@@ -26,6 +26,14 @@ LLM compaction) distills from a natural-language skill:
              | {"msg":    {"from": "<role>", "to": "<role>", "label": "<l>"}}
              | {"choice": {"by": "<role>", "branches": {"<label>": [<step>...], ...}}}
              | {"goal":   <formula>}       // explicit goal marker (optional)
+             | {"rec":    {"name": "X", "body": [<step>...]}}   // tail-recursive loop
+             | {"continue": "X"}           // jump back to the enclosing rec X
+             | {"spawn":  {"role": "<role>"}}  // dynamic participant (outside
+                                               // the decidable fragment -> UNKNOWN)
+
+A pack may also declare per-role behaviours ("skills": {"<role>": [<local
+step>...]}); the checker verifies the conformance premise S_p <= G|p via
+Gay-Hole subtyping (see session.py for the local-type grammar).
 
 validate_pack() is the deterministic schema gate on untrusted front-end
 output: it rejects malformed packs before they reach the checker.  It does NOT
@@ -68,6 +76,7 @@ class Pack:
     goal: Any
     init_true: list[str] = field(default_factory=list)
     init_constraints: list[Any] = field(default_factory=list)
+    skills: dict[str, list] = field(default_factory=dict)  # declared S_p
 
     @staticmethod
     def load(d: dict) -> "Pack":
@@ -91,6 +100,7 @@ class Pack:
             goal=d["goal"],
             init_true=list(d.get("init_true", [])),
             init_constraints=list(d.get("init_constraints", [])),
+            skills=dict(d.get("skills", {})),
         )
 
     @staticmethod
@@ -99,7 +109,10 @@ class Pack:
             return Pack.load(json.load(fh))
 
 
-def _check_steps(steps: Any, path: str) -> None:
+def _check_steps(steps: Any, path: str, rec_scope: frozenset = frozenset(),
+                 rec_names: set | None = None) -> None:
+    if rec_names is None:
+        rec_names = set()
     if not isinstance(steps, list):
         raise PackError(f"{path}: protocol block must be a list")
     for i, s in enumerate(steps):
@@ -125,14 +138,82 @@ def _check_steps(steps: Any, path: str) -> None:
             if not body["branches"]:
                 raise PackError(f"{p}: choice needs at least one branch")
             for lbl, br in body["branches"].items():
-                _check_steps(br, f"{p}.{lbl}")
+                _check_steps(br, f"{p}.{lbl}", rec_scope, rec_names)
+        elif kind == "goal":
+            try:
+                validate_formula(body, p)
+            except FormulaError as e:
+                raise PackError(str(e)) from e
+        elif kind == "rec":
+            if not (isinstance(body, dict) and isinstance(body.get("name"), str)
+                    and isinstance(body.get("body"), list)):
+                raise PackError(f"{p}: rec needs name+body")
+            if body["name"] in rec_names:
+                raise PackError(f"{p}: duplicate rec name {body['name']!r}")
+            rec_names.add(body["name"])
+            _check_steps(body["body"], f"{p}.body",
+                         rec_scope | {body["name"]}, rec_names)
+        elif kind == "continue":
+            if not isinstance(body, str):
+                raise PackError(f"{p}: continue needs a rec name")
+            if body not in rec_scope:
+                raise PackError(f"{p}: continue {body!r} has no enclosing rec")
+            if i != len(steps) - 1:
+                raise PackError(f"{p}: continue must be in tail position "
+                                f"(the decidable fragment is tail-recursive)")
+        elif kind == "spawn":
+            if not (isinstance(body, dict) and "role" in body):
+                raise PackError(f"{p}: spawn needs role")
+        else:
+            raise PackError(f"{p}: unknown step kind {kind!r}")
+
+
+LOCAL_KINDS = ("send", "recv", "act", "select", "branch", "rec", "continue",
+               "goal")
+
+
+def _check_local_steps(steps: Any, path: str,
+                       rec_scope: frozenset = frozenset()) -> None:
+    if not isinstance(steps, list):
+        raise PackError(f"{path}: local behaviour must be a list")
+    for i, s in enumerate(steps):
+        p = f"{path}[{i}]"
+        if not (isinstance(s, dict) and len(s) == 1):
+            raise PackError(f"{p}: local step must be a single-key dict")
+        (kind, body), = s.items()
+        if kind == "send":
+            if not (isinstance(body, dict) and "to" in body and "label" in body):
+                raise PackError(f"{p}: send needs to+label")
+        elif kind == "recv":
+            if not (isinstance(body, dict) and "from" in body and "label" in body):
+                raise PackError(f"{p}: recv needs from+label")
+        elif kind == "act":
+            if not (isinstance(body, dict) and "cap" in body):
+                raise PackError(f"{p}: act needs cap")
+        elif kind in ("select", "branch"):
+            if not (isinstance(body, dict) and isinstance(body.get("branches"), dict)
+                    and body["branches"]):
+                raise PackError(f"{p}: {kind} needs non-empty branches")
+            if kind == "branch" and "from" not in body:
+                raise PackError(f"{p}: branch needs from")
+            for lbl, br in body["branches"].items():
+                _check_local_steps(br, f"{p}.{lbl}", rec_scope)
+        elif kind == "rec":
+            if not (isinstance(body, dict) and isinstance(body.get("name"), str)
+                    and isinstance(body.get("body"), list)):
+                raise PackError(f"{p}: rec needs name+body")
+            _check_local_steps(body["body"], f"{p}.body",
+                               rec_scope | {body["name"]})
+        elif kind == "continue":
+            if not (isinstance(body, str) and body in rec_scope):
+                raise PackError(f"{p}: continue needs an enclosing rec name")
         elif kind == "goal":
             try:
                 validate_formula(body, p)
             except FormulaError as e:
                 raise PackError(str(e)) from e
         else:
-            raise PackError(f"{p}: unknown step kind {kind!r}")
+            raise PackError(f"{p}: unknown local step kind {kind!r}")
 
 
 def validate_pack(pack: Any) -> None:
@@ -160,6 +241,11 @@ def validate_pack(pack: Any) -> None:
                 validate_formula(constr, f"cap[{cn}].nondet[{v}]")
         _check_steps(pack["protocol"], "protocol")
         validate_formula(pack["goal"], "goal")
+        skills = pack.get("skills", {})
+        if not isinstance(skills, dict):
+            raise PackError("skills must be a dict role -> local behaviour")
+        for role, ssteps in skills.items():
+            _check_local_steps(ssteps, f"skills[{role}]")
         it = pack.get("init_true", [])
         if not (isinstance(it, list) and all(isinstance(x, str) for x in it)):
             raise PackError("init_true must be a list of predicate names")

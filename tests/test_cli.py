@@ -55,6 +55,42 @@ def test_scan_directory_json(capsys):
     assert by_name["hallucinated-mailer/SKILL.md"]["verdict"] == "IMPOSSIBLE"
 
 
+def test_check_unknown_exit_3(tmp_path, capsys):
+    pack = {"name": "spawner", "capabilities": {},
+            "protocol": [{"spawn": {"role": "helper"}}], "goal": True}
+    p = tmp_path / "pack.json"
+    p.write_text(json.dumps(pack))
+    rc = main(["check", str(p)])
+    assert rc == 3
+    assert "UNKNOWN" in capsys.readouterr().out
+
+
+def test_examples_check_out(capsys):
+    root = Path(__file__).parent.parent / "examples"
+    for skill in sorted(root.rglob("SKILL.md")):
+        assert main(["check", str(skill)]) == 0, skill
+
+
+def test_audit_poisoned_exit_1(capsys):
+    rc = main(["audit", str(FIXTURES / "poisoned-helper")])
+    assert rc == 1
+    out = capsys.readouterr().out
+    assert "description-injection" in out
+
+
+def test_audit_clean_exit_0(capsys):
+    rc = main(["audit", str(FIXTURES / "changelog-writer")])
+    assert rc == 0
+
+
+def test_audit_json(capsys):
+    rc = main(["audit", "--json", str(FIXTURES / "poisoned-helper")])
+    assert rc == 1
+    data = json.loads(capsys.readouterr().out)
+    (findings,) = data.values()
+    assert any(f["code"] == "unicode-invisible" for f in findings)
+
+
 def test_eval_passes(capsys):
     rc = main(["eval"])
     assert rc == 0

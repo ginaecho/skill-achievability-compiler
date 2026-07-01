@@ -305,3 +305,120 @@ print(f"wrote {os.path.relpath(OUT)} with {len(C)} specs")
 from collections import Counter
 print("by category:", dict(Counter(c["category"] for c in C)))
 print("by ground truth:", dict(Counter(c["ground_truth"] for c in C)))
+
+# ==========================================================================
+# Extended corpus: the decidable-fragment boundary (tail recursion, dynamic
+# spawning) and the conformance premise.  Kept separate from the 15-spec
+# headline corpus so the paper's confusion matrix stays reproducible.
+# Ground truth may be UNKNOWN: outside the fragment the semi-decision must
+# neither claim ACHIEVABLE nor IMPOSSIBLE.
+# ==========================================================================
+
+E = []
+
+def add_ext(id, category, ground_truth, nl, pack, note=""):
+    E.append({"id": id, "category": category, "ground_truth": ground_truth,
+              "nl": nl.strip(), "pack": pack, "note": note})
+
+add_ext("retry_loop_ok", "TOLERANCE", "ACHIEVABLE",
+"""
+# Skill: Retry search until found, then deliver
+Goal: answer delivered. Search in a loop; when found, exit and deliver.
+""",
+{"name":"retry_loop_ok","roles":["worker"],
+ "capabilities":{
+   "search":{"owner":"worker","add":["found"]},
+   "deliver":{"owner":"worker","pre":"found","add":["answered"]}},
+ "protocol":[{"rec":{"name":"X","body":[
+                {"act":{"cap":"search","by":"worker"}},
+                {"choice":{"by":"worker","branches":{
+                  "retry":[{"continue":"X"}],
+                  "found":[]}}}]}},
+             {"act":{"cap":"deliver","by":"worker"}}],
+ "goal":"answered"},
+ note="tail-recursive retry with an exit branch is inside the fragment")
+
+add_ext("spin_forever", "INFINITE_LOOP", "IMPOSSIBLE",
+"""
+# Skill: Publish a report (but the plan only ever re-drafts)
+Goal: published. The loop re-drafts forever; nothing establishes published.
+""",
+{"name":"spin_forever","roles":["agent"],
+ "capabilities":{"draft":{"owner":"agent","add":["drafted"]}},
+ "protocol":[{"rec":{"name":"X","body":[
+                {"act":{"cap":"draft","by":"agent"}},
+                {"continue":"X"}]}}],
+ "goal":"published"},
+ note="predicate-state saturation terminates the loop search -> GOAL_UNSAT")
+
+add_ext("spawn_helpers", "AUTONOMY", "UNKNOWN",
+"""
+# Skill: Fan out research to freshly spawned subagents
+Goal: report delivered. The planner spawns helper agents at run time.
+""",
+{"name":"spawn_helpers","roles":["planner"],
+ "capabilities":{"deliver":{"owner":"planner","add":["delivered"]}},
+ "protocol":[{"spawn":{"role":"helper"}},
+             {"act":{"cap":"deliver","by":"planner"}}],
+ "goal":"delivered"},
+ note="dynamic topology -> outside the decidable fragment (Theorem 5)")
+
+add_ext("spawn_with_ghost_tool", "AUTONOMY", "IMPOSSIBLE",
+"""
+# Skill: Fan out, then update the ledger
+Goal: ledger updated. Spawns helpers AND invokes a tool nobody has.
+""",
+{"name":"spawn_with_ghost_tool","roles":["planner"],
+ "capabilities":{},
+ "protocol":[{"spawn":{"role":"helper"}},
+             {"act":{"cap":"update_ledger","by":"planner"}}],
+ "goal":"ledger_updated"},
+ note="capability soundness survives autonomy: refute before degrading")
+
+add_ext("nonconformant_handler", "CONFORMANCE", "IMPOSSIBLE",
+"""
+# Skill: Triage then handle -- but the declared handler only handles one path
+Goal: resolved. Contract informs the handler of go_simple/go_complex; the
+declared handler behaviour only receives go_simple.
+""",
+{"name":"nonconformant_handler","roles":["router","handler"],
+ "capabilities":{
+   "resolve_simple":{"owner":"handler","add":["resolved"]},
+   "resolve_complex":{"owner":"handler","add":["resolved"]}},
+ "protocol":[{"choice":{"by":"router","branches":{
+     "simple":[{"msg":{"from":"router","to":"handler","label":"go_simple"}},
+               {"act":{"cap":"resolve_simple","by":"handler"}}],
+     "complex":[{"msg":{"from":"router","to":"handler","label":"go_complex"}},
+                {"act":{"cap":"resolve_complex","by":"handler"}}]}}}],
+ "goal":"resolved",
+ "skills":{"handler":[{"branch":{"from":"router","branches":{
+     "go_simple":[{"act":{"cap":"resolve_simple"}}]}}}]}},
+ note="S_handler drops an external choice -> S </= G|handler (Sub-Ext)")
+
+add_ext("conformant_tolerant_handler", "CONFORMANCE", "ACHIEVABLE",
+"""
+# Skill: Triage then handle -- handler declared with an EXTRA receive
+Goal: resolved. The declared handler also accepts a go_escalate label the
+contract never sends; extra external choices are safe (Sub-Ext).
+""",
+{"name":"conformant_tolerant_handler","roles":["router","handler"],
+ "capabilities":{
+   "resolve_simple":{"owner":"handler","add":["resolved"]},
+   "resolve_complex":{"owner":"handler","add":["resolved"]}},
+ "protocol":[{"choice":{"by":"router","branches":{
+     "simple":[{"msg":{"from":"router","to":"handler","label":"go_simple"}},
+               {"act":{"cap":"resolve_simple","by":"handler"}}],
+     "complex":[{"msg":{"from":"router","to":"handler","label":"go_complex"}},
+                {"act":{"cap":"resolve_complex","by":"handler"}}]}}}],
+ "goal":"resolved",
+ "skills":{"handler":[{"branch":{"from":"router","branches":{
+     "go_simple":[{"act":{"cap":"resolve_simple"}}],
+     "go_complex":[{"act":{"cap":"resolve_complex"}}],
+     "go_escalate":[{"act":{"cap":"resolve_complex"}}]}}}]}},
+ note="interface slack in the safe direction must not refute (T2 flavour)")
+
+OUT_EXT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       "..", "src", "skillc", "data", "corpus_extended.json")
+with open(OUT_EXT, "w") as f:
+    json.dump(E, f, indent=2)
+print(f"wrote {os.path.relpath(OUT_EXT)} with {len(E)} extended specs")

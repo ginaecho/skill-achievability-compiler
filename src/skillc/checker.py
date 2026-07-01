@@ -15,21 +15,34 @@ proof in proof/SkillAchievability.v:
     admissible", not "guaranteed" -- the residue is intent fidelity (top) and
     payload faithfulness (bottom), owned by other layers.
 
+The checker decides the four premises of the achievability judgment
+(paper 5.2):  capability soundness (no hallucinated tools), realizability
+(projection defined for every role), conformance (declared skills refine
+their projected contracts, Gay-Hole subtyping), and goal may-reachability.
+Tail-recursive loops (mu X. G) are explored with predicate-state saturation
+and numeric widening on the back edge -- widening only enlarges the reachable
+set, so refutation stays sound (Coq T2).  Dynamic participant spawning is
+outside the decidable fragment (Brand-Zafiropulo): the procedure degrades to
+a semi-decision and answers UNKNOWN unless it can refute structurally first.
+
 Verdicts:  ACHIEVABLE (+witness path)  |  IMPOSSIBLE (+reason, +frontier)
+           |  UNKNOWN (outside the decidable fragment)
 Reasons :  MISSING_CAPABILITY | BLOCKED_GUARD | GOAL_UNSAT | NON_PROJECTABLE
+           | NON_CONFORMANT | DYNAMIC_TOPOLOGY
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any
 
 import z3
 
 from .formula import CMP
 from .pack import Capability, Pack
+from .session import ProjectionError, conformance_failure, project
 
 REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
-           "NON_PROJECTABLE")
+           "NON_PROJECTABLE", "NON_CONFORMANT", "DYNAMIC_TOPOLOGY")
 
 
 # --------------------------------------------------------------------------
@@ -131,7 +144,7 @@ def initial_state(p: Pack) -> State:
 
 
 # --------------------------------------------------------------------------
-# Projectability (structural knowledge-of-choice / handoff check)
+# Roles and fragment boundary
 # --------------------------------------------------------------------------
 
 def roles_acting(steps: list[dict]) -> set[str]:
@@ -141,55 +154,27 @@ def roles_acting(steps: list[dict]) -> set[str]:
             out.add(s["act"].get("by", "?"))
         if "msg" in s:
             out.add(s["msg"]["from"])
+            out.add(s["msg"]["to"])
         if "choice" in s:
             out.add(s["choice"]["by"])
             for br in s["choice"]["branches"].values():
                 out |= roles_acting(br)
+        if "rec" in s:
+            out |= roles_acting(s["rec"]["body"])
     return out
 
 
-def message_receivers(steps: list[dict]) -> set[str]:
-    """Roles that receive some message inside a branch."""
-    out: set[str] = set()
+def has_spawn(steps: list[dict]) -> bool:
+    """Dynamic participant spawning: the autonomy boundary (Theorem 5)."""
     for s in steps:
-        if "msg" in s:
-            out.add(s["msg"]["to"])
+        if "spawn" in s:
+            return True
         if "choice" in s:
-            for br in s["choice"]["branches"].values():
-                out |= message_receivers(br)
-    return out
-
-
-def check_projectable(steps: list[dict]) -> Optional[str]:
-    """Return None if OK, else a human-readable non-projectability reason.
-
-    Knowledge-of-choice: when role p selects among branches, any *other* role
-    that must act inside a branch must receive a branch-distinguishing message
-    before acting.  Otherwise it cannot know how to behave -> deadlock / wrong
-    handoff (the classic unobserved-choice freeze).
-
-    This is a structural, focused check on the unobserved-choice family, not a
-    full MPST projection-with-merge engine.
-    """
-    for s in steps:
-        if "choice" in s:
-            chooser = s["choice"]["by"]
-            branches = s["choice"]["branches"]
-            for label, br in branches.items():
-                actors = roles_acting(br)
-                informed = message_receivers(br) | {chooser}
-                uninformed = actors - informed
-                if uninformed:
-                    who = sorted(uninformed)[0]
-                    return (f"role '{who}' must act in branch '{label}' chosen by "
-                            f"'{chooser}' but receives no message distinguishing "
-                            f"that branch (unobserved choice -> deadlock/handoff "
-                            f"failure)")
-            for br in branches.values():
-                r = check_projectable(br)
-                if r:
-                    return r
-    return None
+            if any(has_spawn(br) for br in s["choice"]["branches"].values()):
+                return True
+        if "rec" in s and has_spawn(s["rec"]["body"]):
+            return True
+    return False
 
 
 # --------------------------------------------------------------------------
@@ -203,9 +188,12 @@ class Verdict:
     detail: str = ""
     witness: tuple = ()          # action/branch path for ACHIEVABLE
     frontier: tuple = ()         # blocking info for IMPOSSIBLE
+    unknown: bool = False        # outside the decidable fragment
 
     @property
     def label(self) -> str:
+        if self.unknown:
+            return "UNKNOWN"
         return "ACHIEVABLE" if self.achievable else "IMPOSSIBLE"
 
     def to_dict(self) -> dict:
@@ -222,20 +210,41 @@ class Checker:
     def __init__(self, pack: Pack):
         self.p = pack
         self.blocked: list[str] = []     # frontier accumulation
+        self.loop_seen: set = set()      # (rec name, pred-state) at back edges
 
     def run(self) -> Verdict:
-        # 1. capability existence (no hallucinated tools)
+        # 1. capability existence (no hallucinated tools).  This premise is
+        #    decided first and survives autonomy: a tool absent from Gamma
+        #    stays absent no matter how many participants are spawned.
         missing = self._missing_caps(self.p.protocol)
         if missing:
             return Verdict(False, "MISSING_CAPABILITY",
                            f"protocol invokes undeclared capabilities: {sorted(missing)}",
                            frontier=tuple(sorted(missing)))
-        # 2. projectability / handoff
-        proj = check_projectable(self.p.protocol)
-        if proj:
-            return Verdict(False, "NON_PROJECTABLE", proj)
-        # 3. tolerant may-reachability of the goal
-        ok, end_state = self._reach(self.p.protocol, initial_state(self.p))
+        # 2. the autonomy boundary: dynamic spawning -> unbounded participants
+        #    -> undecidable (Theorem 5).  Degrade to a semi-decision.
+        if has_spawn(self.p.protocol):
+            return Verdict(False, "DYNAMIC_TOPOLOGY",
+                           "protocol spawns participants at run time; "
+                           "achievability is undecidable outside the "
+                           "static-topology fragment (Brand-Zafiropulo)",
+                           unknown=True)
+        # 3. realizability: projection G|p defined for every role (Proj-Sel /
+        #    Proj-Brn / Proj-Mrg).  Undefined = deadlocking handoff.
+        for role in sorted(set(self.p.roles) | roles_acting(self.p.protocol)):
+            try:
+                project(self.p.protocol, role)
+            except ProjectionError as e:
+                return Verdict(False, "NON_PROJECTABLE", str(e))
+        # 4. conformance: every declared skill refines its projected contract
+        #    (S_p <= G|p, Gay-Hole subtyping).  Refutes the *judgment*: the
+        #    verdict on G cannot be transported to a non-conforming skill.
+        if self.p.skills:
+            fail = conformance_failure(self.p.skills, self.p.protocol)
+            if fail:
+                return Verdict(False, "NON_CONFORMANT", fail)
+        # 5. tolerant may-reachability of the goal
+        ok, end_state = self._reach(self.p.protocol, initial_state(self.p), {})
         if ok:
             return Verdict(True, "OK", "goal reachable along witness path",
                            witness=end_state.path)
@@ -254,12 +263,24 @@ class Checker:
             if "choice" in s:
                 for br in s["choice"]["branches"].values():
                     out |= self._missing_caps(br)
+            if "rec" in s:
+                out |= self._missing_caps(s["rec"]["body"])
         return out
 
     def _goal_sat(self, st: State) -> bool:
         return _sat(list(st.arith) + [eval_formula(self.p.goal, st)])
 
-    def _reach(self, steps: list[dict], st: State) -> tuple[bool, State]:
+    def _widen(self, st: State, label: str) -> State:
+        """Back-edge widening: havoc the numeric summary.  Dropping the
+        accumulated arithmetic constraints only ENLARGES the reachable set,
+        so refutation remains sound (Coq T2); together with the finite
+        predicate valuations it makes the loop search terminate (Theorem 4)."""
+        bumped = {v: n + 1 for v, n in st.versions().items()}
+        return _mk_state(st.true_preds, (), bumped,
+                         st.path + (("continue", label),))
+
+    def _reach(self, steps: list[dict], st: State,
+               recenv: dict) -> tuple[bool, State]:
         """(reached_goal, witnessing/end state).  Existential over branches."""
         cur = st
         for i, s in enumerate(steps):
@@ -278,6 +299,22 @@ class Checker:
                         f"this path (pre={cap.pre!r})")
                     return False, cur              # mandatory action blocked
                 cur = apply_effect(cur, cap)
+            elif "rec" in s:
+                # mu X. body : the fall-through continuation folds into the
+                # unfolding (tail recursion), so the remainder is consumed
+                name = s["rec"]["name"]
+                unfolding = list(s["rec"]["body"]) + steps[i + 1:]
+                return self._reach(unfolding, cur,
+                                   {**recenv, name: unfolding})
+            elif "continue" in s:
+                name = s["continue"]
+                key = (name, cur.true_preds)
+                if key in self.loop_seen:
+                    # same abstract configuration already explored: with the
+                    # numerics widened, further unfolding adds nothing new
+                    return False, cur
+                self.loop_seen.add(key)
+                return self._reach(recenv[name], self._widen(cur, name), recenv)
             elif "choice" in s:
                 # existential: succeed if ANY branch + continuation reaches goal
                 rest = steps[i + 1:]
@@ -285,7 +322,7 @@ class Checker:
                     branch_state = _mk_state(cur.true_preds, cur.arith,
                                              cur.versions(),
                                              cur.path + (("choose", label),))
-                    ok, end = self._reach(list(br) + rest, branch_state)
+                    ok, end = self._reach(list(br) + rest, branch_state, recenv)
                     if ok:
                         return True, end
                 return False, cur

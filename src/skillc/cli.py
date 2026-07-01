@@ -3,11 +3,12 @@
   skillc compile SKILL.md [--profile P] [-o pack.json]   markdown -> pack
   skillc check   FILE     [--profile P] [--json]         pack.json or SKILL.md -> verdict
   skillc scan    DIR      [--profile P] [--json|--md]    batch-check a skill tree
+  skillc audit   PATH     [--json]                       bundle security pre-pass
   skillc eval                                            corpus evaluation
   skillc profiles                                        list capability profiles
 
 Exit codes: 0 achievable / all pass, 1 impossible / soundness violation,
-2 usage or input error.
+2 usage or input error, 3 unknown (outside the decidable fragment).
 """
 from __future__ import annotations
 
@@ -89,6 +90,8 @@ def cmd_check(args) -> int:
                 print(f"  missing: {capname}{loc}")
         if args.verbose and v.achievable:
             print("  witness:", " -> ".join(f"{k}:{x}" for k, x in v.witness))
+    if v.unknown:
+        return 3
     return 0 if v.achievable else 1
 
 
@@ -121,6 +124,30 @@ def cmd_scan(args) -> int:
         print(f"\n{n_ok}/{len(rows)} achievable under profile "
               f"'{args.profile}'")
     return 0
+
+
+def cmd_audit(args) -> int:
+    from .audit import audit_tree
+    results = audit_tree(args.path)
+    n_err = 0
+    if args.json:
+        print(json.dumps({b: [f.to_dict() for f in fs]
+                          for b, fs in results.items()}, indent=2))
+        n_err = sum(f.severity == "error" for fs in results.values() for f in fs)
+    else:
+        for bundle, findings in results.items():
+            if not findings and not args.quiet:
+                print(f"{bundle}: clean")
+                continue
+            for f in findings:
+                loc = f":{f.line}" if f.line else ""
+                print(f"{bundle}: {f.severity.upper()} [{f.code}] {f.message} "
+                      f"({f.file}{loc})")
+                n_err += f.severity == "error"
+        n = len(results)
+        print(f"\naudited {n} bundle{'s' if n != 1 else ''}, "
+              f"{n_err} error-severity finding{'s' if n_err != 1 else ''}")
+    return 1 if n_err else 0
 
 
 def cmd_eval(args) -> int:
@@ -175,6 +202,14 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--json", action="store_true")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_scan)
+
+    sp = sub.add_parser("audit",
+                        help="skill-bundle security pre-pass (SkillSpector-like)")
+    sp.add_argument("path")
+    sp.add_argument("--json", action="store_true")
+    sp.add_argument("-q", "--quiet", action="store_true",
+                    help="omit clean bundles from the listing")
+    sp.set_defaults(fn=cmd_audit)
 
     sp = sub.add_parser("eval", help="run the corpus evaluation")
     sp.set_defaults(fn=cmd_eval)

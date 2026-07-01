@@ -45,6 +45,14 @@ Pack schema (JSON):
           | {"msg": {"from": "<role>", "to": "<role>", "label": "<l>"}}
           | {"choice": {"by": "<role>", "branches": {"<label>": [<step>...], ...}}}
           | {"goal": <formula>}
+          | {"rec": {"name": "X", "body": [<step>...]}}   // tail-recursive loop
+          | {"continue": "X"}                             // last step of its block
+          | {"spawn": {"role": "<role>"}}   // runtime participant spawning
+Optionally declare per-role behaviours for conformance checking:
+"skills": {"<role>": [<local step>...]} with local steps
+  {"send": {"to","label"}} | {"recv": {"from","label"}} | {"act": {"cap"}}
+  | {"select": {"branches": {...}}} | {"branch": {"from", "branches": {...}}}
+  | {"rec": {"name","body"}} | {"continue": "X"}
 <formula> = "pred" | true | false | {"and":[...]} | {"or":[...]} | {"not": f}
           | {"cmp": [expr, "<"|"<="|"=="|">"|">="|"!=", expr]}
 <expr>    = "var" | int | {"+":[e,e]} | {"-":[e,e]} | {"*":[e,e]}
@@ -67,7 +75,11 @@ SYSTEM = (
     "for inter-role messages. If a role must act inside a branch, include the "
     "informing msg only if the prose provides one.\n"
     "5. List predicates true at the start in init_true; everything else is "
-    "false by default (frame assumption).\n" + SCHEMA_DOC
+    "false by default (frame assumption).\n"
+    "6. Use rec/continue for retry loops (continue must be the last step of "
+    "its block: only tail recursion is decidable). If the prose spawns "
+    "subagents at run time, emit a spawn step -- the checker degrades to "
+    "UNKNOWN rather than guessing.\n" + SCHEMA_DOC
 )
 
 
