@@ -65,6 +65,30 @@ def test_consumer_only_skills_are_refuted_under_claude_code():
     assert "ask_user_input_v0" in v.frontier
 
 
+def test_profile_narrowing_refutes_with_the_removed_tool_named():
+    """Mutation testing on real skills, refutation direction: take a skill
+    that is achievable under claude-ai and remove one agent-tool it actually
+    invokes -- the compiler must flip to IMPOSSIBLE and name that tool."""
+    from skillc.profiles import Profile
+    mutated = 0
+    for path in all_skill_files():
+        res = compile_file(path, CLAUDE_AI)
+        if res.embedded:
+            continue
+        used = {i.tool for i in res.invocations if i.kind == "agent-tool"}
+        if not used or not check(res.pack).achievable:
+            continue
+        victim = sorted(used)[0]
+        narrowed = Profile(name="narrowed", tools=CLAUDE_AI.tools - {victim},
+                           shell=CLAUDE_AI.shell)
+        v = check(compile_file(path, narrowed).pack)
+        assert not v.achievable, f"{path}: still achievable without {victim}"
+        assert v.reason == "MISSING_CAPABILITY"
+        assert victim in v.frontier, f"{path}: {victim} not named in frontier"
+        mutated += 1
+    assert mutated > 0, "no skill exercised the narrowing mutation"
+
+
 def test_profile_widening_is_monotone_on_real_skills():
     """T3 on real data: granting the missing tools flips IMPOSSIBLE ->
     ACHIEVABLE, and never the other way."""

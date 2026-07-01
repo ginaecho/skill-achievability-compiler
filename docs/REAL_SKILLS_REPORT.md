@@ -1,6 +1,6 @@
 # Real-skill scan report
 
-`skillc 0.2.0` run over the public skills corpus ([anthropics/skills](https://github.com/anthropics/skills)): 32 `SKILL.md` files, checked under each capability profile.  Regenerate with `python3 scripts/make_report.py <dir>`.
+`skillc 0.3.0` run over the public skills corpus ([anthropics/skills](https://github.com/anthropics/skills)): 32 `SKILL.md` files, checked under each capability profile.  Regenerate with `python3 scripts/make_report.py <dir>`.
 
 A verdict is always *relative to a capability context*: `IMPOSSIBLE [MISSING_CAPABILITY]` means the skill's instructions invoke a tool that this runtime does not grant -- the skill cannot be carried out as written there.  It is not a defect of the skill.
 

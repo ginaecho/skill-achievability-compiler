@@ -37,7 +37,7 @@ from typing import Any
 
 import z3
 
-from .formula import CMP
+from .formula import CMP, atoms
 from .pack import Capability, Pack
 from .session import ProjectionError, conformance_failure, project
 
@@ -206,11 +206,67 @@ class Verdict:
         }
 
 
+def establishable_atoms(p: Pack) -> frozenset:
+    """The establisher closure: predicates that can EVER be true -- initially
+    true, or added by some capability in Gamma.  Every reachable world of
+    every protocol over Gamma stays inside this set (paper: Lemma
+    'establisher closure'), because only capability effects change the world
+    and Del only shrinks it."""
+    out = set(p.init_true)
+    for c in p.capabilities.values():
+        out |= set(c.add)
+    return frozenset(out)
+
+
 class Checker:
-    def __init__(self, pack: Pack):
+    def __init__(self, pack: Pack, semantics: str = "may"):
+        if semantics not in ("may", "adversarial"):
+            raise ValueError(f"unknown semantics {semantics!r}")
         self.p = pack
+        self.semantics = semantics
         self.blocked: list[str] = []     # frontier accumulation
+        self.defeated: list[str] = []    # external branches that defeat the goal
         self.loop_seen: set = set()      # (rec name, pred-state) at back edges
+
+    def _gamma_refutation(self) -> Verdict | None:
+        """Protocol-independent refutation over the establisher closure.
+
+        Encode the goal with every non-establishable atom pinned FALSE and
+        everything else (establishable atoms, arithmetic comparisons) left
+        FREE.  If that over-approximation is unsatisfiable, no run of ANY
+        protocol over Gamma -- including protocols that spawn participants,
+        who still act through Gamma -- can satisfy the goal.  This is the
+        FlightInstance argument made general and checked by z3.
+        """
+        can = establishable_atoms(self.p)
+        fresh = iter(range(10 ** 9))
+
+        def enc(f: Any) -> z3.BoolRef:
+            if f is True:
+                return z3.BoolVal(True)
+            if f is False:
+                return z3.BoolVal(False)
+            if isinstance(f, str):
+                return z3.Bool(f) if f in can else z3.BoolVal(False)
+            if "and" in f:
+                return z3.And([enc(x) for x in f["and"]])
+            if "or" in f:
+                return z3.Or([enc(x) for x in f["or"]])
+            if "not" in f:
+                return z3.Not(enc(f["not"]))
+            if "cmp" in f:
+                return z3.Bool(f"__cmp_{next(fresh)}")   # arithmetic left free
+            raise ValueError(f"bad formula: {f!r}")
+
+        if _sat([enc(self.p.goal)]):
+            return None
+        dead = tuple(sorted(atoms(self.p.goal) - can))
+        return Verdict(False, "GOAL_UNSAT",
+                       f"protocol-independent refutation: no capability in "
+                       f"Gamma establishes {list(dead)} and the goal cannot "
+                       f"hold without them -- every protocol over these "
+                       f"capabilities is doomed, spawning included",
+                       frontier=dead)
 
     def run(self) -> Verdict:
         # 1. capability existence (no hallucinated tools).  This premise is
@@ -221,6 +277,11 @@ class Checker:
             return Verdict(False, "MISSING_CAPABILITY",
                            f"protocol invokes undeclared capabilities: {sorted(missing)}",
                            frontier=tuple(sorted(missing)))
+        # 1b. establisher-closure refutation: protocol-independent, so it too
+        #     survives autonomy and is decided before degrading to UNKNOWN.
+        gamma = self._gamma_refutation()
+        if gamma:
+            return gamma
         # 2. the autonomy boundary: dynamic spawning -> unbounded participants
         #    -> undecidable (Theorem 5).  Degrade to a semi-decision.
         if has_spawn(self.p.protocol):
@@ -248,6 +309,11 @@ class Checker:
         if ok:
             return Verdict(True, "OK", "goal reachable along witness path",
                            witness=end_state.path)
+        if self.defeated:
+            uniq = tuple(dict.fromkeys(self.defeated))
+            return Verdict(False, "GOAL_UNSAT",
+                           "adversarially unachievable: " + "; ".join(uniq),
+                           frontier=uniq)
         if self.blocked:
             uniq = tuple(dict.fromkeys(self.blocked))
             return Verdict(False, "BLOCKED_GUARD", "; ".join(uniq), frontier=uniq)
@@ -316,23 +382,46 @@ class Checker:
                 self.loop_seen.add(key)
                 return self._reach(recenv[name], self._widen(cur, name), recenv)
             elif "choice" in s:
-                # existential: succeed if ANY branch + continuation reaches goal
                 rest = steps[i + 1:]
-                for label, br in s["choice"]["branches"].items():
+                body = s["choice"]
+                demonic = (self.semantics == "adversarial"
+                           and body.get("external", False))
+                last_end = cur
+                for label, br in body["branches"].items():
                     branch_state = _mk_state(cur.true_preds, cur.arith,
                                              cur.versions(),
                                              cur.path + (("choose", label),))
                     ok, end = self._reach(list(br) + rest, branch_state, recenv)
-                    if ok:
+                    if demonic:
+                        # universal: the environment resolves this choice, so
+                        # EVERY branch must still reach the goal
+                        if not ok:
+                            self.defeated.append(
+                                f"external branch '{label}' of the choice by "
+                                f"'{body['by']}' defeats the goal")
+                            return False, end
+                        last_end = end
+                    elif ok:
+                        # existential: ANY branch + continuation suffices
                         return True, end
-                return False, cur
+                return (True, last_end) if demonic else (False, cur)
         # end of this block: check goal at terminal
         if self._goal_sat(cur):
             return True, cur
         return False, cur
 
 
-def check(pack: dict | Pack) -> Verdict:
-    """Check a pack (dict or Pack) and return the Verdict."""
+def check(pack: dict | Pack, semantics: str = "may") -> Verdict:
+    """Check a pack (dict or Pack) and return the Verdict.
+
+    semantics="may"          angelic ◇: some resolution of every choice works
+                             (the paper's Layer-A judgment; refutation sound).
+    semantics="adversarial"  choices marked {"external": true} are resolved by
+                             the environment: the goal must be reachable under
+                             EVERY resolution of external choices, while the
+                             agent's own choices stay existential (AND-OR
+                             search).  ACHIEVABLE then means the agent has a
+                             winning strategy against the declared model.
+    """
     p = pack if isinstance(pack, Pack) else Pack.load(pack)
-    return Checker(p).run()
+    return Checker(p, semantics=semantics).run()

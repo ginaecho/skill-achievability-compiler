@@ -119,6 +119,16 @@ def _proj(steps: list[dict], role: str) -> tuple:
                  for lbl, br in body["branches"].items()}
         if chooser == role:
             return ("select", tuple(sorted(parts.items())))
+        if body.get("observed", False):
+            # Observed choice: the selection happens on a medium every role
+            # perceives directly (a live call, a shared thread) -- an
+            # implicit broadcast of the branch label.  A role whose behaviour
+            # does not depend on the branch merges as usual; otherwise
+            # project as an external choice on the choice labels themselves
+            # (Proj-Brn with the announcement made implicit).
+            if len(set(parts.values())) == 1:
+                return next(iter(parts.values()))
+            return ("branch", chooser, tuple(sorted(parts.items())))
         # Proj-Brn: every branch informs `role` with a distinguishing receive
         heads = list(parts.values())
         if (all(h[0] == "recv" for h in heads)

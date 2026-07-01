@@ -49,6 +49,30 @@ class TestProjection:
             "slow": [act("wait", "worker"), act("log", "planner")]}}}]
         assert project(g, "planner") == ("act", "log", END)
 
+    def test_observed_choice_projects_without_messages(self):
+        """Conversation-embedded choice: the medium announces the outcome
+        (Proj-Obs), so no explicit msg steps are needed."""
+        g = [{"choice": {"by": "business", "observed": True, "branches": {
+            "confirm": [act("record", "agent")],
+            "decline": [act("apologize", "agent")]}}}]
+        t = project(g, "agent")
+        assert t == ("branch", "business",
+                     (("confirm", ("act", "record", END)),
+                      ("decline", ("act", "apologize", END))))
+
+    def test_observed_choice_uninvolved_role_stays_end(self):
+        g = [{"choice": {"by": "business", "observed": True, "branches": {
+            "confirm": [act("record", "agent")],
+            "decline": [act("apologize", "agent")]}}}]
+        assert project(g, "observer") == END
+
+    def test_unobserved_variant_of_same_choice_fails(self):
+        g = [{"choice": {"by": "business", "branches": {
+            "confirm": [act("record", "agent")],
+            "decline": [act("apologize", "agent")]}}}]
+        with pytest.raises(ProjectionError, match="agent"):
+            project(g, "agent")
+
     def test_projection_of_rec(self):
         g = [{"rec": {"name": "X", "body": [
             act("step", "agent"),

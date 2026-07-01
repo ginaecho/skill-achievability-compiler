@@ -11,7 +11,9 @@ admissible", not "guaranteed".
 The soundness core is mechanized in Coq ([`proof/SkillAchievability.v`](proof/SkillAchievability.v),
 zero axioms, audited by [`proof/check_assumptions.v`](proof/check_assumptions.v));
 the checker decides capability-guarded may-reachability with z3, in
-milliseconds, with no LLM in the trusted path.
+milliseconds, with no LLM in the trusted path.  The accompanying paper —
+extended here with full proofs and four implementation-driven strengthenings —
+lives in [`paper/`](paper/) ([PDF](paper/skillachievability.pdf)).
 
 ```
  natural-language skill ──► [ front-end compaction ] ──► pack ──► [ checker ] ──► verdict
@@ -94,9 +96,28 @@ with predicate-state saturation plus numeric widening on the back edge —
 widening only enlarges the reachable set, so refutation stays sound.  Dynamic
 participant spawning (`spawn`) crosses the autonomy boundary
 (Brand–Zafiropulo): the procedure degrades to a semi-decision — it still
-refutes what survives autonomy (a tool absent from Γ stays absent no matter
-what is spawned) and otherwise answers **`UNKNOWN`** (exit code 3) instead of
-guessing.
+refutes what survives autonomy and otherwise answers **`UNKNOWN`** (exit
+code 3) instead of guessing.
+
+**Beyond the original paper** (proved in [`paper/`](paper/), §6.6–§7):
+
+- **Establisher-closure refutation** — a goal conjunct no capability
+  establishes refutes *every* protocol over Γ in one SMT query, spawning
+  included; `GOAL_UNSAT` with a `protocol-independent` certificate then means
+  "acquire a tool", not "fix the plan".
+- **Observed choice** (`"observed": true`) — a choice resolved inside a live
+  conversation (assistant↔user chat, a phone call) is announced by the medium
+  itself; projection treats it as an implicit broadcast (unobserved choice is
+  a ≥3-party *asynchronous* phenomenon).  This eliminated every false
+  refutation of real conversational skills.
+- **Adversarial must-achievability** (`skillc check --adversarial`, choices
+  marked `"external": true`) — the goal must survive every environment
+  resolution while the agent's own choices stay existential (AND-OR search);
+  adversarial refutations inherit soundness compositionally from T1.
+- **Counterexample-guided compaction repair** — a `NON_PROJECTABLE`
+  counterexample is fed back to the untrusted compactor for one bounded,
+  structure-only repair round (it may not invent tools or weaken the goal);
+  the verdict always comes from the trusted checker.
 
 Tolerance comes from may-reachability (detours allowed), interface slack in
 the safe direction (a skill may *offer more* receives and *make fewer*
@@ -163,6 +184,19 @@ files mounted at `/mnt/skills`, or fetched with
 
 Full table: [`docs/REAL_SKILLS_REPORT.md`](docs/REAL_SKILLS_REPORT.md).
 
+**Semantic level** ([`docs/SEMANTIC_VALIDATION.md`](docs/SEMANTIC_VALIDATION.md),
+`scripts/semantic_validation.py`): four representative consumer skills were
+LLM-compacted into semantic packs (goals like *booked ∧ calendar-updated ∧
+user-informed* with per-step guards), through the schema gate and at most one
+repair round — **4/4 check ACHIEVABLE** (no false alarms on deployed skills).
+Each pack was then sabotaged with a known ground truth: drop a capability the
+plan invokes, and strip a goal conjunct's establishers — **6/6 mutants
+refuted**, naming the dropped tool (`MISSING_CAPABILITY`) or the dead conjunct
+(`GOAL_UNSAT`, protocol-independent certificate) every time.  Deterministic
+mutation testing over all 32 skills works in both directions: removing an
+invoked tool from the profile flips the verdict and names exactly that tool;
+granting the frontier back flips it to achievable.
+
 On the 15-spec ground-truth corpus (`skillc eval`): **FN = 0** (no achievable
 goal ever refuted — T1) and the only false `ACHIEVABLE`s are the two planted
 `SPURIOUS` cases (payload faithfulness / intent fidelity), i.e. exactly the
@@ -172,7 +206,7 @@ never a structural failure it should have caught.
 ## Tests
 
 ```bash
-python3 -m pytest                          # 217 tests
+python3 -m pytest                          # 236 tests
 SKILLC_SKILLS_DIR=./real-skills pytest tests/test_real_skills.py   # real corpus
 SKILLC_LIVE_LLM=1 pytest tests/test_llm_frontend.py               # live LLM (opt-in)
 coqc proof/SkillAchievability.v && coqc proof/check_assumptions.v  # the proof
@@ -205,6 +239,8 @@ src/skillc/            the compiler package
   evaluate.py            corpus evaluation + soundness/incompleteness audit
   cli.py                 skillc compile | check | scan | audit | eval | profiles
   data/                  built-in profiles + evaluation corpora
+paper/                 the paper (LaTeX + built PDF): full proofs +
+                       implementation-driven extensions
 proof/                 the theorem checkers for the paper's claims (Coq 8.18,
                        zero axioms) -- certify T1/T2/T3; the compiler itself
                        is the Python package above

@@ -13,7 +13,7 @@ from .pack import Capability, Pack, PackError, validate_pack
 from .profiles import Profile, builtin_profiles, load_profile
 from .session import ProjectionError, parse_local, project, subtype
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Checker", "Verdict", "check",

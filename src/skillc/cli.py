@@ -73,7 +73,7 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
 
 def cmd_check(args) -> int:
     pack, res = _load_result(Path(args.file), args)
-    v = check(pack)
+    v = check(pack, semantics="adversarial" if args.adversarial else "may")
     if args.json:
         out = v.to_dict()
         out["pack_name"] = pack.get("name", "?")
@@ -193,6 +193,9 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("file")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("-v", "--verbose", action="store_true")
+    sp.add_argument("--adversarial", action="store_true",
+                    help="require the goal under EVERY resolution of choices "
+                         "marked external (must-achievability)")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_check)
 

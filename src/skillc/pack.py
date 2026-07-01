@@ -137,6 +137,9 @@ def _check_steps(steps: Any, path: str, rec_scope: frozenset = frozenset(),
                 raise PackError(f"{p}: choice needs by+branches")
             if not body["branches"]:
                 raise PackError(f"{p}: choice needs at least one branch")
+            for flag in ("external", "observed"):
+                if not isinstance(body.get(flag, False), bool):
+                    raise PackError(f"{p}: choice {flag!r} must be a bool")
             for lbl, br in body["branches"].items():
                 _check_steps(br, f"{p}.{lbl}", rec_scope, rec_names)
         elif kind == "goal":
