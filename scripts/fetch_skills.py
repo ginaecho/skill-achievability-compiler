@@ -24,7 +24,8 @@ RAW = f"https://raw.githubusercontent.com/{REPO}/main"
 # Skill directories in anthropics/skills@main (fallback manifest).
 MANIFEST = [
     "skills/algorithmic-art", "skills/brand-guidelines",
-    "skills/canvas-design", "skills/doc-coauthoring",
+    "skills/canvas-design", "skills/claude-api",
+    "skills/doc-coauthoring",
     "skills/docx", "skills/frontend-design", "skills/internal-comms",
     "skills/mcp-builder", "skills/pdf", "skills/pptx",
     "skills/skill-creator", "skills/slack-gif-creator",
