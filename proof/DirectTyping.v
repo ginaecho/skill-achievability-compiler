@@ -25,24 +25,21 @@
 (*  Proved here (Coq 8.18, no external libraries, axiom-free):        *)
 (*                                                                      *)
 (*   ctypes  G s W      : the direct judgment  G |- (s ; W)  built      *)
-(*                         from T-Comm / T-Act / T-Goal.  T-Comm is      *)
-(*                         generalized to fold BOTH directions of        *)
-(*                         session subtyping into the rule itself         *)
-(*                         (Sub-Int: the sender may commit to FEWER        *)
-(*                         branches than G declares; Sub-Ext: the           *)
-(*                         receiver may accept MORE) and, by requiring       *)
-(*                         every offered branch's continuation to be         *)
-(*                         checked against the SAME residual session,         *)
-(*                         it rejects the unobserved-choice / deadlocking      *)
+(*                         from the professor's exact T-Comm / T-Act /    *)
+(*                         T-Goal.  T-Comm keeps the receiver-side          *)
+(*                         subtyping direction (Sub-Ext: the receiver q     *)
+(*                         may accept a superset J >= I of the protocol's    *)
+(*                         labels; the sender p offers exactly I) and, by     *)
+(*                         requiring every protocol branch's continuation to  *)
+(*                         be checked against the SAME residual session,       *)
+(*                         it rejects the unobserved-choice / deadlocking       *)
 (*                         handoff WITHOUT ever computing a merge.              *)
 (*                                                                                *)
 (*                         T-Act's world/type pairing is stated in the           *)
 (*                         lockstep convention used by the paper's own G-Act      *)
 (*                         rule -- the unconsumed type pairs with the PRE-        *)
 (*                         effect world, the residual type with the POST-        *)
-(*                         effect world -- which corrects a transcription        *)
-(*                         slip in the pasted proposal (there the two worlds     *)
-(*                         were swapped).                                        *)
+(*                         effect world.                                          *)
 (*                                                                                 *)
 (*   step               : the operational semantics (S-Comm / S-Act), typing-    *)
 (*                         independent, exactly as in the paper's Section 4.2.   *)
@@ -131,15 +128,23 @@ Section DirectTyping.
       ctypes Gc s W ->
       ctypes (GGoal phi Gc) s W
   | CT_Comm : forall p q gbranches s W sendb recvb,
+      (* The professor's exact T-Comm: the sender p offers exactly the
+         protocol's branch set I (= labels of [gbranches] = labels of
+         [sendb]); the receiver q offers a superset J >= I (the sole
+         subtyping direction the rule keeps -- Sub-Ext, receiver accepts
+         more).  Every protocol branch is checked against the SAME residual
+         bystanders [M] -- the unobserved-choice / deadlock check, with no
+         merge computed. *)
       p <> q ->
       s p = POut q sendb ->
       s q = PIn  p recvb ->
-      sendb <> nil ->
-      LabSub sendb gbranches ->    (* Sub-Int: sender may offer fewer than G *)
-      LabSub gbranches recvb ->    (* Sub-Ext: receiver may accept more than G *)
-      (forall l P, InPair l P sendb ->
-         exists Gc Q, InPair l Gc gbranches /\ InPair l Q recvb /\
-                      ctypes Gc (upd (upd s p P) q Q) W) ->
+      gbranches <> nil ->
+      LabSub gbranches sendb ->    (* every protocol branch is offered by p ... *)
+      LabSub sendb gbranches ->    (* ... and p offers no others: labels(sendb) = I *)
+      LabSub gbranches recvb ->    (* I subseteq J: receiver accepts more (Sub-Ext) *)
+      (forall l Gl, InPair l Gl gbranches ->
+         exists P Q, InPair l P sendb /\ InPair l Q recvb /\
+                     ctypes Gl (upd (upd s p P) q Q) W) ->
       ctypes (GComm p q gbranches) s W.
 
   (* "G's remaining behaviour is only goal-checks down to end" *)
@@ -161,7 +166,7 @@ Section DirectTyping.
     induction H as [ s W Hend
                     | a p Gc s W W' P Hact Heff Hcont _
                     | phi Gc s W Hphi Hcont IH
-                    | p q gbranches s W sendb recvb Hpq Hsp Hsq Hne Hsub1 Hsub2 Hcont ].
+                    | p q gbranches s W sendb recvb Hpq Hsp Hsq Hne Hsub_gs Hsub_sg Hsub_gr Hcont ].
     - (* CT_End *) intro Hnt. exfalso. apply Hnt. constructor.
     - (* CT_Act *) intro Hnt.
       exists (upd s p P), W', Gc. split.
@@ -170,12 +175,12 @@ Section DirectTyping.
     - (* CT_Goal *) intro Hnt.
       apply IH. intro HTGc. apply Hnt. constructor. exact HTGc.
     - (* CT_Comm *) intro Hnt.
-      destruct sendb as [| [l P] rest].
+      destruct gbranches as [| [l Gl] grest].
       + congruence.
-      + assert (HinP : InPair l P ((l, P) :: rest)) by (left; reflexivity).
-        destruct (Hcont l P HinP) as [Gc [Q [HinGc [HinQ HtyC]]]].
-        exists (upd (upd s p P) q Q), W, Gc. split.
-        * eapply S_Comm; eauto.
+      + assert (HinG : InPair l Gl ((l, Gl) :: grest)) by (left; reflexivity).
+        destruct (Hcont l Gl HinG) as [P [Q [HinP [HinQ HtyC]]]].
+        exists (upd (upd s p P) q Q), W, Gl. split.
+        * eapply S_Comm; [exact Hsp | exact HinP | exact Hsq | exact HinQ].
         * exact HtyC.
   Qed.
 
@@ -242,20 +247,24 @@ Module HandoffInstance.
   Proof.
     unfold G_good, s_good.
     eapply CT_Comm.
-    - discriminate.
-    - reflexivity.
-    - reflexivity.
-    - discriminate.
-    - intros l x Hin. destruct Hin as [Heq | []].
+    - discriminate.                       (* Planner <> Worker *)
+    - reflexivity.                        (* s Planner = POut Worker sendb *)
+    - reflexivity.                        (* s Worker  = PIn Planner recvb *)
+    - discriminate.                       (* gbranches <> nil *)
+    - intros l x Hin. destruct Hin as [Heq | []].   (* LabSub gbranches sendb *)
       assert (l = Req) by congruence. subst l.
-      eexists. left. reflexivity.
-    - intros l x Hin. destruct Hin as [Heq | []].
+      exists PEnd. left. reflexivity.
+    - intros l x Hin. destruct Hin as [Heq | []].   (* LabSub sendb gbranches *)
       assert (l = Req) by congruence. subst l.
-      eexists. left. reflexivity.
-    - intros l P Hin. destruct Hin as [Heq | []].
-      assert (l = Req) by congruence. assert (P = PEnd) by congruence. subst l P.
-      eexists (GAct Deliver Worker (GGoal Done GEnd)).
-      eexists (PAct Deliver PEnd).
+      exists (GAct Deliver Worker (GGoal Done GEnd)). left. reflexivity.
+    - intros l x Hin. destruct Hin as [Heq | []].   (* LabSub gbranches recvb *)
+      assert (l = Req) by congruence. subst l.
+      exists (PAct Deliver PEnd). left. reflexivity.
+    - intros l Gl Hin. destruct Hin as [Heq | []].  (* premise, over gbranches *)
+      assert (l = Req) by congruence.
+      assert (Gl = GAct Deliver Worker (GGoal Done GEnd)) by congruence. subst l Gl.
+      exists PEnd.
+      exists (PAct Deliver PEnd).
       repeat split.
       + left. reflexivity.
       + left. reflexivity.

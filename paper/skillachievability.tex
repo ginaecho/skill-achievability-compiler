@@ -475,11 +475,12 @@ Both devices exist to answer questions about the \emph{network as a whole} ---
 implementation stand in for that contract?'' --- while type-checking only one
 role's syntax at a time. \S5.2 answers the same two questions with a single
 judgment, \emph{typing the whole configuration directly against $G$}: a choice
-node's rule quantifies over every branch the sender might take and requires the
+node's rule quantifies over every branch the protocol declares and requires the
 \emph{same} residual configuration to check against each one, which is exactly
 the semantic content of a defined merge, obtained without ever computing $\sqcap$
-or a local type. The two directions of subtyping are folded into the same rule as
-a pair of label-set inclusions. Tolerance therefore still has the same three
+or a local type. The receiver-side subtyping direction (a receiver may accept a
+superset of the protocol's labels) is folded into the same rule as a label-set
+inclusion $I\subseteq J$. Tolerance therefore still has the same three
 independent knobs from \S2 --- the existential $\Diamond$ (\S4.2), subtyping
 (now inside \textsc{T-Comm}, \S5.2), and the granularity of $\alpha$ --- ``flexible,
 tolerant of small details'' is still the profile $\langle$coarse $\alpha$,
@@ -509,37 +510,36 @@ does not grant, and achievability is refuted without any search.
 Skills are typed \emph{directly} against the global protocol and the world, by
 the coinductive judgment $G\vdash(\MM;W)$ --- read ``$G$ types session $\MM$
 starting from world $W$.'' There is no local type, no projection, and no
-subtyping relation: both directions of session subtyping and the
+separate subtyping relation: the receiver-side subtyping direction and the
 unobserved-choice check are structural side conditions of one rule.
 \begin{mathpar}
 \inferrule[T-Nil]{ }{\mathbf{end}\vdash(\mathbf 0;W)}
 \and
-\inferrule[T-Act]{\langle W\rangle\,a\,\langle W'\rangle \\ G\vdash(\mathsf p[P]\ppar\MM;W')}
+\inferrule[T-Act]{G\vdash(\mathsf p[P]\ppar\MM;W') \\ \langle W\rangle\,a\,\langle W'\rangle}
   {a@\mathsf p.\,G\vdash(\mathsf p[a.P]\ppar\MM;W)}
 \and
-\inferrule[T-Goal]{W\vDash\varphi \\ G\vdash(\MM;W)}
+\inferrule[T-Goal]{G\vdash(\MM;W) \\ W\vDash\varphi}
   {\checkmark\varphi.\,G\vdash(\MM;W)}
 \and
-\inferrule[T-Comm]{\mathsf p\neq\mathsf q \\ L\neq\emptyset \\ L\subseteq K\subseteq J \\
-  \forall\ell\in L.\ G_\ell\vdash(\mathsf p[P_\ell]\ppar\mathsf q[Q_\ell]\ppar\MM;W)}
-  {\mathsf p{\to}\mathsf q:\{\ell.G_\ell\}_{\ell\in K}\vdash
-   (\mathsf p[\mathsf q!\{\ell.P_\ell\}_{\ell\in L}]\ppar
-    \mathsf q[\mathsf p?\{\ell.Q_\ell\}_{\ell\in J}]\ppar\MM;W)}
+\inferrule[T-Comm]{G_i\vdash(\mathsf p[P_i]\ppar\mathsf q[Q_i]\ppar\MM;W) \\ \forall i\in I\subseteq J}
+  {\mathsf p{\to}\mathsf q:\{\ell_i.G_i\}_{i\in I}\vdash
+   (\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}]\ppar
+    \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}]\ppar\MM;W)}
 \end{mathpar}
 \textsc{T-Act} pairs type and world in lockstep with \textsc{World-Act}: the
 unconsumed type $a@\mathsf p.G$ sits with the \emph{pre}-effect world $W$ and the
 residual $G$ with the \emph{post}-effect world $W'$ --- the same convention as
-\textsc{G-Act} (\S4.2). \textsc{T-Comm} lets the sender $\mathsf p$ commit to
-\emph{fewer} branches than $G$ declares ($L\subseteq K$, recovering
-\textsc{Sub-Int}) and the receiver $\mathsf q$ accept \emph{more}
-($K\subseteq J$, recovering \textsc{Sub-Ext}); requiring \emph{every} label
-$\mathsf p$ might send to be checked against the \emph{same} bystanders $\MM$ is
-exactly the unobserved-choice condition, so a role forced to behave differently
-across branches it cannot distinguish makes no derivation possible --- the rule
-fails closed, and deadlock-freedom falls out of \textsc{T-Comm} itself with no
-merge to compute (Theorem~\ref{thm:safety}). \textsc{T-Act} is derivable only
-when $\langle W\rangle\,a\,\langle W'\rangle$ holds, which itself presupposes
-$a\in\dom(\Gamma)$: this is where hallucinated capabilities die, with
+\textsc{G-Act} (\S4.2). In \textsc{T-Comm} the sender $\mathsf p$ offers exactly
+the protocol's branch set $I$, while the receiver $\mathsf q$ may accept
+\emph{more} ($I\subseteq J$) --- the one subtyping direction the rule keeps
+(\textsc{Sub-Ext}, safe interface slack at the receiver). Requiring \emph{every}
+protocol branch $\ell_i$ to be checked against the \emph{same} bystanders $\MM$
+is exactly the unobserved-choice condition, so a role forced to behave
+differently across branches it cannot distinguish makes no derivation possible
+--- the rule fails closed, and deadlock-freedom falls out of \textsc{T-Comm}
+itself with no merge to compute (Theorem~\ref{thm:safety}). \textsc{T-Act} is
+derivable only when $\langle W\rangle\,a\,\langle W'\rangle$ holds, which itself
+presupposes $a\in\dom(\Gamma)$: this is where hallucinated capabilities die, with
 \textsc{T-Miss} as the diagnostic.
 
 \subsection{The achievability judgment}
@@ -556,7 +556,7 @@ reachability half is unchanged from \S4.2 and decided on $\Gamma,G$ alone, befor
 any $S_{\mathsf p}$ is known --- exactly what lets the checker run on the
 LLM-compacted pack the moment it exists; conformance is the additional,
 separately decidable check once the skills are declared, and needs no transport
-lemma: the two directions of subtyping are already inside \textsc{T-Comm}.
+lemma: the receiver-side subtyping slack is already inside \textsc{T-Comm}.
 
 \subsection{Reachability rules}
 The diamond is derived by the following inductive system, realized by the checker
@@ -756,9 +756,13 @@ judgment is what the checker must decide, projection-with-merge remains a sound
 and, we expect, complete decision procedure for it whenever $G$ is realizable ---
 that equivalence is asserted from the classical correspondence between
 projection and network-level conformance~\cite{honda,yoshidagheri}, not itself
-mechanized here. The verdict reason \textsc{Non\_Projectable} names this
-algorithmic engine's diagnostic; \S5.2 is the specification it is checked
-against.
+mechanized here. The implementation carries the full two-directional Gay--Hole
+subtyping, so it is at least as permissive as the declarative \textsc{T-Comm} of
+\S5.2 (which keeps only the receiver-side direction); the extra sender-side slack
+is an implementation convenience, and tightening the engine to match \textsc{T-Comm}
+exactly is a one-line restriction on the subtype check. The verdict reason
+\textsc{Non\_Projectable} names this algorithmic engine's diagnostic; \S5.2 is the
+specification it is checked against.
 
 \section{Evaluation}
 We assembled a corpus of 15 skills spanning the canonical failure modes ---
@@ -814,11 +818,11 @@ calculus and directed-choice global types follow the modern synchronous
 formulation of the Yoshida line~\cite{yoshidagheri,ghilezan,scalasyoshida}. We
 depart from the classical presentation in one respect: \S5.2 checks conformance
 directly against the whole session configuration rather than projecting first,
-which lets both directions of subtyping and the unobserved-choice check collapse
-into the side conditions of a single rule instead of a separate merge computation
---- and we mechanize this directly (\S6.3), rather than citing subject reduction
-from the projection-based literature. We otherwise add a world and a goal, which
-classical session types do not model.
+which lets the receiver-side subtyping direction and the unobserved-choice check
+collapse into the side conditions of a single rule instead of a separate merge
+computation --- and we mechanize this directly (\S6.3), rather than citing subject
+reduction from the projection-based literature. We otherwise add a world and a
+goal, which classical session types do not model.
 \emph{Automated planning}~\cite{strips} supplies capability-guarded goal
 reachability; we reuse its frame semantics but embed it in a multiparty
 choreography. The contribution is the \emph{fusion}, decided over an
