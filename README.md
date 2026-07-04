@@ -243,8 +243,11 @@ src/skillc/            the compiler package
 paper/                 the paper (LaTeX + built PDF): full proofs +
                        implementation-driven extensions
 proof/                 the theorem checkers for the paper's claims (Coq 8.18,
-                       zero axioms) -- certify T1/T2/T3; the compiler itself
-                       is the Python package above
+                       zero axioms) -- SkillAchievability.v certifies T1/T2/T3;
+                       DirectTyping.v the direct-typing head-move safety;
+                       DirectTypingSR.v subject reduction + session fidelity
+                       (communication interleaving); the compiler itself is the
+                       Python package above
 corpus/build_corpus.py 15 headline specs + 6 fragment/conformance specs
 docs/                  compaction prompt + real-skill scan report
 examples/              embedded-pack skills: retry loop, conformance-checked team

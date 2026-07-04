@@ -6,3 +6,6 @@ Print Assumptions HandoffInstance.good_typed.
 Print Assumptions HandoffInstance.good_runs_to_goal.
 Print Assumptions HandoffInstance.bad_stuck.
 Print Assumptions HandoffInstance.bad_untypeable.
+Require Import DirectTypingSR.
+Print Assumptions subject_reduction.
+Print Assumptions session_fidelity.

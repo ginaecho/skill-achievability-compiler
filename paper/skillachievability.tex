@@ -604,10 +604,11 @@ decidable on the pack alone.
 
 \section{Metatheory}
 
-We separate what is \emph{mechanized in Coq} (Theorems~\ref{thm:ref}--\ref{thm:cap},
-the head-move fragment of Theorem~\ref{thm:sr}, and the concrete instances, all
-axiom-free) from what is \emph{proved on paper} (the full operational
-correspondence, decidability, and the undecidability boundary).
+We separate what is \emph{mechanized in Coq} (Theorems~\ref{thm:ref}--\ref{thm:cap};
+Theorems~\ref{thm:sr}--\ref{thm:sf} for the communication fragment with full
+interleaving; the head-move action case; and the concrete instances, all
+axiom-free) from what is \emph{proved on paper} (the action-interleaving cases,
+decidability, and the undecidability boundary).
 
 \subsection{Soundness of the abstraction}
 Let $\mathcal A$ be the abstract transition system the checker explores and
@@ -676,38 +677,101 @@ If $G\vdash(\MM;W)$ and $(G,W)\reach_{\!\Lambda}(G',W')$, then
 $(\MM,W)\xrightarrow{\ \Lambda\ }(\MM',W')$ for some $\MM'$ with
 $G'\vdash(\MM';W')$.
 \end{theorem}
-\begin{proof}[Proof sketch]
-Both are by induction on the typing derivation, with a case split on the
-transition. When the move is the one $G$'s head prescribes, the matching head
-rule (\textsc{G-Comm-E}/\textsc{G-Act-E}) fires and the residual typing is exactly
-the premise of \textsc{T-Comm}/\textsc{T-Act} --- here the lockstep world pairing
-of the (corrected) \textsc{T-Act} is essential: the residual $G$ is typed at the
-same post-effect world $W'$ that \textsc{G-Act-E} reaches, so the two agree. When
-the move is by participants \emph{disjoint} from the head, it commutes into every
-branch and the interleaving rule (\textsc{G-Comm-I}/\textsc{G-Act-I}) fires,
-discharging the goal via \textsc{G-Goal} eagerly so no marker is stranded in a
-world where its formula fails; because \textsc{T-Comm} checks every branch against
-the \emph{same} bystanders, the disjoint move is available uniformly and the
-induction hypothesis supplies the stepped continuations. No case computes a
-projection or a merge. Under nondeterministic effects ($\Nd$) subject reduction
-requires \textsc{T-Act} to range over post-effect worlds; for deterministic
-effects the statement above is exact.
+We prove both by induction on the typing derivation $G\vdash(\MM;W)$, with a
+case analysis on the transition; the one auxiliary fact used throughout is that
+typing respects pointwise-equal sessions (\id{ctypes\_ext}), which lets the
+interleaving cases reassociate independent updates without functional
+extensionality.
+
+\begin{proof}[Proof of Theorem~\ref{thm:sr} (subject reduction)]
+By induction on $G\vdash(\MM;W)$.
+
+\emph{Case \textsc{T-Nil}} ($G=\mathbf{end}$, every role idle). Then $\MM$ has no
+output or pending action, so no $\Lambda$-transition exists and the claim holds
+vacuously.
+
+\emph{Case \textsc{T-Goal}} ($G=\checkmark\varphi.G_0$, with $W\vDash\varphi$ and
+$G_0\vdash(\MM;W)$). A goal marker is not a session construct, so the transition
+$(\MM,W)\to_\Lambda(\MM',W')$ is already a transition of $G_0$'s session. The
+induction hypothesis gives $(G_0,W)\reach_\Lambda(G',W')$ with $G'\vdash(\MM';W')$;
+since $W\vDash\varphi$, rule \textsc{G-Goal} discharges the marker,
+$(\checkmark\varphi.G_0,W)\reach_\Lambda(G',W')$ (eager discharge: the marker is
+consumed, never carried into $W'$, so it cannot be stranded where $\varphi$ fails).
+
+\emph{Case \textsc{T-Comm}}, with head $\mathsf p{\to}\mathsf q$ and branches
+$G_i$. Here $\MM$ is $\mathsf p[\mathsf q!\dots]\ppar\mathsf q[\mathsf
+p?\dots]\ppar\MM_0$, and each branch satisfies $G_i\vdash(\mathsf p[P_i]\ppar
+\mathsf q[Q_i]\ppar\MM_0;W)$. The transition is a communication
+$\Lambda=\mathsf r\,\ell\,\mathsf t$. Because $\mathsf p$ offers only outputs to
+$\mathsf q$ and $\mathsf q$ only inputs from $\mathsf p$, the sender/receiver
+shapes force a dichotomy.
+\begin{itemize}
+\item \emph{Head move} ($\mathsf r=\mathsf p$). Then $\mathsf t=\mathsf q$ and
+$\ell=\ell_k\in I$, and $\MM'=\mathsf p[P_k]\ppar\mathsf q[Q_k]\ppar\MM_0$. Rule
+\textsc{G-Comm-E} gives $(G,W)\reach_{\mathsf p\ell_k\mathsf q}(G_k,W)$, and
+$G_k\vdash(\MM';W)$ is exactly the $k$-th premise.
+\item \emph{Interleaving move} ($\mathsf r\neq\mathsf p$). The shapes then force
+$\mathsf r,\mathsf t\notin\{\mathsf p,\mathsf q\}$: $\mathsf r$ is an output so
+$\mathsf r\neq\mathsf q$, and $\mathsf t$ is an input so $\mathsf t\neq\mathsf p$,
+while $\mathsf t=\mathsf q$ would force $\mathsf r=\mathsf p$. Since $\mathsf
+r,\mathsf t$ lie in the bystanders $\MM_0$, the \emph{same} communication is
+enabled in each branch's configuration $\mathsf p[P_i]\ppar\mathsf
+q[Q_i]\ppar\MM_0$ (the head updates do not touch $\mathsf r,\mathsf t$). The
+induction hypothesis at each $i$ yields $G_i'$ with
+$(G_i,W)\reach_\Lambda(G_i',W)$ and $G_i'\vdash(\mathsf p[P_i]\ppar\mathsf
+q[Q_i]\ppar\MM_0';W)$, where $\MM_0'$ is $\MM_0$ after the bystander step. As
+$\mathrm{prt}(\Lambda)=\{\mathsf r,\mathsf t\}$ is disjoint from $\{\mathsf
+p,\mathsf q\}$, rule \textsc{G-Comm-I} assembles
+$(G,W)\reach_\Lambda(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i'\},W)$, and
+re-applying \textsc{T-Comm} (the sender/receiver at $\mathsf p,\mathsf q$ are
+untouched, and each branch is retyped by the induction hypothesis, reassociating
+the independent updates via \id{ctypes\_ext}) gives the residual typing.
+\end{itemize}
+Communications leave the world fixed, so no independence hypothesis is needed. For
+a world-changing action at the head (\textsc{T-Act}), \textsc{G-Act-E} matches and
+the residual $G$ is typed at the \emph{same} post-effect world the rule reaches
+--- this is exactly where the lockstep world pairing of the corrected \textsc{T-Act}
+is used. Interleaving \emph{two} actions requires their effects to commute
+($\mathsf{eff}_a\circ\mathsf{eff}_b=\mathsf{eff}_b\circ\mathsf{eff}_a$ for
+disjoint $a,b$), a frame-independence side condition that participant-disjointness
+alone does not supply; under it the \textsc{T-Act} interleaving case goes through
+identically.
 \end{proof}
 
-\noindent\textbf{Mechanized fragment.} The head-move case of
-Theorem~\ref{thm:sr} --- a well-typed, non-terminal configuration takes the step
-its protocol prescribes and lands well typed --- is mechanized axiom-free in
-\id{DirectTyping.v} (from \textsc{T-Comm}/\textsc{T-Act}/\textsc{T-Goal} alone, no
-projection), together with its deadlock-freedom (\id{progress}) half:
+\begin{proof}[Proof of Theorem~\ref{thm:sf} (session fidelity)]
+By induction on $G\vdash(\MM;W)$, inverting the global step
+$(G,W)\reach_\Lambda(G',W')$. \textsc{T-Nil} admits no global step.
+For \textsc{T-Goal}, the only applicable rule is \textsc{G-Goal}; the induction
+hypothesis realises the underlying step and the marker is discharged. For
+\textsc{T-Comm}, the global step is either \textsc{G-Comm-E} --- and the
+prescribed head communication $\mathsf p\,\ell_k\,\mathsf q$ is enabled by
+\textsc{S-Comm}, landing in the $k$-th premise --- or \textsc{G-Comm-I} with
+$\mathrm{prt}(\Lambda)\cap\{\mathsf p,\mathsf q\}=\emptyset$; then the induction
+hypothesis on any branch produces a bystander communication, whose endpoints lie
+outside $\{\mathsf p,\mathsf q\}$, so \textsc{S-Comm} fires it on $\MM$ and
+\textsc{T-Comm} retypes the result. The action cases mirror those of
+Theorem~\ref{thm:sr}.
+\end{proof}
+
+\noindent\textbf{Mechanization.} Both theorems are mechanized axiom-free for the
+communication-with-goals fragment --- the fragment in which interleaving is
+\emph{unconditional} --- in \id{DirectTypingSR.v}, over the labelled session and
+global transition systems, with full bystander interleaving and no projection,
+merge, or local type:
 \begin{lstlisting}[style=coq]
-Theorem type_directed_safety : forall Gt s W,
-  ctypes role_eq_dec eff Gt s W -> ~ Terminal Gt ->
-  exists s' W' Gt', step role_eq_dec eff (s, W) (s', W')
-                     /\ ctypes role_eq_dec eff Gt' s' W'.
-(* Print Assumptions type_directed_safety. => Closed under the global context *)
+Theorem subject_reduction : forall W G s s' L,
+  ctypes W G s -> lstep L s s' ->
+  exists G', gstep W L G G' /\ ctypes W G' s'.
+Theorem session_fidelity : forall W G G' s L,
+  ctypes W G s -> gstep W L G G' ->
+  exists s', lstep L s s' /\ ctypes W G' s'.
+(* Print Assumptions => Closed under the global context (both). *)
 \end{lstlisting}
-Mechanizing the full labelled correspondence, including the interleaving cases,
-is the main outstanding proof-engineering task (\S10).
+The head-move case for world-changing \emph{actions} is additionally mechanized in
+\id{DirectTyping.v} (\id{type\_directed\_safety}, also the \id{progress} half);
+its labelled-LTS interleaving --- which needs the effect-commutativity side
+condition above --- and multi-branch choice (the standard nested-list induction)
+remain on paper (\S10).
 
 \noindent\textbf{Concrete instance.} \id{HandoffInstance} mechanizes the
 planner/worker handoff of \S1 on both sides. The \emph{good} pairing --- planner
@@ -788,10 +852,12 @@ intent fidelity & top edge, synthesis & one human checkpoint\\
 The checker is ${\sim}300$ lines of Python over Z3. The compaction front-end issues
 the prompt of \S3 to an LLM and passes the result through a deterministic
 \emph{schema gate} before the checker sees it, so malformed packs are rejected
-without crashing the trusted core. The Coq development is two files: the
+without crashing the trusted core. The Coq development is three files: the
 reachability soundness core (Theorems~\ref{thm:ref}--\ref{thm:cap} plus
-\id{FlightInstance}, ${\sim}230$ lines) and the direct-typing core (the head-move
-fragment of Theorem~\ref{thm:sr} plus \id{HandoffInstance}, ${\sim}310$ lines); both
+\id{FlightInstance}, ${\sim}230$ lines); the direct-typing core (the head-move
+action safety plus \id{HandoffInstance}, ${\sim}310$ lines); and the
+operational-correspondence core (Theorems~\ref{thm:sr}--\ref{thm:sf} for the
+communication fragment with full interleaving, ${\sim}250$ lines); all three
 check under Coq 8.18 with no axioms, verified by \id{Print Assumptions}. The
 checker mirrors the semantics of \S4 exactly: STRIPS frame semantics for the
 world, existential search over the protocol control structure, and Z3 for
@@ -925,17 +991,18 @@ to a semi-decision (Theorem~\ref{thm:undec}); a practical system answers
 (more false achievable), never breaking Theorem~\ref{thm:ref} but weakening
 usefulness.
 \item \textbf{Engineering gaps.} The mechanization covers soundness of abstract
-reachability and the head-move fragment of subject reduction for the direct
-typing discipline (\S6.3) --- but the \emph{interleaving} cases of subject
-reduction and session fidelity (Theorems~\ref{thm:sr}--\ref{thm:sf}) are so far
-proved only on paper, as is the decision procedure the checker runs; nor does the
-mechanization yet cover recursive protocols ($\mu X.G$), which need the same
-coinductive treatment as the cited classical theory. The corpus is a
-proof-of-concept. \emph{Closed by this revision:} the old gap between the theory
-and ``full projection-with-merge'' is gone --- the direct judgment needs no merge
-at all. \emph{Still open:} mechanizing the full labelled correspondence (the
-interleaving lemma and the eager goal discharge are the fiddly parts); the
-equivalence between the declarative judgment ($G\vdash(\MM;W)$, \S5.2) and the
+reachability, the head-move action safety, and --- new in this revision ---
+subject reduction and session fidelity with \emph{full bystander interleaving}
+for the communication fragment (\id{DirectTypingSR.v}, \S6.3), all axiom-free.
+What remains on paper is narrower than before: the \emph{action}-interleaving
+cases (which need the effect-commutativity side condition of \S6.3), multi-branch
+choice (the standard nested-list induction), recursive protocols ($\mu X.G$), and
+the decision procedure the checker runs. The corpus is a proof-of-concept.
+\emph{Closed by this revision:} the old gap between the theory and ``full
+projection-with-merge'' is gone --- the direct judgment needs no merge at all ---
+and the communication operational correspondence is now machine-checked.
+\emph{Still open:} completing the labelled correspondence to actions and choice;
+the equivalence between the declarative judgment ($G\vdash(\MM;W)$, \S5.2) and the
 projection-based algorithmic engine that decides it (\id{session.py}); and the
 bridge from an abstract reachability witness to a concrete, directly-typed
 realizing session. Mechanizing the decision procedure and a live-LLM corpus at

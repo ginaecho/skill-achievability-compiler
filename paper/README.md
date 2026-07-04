@@ -22,10 +22,15 @@ the pack (`Γ;G ⊨ ◇φ_goal`, §4.2/§5.4) is unchanged and still needs no se
 - Operational correspondence (§6.3): **Subject Reduction** (Thm 4) and **Session
   Fidelity** (Thm 5) for the direct judgment over a *labelled* transition system
   (§4.2 now carries transition labels `Λ`, a participant map `prt`, and a global
-  LTS split into head `-E` rules and interleaving `-I` rules). The head-move
-  fragment is mechanized axiom-free (`type_directed_safety`); the interleaving
-  cases are proved on paper. Goal markers are discharged *eagerly* by `G-Goal`
-  (never carried past a world-changing step), which is what keeps SR sound.
+  LTS split into head `-E` rules and interleaving `-I` rules), with the full
+  inductive proofs written out. **Both are mechanized axiom-free with full
+  bystander interleaving** for the communication fragment in
+  `../proof/DirectTypingSR.v` (`subject_reduction`, `session_fidelity`). The
+  world-changing *action* interleaving needs an effect-commutativity side
+  condition (participant-disjointness alone does not imply effects commute over a
+  shared world) and is proved on paper; the head-move action case is mechanized
+  in `DirectTyping.v`. Goal markers are discharged *eagerly* by `G-Goal` (never
+  carried past a world-changing step), which is what keeps SR sound.
 - `proof/DirectTyping.v`: the new Coq development — `type_directed_safety` /
   `progress`, and `HandoffInstance`, mechanizing the paper's own planner/worker
   example on both sides (the good handoff is typed and reaches the goal; the
