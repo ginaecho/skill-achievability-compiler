@@ -105,16 +105,17 @@ a mechanically verified core. We prove in Coq that the checker is \emph{sound fo
 refutation} --- a verdict of \emph{impossible} is never wrong --- while being
 deliberately \emph{incomplete} for achievability, with the residue confined to
 two precisely characterized edges (payload faithfulness and intent fidelity)
-handed respectively to a runtime monitor and a human checkpoint. We further prove
-that the direct typing discipline itself is safe: a well-typed, non-terminal
-configuration always has the next move its protocol prescribes, and that move
-lands in a configuration typed by the residual protocol --- deadlock-freedom and
-preservation obtained without ever computing a projection or a merge. We give the
-syntax, an operational semantics, the typing and achievability judgments with
-inference rules, and the metatheory: refutation soundness, tolerance soundness,
-capability monotonicity, direct-typing safety, decidability within a
-static-topology fragment, and undecidability once agents may spawn participants
-at run time. An implementation and a corpus spanning the canonical agent failure
+handed respectively to a runtime monitor and a human checkpoint. We further show
+that the direct typing discipline enjoys \emph{operational correspondence} ---
+subject reduction and session fidelity: a well-typed session and its protocol step
+in lockstep over a labelled transition system, so a well-typed run never
+deadlocks and stays well typed, all obtained without ever computing a projection
+or a merge. We give the syntax, a labelled operational semantics, the typing and
+achievability judgments with inference rules, and the metatheory: refutation
+soundness, tolerance soundness, capability monotonicity, subject reduction and
+session fidelity, decidability within a static-topology fragment, and
+undecidability once agents may spawn participants at run time. An implementation
+and a corpus spanning the canonical agent failure
 modes confirm the theory: zero false impossibilities, and every false
 achievability an instance of the two deferred edges.
 \end{abstract}
@@ -250,10 +251,12 @@ merge operator, and no separate subtyping relation. To our knowledge this fusion
 aimed at LLM-drafted agent skills, is new.
 \item \textbf{A mechanized soundness core} (\S6) in Coq: refutation soundness
 (a verdict of impossible is never wrong), tolerance soundness (coarsening the
-abstraction preserves refutation), capability monotonicity (more tools never
-make a goal impossible), and \emph{direct-typing safety} --- deadlock-freedom and
-preservation proved for the new judgment itself, with no projection or merge
---- all axiom-free.
+abstraction preserves refutation), and capability monotonicity (more tools never
+make a goal impossible) --- all axiom-free --- together with an
+\emph{operational-correspondence} metatheory (subject reduction and session
+fidelity) for the direct judgment over a labelled transition system, with no
+projection or merge, whose head-move fragment is mechanized axiom-free and whose
+interleaving cases are proved on paper.
 \item \textbf{A decidability boundary result} (\S6.5): achievability is decidable
 in a static-topology fragment and undecidable once agents may spawn participants
 at run time. Autonomy is exactly what crosses the line.
@@ -409,10 +412,16 @@ N(x) & \text{otherwise (frame)}
 \end{cases}
 \]
 
-\subsection{Sessions, configurations, and may-reachability}
+\subsection{A labelled semantics for sessions and global types}
 \label{sec:semantics}
 Only capabilities touch the world, so sessions reduce as configurations
-$(\MM,W)$; communication is synchronous~\cite{ghilezan}:
+$(\MM,W)$; communication is synchronous~\cite{ghilezan}. Each transition carries
+a label $\Lambda$ recording its \emph{participants}, so that independent moves by
+disjoint roles can be identified:
+\[
+\mathrm{prt}(\mathsf p\,\ell\,\mathsf q)=\{\mathsf p,\mathsf q\},\qquad
+\mathrm{prt}(a@\mathsf p)=\{\mathsf p\}.
+\]
 \begin{mathpar}
 \inferrule[S-Comm]{k\in I\subseteq J}
   {\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}] \ppar
@@ -428,25 +437,45 @@ $(\MM,W)$; communication is synchronous~\cite{ghilezan}:
 closed under permutation of $\ppar$ and $\mathsf p[\mathbf 0]\ppar\MM\equiv\MM$.
 A non-terminated configuration with no successor is \emph{stuck}; the
 deadlocking planner/worker handoff of \S1 is the stuck two-role configuration in
-which both processes begin with an input.
+which both processes begin with an input. (Goal markers are \emph{not} a session
+action --- processes carry none --- so there is no session-level $\checkmark$
+transition; $\checkmark\varphi$ is a type-level obligation discharged by
+\textsc{T-Goal} and by \textsc{G-Goal} below.)
 
-The \emph{checker} explores the global type directly: a checker configuration is
-a pair $(G,W)$, and $\reach$ consumes the initial construct of $G$
-(read up to unfolding); $\reachs$ is its reflexive-transitive closure.
+The checker relates a session to its protocol through a \emph{labelled} transition
+system on global types, $(G,W)\reach_{\!\Lambda}(G',W')$, built from \emph{head}
+rules that consume the leading construct and \emph{interleaving} rules that let a
+move by participants \emph{disjoint} from the head commute inward:
 \begin{mathpar}
-\inferrule[G-Comm]{k\in I}
-  {(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i\}_{i\in I},\,W)\reach(G_k,\,W)}
+\inferrule[G-Comm-E]{k\in I}
+  {(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i\}_{i\in I},\,W)
+   \reach_{\!\mathsf p\,\ell_k\,\mathsf q}(G_k,\,W)}
 \and
-\inferrule[G-Act]{\langle W\rangle\,a\,\langle W'\rangle}
-  {(a@\mathsf p.\,G,\,W)\reach(G,\,W')}
+\inferrule[G-Act-E]{\langle W\rangle\,a\,\langle W'\rangle}
+  {(a@\mathsf p.\,G,\,W)\reach_{\!a@\mathsf p}(G,\,W')}
 \and
-\inferrule[G-Goal]{ }
-  {(\checkmark\varphi.\,G,\,W)\reach(G,\,W)}
+\inferrule[G-Goal]{W\vDash\varphi}
+  {(\checkmark\varphi.\,G,\,W)\reach_{\!\tau}(G,\,W)}
+\and
+\inferrule[G-Comm-I]{(G_i,W)\reach_{\!\Lambda}(G_i',W')\ \ (\forall i\in I) \\
+  \mathrm{prt}(\Lambda)\cap\{\mathsf p,\mathsf q\}=\emptyset}
+  {(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i\}_{i\in I},\,W)
+   \reach_{\!\Lambda}(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i'\}_{i\in I},\,W')}
+\and
+\inferrule[G-Act-I]{(G,W)\reach_{\!\Lambda}(G',W') \\ \mathrm{prt}(\Lambda)\cap\{\mathsf p\}=\emptyset}
+  {(a@\mathsf p.\,G,\,W)\reach_{\!\Lambda}(a@\mathsf p.\,G',\,W')}
 \end{mathpar}
-\textsc{G-Comm} is legitimate because choice is directed --- the branch is a
-communication both endpoints observe, and realizability (\S4.3) guarantees every
-third party can follow. A configuration is \emph{goal-satisfying} when control
-is at a goal marker or terminus and the world entails the goal:
+\textsc{G-Goal} discharges a goal marker \emph{eagerly} as an internal ($\tau$)
+step the moment $W\vDash\varphi$; a marker is never carried \emph{past} a
+world-changing move (which would demand $\varphi$ in the wrong world), so goal
+markers never block and never migrate. The head rules alone give the
+$\Lambda$-erased reduction $(G,W)\reach(G',W')$ that the achievability judgment
+below uses; the interleaving rules matter only for the operational
+correspondence of \S6.3. \textsc{G-Comm-E} is legitimate because choice is
+directed --- the branch is a communication both endpoints observe, and \S4.3
+guarantees every third party can follow. A configuration is
+\emph{goal-satisfying} when control is at a goal marker or terminus and the world
+entails the goal:
 \[
 \goal(\checkmark\varphi.G,W)\iff W\vDash\varphi,\qquad
 \goal(\mathbf{end},W)\iff W\vDash\gphi,
@@ -537,7 +566,7 @@ protocol branch $\ell_i$ to be checked against the \emph{same} bystanders $\MM$
 is exactly the unobserved-choice condition, so a role forced to behave
 differently across branches it cannot distinguish makes no derivation possible
 --- the rule fails closed, and deadlock-freedom falls out of \textsc{T-Comm}
-itself with no merge to compute (Theorem~\ref{thm:safety}). \textsc{T-Act} is
+itself with no merge to compute (Theorem~\ref{thm:sr}). \textsc{T-Act} is
 derivable only when $\langle W\rangle\,a\,\langle W'\rangle$ holds, which itself
 presupposes $a\in\dom(\Gamma)$: this is where hallucinated capabilities die, with
 \textsc{T-Miss} as the diagnostic.
@@ -575,9 +604,10 @@ decidable on the pack alone.
 
 \section{Metatheory}
 
-We separate what is \emph{mechanized in Coq} (Theorems~\ref{thm:ref}--\ref{thm:safety}
-and the concrete instances, all axiom-free) from what is \emph{proved on paper}
-(decidability and the undecidability boundary).
+We separate what is \emph{mechanized in Coq} (Theorems~\ref{thm:ref}--\ref{thm:cap},
+the head-move fragment of Theorem~\ref{thm:sr}, and the concrete instances, all
+axiom-free) from what is \emph{proved on paper} (the full operational
+correspondence, decidability, and the undecidability boundary).
 
 \subsection{Soundness of the abstraction}
 Let $\mathcal A$ be the abstract transition system the checker explores and
@@ -630,28 +660,45 @@ $\mathsf{booked}\wedge\mathsf{confirmation\_sent}$, since no step touches
 $\mathsf{conf}$) and \id{booking\_reachable} (a booking is still reachable). Both
 are axiom-free, witnessing non-vacuity of Theorem~\ref{thm:ref}.
 
-\subsection{Direct-typing safety: deadlock-freedom without projection}
+\subsection{Operational correspondence: subject reduction and session fidelity}
 \label{sec:safety-meta}
-\S5.2's claim that deadlock-freedom ``falls out of \textsc{T-Comm} itself'' is not
-a slogan: it is a second Coq development (\id{DirectTyping.v}), mechanizing
-$\vdash$ for the finite fragment of the calculus and proving, from
-\textsc{T-Comm}/\textsc{T-Act}/\textsc{T-Goal} alone, exactly the guarantee \S5.2
-of the earlier draft could only \emph{cite} from the projection-based
-literature~\cite{honda,yoshidagheri,scalasyoshida}.
-\begin{theorem}[Direct-typing safety]\label{thm:safety}
-If $G\vdash(\MM;W)$ and $G$ is not (a chain of goal markers over) $\mathbf{end}$,
-then $(\MM,W)$ has a step, and that step lands in a configuration typed by a
-residual global type: $\exists\MM',W',G'.\ (\MM,W)\xrightarrow{\ }(\MM',W')\ \wedge\
-G'\vdash(\MM';W')$.
+The direct judgment $G\vdash(\MM;W)$ is not merely preserved by reduction: the
+session and its protocol step \emph{in lockstep} over the labelled transition
+systems of \S4.2. This is the standard soundness backbone of a session
+calculus~\cite{honda,scalasyoshida}, obtained here \emph{directly}, with no
+projection and no merge.
+\begin{theorem}[Subject reduction]\label{thm:sr}
+If $G\vdash(\MM;W)$ and $(\MM,W)\xrightarrow{\ \Lambda\ }(\MM',W')$, then
+$(G,W)\reach_{\!\Lambda}(G',W')$ for some $G'$ with $G'\vdash(\MM';W')$.
 \end{theorem}
-\begin{proof}
-Induction on the typing derivation. \textsc{T-Act} and \textsc{T-Comm} each
-already carry the needed premise for their own next step ($\langle W\rangle a
-\langle W'\rangle$, respectively a nonempty offered branch); \textsc{T-Goal}
-recurses into its continuation. No case needs a merge or a projection.
-Mechanized, axiom-free, as \id{type\_directed\_safety}; \id{progress} is its
-deadlock-freedom half:
+\begin{theorem}[Session fidelity]\label{thm:sf}
+If $G\vdash(\MM;W)$ and $(G,W)\reach_{\!\Lambda}(G',W')$, then
+$(\MM,W)\xrightarrow{\ \Lambda\ }(\MM',W')$ for some $\MM'$ with
+$G'\vdash(\MM';W')$.
+\end{theorem}
+\begin{proof}[Proof sketch]
+Both are by induction on the typing derivation, with a case split on the
+transition. When the move is the one $G$'s head prescribes, the matching head
+rule (\textsc{G-Comm-E}/\textsc{G-Act-E}) fires and the residual typing is exactly
+the premise of \textsc{T-Comm}/\textsc{T-Act} --- here the lockstep world pairing
+of the (corrected) \textsc{T-Act} is essential: the residual $G$ is typed at the
+same post-effect world $W'$ that \textsc{G-Act-E} reaches, so the two agree. When
+the move is by participants \emph{disjoint} from the head, it commutes into every
+branch and the interleaving rule (\textsc{G-Comm-I}/\textsc{G-Act-I}) fires,
+discharging the goal via \textsc{G-Goal} eagerly so no marker is stranded in a
+world where its formula fails; because \textsc{T-Comm} checks every branch against
+the \emph{same} bystanders, the disjoint move is available uniformly and the
+induction hypothesis supplies the stepped continuations. No case computes a
+projection or a merge. Under nondeterministic effects ($\Nd$) subject reduction
+requires \textsc{T-Act} to range over post-effect worlds; for deterministic
+effects the statement above is exact.
 \end{proof}
+
+\noindent\textbf{Mechanized fragment.} The head-move case of
+Theorem~\ref{thm:sr} --- a well-typed, non-terminal configuration takes the step
+its protocol prescribes and lands well typed --- is mechanized axiom-free in
+\id{DirectTyping.v} (from \textsc{T-Comm}/\textsc{T-Act}/\textsc{T-Goal} alone, no
+projection), together with its deadlock-freedom (\id{progress}) half:
 \begin{lstlisting}[style=coq]
 Theorem type_directed_safety : forall Gt s W,
   ctypes role_eq_dec eff Gt s W -> ~ Terminal Gt ->
@@ -659,16 +706,18 @@ Theorem type_directed_safety : forall Gt s W,
                      /\ ctypes role_eq_dec eff Gt' s' W'.
 (* Print Assumptions type_directed_safety. => Closed under the global context *)
 \end{lstlisting}
+Mechanizing the full labelled correspondence, including the interleaving cases,
+is the main outstanding proof-engineering task (\S10).
+
 \noindent\textbf{Concrete instance.} \id{HandoffInstance} mechanizes the
 planner/worker handoff of \S1 on both sides. The \emph{good} pairing --- planner
 sends, worker delivers, goal checked --- is proved \id{ctypes}-typed
 (\id{good\_typed}) and its run is proved to reach a world satisfying the goal
 (\id{good\_runs\_to\_goal}). The \emph{bad} pairing --- both roles start with an
 input, exactly the deadlock of \S1 --- is proved \id{Stuck} (\id{bad\_stuck}), and
-Theorem~\ref{thm:safety}'s contrapositive then gives, for free, that
-\emph{no non-trivial global type can ever type it} (\id{bad\_untypeable}): the
-rule rejects the classical deadlocking handoff without any projection ever being
-computed.
+the contrapositive of \id{progress} then gives, for free, that \emph{no
+non-trivial global type can ever type it} (\id{bad\_untypeable}): the rule rejects
+the classical deadlocking handoff without any projection ever being computed.
 
 \subsection{Incompleteness, by design}
 \begin{proposition}[Incompleteness]\label{prop:inc}
@@ -741,8 +790,8 @@ the prompt of \S3 to an LLM and passes the result through a deterministic
 \emph{schema gate} before the checker sees it, so malformed packs are rejected
 without crashing the trusted core. The Coq development is two files: the
 reachability soundness core (Theorems~\ref{thm:ref}--\ref{thm:cap} plus
-\id{FlightInstance}, ${\sim}230$ lines) and the direct-typing safety core
-(Theorem~\ref{thm:safety} plus \id{HandoffInstance}, ${\sim}310$ lines); both
+\id{FlightInstance}, ${\sim}230$ lines) and the direct-typing core (the head-move
+fragment of Theorem~\ref{thm:sr} plus \id{HandoffInstance}, ${\sim}310$ lines); both
 check under Coq 8.18 with no axioms, verified by \id{Print Assumptions}. The
 checker mirrors the semantics of \S4 exactly: STRIPS frame semantics for the
 world, existential search over the protocol control structure, and Z3 for
@@ -820,9 +869,10 @@ depart from the classical presentation in one respect: \S5.2 checks conformance
 directly against the whole session configuration rather than projecting first,
 which lets the receiver-side subtyping direction and the unobserved-choice check
 collapse into the side conditions of a single rule instead of a separate merge
-computation --- and we mechanize this directly (\S6.3), rather than citing subject
-reduction from the projection-based literature. We otherwise add a world and a
-goal, which classical session types do not model.
+computation --- and we prove subject reduction and session fidelity directly for
+that judgment (\S6.3), rather than citing them from the projection-based
+literature. We otherwise add a world and a goal, which classical session types do
+not model.
 \emph{Automated planning}~\cite{strips} supplies capability-guarded goal
 reachability; we reuse its frame semantics but embed it in a multiparty
 choreography. The contribution is the \emph{fusion}, decided over an
@@ -875,19 +925,20 @@ to a semi-decision (Theorem~\ref{thm:undec}); a practical system answers
 (more false achievable), never breaking Theorem~\ref{thm:ref} but weakening
 usefulness.
 \item \textbf{Engineering gaps.} The mechanization covers soundness of abstract
-reachability and, separately, deadlock-freedom and preservation for the direct
-typing discipline (\S6.3) --- but not the decision procedure the checker actually
-runs, and not the finite fragment's extension to recursive protocols
-($\mu X.G$), which needs the same coinductive treatment as the cited classical
-theory; the corpus is a proof-of-concept. \emph{Closed by this revision:} the old
-gap between the theory and ``full projection-with-merge'' is gone --- the direct
-judgment needs no merge at all. \emph{Still open:} the equivalence between the
-declarative judgment ($G\vdash(\MM;W)$, \S5.2) and the algorithmic engine that
-decides it in the implementation (projection, merge, subtyping, \id{session.py})
-is asserted, not mechanized; and the bridge from an abstract reachability
-witness to a concrete, directly-typed realizing session --- promising because the
-witness path alone, without merge, should suffice to build one --- is future
-mechanization work. Mechanizing the decision procedure and a live-LLM corpus at
+reachability and the head-move fragment of subject reduction for the direct
+typing discipline (\S6.3) --- but the \emph{interleaving} cases of subject
+reduction and session fidelity (Theorems~\ref{thm:sr}--\ref{thm:sf}) are so far
+proved only on paper, as is the decision procedure the checker runs; nor does the
+mechanization yet cover recursive protocols ($\mu X.G$), which need the same
+coinductive treatment as the cited classical theory. The corpus is a
+proof-of-concept. \emph{Closed by this revision:} the old gap between the theory
+and ``full projection-with-merge'' is gone --- the direct judgment needs no merge
+at all. \emph{Still open:} mechanizing the full labelled correspondence (the
+interleaving lemma and the eager goal discharge are the fiddly parts); the
+equivalence between the declarative judgment ($G\vdash(\MM;W)$, \S5.2) and the
+projection-based algorithmic engine that decides it (\id{session.py}); and the
+bridge from an abstract reachability witness to a concrete, directly-typed
+realizing session. Mechanizing the decision procedure and a live-LLM corpus at
 scale are also next.
 \end{itemize}
 
@@ -900,10 +951,11 @@ capability-guarded reachability with session types' deadlock-freedom, decided
 with no local types, no projection, and no separate subtyping relation --- treat
 the LLM's compaction as untrusted, and prove the checker sound for refutation.
 The verdict \emph{impossible} is then never wrong; \emph{achievable} is honest
-about the two edges it defers; and the direct typing discipline is itself proved
-deadlock-free and preserved, with no merge ever computed. The same machinery, with
-the diamond flipped to a box, extends upward to per-step safety --- a layered route
-from ``can this agent even do that?'' to ``will it do it safely?''
+about the two edges it defers; and the direct typing discipline itself enjoys
+operational correspondence --- subject reduction and session fidelity over a
+labelled transition system --- with no merge ever computed. The same machinery,
+with the diamond flipped to a box, extends upward to per-step safety --- a layered
+route from ``can this agent even do that?'' to ``will it do it safely?''
 
 \begin{thebibliography}{9}\small
 \bibitem{honda} K.~Honda, N.~Yoshida, M.~Carbone. Multiparty Asynchronous Session Types. \emph{J. ACM} 63(1), 2016.

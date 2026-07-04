@@ -19,9 +19,13 @@ the pack (`Γ;G ⊨ ◇φ_goal`, §4.2/§5.4) is unchanged and still needs no se
 **New in this revision:**
 - §5.2 (`T-Comm`/`T-Act`/`T-Goal`) replaces §5.2's old local-type process typing,
   §4.3's projection/realizability, and §4.4's subtyping.
-- Theorem 4 (`Direct-typing safety`, §6.3): deadlock-freedom and preservation
-  for the new judgment, mechanized from scratch (the old draft could only cite
-  this guarantee from the projection-based literature).
+- Operational correspondence (§6.3): **Subject Reduction** (Thm 4) and **Session
+  Fidelity** (Thm 5) for the direct judgment over a *labelled* transition system
+  (§4.2 now carries transition labels `Λ`, a participant map `prt`, and a global
+  LTS split into head `-E` rules and interleaving `-I` rules). The head-move
+  fragment is mechanized axiom-free (`type_directed_safety`); the interleaving
+  cases are proved on paper. Goal markers are discharged *eagerly* by `G-Goal`
+  (never carried past a world-changing step), which is what keeps SR sound.
 - `proof/DirectTyping.v`: the new Coq development — `type_directed_safety` /
   `progress`, and `HandoffInstance`, mechanizing the paper's own planner/worker
   example on both sides (the good handoff is typed and reaches the goal; the
