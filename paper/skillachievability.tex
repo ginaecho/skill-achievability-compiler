@@ -622,8 +622,31 @@ $\mathit{abs}:W\to\mathcal A$ the abstraction. We require two simulation conditi
 If $(G,W_0)\reachs(G',W)$ then $\mathit{abs}(W_0)\,\hat\reach^{*}\,\mathit{abs}(W)$.
 \end{lemma}
 \begin{proof}
-Induction on the closure; \textsc{(step-sim)} discharges the step case. Mechanized
-as \id{reach\_abs}.
+By induction on the derivation of $(G,W_0)\reachs(G',W)$, i.e.\ on the length of
+the reflexive-transitive closure.
+\emph{Base.} The empty run gives $W=W_0$, and
+$\mathit{abs}(W_0)\,\hat\reach^{*}\,\mathit{abs}(W_0)$ by reflexivity of
+$\hat\reach^{*}$.
+\emph{Step.} Suppose $(G,W_0)\reachs(G'',W'')\reach(G',W)$. The induction
+hypothesis gives $\mathit{abs}(W_0)\,\hat\reach^{*}\,\mathit{abs}(W'')$. The last
+step either leaves the world fixed ($W=W''$, a communication or goal step), in
+which case the goal is immediate; or it is a capability firing $W''\reach W$, and
+\textsc{(step-sim)} yields $\mathit{abs}(W'')\,\hat\reach\,\mathit{abs}(W)$.
+Composing with transitivity of $\hat\reach^{*}$ gives
+$\mathit{abs}(W_0)\,\hat\reach^{*}\,\mathit{abs}(W)$. Mechanized as \id{reach\_abs}
+(the step case discharged by \textsc{step\_sim}, transitivity by
+\id{reach\_trans}).
+\end{proof}
+
+\begin{lemma}[Reachability monotonicity]\label{lem:mono}
+If every step of $\reach_1$ is a step of $\reach_2$ (that is, $x\reach_1 y$ implies
+$x\reach_2 y$), then $s\reachs_1 w$ implies $s\reachs_2 w$.
+\end{lemma}
+\begin{proof}
+By induction on the closure $s\reachs_1 w$. The empty run transports by
+reflexivity. For $s\reachs_1 u\reach_1 w$, the induction hypothesis gives
+$s\reachs_2 u$; the hypothesis turns the last step $u\reach_1 w$ into $u\reach_2
+w$; appending it gives $s\reachs_2 w$. Mechanized as \id{reach\_mono}.
 \end{proof}
 
 \subsection{Refutation soundness, tolerance, monotonicity}
@@ -633,8 +656,15 @@ no concrete run from $W_0$ reaches $\gphi$. Hence a verdict of \emph{impossible}
 never wrong.
 \end{theorem}
 \begin{proof}
-Contrapositive of Lemma~\ref{lem:transport} composed with \textsc{(goal-sim)}.
-Mechanized, axiom-free:
+We prove the contrapositive: if \emph{some} concrete run reaches the goal, then
+the abstract system reaches an abstract goal state. Suppose $W_0\reachs W$ with
+$\goal(W)$. By Lemma~\ref{lem:transport}, $\mathit{abs}(W_0)\,\hat\reach^{*}\,
+\mathit{abs}(W)$, and by \textsc{(goal-sim)}, $\hat\goal(\mathit{abs}(W))$. Thus
+$\mathit{abs}(W)$ is an abstract goal state reachable from $\mathit{abs}(W_0)$,
+contradicting the hypothesis. Hence no concrete run reaches $\gphi$: a verdict of
+\emph{impossible} --- read off exactly the premise, that the abstract search
+exhausts without hitting an abstract goal --- is never wrong. Mechanized,
+axiom-free (the existential witness is $\mathit{abs}(W)$):
 \end{proof}
 \begin{lstlisting}[style=coq]
 Theorem refutation_sound : forall s0,
@@ -646,14 +676,41 @@ Theorem refutation_sound : forall s0,
 \begin{theorem}[Tolerance soundness]\label{thm:tol}
 If a \emph{coarser} over-approximation (more edges) cannot reach the goal, neither
 can any finer system. Hence coarsening $\alpha$ to tolerate more detail never
-produces a false refutation. (Coq: \id{tolerance\_sound}.)
+produces a false refutation.
 \end{theorem}
+\begin{proof}
+Let $\reach_{\mathrm{fine}}$ and $\reach_{\mathrm{coarse}}$ be the two abstract
+step relations, with the coarsening an \emph{over}-approximation: every fine step
+is also a coarse step, $x\reach_{\mathrm{fine}}y\Rightarrow x\reach_{\mathrm{coarse}}y$.
+Suppose, for contradiction, that the finer system reaches the goal: $s_0
+\reachs_{\mathrm{fine}}a$ with $\hat\goal(a)$. By Lemma~\ref{lem:mono} (with
+$\reach_1=\reach_{\mathrm{fine}}$, $\reach_2=\reach_{\mathrm{coarse}}$), $s_0
+\reachs_{\mathrm{coarse}}a$; and $\hat\goal(a)$ still holds. So the coarser system
+reaches a goal state, contradicting the hypothesis. Hence no coarser-refuted goal
+is reachable in any finer system: coarsening $\alpha$ only \emph{adds} abstract
+edges, so it can never turn an unreachable goal into a reachable one --- refutation
+is preserved. Mechanized as \id{tolerance\_sound}, axiom-free.
+\end{proof}
 
 \begin{theorem}[Capability monotonicity]\label{thm:cap}
 If $\Gamma\subseteq\Gamma'$ and $\Gamma$ reaches $\gphi$, then $\Gamma'$ reaches
-$\gphi$. Granting tools never makes an achievable goal impossible. (Coq:
-\id{cap\_monotone}.)
+$\gphi$. Granting tools never makes an achievable goal impossible.
 \end{theorem}
+\begin{proof}
+Enlarging the capability context only \emph{adds} guarded effects: since
+$\Gamma\subseteq\Gamma'$, every capability firing available under $\Gamma$ is
+available under $\Gamma'$ with the same guard and effect (\textsc{World-Act}
+quantifies over $a\in\dom(\Gamma)\subseteq\dom(\Gamma')$), so every step of the
+$\Gamma$-transition relation is a step of the $\Gamma'$-relation. Suppose $\Gamma$
+reaches the goal: $W_0\reachs_{\Gamma}W$ with $\goal(W)$. By
+Lemma~\ref{lem:mono}, $W_0\reachs_{\Gamma'}W$, and $\goal(W)$ is unchanged (the
+goal predicate does not depend on $\Gamma$). Hence $\Gamma'$ reaches $\gphi$ ---
+via the very same witnessing run. The other premises of \textsc{Ach} are
+monotone in the same direction ($\caps(G)\subseteq\Gamma\subseteq\Gamma'$ still
+holds, and realizability and conformance do not mention $\Gamma$ beyond
+$a\in\dom(\Gamma)$), so the whole judgment is preserved. Mechanized as
+\id{cap\_monotone}, axiom-free.
+\end{proof}
 
 \noindent\textbf{Concrete instance.} The flight skill of \S2, variant A, is
 mechanized as \id{FlightInstance}. We prove \id{flight\_refuted} (no run reaches
@@ -808,20 +865,71 @@ In the fragment with finitely many roles (static topology), tail-recursive $G$,
 decidable state logic $\mathcal L$, and $\mathcal L$-definable effects,
 $\Gamma;G\achbox\gphi$ is decidable.
 \end{theorem}
-\begin{proof}[Proof sketch]
-The reachable set of (control, symbolic-world) pairs is finite: control is finite
-by tail-recursion, predicate valuations are finite, and arithmetic is summarized by
-accumulated $\mathcal L$-constraints with widening on recursion. Each guard/goal
-test is an SMT query in $\mathcal L$. Forward search terminates with a definite
-verdict.
+\begin{proof}
+The achievability judgment $\Gamma;G\achbox\gphi$ (\S4.2) is an existential
+reachability query over configurations $(G',W)$; we exhibit a terminating decision
+procedure and argue its completeness.
+
+\emph{The search space is finite.} A configuration has two components.
+(i) \emph{Control}, the residual global type $G'$ reachable from $G$ by
+$\reach$. Since $G$ is a regular tree (tail-recursion: finitely many distinct
+subtrees, \S3.3) and each $\reach$ step either descends into a subtree
+(\textsc{G-Comm-E}, \textsc{G-Act-E}) or erases a marker (\textsc{G-Goal}), the set
+$\{G' : (G,\_)\reachs(G',\_)\}$ is a subset of the finitely many subtrees of $G$,
+hence finite. (ii) \emph{Symbolic world}. The boolean part is a valuation
+$B:\Pred\to\mathbb B$ over the finitely many predicates named in the pack, so there
+are $2^{|\Pred|}$ boolean states. The numeric part is summarized by an accumulated
+constraint $\psi\in\mathcal L$ (a conjunction of the guards taken and the
+$\Nd$-postconditions assumed); on a back edge of the tail-recursion the procedure
+applies \emph{widening}, replacing $\psi$ by a weaker constraint drawn from a finite
+lattice of templates, which guarantees the sequence of numeric summaries
+stabilizes after finitely many iterations. Thus only finitely many distinct
+symbolic worlds arise, and the product with control is finite.
+
+\emph{Each edge is computable.} Firing a capability requires checking $W\vDash
+\pre_a$ and forming $\seither$; testing goal-satisfaction requires $W\vDash\varphi$.
+Both are entailment/satisfiability queries in quantifier-free linear integer
+arithmetic with uninterpreted predicates --- a decidable theory, discharged by an
+SMT solver. Branch selection (\textsc{Reach-Or}) is a finite disjunction.
+
+\emph{Termination and correctness.} Forward search (breadth-first over $\reach$)
+maintains a visited set of (control, symbolic-world) pairs; because that set is
+finite it adds each pair at most once, so the search halts. It answers
+\textsc{achievable} iff it enumerates a goal-satisfying configuration, and
+\textsc{impossible} otherwise. Soundness of the \textsc{impossible} verdict is
+Theorem~\ref{thm:ref}; and widening only \emph{enlarges} the reachable set (it
+weakens constraints, adding edges), so by Theorem~\ref{thm:tol} it never
+introduces a false refutation. Hence the procedure is a decision procedure for
+$\Gamma;G\achbox\gphi$.
 \end{proof}
 \begin{theorem}[Undecidability under autonomy]\label{thm:undec}
 If skills may spawn participants at run time (unbounded $\mathcal R$) with dynamic
 channels, achievability is undecidable.
 \end{theorem}
-\begin{proof}[Proof sketch]
-Such systems embed communicating finite-state machines, whose control-state
-reachability is undecidable (Brand--Zafiropulo). Goal reachability inherits this.
+\begin{proof}
+By reduction from the control-state reachability problem for communicating
+finite-state machines (CFSMs), which is undecidable~\cite{bz}. Fix a CFSM instance:
+finite-control machines $M_1,M_2$ exchanging messages over unbounded FIFO
+channels, and a target control state $q_f$ of $M_1$; deciding whether a run reaches
+$q_f$ is undecidable.
+
+We compute, from this instance, a skill whose goal is achievable iff the CFSM
+reaches $q_f$. Each machine $M_i$ becomes a role whose process mirrors its control
+graph: a transition that sends message $m$ spawns, at run time, a fresh
+\emph{courier} participant carrying $m$ (this is exactly the dynamic-spawning
+capability the theorem hypothesizes), and a transition that receives $m$
+synchronizes with the oldest outstanding courier for that channel, so the unbounded
+family of couriers realizes the unbounded FIFO. A boolean predicate
+$\mathsf{at\_}q_f$ is established by the single capability guarding $M_1$'s entry
+into $q_f$, and we set $\gphi=\mathsf{at\_}q_f$. By construction a run of the skill
+reaches a state satisfying $\gphi$ iff the CFSM has a run reaching $q_f$: the
+courier discipline puts the skill's reachable configurations in bijection with the
+CFSM's channel contents and control states. The construction is a computable map
+from CFSM instances to packs, so a decision procedure for achievability would
+decide CFSM control-state reachability --- impossible. Hence achievability is
+undecidable once participants may be spawned dynamically. (The finiteness argument
+of Theorem~\ref{thm:dec} breaks at exactly the point this reduction exploits: an
+unbounded number of couriers makes the set of reachable controls infinite.)
 \end{proof}
 
 \noindent The two theorems draw the line, and the line is autonomy itself. A
