@@ -4,6 +4,28 @@
 Goal-Achievability Type Discipline for LLM-Synthesized Agent Skills*,
 with `skillachievability.pdf` built from it.
 
+## Source of truth for the core rules
+
+`tas.tex` is the **authoritative statement of the core formal rules** —
+the global-type grammar, the `prt`/`cap` definitions, the typing rules
+(`T-Comm`/`T-Act`/`T-Goal`/`T-End`), the session and global labelled
+transition systems (`S-*`, `G-*-E`, `G-*-I`), and the Subject Reduction /
+Session Fidelity statements. It is maintained by the professor and edited
+directly; treat it as the canonical version of any rule it contains.
+
+`skillachievability.tex` is the **full paper**, which embeds those rules
+inside the surrounding prose, proofs, figures, and Coq listings.
+
+**Integration workflow:** when `tas.tex` is updated, diff it against the
+committed copy, then port each changed rule/definition into
+`skillachievability.tex` — keeping the paper's presentation conventions
+(clean `\inferrule`/`mathpar`, subscript transition labels) and fixing any
+obvious source typos. Any point where a rule cannot be transcribed verbatim
+without breaking the surrounding proofs (e.g. a world-pairing or side-condition
+question) is flagged inline with a `% NOTE (integration)` comment and raised
+with the professor rather than silently changed. `tas.tex` wins on the rules;
+the paper wins on prose and proofs.
+
 This revision replaces the projection-based conformance system of the earlier
 extended draft (local types, projection with merge, a separate Gay–Hole
 subtyping relation) with a **direct typing discipline**: `T-Comm`/`T-Act`/
@@ -29,8 +51,12 @@ the pack (`Γ;G ⊨ ◇φ_goal`, §4.2/§5.4) is unchanged and still needs no se
   world-changing *action* interleaving needs an effect-commutativity side
   condition (participant-disjointness alone does not imply effects commute over a
   shared world) and is proved on paper; the head-move action case is mechanized
-  in `DirectTyping.v`. Goal markers are discharged *eagerly* by `G-Goal` (never
-  carried past a world-changing step), which is what keeps SR sound.
+  in `DirectTyping.v`. Goal markers are now **observable labels**: `S-Goal`
+  (session) and `G-Goal-E` (global, head) emit `✓φ`, and `G-Goal-I` commutes a
+  continuation step under a still-pending marker. The world-changing case of
+  `G-Goal-I` (a firing that can falsify a pending `φ`) is the open crux of the
+  correspondence, left to §10; per the professor, `G-Goal-I` is intentionally
+  general and each session carries a set of goals over which `S-Goal` ranges.
 - `proof/DirectTyping.v`: the new Coq development — `type_directed_safety` /
   `progress`, and `HandoffInstance`, mechanizing the paper's own planner/worker
   example on both sides (the good handoff is typed and reaches the goal; the
