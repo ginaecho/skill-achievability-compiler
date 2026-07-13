@@ -475,8 +475,11 @@ A non-terminated configuration with no successor is \emph{stuck}; the
 deadlocking planner/worker handoff of \S1 is the stuck two-role configuration in
 which both processes begin with an input. A goal marker is \emph{not} carried by
 any process; instead \textsc{S-Goal} lets a configuration \emph{observe} that its
-world already entails $\varphi$, emitting the label $\checkmark\varphi$ without
-altering $\MM$ or $W$. This observable goal step is matched at the type level by
+world already entails one of its declared goals $\varphi$, emitting the label
+$\checkmark\varphi$ without altering $\MM$ or $W$. (Each session carries a set of
+goal formulas, and $\varphi$ ranges over that set --- not over every formula the
+world happens to satisfy --- so that each observation has a matching marker in the
+protocol.) This observable goal step is matched at the type level by
 \textsc{G-Goal-E} below, so that $\checkmark\varphi$ is a genuine label $\Lambda$
 of both transition systems and the operational correspondence of \S6.3 ranges
 over it uniformly.
@@ -511,10 +514,14 @@ move by participants \emph{disjoint} from the head commute inward:
 the observable label $\checkmark\varphi$ that matches \textsc{S-Goal}; the marker
 is consumed in place and never carried \emph{past} a world-changing move (which
 would demand $\varphi$ in the wrong world), so goal markers never block. Dually,
-\textsc{G-Goal-I} lets a move by participants \emph{other} than the marker's
-commute inward under a still-pending $\checkmark\varphi$, the marker riding along
-unchanged --- the type-level counterpart of the fact that a bystander step neither
-establishes nor destroys the goal. The extraction (head) rules
+\textsc{G-Goal-I} lets a step of the continuation commute inward under a
+still-pending $\checkmark\varphi$, the marker riding along. Its purpose is
+structural: a global type sequences the marker \emph{before} the actions of its
+continuation, whereas a session need not, so the interleaving rule lets the type
+follow a session that has already moved. (When the commuting step changes the
+world it may falsify a pending $\varphi$; reconciling that with subject reduction
+is the crux the operational-correspondence programme of \S10 addresses.) The
+extraction (head) rules
 \textsc{G-Comm-E}/\textsc{G-Act-E}/\textsc{G-Goal-E} give the $\Lambda$-erased
 reduction $(G,W)\reach(G',W')$ that the achievability judgment below uses; the
 interleaving rules matter only for the operational correspondence of \S6.3, and
@@ -589,11 +596,11 @@ the coinductive judgment $G\vdash(\MM;W)$ --- read ``$G$ types session $\MM$
 starting from world $W$.'' There is no local type, no projection, and no
 separate subtyping relation: the receiver-side subtyping direction and the
 unobserved-choice check are structural side conditions of one rule.
-% NOTE (integration): the source file's T-Act paired a@p.G with the post-effect
-% world W' while its own G-Act-E / S-Act pair a@p.G with the pre-effect world W.
-% We keep the lockstep pre/post convention (conclusion at pre-world W, residual G
-% at post-world W'), consistent with G-Act-E, S-Act, and the subject-reduction
-% proof of \S6.3. Only the new participant side conditions are added.
+% NOTE (integration): the pre/post world pairing of T-Act (conclusion at the
+% pre-effect world W, residual G at the post-effect world W') was confirmed by
+% the professor's revision, which corrected the earlier draft to this exact
+% convention -- consistent with G-Act-E, S-Act, and the subject-reduction proof
+% of \S6.3.
 \begin{mathpar}
 \inferrule[T-End]{ }{\End\vdash(\mathsf p[\mathbf 0];W)}
 \and
@@ -834,27 +841,33 @@ $W'=W$), \textsc{G-Goal-I} carries the still-pending marker along,
 $(\checkmark\varphi.G_0,W)\reach_\Lambda(\checkmark\varphi.G',W)$, and
 $\checkmark\varphi.G'\vdash(\MM';W)$ by \textsc{T-Goal} (the side condition
 $\prt{G'}=\prt{\MM'}$ is preserved because $\Lambda$ acts on the same participants
-on both sides). A \emph{world-changing} interleaving move under a pending marker
-is excluded by eager discharge --- $W\vDash\varphi$ already holds, so the marker is
-observed (previous case) before any capability fires, and is never carried into a
-world $W'$ where $\varphi$ might fail.
+on both sides). When the move is \emph{world-changing} (a capability firing,
+$W'\neq W$), \textsc{G-Goal-I} still commutes it under the marker,
+$(\checkmark\varphi.G_0,W)\reach_\Lambda(\checkmark\varphi.G',W')$; re-typing the
+residual by \textsc{T-Goal} then additionally asks $W'\vDash\varphi$, which a
+firing that touches $\varphi$ may break. This is the crux of the correspondence:
+the global type sequences the marker \emph{before} $G_0$'s actions, whereas the
+session may fire the action first --- the interleaving rules exist precisely to
+let the type catch up (a session that can already act may be typed by a global
+whose head is still a marker), and discharging this case is what the
+operational-correspondence programme (\S10) must complete. We keep the general
+rule rather than restricting it, so that goal observations remain first-class
+labels.
 \end{itemize}
-% NOTE (integration): making $\checkmark\varphi$ an observable label (S-Goal /
-% G-Goal-E / G-Goal-I) reopens the marker-vs-action interaction the earlier draft
-% sidestepped. G-Goal-I as stated in the source file puts no world-preservation
-% restriction on $\Lambda$; the eager-discharge argument above is what keeps
-% subject reduction honest, and effectively restricts G-Goal-I to world-preserving
-% (communication) interleaving. Worth confirming with the professor whether
-% G-Goal-I should carry a $W'=W$ side condition to match.
+% NOTE (integration): G-Goal-I is intentionally general (per the professor's
+% reply). The inner reduction rules are essential for subject reduction: a
+% session that can already communicate/act may be typed by a global type whose
+% head is still a marker, because global types impose a sequentiality on actions
+% that sessions do not. The world-changing-under-marker case (a firing that can
+% falsify a pending phi) is therefore the crux of SR and is left to the
+% \S10 programme -- NOT sidestepped by a W'=W restriction.
 %
-% NOTE (integration, 2): S-Goal as stated has no premise tying phi to the
-% protocol -- it lets a session observe ANY formula the world entails. Subject
-% reduction as stated then needs the observed phi to be one the protocol marks
-% (checkmark-phi in cap(G)); an observation of an unmarked formula has no
-% matching global move. The proofs here read S-Goal as ranging over the
-% protocol's marked goal formulas -- equivalently, the correspondence quantifies
-% over Lambda in cap(G). Worth confirming whether S-Goal should carry a
-% side condition to that effect.
+% NOTE (integration, 2): per the professor's reply, each session should carry a
+% set of goals, and S-Goal observes only formulas in that set (not any true
+% formula). The precise way a goal-set is attached to a session is not yet fixed
+% in the source; pending that, the proofs here read S-Goal as ranging over the
+% session's declared goals (equivalently checkmark-phi in cap(G)). To be
+% finalized once the session goal-set is formalized.
 
 \emph{Case \textsc{T-Comm}}, with head $\mathsf p{\to}\mathsf q$ and branches
 $G_i$. Here $\MM$ is $\mathsf p[\mathsf q!\dots]\ppar\mathsf q[\mathsf
