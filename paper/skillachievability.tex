@@ -62,7 +62,6 @@
 \newcommand{\apply}{\mathrm{apply}}
 \newcommand{\seither}{\mathrm{sp}}
 \newcommand{\dom}{\mathrm{dom}}
-\newcommand{\caps}{\mathrm{caps}}
 \newcommand{\goal}{\mathit{goal}}
 \newcommand{\gphi}{\varphi_{\mathit{goal}}}
 \newcommand{\restr}[1]{{\restriction}#1}
@@ -71,6 +70,13 @@
 \newcommand{\coind}{\mathrel{::=^{\mathit{coind}}}}
 \newcommand{\MM}{\mathbb{M}}
 \newcommand{\ppar}{\;\|\;}
+
+%%% participant/capability notation (professor's revision)
+\newcommand{\cp}[1]{\mathsf{cap}(#1)}
+\newcommand{\prt}[1]{\mathsf{prt}(#1)}
+\newcommand{\Pair}[2]{(#1;#2)}
+\newcommand{\set}[1]{\{#1\}}
+\newcommand{\End}{\mathsf{End}}
 
 \setlength{\parskip}{0.35ex}
 \setlength{\parindent}{1.2em}
@@ -376,7 +382,7 @@ construct~\cite{honda,yoshidagheri}.)
 G \;\coind\; \mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}
   \ \mid\ a@\mathsf{p}.\,G
   \ \mid\ \checkmark\varphi.\,G
-  \ \mid\ \mathbf{end}
+  \ \mid\ \End
 \]
 subject to $\mathsf p\neq\mathsf q$ and the same regularity and label
 conditions as processes. This is the \emph{only} type in the discipline: \S5.2
@@ -415,32 +421,65 @@ N(x) & \text{otherwise (frame)}
 \subsection{A labelled semantics for sessions and global types}
 \label{sec:semantics}
 Only capabilities touch the world, so sessions reduce as configurations
-$(\MM,W)$; communication is synchronous~\cite{ghilezan}. Each transition carries
+$\Pair\MM W$; communication is synchronous~\cite{ghilezan}. Each transition carries
 a label $\Lambda$ recording its \emph{participants}, so that independent moves by
-disjoint roles can be identified:
+disjoint roles can be identified. Two auxiliary maps drive the labelled system:
+the \emph{participants} $\prt{\cdot}$ of a global type, a label, or a session, and
+the \emph{capabilities} $\cp{\cdot}$ (the set of moves a global type can perform).
+On global types,
 \[
-\mathrm{prt}(\mathsf p\,\ell\,\mathsf q)=\{\mathsf p,\mathsf q\},\qquad
-\mathrm{prt}(a@\mathsf p)=\{\mathsf p\}.
+\begin{array}{l@{\qquad}l}
+\prt{\mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}}
+   =\set{\mathsf{p},\mathsf{q}}\cup\textstyle\bigcup_{i\in I}\prt{G_i}
+ & \prt{\checkmark\varphi.G}=\prt G\\[3pt]
+\prt{a@\mathsf{p}.G}=\set{\mathsf{p}}\cup\prt G
+ & \prt\End=\emptyset,
+\end{array}
+\]
+on labels
+$\prt{\mathsf p\,\ell\,\mathsf q}=\set{\mathsf{p},\mathsf{q}}$,
+$\prt{a@\mathsf{p}}=\set{\mathsf{p}}$,
+$\prt{\checkmark\varphi}=\emptyset$,
+and on sessions $\prt\MM=\set{\mathsf p\mid \MM\equiv \mathsf p[P]\ \&\ P\neq\mathbf 0}$
+(the roles with a residual behaviour). The capabilities of a global type are
+\[
+\begin{array}{l}
+\cp{\mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}}
+   =\set{\mathsf p\,\ell_i\,\mathsf q\mid i\in I}\cup\textstyle\bigcup_{i\in I}\cp{G_i}\\[3pt]
+\cp{a@\mathsf{p}.G}=\set{a@\mathsf{p}}\cup\cp G
+\qquad
+\cp{\checkmark\varphi.G}=\set{\checkmark\varphi}\cup\cp G
+\qquad
+\cp\End=\emptyset.
+\end{array}
 \]
 \begin{mathpar}
 \inferrule[S-Comm]{k\in I\subseteq J}
-  {\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}] \ppar
-   \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}] \ppar \MM,\ W
+  {\Pair{\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}] \ppar
+   \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}] \ppar \MM} W
    \;\xrightarrow{\ \mathsf p\,\ell_k\,\mathsf q\ }\;
-   \mathsf p[P_k]\ppar\mathsf q[Q_k]\ppar\MM,\ W}
+   \Pair{\mathsf p[P_k]\ppar\mathsf q[Q_k]\ppar\MM} W}
 \and
 \inferrule[S-Act]{\langle W\rangle\;a\;\langle W'\rangle}
-  {\mathsf p[a.P]\ppar\MM,\ W
+  {\Pair{\mathsf p[a.P]\ppar\MM} W
    \;\xrightarrow{\ a@\mathsf p\ }\;
-   \mathsf p[P]\ppar\MM,\ W'}
+   \Pair{\mathsf p[P]\ppar\MM}{W'}}
+\and
+\inferrule[S-Goal]{W\vDash\varphi}
+  {\Pair\MM W
+   \;\xrightarrow{\ \checkmark\varphi\ }\;
+   \Pair\MM W}
 \end{mathpar}
 closed under permutation of $\ppar$ and $\mathsf p[\mathbf 0]\ppar\MM\equiv\MM$.
 A non-terminated configuration with no successor is \emph{stuck}; the
 deadlocking planner/worker handoff of \S1 is the stuck two-role configuration in
-which both processes begin with an input. (Goal markers are \emph{not} a session
-action --- processes carry none --- so there is no session-level $\checkmark$
-transition; $\checkmark\varphi$ is a type-level obligation discharged by
-\textsc{T-Goal} and by \textsc{G-Goal} below.)
+which both processes begin with an input. A goal marker is \emph{not} carried by
+any process; instead \textsc{S-Goal} lets a configuration \emph{observe} that its
+world already entails $\varphi$, emitting the label $\checkmark\varphi$ without
+altering $\MM$ or $W$. This observable goal step is matched at the type level by
+\textsc{G-Goal-E} below, so that $\checkmark\varphi$ is a genuine label $\Lambda$
+of both transition systems and the operational correspondence of \S6.3 ranges
+over it uniformly.
 
 The checker relates a session to its protocol through a \emph{labelled} transition
 system on global types, $(G,W)\reach_{\!\Lambda}(G',W')$, built from \emph{head}
@@ -454,31 +493,40 @@ move by participants \emph{disjoint} from the head commute inward:
 \inferrule[G-Act-E]{\langle W\rangle\,a\,\langle W'\rangle}
   {(a@\mathsf p.\,G,\,W)\reach_{\!a@\mathsf p}(G,\,W')}
 \and
-\inferrule[G-Goal]{W\vDash\varphi}
-  {(\checkmark\varphi.\,G,\,W)\reach_{\!\tau}(G,\,W)}
+\inferrule[G-Goal-E]{W\vDash\varphi}
+  {(\checkmark\varphi.\,G,\,W)\reach_{\!\checkmark\varphi}(G,\,W)}
 \and
 \inferrule[G-Comm-I]{(G_i,W)\reach_{\!\Lambda}(G_i',W')\ \ (\forall i\in I) \\
-  \mathrm{prt}(\Lambda)\cap\{\mathsf p,\mathsf q\}=\emptyset}
+  \Lambda\in\cp{G_i} \\ \prt\Lambda\cap\set{\mathsf p,\mathsf q}=\emptyset}
   {(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i\}_{i\in I},\,W)
    \reach_{\!\Lambda}(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i'\}_{i\in I},\,W')}
 \and
-\inferrule[G-Act-I]{(G,W)\reach_{\!\Lambda}(G',W') \\ \mathrm{prt}(\Lambda)\cap\{\mathsf p\}=\emptyset}
+\inferrule[G-Act-I]{(G,W)\reach_{\!\Lambda}(G',W') \\ \Lambda\in\cp G \\ \prt\Lambda\cap\set{\mathsf p}=\emptyset}
   {(a@\mathsf p.\,G,\,W)\reach_{\!\Lambda}(a@\mathsf p.\,G',\,W')}
+\and
+\inferrule[G-Goal-I]{(G,W)\reach_{\!\Lambda}(G',W') \\ \Lambda\in\cp G}
+  {(\checkmark\varphi.\,G,\,W)\reach_{\!\Lambda}(\checkmark\varphi.\,G',\,W')}
 \end{mathpar}
-\textsc{G-Goal} discharges a goal marker \emph{eagerly} as an internal ($\tau$)
-step the moment $W\vDash\varphi$; a marker is never carried \emph{past} a
-world-changing move (which would demand $\varphi$ in the wrong world), so goal
-markers never block and never migrate. The head rules alone give the
-$\Lambda$-erased reduction $(G,W)\reach(G',W')$ that the achievability judgment
-below uses; the interleaving rules matter only for the operational
-correspondence of \S6.3. \textsc{G-Comm-E} is legitimate because choice is
-directed --- the branch is a communication both endpoints observe, and \S4.3
+\textsc{G-Goal-E} discharges a goal marker the moment $W\vDash\varphi$, emitting
+the observable label $\checkmark\varphi$ that matches \textsc{S-Goal}; the marker
+is consumed in place and never carried \emph{past} a world-changing move (which
+would demand $\varphi$ in the wrong world), so goal markers never block. Dually,
+\textsc{G-Goal-I} lets a move by participants \emph{other} than the marker's
+commute inward under a still-pending $\checkmark\varphi$, the marker riding along
+unchanged --- the type-level counterpart of the fact that a bystander step neither
+establishes nor destroys the goal. The extraction (head) rules
+\textsc{G-Comm-E}/\textsc{G-Act-E}/\textsc{G-Goal-E} give the $\Lambda$-erased
+reduction $(G,W)\reach(G',W')$ that the achievability judgment below uses; the
+interleaving rules matter only for the operational correspondence of \S6.3, and
+their $\Lambda\in\cp G$ premise confines a commuting move to a capability the
+residual protocol actually offers. \textsc{G-Comm-E} is legitimate because choice
+is directed --- the branch is a communication both endpoints observe, and \S4.3
 guarantees every third party can follow. A configuration is
 \emph{goal-satisfying} when control is at a goal marker or terminus and the world
 entails the goal:
 \[
 \goal(\checkmark\varphi.G,W)\iff W\vDash\varphi,\qquad
-\goal(\mathbf{end},W)\iff W\vDash\gphi,
+\goal(\End,W)\iff W\vDash\gphi,
 \]
 \[
 \Gamma;G\achbox\gphi\iff
@@ -541,16 +589,23 @@ the coinductive judgment $G\vdash(\MM;W)$ --- read ``$G$ types session $\MM$
 starting from world $W$.'' There is no local type, no projection, and no
 separate subtyping relation: the receiver-side subtyping direction and the
 unobserved-choice check are structural side conditions of one rule.
+% NOTE (integration): the source file's T-Act paired a@p.G with the post-effect
+% world W' while its own G-Act-E / S-Act pair a@p.G with the pre-effect world W.
+% We keep the lockstep pre/post convention (conclusion at pre-world W, residual G
+% at post-world W'), consistent with G-Act-E, S-Act, and the subject-reduction
+% proof of \S6.3. Only the new participant side conditions are added.
 \begin{mathpar}
-\inferrule[T-Nil]{ }{\mathbf{end}\vdash(\mathbf 0;W)}
+\inferrule[T-End]{ }{\End\vdash(\mathsf p[\mathbf 0];W)}
 \and
-\inferrule[T-Act]{G\vdash(\mathsf p[P]\ppar\MM;W') \\ \langle W\rangle\,a\,\langle W'\rangle}
+\inferrule[T-Act]{G\vdash(\mathsf p[P]\ppar\MM;W') \\ \langle W\rangle\,a\,\langle W'\rangle \\
+  \prt G\cup\set{\mathsf p}=\prt\MM\cup\set{\mathsf p}}
   {a@\mathsf p.\,G\vdash(\mathsf p[a.P]\ppar\MM;W)}
 \and
-\inferrule[T-Goal]{G\vdash(\MM;W) \\ W\vDash\varphi}
+\inferrule[T-Goal]{G\vdash(\MM;W) \\ W\vDash\varphi \\ \prt G=\prt\MM}
   {\checkmark\varphi.\,G\vdash(\MM;W)}
 \and
-\inferrule[T-Comm]{G_i\vdash(\mathsf p[P_i]\ppar\mathsf q[Q_i]\ppar\MM;W) \\ \forall i\in I\subseteq J}
+\inferrule[T-Comm]{G_i\vdash(\mathsf p[P_i]\ppar\mathsf q[Q_i]\ppar\MM;W) \\ \forall i\in I\subseteq J \\
+  \prt{\mathsf p{\to}\mathsf q:\{\ell_i.G_i\}_{i\in I}}=\prt\MM\cup\set{\mathsf p,\mathsf q}}
   {\mathsf p{\to}\mathsf q:\{\ell_i.G_i\}_{i\in I}\vdash
    (\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}]\ppar
     \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}]\ppar\MM;W)}
@@ -558,7 +613,7 @@ unobserved-choice check are structural side conditions of one rule.
 \textsc{T-Act} pairs type and world in lockstep with \textsc{World-Act}: the
 unconsumed type $a@\mathsf p.G$ sits with the \emph{pre}-effect world $W$ and the
 residual $G$ with the \emph{post}-effect world $W'$ --- the same convention as
-\textsc{G-Act} (\S4.2). In \textsc{T-Comm} the sender $\mathsf p$ offers exactly
+\textsc{G-Act-E} (\S4.2). In \textsc{T-Comm} the sender $\mathsf p$ offers exactly
 the protocol's branch set $I$, while the receiver $\mathsf q$ may accept
 \emph{more} ($I\subseteq J$) --- the one subtyping direction the rule keeps
 (\textsc{Sub-Ext}, safe interface slack at the receiver). Requiring \emph{every}
@@ -566,14 +621,28 @@ protocol branch $\ell_i$ to be checked against the \emph{same} bystanders $\MM$
 is exactly the unobserved-choice condition, so a role forced to behave
 differently across branches it cannot distinguish makes no derivation possible
 --- the rule fails closed, and deadlock-freedom falls out of \textsc{T-Comm}
-itself with no merge to compute (Theorem~\ref{thm:sr}). \textsc{T-Act} is
-derivable only when $\langle W\rangle\,a\,\langle W'\rangle$ holds, which itself
-presupposes $a\in\dom(\Gamma)$: this is where hallucinated capabilities die, with
-\textsc{T-Miss} as the diagnostic.
+itself with no merge to compute (Theorem~\ref{thm:sr}). Each rule additionally
+carries a \emph{participant-matching} side condition tying the protocol's
+participants to the session's: $\prt{\mathsf p{\to}\mathsf q:\{\ell_i.G_i\}}
+=\prt\MM\cup\set{\mathsf p,\mathsf q}$ in \textsc{T-Comm},
+$\prt G\cup\set{\mathsf p}=\prt\MM\cup\set{\mathsf p}$ in \textsc{T-Act}, and
+$\prt G=\prt\MM$ in \textsc{T-Goal}. These make the invariant ``the roles the
+protocol still mentions are exactly the roles still running'' hold at every node,
+ruling out a session that carries a stray participant the protocol has forgotten
+(or vice versa) --- the well-formedness that lets the interleaving cases of \S6.3
+match a bystander move on the session to a $\cp{\cdot}$-labelled move on the type.
+\textsc{T-End} closes the discipline at the terminus: the terminated protocol
+$\End$ types a single idle role $\mathsf p[\mathbf 0]$ --- and, through the
+congruence $\mathsf p[\mathbf 0]\ppar\MM\equiv\MM$, any session all of whose
+roles have terminated --- the base case of the participant invariant, since
+$\prt\End=\emptyset$ and an idle role contributes nothing to $\prt\MM$.
+\textsc{T-Act} is derivable only when $\langle W\rangle\,a\,\langle W'\rangle$
+holds, which itself presupposes $a\in\dom(\Gamma)$: this is where hallucinated
+capabilities die, with \textsc{T-Miss} as the diagnostic.
 
 \subsection{The achievability judgment}
 \begin{mathpar}
-\inferrule[Ach]{\Gamma\supseteq\caps(G) \\ \exists W_0\vDash\mathit{init}.\ \
+\inferrule[Ach]{\Gamma\supseteq\cp{G} \\ \exists W_0\vDash\mathit{init}.\ \
   G\vdash(\mathsf p_1[S_{\mathsf p_1}]\ppar\cdots\ppar\mathsf p_n[S_{\mathsf p_n}];W_0)
   \ \wedge\ \Gamma;(G,W_0)\achbox\gphi}
   {\Gamma\vdash\{S_{\mathsf p}\}_{\mathsf p}\ :\ G\ \triangleright\ \Diamond\gphi}
@@ -706,7 +775,7 @@ reaches the goal: $W_0\reachs_{\Gamma}W$ with $\goal(W)$. By
 Lemma~\ref{lem:mono}, $W_0\reachs_{\Gamma'}W$, and $\goal(W)$ is unchanged (the
 goal predicate does not depend on $\Gamma$). Hence $\Gamma'$ reaches $\gphi$ ---
 via the very same witnessing run. The other premises of \textsc{Ach} are
-monotone in the same direction ($\caps(G)\subseteq\Gamma\subseteq\Gamma'$ still
+monotone in the same direction ($\cp{G}\subseteq\Gamma\subseteq\Gamma'$ still
 holds, and realizability and conformance do not mention $\Gamma$ beyond
 $a\in\dom(\Gamma)$), so the whole judgment is preserved. Mechanized as
 \id{cap\_monotone}, axiom-free.
@@ -743,22 +812,60 @@ extensionality.
 \begin{proof}[Proof of Theorem~\ref{thm:sr} (subject reduction)]
 By induction on $G\vdash(\MM;W)$.
 
-\emph{Case \textsc{T-Nil}} ($G=\mathbf{end}$, every role idle). Then $\MM$ has no
-output or pending action, so no $\Lambda$-transition exists and the claim holds
-vacuously.
+\emph{Case \textsc{T-End}} ($G=\End$, every role idle). Then $\MM$ has no
+output or pending action, so the only available transition is the goal
+observation \textsc{S-Goal} at $\Lambda=\checkmark\gphi$ when $W\vDash\gphi$, which
+leaves $(\MM,W)$ fixed; there is no residual type to preserve and the claim holds
+(otherwise no $\Lambda$-transition exists and it holds vacuously).
 
 \emph{Case \textsc{T-Goal}} ($G=\checkmark\varphi.G_0$, with $W\vDash\varphi$ and
-$G_0\vdash(\MM;W)$). A goal marker is not a session construct, so the transition
-$(\MM,W)\to_\Lambda(\MM',W')$ is already a transition of $G_0$'s session. The
-induction hypothesis gives $(G_0,W)\reach_\Lambda(G',W')$ with $G'\vdash(\MM';W')$;
-since $W\vDash\varphi$, rule \textsc{G-Goal} discharges the marker,
-$(\checkmark\varphi.G_0,W)\reach_\Lambda(G',W')$ (eager discharge: the marker is
-consumed, never carried into $W'$, so it cannot be stranded where $\varphi$ fails).
+$G_0\vdash(\MM;W)$, $\prt{G_0}=\prt\MM$). The transition $(\MM,W)\to_\Lambda
+(\MM',W')$ splits on its label.
+\begin{itemize}
+\item \emph{Goal observation} ($\Lambda=\checkmark\varphi$, by \textsc{S-Goal}, so
+$\MM'=\MM$ and $W'=W$). Since $W\vDash\varphi$, rule \textsc{G-Goal-E} discharges
+the marker, $(\checkmark\varphi.G_0,W)\reach_{\checkmark\varphi}(G_0,W)$, and
+$G_0\vdash(\MM;W)$ is the premise: take $G'=G_0$.
+\item \emph{Interleaving} ($\Lambda\neq\checkmark\varphi$). A goal marker is not a
+session construct, so this is already a transition of $G_0$'s session; the
+induction hypothesis gives $(G_0,W)\reach_\Lambda(G',W')$ with $\Lambda\in\cp{G_0}$
+and $G'\vdash(\MM';W')$. When the move is world-preserving (a communication,
+$W'=W$), \textsc{G-Goal-I} carries the still-pending marker along,
+$(\checkmark\varphi.G_0,W)\reach_\Lambda(\checkmark\varphi.G',W)$, and
+$\checkmark\varphi.G'\vdash(\MM';W)$ by \textsc{T-Goal} (the side condition
+$\prt{G'}=\prt{\MM'}$ is preserved because $\Lambda$ acts on the same participants
+on both sides). A \emph{world-changing} interleaving move under a pending marker
+is excluded by eager discharge --- $W\vDash\varphi$ already holds, so the marker is
+observed (previous case) before any capability fires, and is never carried into a
+world $W'$ where $\varphi$ might fail.
+\end{itemize}
+% NOTE (integration): making $\checkmark\varphi$ an observable label (S-Goal /
+% G-Goal-E / G-Goal-I) reopens the marker-vs-action interaction the earlier draft
+% sidestepped. G-Goal-I as stated in the source file puts no world-preservation
+% restriction on $\Lambda$; the eager-discharge argument above is what keeps
+% subject reduction honest, and effectively restricts G-Goal-I to world-preserving
+% (communication) interleaving. Worth confirming with the professor whether
+% G-Goal-I should carry a $W'=W$ side condition to match.
+%
+% NOTE (integration, 2): S-Goal as stated has no premise tying phi to the
+% protocol -- it lets a session observe ANY formula the world entails. Subject
+% reduction as stated then needs the observed phi to be one the protocol marks
+% (checkmark-phi in cap(G)); an observation of an unmarked formula has no
+% matching global move. The proofs here read S-Goal as ranging over the
+% protocol's marked goal formulas -- equivalently, the correspondence quantifies
+% over Lambda in cap(G). Worth confirming whether S-Goal should carry a
+% side condition to that effect.
 
 \emph{Case \textsc{T-Comm}}, with head $\mathsf p{\to}\mathsf q$ and branches
 $G_i$. Here $\MM$ is $\mathsf p[\mathsf q!\dots]\ppar\mathsf q[\mathsf
 p?\dots]\ppar\MM_0$, and each branch satisfies $G_i\vdash(\mathsf p[P_i]\ppar
-\mathsf q[Q_i]\ppar\MM_0;W)$. The transition is a communication
+\mathsf q[Q_i]\ppar\MM_0;W)$. If the transition is a goal observation
+$\Lambda=\checkmark\varphi$ (\textsc{S-Goal}, leaving $(\MM,W)$ fixed), it is
+matched by \textsc{G-Comm-I}: $\prt{\checkmark\varphi}=\emptyset$ makes the
+disjointness premise trivial, and each branch realises the same observation by
+the induction hypothesis, using $\checkmark\varphi\in\cp{G_i}$ --- the
+observation concerns a marker the protocol actually pends (see the note below).
+Otherwise the transition is a communication
 $\Lambda=\mathsf r\,\ell\,\mathsf t$. Because $\mathsf p$ offers only outputs to
 $\mathsf q$ and $\mathsf q$ only inputs from $\mathsf p$, the sender/receiver
 shapes force a dichotomy.
@@ -777,7 +884,7 @@ q[Q_i]\ppar\MM_0$ (the head updates do not touch $\mathsf r,\mathsf t$). The
 induction hypothesis at each $i$ yields $G_i'$ with
 $(G_i,W)\reach_\Lambda(G_i',W)$ and $G_i'\vdash(\mathsf p[P_i]\ppar\mathsf
 q[Q_i]\ppar\MM_0';W)$, where $\MM_0'$ is $\MM_0$ after the bystander step. As
-$\mathrm{prt}(\Lambda)=\{\mathsf r,\mathsf t\}$ is disjoint from $\{\mathsf
+$\prt\Lambda=\{\mathsf r,\mathsf t\}$ is disjoint from $\{\mathsf
 p,\mathsf q\}$, rule \textsc{G-Comm-I} assembles
 $(G,W)\reach_\Lambda(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i'\},W)$, and
 re-applying \textsc{T-Comm} (the sender/receiver at $\mathsf p,\mathsf q$ are
@@ -788,7 +895,9 @@ Communications leave the world fixed, so no independence hypothesis is needed. F
 a world-changing action at the head (\textsc{T-Act}), \textsc{G-Act-E} matches and
 the residual $G$ is typed at the \emph{same} post-effect world the rule reaches
 --- this is exactly where the lockstep world pairing of the corrected \textsc{T-Act}
-is used. Interleaving \emph{two} actions requires their effects to commute
+is used; a goal observation at an action-typed configuration is matched by
+\textsc{G-Act-I} exactly as in the \textsc{T-Comm} case, since
+$\prt{\checkmark\varphi}\cap\set{\mathsf p}=\emptyset$ trivially. Interleaving \emph{two} actions requires their effects to commute
 ($\mathsf{eff}_a\circ\mathsf{eff}_b=\mathsf{eff}_b\circ\mathsf{eff}_a$ for
 disjoint $a,b$), a frame-independence side condition that participant-disjointness
 alone does not supply; under it the \textsc{T-Act} interleaving case goes through
@@ -797,13 +906,16 @@ identically.
 
 \begin{proof}[Proof of Theorem~\ref{thm:sf} (session fidelity)]
 By induction on $G\vdash(\MM;W)$, inverting the global step
-$(G,W)\reach_\Lambda(G',W')$. \textsc{T-Nil} admits no global step.
-For \textsc{T-Goal}, the only applicable rule is \textsc{G-Goal}; the induction
-hypothesis realises the underlying step and the marker is discharged. For
+$(G,W)\reach_\Lambda(G',W')$. \textsc{T-End} admits only the goal observation
+\textsc{G-Goal-E} at $\checkmark\gphi$, matched on the session by \textsc{S-Goal}.
+For \textsc{T-Goal}, the step is either \textsc{G-Goal-E} --- matched by
+\textsc{S-Goal} on the session, the marker discharged --- or \textsc{G-Goal-I},
+whose premise $(G_0,W)\reach_\Lambda(G_0',W')$ the induction hypothesis realises as
+an underlying session step that carries the marker along. For
 \textsc{T-Comm}, the global step is either \textsc{G-Comm-E} --- and the
 prescribed head communication $\mathsf p\,\ell_k\,\mathsf q$ is enabled by
 \textsc{S-Comm}, landing in the $k$-th premise --- or \textsc{G-Comm-I} with
-$\mathrm{prt}(\Lambda)\cap\{\mathsf p,\mathsf q\}=\emptyset$; then the induction
+$\prt\Lambda\cap\{\mathsf p,\mathsf q\}=\emptyset$; then the induction
 hypothesis on any branch produces a bystander communication, whose endpoints lie
 outside $\{\mathsf p,\mathsf q\}$, so \textsc{S-Comm} fires it on $\MM$ and
 \textsc{T-Comm} retypes the result. The action cases mirror those of
@@ -874,7 +986,7 @@ procedure and argue its completeness.
 (i) \emph{Control}, the residual global type $G'$ reachable from $G$ by
 $\reach$. Since $G$ is a regular tree (tail-recursion: finitely many distinct
 subtrees, \S3.3) and each $\reach$ step either descends into a subtree
-(\textsc{G-Comm-E}, \textsc{G-Act-E}) or erases a marker (\textsc{G-Goal}), the set
+(\textsc{G-Comm-E}, \textsc{G-Act-E}) or erases a marker (\textsc{G-Goal-E}), the set
 $\{G' : (G,\_)\reachs(G',\_)\}$ is a subset of the finitely many subtrees of $G$,
 hence finite. (ii) \emph{Symbolic world}. The boolean part is a valuation
 $B:\Pred\to\mathbb B$ over the finitely many predicates named in the pack, so there
