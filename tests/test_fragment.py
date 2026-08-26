@@ -1,4 +1,4 @@
-"""Tail-recursive loops (Theorem 4) and the autonomy boundary (Theorem 5):
+"""Tail-recursive loops (thm:dec) and the dynamic-topology boundary (thm:undec):
 mu-recursion with widening, and UNKNOWN degradation on dynamic spawning."""
 import pytest
 
@@ -187,8 +187,10 @@ def test_missing_external_choice_is_non_conformant():
     assert "handler" in v.detail
 
 
-def test_selector_dropping_a_branch_is_conformant():
-    """Sub-Int: making FEWER internal choices than the contract is safe."""
+def test_selector_dropping_a_branch_is_non_conformant():
+    """Direct conformance (T-Comm): the sender's declared selection must carry
+    EXACTLY the contract's labels.  A skill that silently drops a branch is
+    not the protocol's sender, so the verdict on G cannot be transported."""
     v = check(pack(
         roles=["router", "handler"],
         capabilities={"fix_a": {"add": ["resolved"]},
@@ -197,6 +199,39 @@ def test_selector_dropping_a_branch_is_conformant():
         goal="resolved",
         skills={"router": [{"select": {"branches": {
             "a": [{"send": {"to": "handler", "label": "go_a"}}]}}}]}))
+    assert not v.achievable
+    assert v.reason == "NON_CONFORMANT"
+    assert "router" in v.detail
+
+
+def test_dropped_selector_branch_cannot_produce_an_impossible_witness():
+    """Regression: only branch 'b' reaches the goal, but the declared router
+    never selects it.  Admitting the skill under Sub-Int let the checker
+    return a witness through an excluded branch -- an unrealisable plan."""
+    v = check(pack(
+        roles=["router", "handler"],
+        capabilities={"fix_a": {"add": ["attempted"]},
+                      "fix_b": {"add": ["resolved"]}},
+        protocol=informed(),
+        goal="resolved",
+        skills={"router": [{"select": {"branches": {
+            "a": [{"send": {"to": "handler", "label": "go_a"}}]}}}]}))
+    assert not v.achievable
+    assert v.reason == "NON_CONFORMANT"
+    assert ("choose", "b") not in (v.witness or ())
+
+
+def test_selector_offering_every_contract_branch_is_conformant():
+    """The exact-label sender is the conformant one."""
+    v = check(pack(
+        roles=["router", "handler"],
+        capabilities={"fix_a": {"add": ["resolved"]},
+                      "fix_b": {"add": ["resolved"]}},
+        protocol=informed(),
+        goal="resolved",
+        skills={"router": [{"select": {"branches": {
+            "a": [{"send": {"to": "handler", "label": "go_a"}}],
+            "b": [{"send": {"to": "handler", "label": "go_b"}}]}}}]}))
     assert v.achievable
 
 

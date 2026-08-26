@@ -12,11 +12,14 @@ Grammar (JSON-encoded):
     expr    : "varname" | int
             | {"+": [expr, expr]}
             | {"-": [expr, expr]}
-            | {"*": [expr, expr]}
+            | {"*": [expr, expr]}    -- QF-LIA: at least one operand must be
+                                        a constant (variable*variable is
+                                        nonlinear and is rejected by the gate)
 
 Predicates are Boolean and subject to STRIPS frame semantics (false unless
 established by an effect); numeric variables are unbounded integers handled
-symbolically by z3.
+symbolically by z3.  Keeping expressions linear keeps every solver query
+inside QF-LIA, the decidable fragment the paper's decision procedure assumes.
 """
 from __future__ import annotations
 
@@ -40,8 +43,25 @@ class FormulaError(ValueError):
     """Raised when a formula/expression is structurally malformed."""
 
 
+def is_constant_expr(e: Any) -> bool:
+    """True if `e` denotes an integer constant, i.e. mentions no variable.
+
+    Used to keep multiplication linear: `k * v` and `v * k` are QF-LIA terms,
+    `v * w` is not.
+    """
+    if isinstance(e, bool):
+        return False
+    if isinstance(e, int):
+        return True
+    if isinstance(e, dict) and len(e) == 1:
+        for k in ("+", "-", "*"):
+            if k in e and isinstance(e[k], list) and len(e[k]) == 2:
+                return all(is_constant_expr(x) for x in e[k])
+    return False
+
+
 def validate_expr(e: Any, path: str = "expr") -> None:
-    """Raise FormulaError if `e` is not a well-formed expression."""
+    """Raise FormulaError if `e` is not a well-formed *linear* expression."""
     if isinstance(e, bool):  # bool is an int subclass; reject explicitly
         raise FormulaError(f"{path}: bad expr {e!r}")
     if isinstance(e, (int, str)):
@@ -53,6 +73,12 @@ def validate_expr(e: Any, path: str = "expr") -> None:
                     raise FormulaError(f"{path}: '{k}' needs exactly 2 operands")
                 validate_expr(e[k][0], f"{path}.{k}[0]")
                 validate_expr(e[k][1], f"{path}.{k}[1]")
+                if k == "*" and not (is_constant_expr(e[k][0])
+                                     or is_constant_expr(e[k][1])):
+                    raise FormulaError(
+                        f"{path}: '*' needs at least one integer-constant "
+                        f"operand -- the pack language is QF-LIA and "
+                        f"variable*variable is nonlinear")
                 return
     raise FormulaError(f"{path}: bad expr {e!r}")
 

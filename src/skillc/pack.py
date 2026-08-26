@@ -42,6 +42,7 @@ is the honest-declaration obligation of the runtime layer.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,6 +66,17 @@ class Capability:
     dele: list[str] = field(default_factory=list)         # predicates -> false
     assigns: dict[str, Any] = field(default_factory=dict)  # var := expr
     nondet: dict[str, Any] = field(default_factory=dict)   # var := * s.t. formula
+
+    def to_dict(self) -> dict:
+        """The JSON shape this capability was loaded from ('del', not 'dele')."""
+        return {
+            "owner": self.owner,
+            "pre": self.pre,
+            "add": list(self.add),
+            "del": list(self.dele),
+            "assigns": dict(self.assigns),
+            "nondet": dict(self.nondet),
+        }
 
 
 @dataclass
@@ -107,6 +119,53 @@ class Pack:
     def load_file(path: str | Path) -> "Pack":
         with open(path, encoding="utf-8") as fh:
             return Pack.load(json.load(fh))
+
+    def to_dict(self) -> dict:
+        """Convert back to the JSON pack shape, so that a Pack built in
+        memory can be put through the same schema gate as untrusted
+        front-end output.  Typed conversion: a capability table that does not
+        hold Capability values is itself a malformed pack."""
+        if not isinstance(self.capabilities, dict):
+            raise PackError("capabilities must be a dict")
+        caps = {}
+        for n, c in self.capabilities.items():
+            if not isinstance(c, Capability):
+                raise PackError(
+                    f"cap[{n}]: expected a Capability, got "
+                    f"{type(c).__name__}")
+            caps[n] = c.to_dict()
+        return {
+            "name": self.name,
+            "roles": list(self.roles),
+            "capabilities": caps,
+            "protocol": list(self.protocol),
+            "goal": self.goal,
+            "init_true": list(self.init_true),
+            "init_constraints": list(self.init_constraints),
+            "skills": {r: list(s) for r, s in self.skills.items()},
+        }
+
+
+def normalize(pack: "Pack | dict") -> "Pack":
+    """The schema-gated typed form of a pack, from either accepted shape.
+
+    Both inputs (raw dict, Pack object) go through validate_pack, so nothing
+    reaches the checker unvalidated, and both converge on the same normalized
+    object, so a pack's identity does not depend on how it was handed over.
+    """
+    return Pack.load(pack.to_dict() if isinstance(pack, Pack) else pack)
+
+
+def pack_digest(pack: "Pack | dict") -> str:
+    """Deterministic identity of a pack: sha256 of its canonical JSON.
+
+    Packs that differ only in omitted defaults or key order share a digest;
+    any change to a capability, the protocol, or the goal changes it.  This
+    is what makes a verdict quotable: it names the object it decided.
+    """
+    canon = json.dumps(normalize(pack).to_dict(), sort_keys=True,
+                       separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 
 def _check_steps(steps: Any, path: str, rec_scope: frozenset = frozenset(),
@@ -220,7 +279,12 @@ def _check_local_steps(steps: Any, path: str,
 
 
 def validate_pack(pack: Any) -> None:
-    """Raise PackError if structurally malformed.  Returns None on success."""
+    """Raise PackError if structurally malformed.  Returns None on success.
+
+    This is the only gate between untrusted front-end output and the trusted
+    core; check() runs it on dicts and on Pack objects alike (via
+    Pack.to_dict), so no in-memory pack can slip past it.
+    """
     if not isinstance(pack, dict):
         raise PackError("pack must be a JSON object")
     for k in ("name", "capabilities", "protocol", "goal"):

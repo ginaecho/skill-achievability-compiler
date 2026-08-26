@@ -1,8 +1,8 @@
 """Projection (Proj-Sel/Proj-Brn/Proj-Mrg), merge, and Gay-Hole subtyping."""
 import pytest
 
-from skillc.session import (END, ProjectionError, merge, parse_local, project,
-                            subtype)
+from skillc.session import (END, ProjectionError, conformance_failure, merge,
+                            parse_local, project, subtype)
 
 
 def act(cap, by):
@@ -139,3 +139,72 @@ def test_parse_local_select_and_branch():
     t = parse_local([{"branch": {"from": "router", "branches": {
         "go": [{"act": {"cap": "fix"}}]}}}])
     assert t == ("branch", "router", (("go", ("act", "fix", END)),))
+
+
+class TestDirectConformance:
+    """`conformance_failure` decides the canonical *direct* conformance of
+    T-Comm: exact sender labels, receiver-side extra branches only."""
+
+    def test_exact_selector_conforms(self):
+        assert conformance_failure(
+            {"router": [{"select": {"branches": {
+                "a": [{"send": {"to": "handler", "label": "go_a"}}],
+                "b": [{"send": {"to": "handler", "label": "go_b"}}]}}}]},
+            INFORMED) is None
+
+    def test_selector_dropping_a_branch_is_rejected(self):
+        fail = conformance_failure(
+            {"router": [{"select": {"branches": {
+                "a": [{"send": {"to": "handler", "label": "go_a"}}]}}}]},
+            INFORMED)
+        assert fail is not None and "router" in fail
+
+    def test_selector_inventing_a_branch_is_rejected(self):
+        fail = conformance_failure(
+            {"router": [{"select": {"branches": {
+                "a": [{"send": {"to": "handler", "label": "go_a"}}],
+                "b": [{"send": {"to": "handler", "label": "go_b"}}],
+                "c": [{"send": {"to": "handler", "label": "go_c"}}]}}}]},
+            INFORMED)
+        assert fail is not None and "router" in fail
+
+    def test_receiver_may_offer_extra_branches(self):
+        assert conformance_failure(
+            {"handler": [{"branch": {"from": "router", "branches": {
+                "go_a": [{"act": {"cap": "fix_a"}}],
+                "go_b": [{"act": {"cap": "fix_b"}}],
+                "go_c": [{"act": {"cap": "fix_a"}}]}}}]},
+            INFORMED) is None
+
+    def test_receiver_dropping_a_branch_is_rejected(self):
+        fail = conformance_failure(
+            {"handler": [{"branch": {"from": "router", "branches": {
+                "go_a": [{"act": {"cap": "fix_a"}}]}}}]},
+            INFORMED)
+        assert fail is not None and "handler" in fail
+
+    def test_selector_with_wrong_continuation_is_rejected(self):
+        fail = conformance_failure(
+            {"router": [{"select": {"branches": {
+                "a": [{"send": {"to": "handler", "label": "go_a"}}],
+                "b": [{"send": {"to": "handler", "label": "wrong"}}]}}}]},
+            INFORMED)
+        assert fail is not None and "router" in fail
+
+    def test_non_projectable_role_is_reported(self):
+        g = [{"choice": {"by": "worker", "branches": {
+            "ask": [act("answer", "planner"), act("deliver", "worker")],
+            "direct": [act("deliver_direct", "worker")]}}}]
+        fail = conformance_failure({"planner": []}, g)
+        assert fail is not None and "cannot project" in fail
+
+    def test_generic_subtype_still_permits_fewer_selections(self):
+        """The Gay-Hole utility is unchanged; only the checker adapter is
+        tightened to the direct rule."""
+        contract = ("select", (("a", END), ("b", END)))
+        skill = ("select", (("a", END),))
+        assert subtype(skill, contract)
+        assert conformance_failure(
+            {"router": [{"select": {"branches": {
+                "a": [{"send": {"to": "handler", "label": "go_a"}}]}}}]},
+            INFORMED) is not None

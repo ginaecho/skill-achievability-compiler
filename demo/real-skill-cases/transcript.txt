@@ -1,0 +1,45 @@
+SKILLC REAL-SKILL DEMO
+Sourced, manually declared packs; no upstream tool is executed.
+
+CASE 1: DOCX: create, render, inspect
+Source: anthropics/skills: skills/docx/SKILL.md
+Scenario: All mandatory verification capabilities are declared.
+PS> python -m skillc.cli check demo\real-skill-cases\01-docx-render-verify\SKILL.md -v
+docx-render-verify: ACHIEVABLE
+  witness: act:write_docx -> act:render_docx -> act:inspect_rendered_pages
+exit code: 0
+
+CASE 2: GitHub: PR and human review handoff
+Source: GitHub Copilot cloud agent + github-mcp-server
+Scenario: The agent goal stops at requesting review, not self-approval.
+PS> python -m skillc.cli check demo\real-skill-cases\02-github-pr-review\SKILL.md -v
+github-pr-review-handoff: ACHIEVABLE
+  witness: act:read_issue -> act:push_branch -> act:create_pull_request -> act:request_review -> msg:review_requested
+exit code: 0
+
+CASE 3: MCP fetch: retrieval is not search
+Source: modelcontextprotocol/servers: src/fetch
+Scenario: The workflow invokes search_web, but fetch only accepts known URLs.
+PS> python -m skillc.cli check demo\real-skill-cases\03-fetch-is-not-search\SKILL.md -v
+fetch-is-not-search: IMPOSSIBLE [MISSING_CAPABILITY]
+  protocol invokes undeclared capabilities: ['search_web']
+  missing: search_web
+exit code: 1
+
+CASE 4: GitHub Actions: protected deployment
+Source: GitHub Actions protected environments
+Scenario: Prevent-self-review leaves environment_approved unestablished.
+PS> python -m skillc.cli check demo\real-skill-cases\04-protected-deployment\SKILL.md -v
+protected-production-deployment: IMPOSSIBLE [BLOCKED_GUARD]
+  capability 'deploy_job' guard never satisfiable on this path (pre={'and': ['run_status_known', 'environment_approved']})
+exit code: 1
+
+CASE 5: XLSX: recalculation is mandatory
+Source: anthropics/skills: skills/xlsx/SKILL.md
+Scenario: The restricted sandbox can write formulas but cannot verify them.
+PS> python -m skillc.cli check demo\real-skill-cases\05-xlsx-recalc-required\SKILL.md -v
+xlsx-recalculation-required: IMPOSSIBLE [GOAL_UNSAT]
+  protocol-independent refutation: no capability in Gamma establishes ['verified'] and the goal cannot hold without them -- every protocol over these capabilities is doomed, spawning included
+exit code: 1
+
+EXPECTED RESULTS: 5/5

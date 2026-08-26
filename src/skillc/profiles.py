@@ -4,7 +4,8 @@ A profile declares the tool capabilities a target agent runtime grants (the
 capability context Γ).  Achievability of a skill is always judged *relative*
 to a profile: the same SKILL.md can be ACHIEVABLE under `claude-ai` (which
 grants `ask_user_input_v0`) and IMPOSSIBLE under `claude-code` (which does
-not) -- that is Coq T3 (cap_monotone) made operational.
+not) -- an operational illustration of relativity to Gamma and the
+contrapositive of Coq T3 (`cap_monotone`).
 
 Built-in profiles live in skillc/data/profiles/*.json:
 

@@ -11,14 +11,16 @@ proof in proof/SkillAchievability.v:
     that establishes it, is REFUTED (Coq: FlightInstance).
   * SOUND for refutation (Coq T1): an IMPOSSIBLE verdict is never wrong,
     relative to the declared capabilities + frame assumption.
-  * INCOMPLETE for achievability (Coq T3): ACHIEVABLE means "structurally
-    admissible", not "guaranteed" -- the residue is intent fidelity (top) and
-    payload faithfulness (bottom), owned by other layers.
+  * INCOMPLETE for achievability (paper, Incompleteness proposition):
+    ACHIEVABLE means "structurally admissible", not "guaranteed" -- the
+    residue is intent fidelity (top) and payload faithfulness (bottom), owned
+    by other layers.
 
-The checker decides the four premises of the achievability judgment
-(paper 5.2):  capability soundness (no hallucinated tools), realizability
-(projection defined for every role), conformance (declared skills refine
-their projected contracts, Gay-Hole subtyping), and goal may-reachability.
+The checker decides an algorithmic form of the paper's achievability judgment
+(sections 5.2-5.3): capability soundness, projection-based realizability,
+direct conformance of declared role behaviours, and goal may-reachability.
+Equivalence between projection and the paper's declarative direct judgment is
+an explicit open proof obligation.
 Tail-recursive loops (mu X. G) are explored with predicate-state saturation
 and numeric widening on the back edge -- widening only enlarges the reachable
 set, so refutation stays sound (Coq T2).  Dynamic participant spawning is
@@ -29,20 +31,39 @@ Verdicts:  ACHIEVABLE (+witness path)  |  IMPOSSIBLE (+reason, +frontier)
            |  UNKNOWN (outside the decidable fragment)
 Reasons :  MISSING_CAPABILITY | BLOCKED_GUARD | GOAL_UNSAT | NON_PROJECTABLE
            | NON_CONFORMANT | DYNAMIC_TOPOLOGY
+
+UNKNOWN is an ABSTENTION, not a refutation: it claims nothing in either
+direction.  Use Verdict.refuted (not `not achievable`) whenever the question
+is "did the checker refute this?" -- the T1 soundness claim is about refuted
+verdicts only.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 import z3
 
 from .formula import CMP, atoms
-from .pack import Capability, Pack
+from .pack import Capability, Pack, normalize, pack_digest
 from .session import ProjectionError, conformance_failure, project
 
 REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
            "NON_PROJECTABLE", "NON_CONFORMANT", "DYNAMIC_TOPOLOGY")
+
+VERDICT_SCHEMA = "skillc.verdict/1"
+
+# Every solver query gets a finite budget.  The pack language is QF-LIA
+# (validate_expr rejects variable*variable), so queries are decidable in
+# principle; the budget is defensive -- a pathological instance degrades to a
+# solver UNKNOWN, which _sat resolves toward satisfiable, i.e. away from
+# refutation.  A finite budget therefore costs completeness, never soundness.
+SOLVER_TIMEOUT_MS = 10_000
+
+
+def _skillc_version() -> str:
+    from . import __version__          # deferred: avoids an import cycle
+    return __version__
 
 
 # --------------------------------------------------------------------------
@@ -105,18 +126,26 @@ def eval_formula(f: Any, st: State) -> z3.BoolRef:
     raise ValueError(f"bad formula: {f!r}")
 
 
-def _sat(constraints: list) -> bool:
-    """Satisfiability, resolved conservatively toward achievability: a solver
-    UNKNOWN (possible once packs use products of variables, outside the
-    linear fragment) counts as satisfiable, so a refutation is only ever
-    issued on a definite unsat -- the sound side of the T1 asymmetry."""
+def _sat(constraints: list, on_unknown: Callable[[], None] | None = None) -> bool:
+    """Satisfiability, resolved conservatively toward achievability.
+
+    A solver UNKNOWN (only reachable now by exhausting SOLVER_TIMEOUT_MS,
+    since the pack language is linear) counts as satisfiable, so a refutation
+    is only ever issued on a definite unsat -- the sound side of the T1
+    asymmetry.  `on_unknown` lets the caller record that the answer was an
+    approximation rather than a decision."""
     s = z3.Solver()
+    s.set("timeout", SOLVER_TIMEOUT_MS)
     s.add(*constraints)
-    return s.check() != z3.unsat
+    res = s.check()
+    if res == z3.unknown and on_unknown is not None:
+        on_unknown()
+    return res != z3.unsat
 
 
-def guard_satisfiable(st: State, cap: Capability) -> bool:
-    return _sat(list(st.arith) + [eval_formula(cap.pre, st)])
+def guard_satisfiable(st: State, cap: Capability,
+                      on_unknown: Callable[[], None] | None = None) -> bool:
+    return _sat(list(st.arith) + [eval_formula(cap.pre, st)], on_unknown)
 
 
 def apply_effect(st: State, cap: Capability) -> State:
@@ -169,7 +198,7 @@ def roles_acting(steps: list[dict]) -> set[str]:
 
 
 def has_spawn(steps: list[dict]) -> bool:
-    """Dynamic participant spawning: the autonomy boundary (Theorem 5)."""
+    """Dynamic participant spawning: the autonomy boundary (thm:undec)."""
     for s in steps:
         if "spawn" in s:
             return True
@@ -193,6 +222,8 @@ class Verdict:
     witness: tuple = ()          # action/branch path for ACHIEVABLE
     frontier: tuple = ()         # blocking info for IMPOSSIBLE
     unknown: bool = False        # outside the decidable fragment
+    semantics: str = "may"       # judgment the verdict was decided under
+    pack_digest: str = ""        # identity of the pack that was decided
 
     @property
     def label(self) -> str:
@@ -200,13 +231,31 @@ class Verdict:
             return "UNKNOWN"
         return "ACHIEVABLE" if self.achievable else "IMPOSSIBLE"
 
+    @property
+    def refuted(self) -> bool:
+        """True only for a definite IMPOSSIBLE.
+
+        UNKNOWN means the pack fell outside the decidable fragment, so the
+        checker made no claim: it is an abstention.  Counting it as a
+        refutation would manufacture false negatives out of honest silence,
+        and would misreport the T1 soundness claim, which ranges over
+        refutations only."""
+        return not self.achievable and not self.unknown
+
     def to_dict(self) -> dict:
         return {
+            "schema": VERDICT_SCHEMA,
             "verdict": self.label,
             "reason": self.reason,
             "detail": self.detail,
             "witness": [list(w) for w in self.witness],
             "frontier": list(self.frontier),
+            "achievable": self.achievable,
+            "refuted": self.refuted,
+            "unknown": self.unknown,
+            "semantics": self.semantics,
+            "skillc_version": _skillc_version(),
+            "pack_digest": self.pack_digest,
         }
 
 
@@ -223,6 +272,12 @@ def establishable_atoms(p: Pack) -> frozenset:
 
 
 class Checker:
+    """The decision procedure over an already-validated Pack.
+
+    check() is the seam that untrusted input goes through: it schema-gates
+    dicts and Pack objects alike before constructing a Checker.
+    """
+
     def __init__(self, pack: Pack, semantics: str = "may"):
         if semantics not in ("may", "adversarial"):
             raise ValueError(f"unknown semantics {semantics!r}")
@@ -231,6 +286,21 @@ class Checker:
         self.blocked: list[str] = []     # frontier accumulation
         self.defeated: list[str] = []    # external branches that defeat the goal
         self.loop_seen: set = set()      # (rec name, pred-state) at back edges
+        self.solver_unknown = False      # >=1 query hit the solver budget
+
+    def _note_solver_unknown(self) -> None:
+        self.solver_unknown = True
+
+    def run(self) -> Verdict:
+        """Decide the pack, then stamp the verdict with what decided it."""
+        v = self._decide()
+        v.semantics = self.semantics
+        if self.solver_unknown:
+            note = (f"solver returned unknown on at least one query "
+                    f"(budget {SOLVER_TIMEOUT_MS} ms); resolved toward "
+                    f"satisfiable, so no refutation rests on it")
+            v.detail = f"{v.detail} [{note}]" if v.detail else note
+        return v
 
     def _gamma_refutation(self) -> Verdict | None:
         """Protocol-independent refutation over the establisher closure.
@@ -262,7 +332,7 @@ class Checker:
                 return z3.Bool(f"__cmp_{next(fresh)}")   # arithmetic left free
             raise ValueError(f"bad formula: {f!r}")
 
-        if _sat([enc(self.p.goal)]):
+        if _sat([enc(self.p.goal)], self._note_solver_unknown):
             return None
         dead = tuple(sorted(atoms(self.p.goal) - can))
         return Verdict(False, "GOAL_UNSAT",
@@ -272,7 +342,7 @@ class Checker:
                        f"capabilities is doomed, spawning included",
                        frontier=dead)
 
-    def run(self) -> Verdict:
+    def _decide(self) -> Verdict:
         # 1. capability existence (no hallucinated tools).  This premise is
         #    decided first and survives autonomy: a tool absent from Gamma
         #    stays absent no matter how many participants are spawned.
@@ -287,7 +357,7 @@ class Checker:
         if gamma:
             return gamma
         # 2. the autonomy boundary: dynamic spawning -> unbounded participants
-        #    -> undecidable (Theorem 5).  Degrade to a semi-decision.
+        #    -> undecidable (thm:undec).  Degrade to a semi-decision.
         if has_spawn(self.p.protocol):
             return Verdict(False, "DYNAMIC_TOPOLOGY",
                            "protocol spawns participants at run time; "
@@ -338,13 +408,14 @@ class Checker:
         return out
 
     def _goal_sat(self, st: State) -> bool:
-        return _sat(list(st.arith) + [eval_formula(self.p.goal, st)])
+        return _sat(list(st.arith) + [eval_formula(self.p.goal, st)],
+                    self._note_solver_unknown)
 
     def _widen(self, st: State, label: str) -> State:
         """Back-edge widening: havoc the numeric summary.  Dropping the
         accumulated arithmetic constraints only ENLARGES the reachable set,
         so refutation remains sound (Coq T2); together with the finite
-        predicate valuations it makes the loop search terminate (Theorem 4)."""
+        predicate valuations it makes the loop search terminate (thm:dec)."""
         bumped = {v: n + 1 for v, n in st.versions().items()}
         return _mk_state(st.true_preds, (), bumped,
                          st.path + (("continue", label),))
@@ -357,13 +428,13 @@ class Checker:
             if "goal" in s:                        # explicit goal marker
                 if self._goal_sat(cur):
                     return True, cur
-                # else continue; the goal may be established later
+                return False, cur                   # unsatisfied checkpoint
             elif "msg" in s:
                 cur = _mk_state(cur.true_preds, cur.arith, cur.versions(),
                                 cur.path + (("msg", s["msg"]["label"]),))
             elif "act" in s:
                 cap = self.p.capabilities[s["act"]["cap"]]
-                if not guard_satisfiable(cur, cap):
+                if not guard_satisfiable(cur, cap, self._note_solver_unknown):
                     self.blocked.append(
                         f"capability '{cap.name}' guard never satisfiable on "
                         f"this path (pre={cap.pre!r})")
@@ -418,6 +489,12 @@ class Checker:
 def check(pack: dict | Pack, semantics: str = "may") -> Verdict:
     """Check a pack (dict or Pack) and return the Verdict.
 
+    Both input shapes go through the same schema gate (pack.normalize ->
+    validate_pack): a Pack assembled in memory is untrusted input too, and a
+    malformed one raises PackError rather than reaching the trusted core.
+    The verdict carries the identity of what was decided (pack_digest) and
+    the judgment it was decided under (semantics).
+
     semantics="may"          angelic ◇: some resolution of every choice works
                              (the paper's Layer-A judgment; refutation sound).
     semantics="adversarial"  choices marked {"external": true} are resolved by
@@ -427,5 +504,7 @@ def check(pack: dict | Pack, semantics: str = "may") -> Verdict:
                              search).  ACHIEVABLE then means the agent has a
                              winning strategy against the declared model.
     """
-    p = pack if isinstance(pack, Pack) else Pack.load(pack)
-    return Checker(p, semantics=semantics).run()
+    p = normalize(pack)
+    v = Checker(p, semantics=semantics).run()
+    v.pack_digest = pack_digest(p)
+    return v

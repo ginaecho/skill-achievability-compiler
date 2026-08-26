@@ -55,7 +55,9 @@ Optionally declare per-role behaviours for conformance checking:
   | {"rec": {"name","body"}} | {"continue": "X"}
 <formula> = "pred" | true | false | {"and":[...]} | {"or":[...]} | {"not": f}
           | {"cmp": [expr, "<"|"<="|"=="|">"|">="|"!=", expr]}
-<expr>    = "var" | int | {"+":[e,e]} | {"-":[e,e]} | {"*":[e,e]}
+<expr>    = "var" | int | {"+":[e,e]} | {"-":[e,e]} | {"*":[int,e]} | {"*":[e,int]}
+Multiplication must have an integer constant operand (QF-LIA); never multiply
+two variable-bearing expressions.
 """
 
 SYSTEM = (

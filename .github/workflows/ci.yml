@@ -18,3 +18,57 @@ jobs:
         run: |
           python scripts/fetch_skills.py real-skills || echo "::warning::skill fetch failed; real-skill tests will be skipped"
           SKILLC_SKILLS_DIR=$PWD/real-skills python -m pytest -v tests/test_real_skills.py
+
+  proof:
+    name: Coq proof verification (pinned Coq 8.18.0)
+    runs-on: ubuntu-latest
+    env:
+      COQ_VERSION: "8.18.0"
+      # Makes tests/test_proof.py fail (collection error), rather than
+      # silently skip, if coqc is not found on PATH in this job.
+      SKILLC_REQUIRE_COQ_PROOFS: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install pytest
+
+      - name: Set up OCaml/opam
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: "4.14"
+
+      - name: Install pinned Coq ${{ env.COQ_VERSION }}
+        run: |
+          opam repo add coq-released https://coq.inria.fr/opam/released
+          opam update
+          opam install -y coq.${COQ_VERSION}
+          echo "$(opam var bin)" >> "$GITHUB_PATH"
+
+      - name: Verify coqc is present and pinned to the expected version
+        run: |
+          command -v coqc || { echo "::error::coqc not found on PATH -- Coq ${COQ_VERSION} installation failed"; exit 1; }
+          coqc -v
+          coqc -v | grep -q "version ${COQ_VERSION}" || { echo "::error::coqc is not pinned to Coq ${COQ_VERSION}"; exit 1; }
+
+      - name: Type-check all three mechanized developments and both Print Assumptions harnesses
+        # tests/test_proof.py compiles SkillAchievability.v, DirectTyping.v
+        # and DirectTypingSR.v, then runs check_assumptions.v and
+        # check_direct_typing.v (which Print Assumptions on every theorem,
+        # including subject_reduction/session_fidelity from
+        # DirectTypingSR.v) and asserts each is axiom-free. A missing or
+        # broken coqc fails this job -- see SKILLC_REQUIRE_COQ_PROOFS above.
+        run: python -m pytest -v tests/test_proof.py
+
+  paper:
+    name: Paper build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build LaTeX paper
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: skillachievability.tex
+          working_directory: paper

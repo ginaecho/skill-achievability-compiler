@@ -9,7 +9,7 @@ Ground truth is the TRUE semantic achievability of the goal.  The eval then
 measures the checker against it.  The key claims under test:
 
   * NO false "IMPOSSIBLE"  (soundness, Coq T1)  -> false-negatives must be 0
-  * SOME false "ACHIEVABLE" allowed (incompleteness, Coq T3) -> the spurious
+  * SOME false "ACHIEVABLE" allowed (paper Incompleteness proposition) -> the spurious
     cases, each annotated with which residue (payload / intent) caused it.
 
 Categories trace the user's own failure docs:
@@ -235,7 +235,7 @@ actually succeeds. The structure is fine; the payload claim is false.
              {"act":{"cap":"email","by":"agent"}}],
  "goal":{"and":["booked","confirmation_sent",{"cmp":["price","<",500]}]}},
  note="FALSE ACHIEVABLE: payload faithfulness of filter_cheap is a Layer-C "
-      "(runtime) obligation, not decided here. Expected & sound per T3.")
+      "(runtime) obligation, not decided here. Expected incompleteness.")
 
 add("spurious_intent", "SPURIOUS", "IMPOSSIBLE",
 """
@@ -361,7 +361,7 @@ Goal: report delivered. The planner spawns helper agents at run time.
  "protocol":[{"spawn":{"role":"helper"}},
              {"act":{"cap":"deliver","by":"planner"}}],
  "goal":"delivered"},
- note="dynamic topology -> outside the decidable fragment (Theorem 5)")
+ note="dynamic topology -> outside the decidable fragment (thm:undec)")
 
 add_ext("spawn_with_ghost_tool", "AUTONOMY", "IMPOSSIBLE",
 """

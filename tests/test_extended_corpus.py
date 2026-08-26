@@ -2,8 +2,8 @@
 
 The headline 15-spec corpus reproduces the paper's confusion matrix; this
 extended set exercises what the paper's sections 5-6 additionally require of
-the compiler: tail-recursive loops (Theorem 4), UNKNOWN degradation under
-dynamic spawning (Theorem 5), refutation that survives autonomy, and the
+the compiler: tail-recursive loops (thm:dec), UNKNOWN degradation under
+dynamic spawning (thm:undec), refutation that survives autonomy, and the
 conformance premise S_p <= G|p.
 """
 import json

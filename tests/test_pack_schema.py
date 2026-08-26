@@ -1,7 +1,7 @@
 import pytest
 
 from skillc.evaluate import load_corpus
-from skillc.pack import Pack, PackError, validate_pack
+from skillc.pack import Pack, PackError, pack_digest, validate_pack
 
 MINIMAL = {
     "name": "m",
@@ -50,3 +50,69 @@ def test_all_reference_compactions_are_well_formed():
     assert len(corpus) == 15
     for c in corpus:
         validate_pack(c["pack"])
+
+
+# --------------------------------------------------------------------------
+# QF-LIA: multiplication needs an integer-constant operand
+# --------------------------------------------------------------------------
+
+@pytest.mark.parametrize("expr", [
+    {"*": ["x", "y"]},
+    {"*": [{"+": ["x", 1]}, "y"]},
+    {"*": [{"*": [2, "x"]}, "y"]},
+])
+def test_gate_rejects_variable_times_variable(expr):
+    d = dict(MINIMAL, capabilities={"a": {"assigns": {"z": expr}}})
+    with pytest.raises(PackError, match="QF-LIA"):
+        validate_pack(d)
+
+
+@pytest.mark.parametrize("expr", [
+    {"*": [2, "x"]},
+    {"*": ["x", 2]},
+    {"*": [{"+": [2, 3]}, "x"]},
+    {"*": [{"-": ["x", 1]}, 4]},
+])
+def test_gate_accepts_linear_multiplication(expr):
+    validate_pack(dict(MINIMAL, capabilities={"a": {"assigns": {"z": expr}}}))
+
+
+def test_gate_rejects_nonlinear_goal_comparison():
+    d = dict(MINIMAL, goal={"cmp": [{"*": ["x", "y"]}, ">", 0]})
+    with pytest.raises(PackError, match="QF-LIA"):
+        validate_pack(d)
+
+
+# --------------------------------------------------------------------------
+# Typed conversion + pack identity
+# --------------------------------------------------------------------------
+
+def test_pack_to_dict_round_trips_through_the_gate():
+    p = Pack.load(MINIMAL)
+    d = p.to_dict()
+    validate_pack(d)
+    assert Pack.load(d).to_dict() == d
+    assert d["capabilities"]["a"]["add"] == ["done"]
+    assert d["capabilities"]["a"]["del"] == []
+
+
+def test_pack_to_dict_rejects_untyped_capabilities():
+    p = Pack(name="m", roles=[], capabilities={"a": {"add": ["done"]}},
+             protocol=[], goal="done")
+    with pytest.raises(PackError, match="Capability"):
+        p.to_dict()
+
+
+def test_pack_digest_is_stable_and_normalising():
+    verbose = dict(MINIMAL, roles=[], init_true=[], init_constraints=[],
+                   skills={}, capabilities={"a": {"owner": "?", "pre": True,
+                                                  "add": ["done"], "del": []}})
+    assert pack_digest(MINIMAL) == pack_digest(verbose)
+    assert pack_digest(MINIMAL) == pack_digest(Pack.load(MINIMAL))
+    assert pack_digest(MINIMAL) != pack_digest(dict(MINIMAL, goal="other"))
+    assert pack_digest(MINIMAL).startswith("sha256:")
+
+
+def test_pack_digest_validates_its_input():
+    with pytest.raises(PackError):
+        pack_digest({"name": "x"})

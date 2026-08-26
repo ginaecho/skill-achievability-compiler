@@ -62,7 +62,71 @@ def test_check_unknown_exit_3(tmp_path, capsys):
     p.write_text(json.dumps(pack))
     rc = main(["check", str(p)])
     assert rc == 3
-    assert "UNKNOWN" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "UNKNOWN" in out
+    assert "not a refutation" in out
+
+
+def test_check_json_is_self_describing(tmp_path, capsys):
+    from skillc import __version__
+    pack = {"name": "spawner", "capabilities": {},
+            "protocol": [{"spawn": {"role": "helper"}}], "goal": True}
+    p = tmp_path / "pack.json"
+    p.write_text(json.dumps(pack))
+    assert main(["check", "--json", str(p)]) == 3
+    data = json.loads(capsys.readouterr().out)
+    assert data["verdict"] == "UNKNOWN"
+    assert data["unknown"] is True and data["refuted"] is False
+    assert data["semantics"] == "may"
+    assert data["skillc_version"] == __version__
+    assert data["pack_digest"].startswith("sha256:")
+    assert data["pack_name"] == "spawner"
+
+
+def _write_scan_tree(tmp_path):
+    (tmp_path / "spawner.json").write_text(json.dumps(
+        {"name": "spawner", "capabilities": {},
+         "protocol": [{"spawn": {"role": "helper"}}], "goal": True}))
+    (tmp_path / "ok.json").write_text(json.dumps(
+        {"name": "ok", "capabilities": {"a": {"add": ["done"]}},
+         "protocol": [{"act": {"cap": "a", "by": "agent"}}], "goal": "done"}))
+
+
+def test_scan_reports_unknown_explicitly(tmp_path, capsys):
+    _write_scan_tree(tmp_path)
+    assert main(["scan", str(tmp_path), "--glob", "*.json", "--json"]) == 0
+    rows = {r["skill"]: r for r in json.loads(capsys.readouterr().out)}
+    assert rows["spawner.json"]["verdict"] == "UNKNOWN"
+    assert rows["spawner.json"]["unknown"] is True
+    assert rows["spawner.json"]["refuted"] is False
+    assert rows["ok.json"]["verdict"] == "ACHIEVABLE"
+
+
+def test_scan_summary_counts_unknown(tmp_path, capsys):
+    _write_scan_tree(tmp_path)
+    assert main(["scan", str(tmp_path), "--glob", "*.json"]) == 0
+    out = capsys.readouterr().out
+    assert "1/2 achievable" in out
+    assert "1 unknown" in out
+
+
+def test_scan_paths_are_portable(tmp_path, capsys):
+    (tmp_path / "nested").mkdir()
+    (tmp_path / "nested" / "ok.json").write_text(json.dumps(
+        {"name": "ok", "capabilities": {}, "protocol": [], "goal": True}))
+    (tmp_path / "nested" / "bad.json").write_text(json.dumps(
+        {"name": "bad", "capabilities": {}, "protocol": [], "goal": {"nand": []}}))
+    assert main(["scan", str(tmp_path), "--glob", "*.json", "--json"]) == 0
+    rows = {r["skill"]: r for r in json.loads(capsys.readouterr().out)}
+    assert set(rows) == {"nested/ok.json", "nested/bad.json"}
+    assert rows["nested/bad.json"]["verdict"] == "ERROR"
+
+
+def test_eval_reports_abstentions(capsys):
+    assert main(["eval"]) == 0
+    out = capsys.readouterr().out
+    assert "FN=0" in out and "PASS" in out
+    assert "UNKNOWN" in out          # abstention line, even when the count is 0
 
 
 def test_examples_check_out(capsys):

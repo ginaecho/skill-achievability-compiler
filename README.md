@@ -4,16 +4,21 @@
 skill (a `SKILL.md`, agent markdown, or a formal achievability pack) is
 achievable in a given capability context.  It is **sound for refutation**:
 an `IMPOSSIBLE` verdict is a proof (relative to the declared capabilities and
-frame assumption) that no run of the skill can reach its goal.  It is
+frame assumption) that no run of the declared pack can reach its goal.  It is
 deliberately **incomplete for achievement**: `ACHIEVABLE` means "structurally
 admissible", not "guaranteed".
 
-The soundness core is mechanized in Coq ([`proof/SkillAchievability.v`](proof/SkillAchievability.v),
-zero axioms, audited by [`proof/check_assumptions.v`](proof/check_assumptions.v));
-the checker decides capability-guarded may-reachability with z3, in
-milliseconds, with no LLM in the trusted path.  The accompanying paper —
-extended here with full proofs and four implementation-driven strengthenings —
-lives in [`paper/`](paper/) ([PDF](paper/skillachievability.pdf)).
+The paper presents the direct-typing and goal-achievability core. Its
+refutation-sound abstraction theorem is mechanized in Coq
+([`proof/SkillAchievability.v`](proof/SkillAchievability.v), zero axioms,
+audited by [`proof/check_assumptions.v`](proof/check_assumptions.v)); the
+executable checker is schema-gated and tested against that specification, but
+its exact symbolic transition system is not yet instantiated in Coq. It decides
+capability-guarded may-reachability with z3, in
+milliseconds, with no LLM in the trusted path. The exact scope of the
+accompanying paper and the implementation-only extensions is recorded in
+[`paper/README.md`](paper/README.md); the paper source and built
+[PDF](paper/skillachievability.pdf) live in [`paper/`](paper/).
 
 ```
  natural-language skill ──► [ front-end compaction ] ──► pack ──► [ checker ] ──► verdict
@@ -42,8 +47,9 @@ call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
 ```
 
 The same skill, two verdicts: achievability is always judged **relative to a
-capability context Γ** (an environment *profile* plus the skill's own
-`allowed-tools`/`tools` frontmatter).  A consumer-app skill that asks
+capability context Γ** (an environment profile plus self-declared
+`allowed-tools`/`tools` metadata). The profile and self-declared grants remain
+distinct trust inputs even though the front-end combines them. A consumer-app skill that asks
 questions via `ask_user_input_v0` is provably not executable as written under
 Claude Code, which has no such tool.
 
@@ -61,28 +67,51 @@ Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (outside
 the decidable fragment) — so `skillc check` can
 gate CI for skill repositories.
 
+## Recorded real-skill demo
+
+Five small declared packs grounded in first-party Anthropic, GitHub, and MCP
+workflows are under [`demo/real-skill-cases`](demo/real-skill-cases). The actual
+compiler run accepts the DOCX verification and GitHub PR handoff workflows, then
+refutes fetch-without-search (`MISSING_CAPABILITY`), a protected deployment
+without external approval (`BLOCKED_GUARD`), and an XLSX workflow without
+recalculation (`GOAL_UNSAT`).
+
+The 77-second 1080p recording is
+[`skillc-real-skills-demo.mp4`](demo/real-skill-cases/skillc-real-skills-demo.mp4).
+Reproduce the commands, transcript, structured results, and video with:
+
+```powershell
+python scripts\make_real_skill_demo.py
+```
+
+These are sourced, manually declared abstractions; they do not execute or copy
+the upstream skills. Primary-source and license notes are in
+[`docs/REAL_SKILL_DEMO_SOURCES.md`](docs/REAL_SKILL_DEMO_SOURCES.md).
+
 ## What the checker decides
 
 A **pack** declares capabilities (STRIPS pre/effects, numeric assignments,
 constrained non-determinism), a goal-marked global protocol (`act` / `msg` /
 `choice` / tail-recursive `rec`/`continue` loops / `spawn`), a goal formula,
 the initial state, and optionally per-role declared behaviours (`skills`).
-The checker decides **all four premises of the paper's achievability
-judgment** (§5.2):
+The executable checker decides four algorithmic checks corresponding to the
+paper's direct conformance and achievability judgments (§5.2–§5.3):
 
 ```
    Γ ⊇ caps(G)          capability soundness   — no hallucinated tools
    G ⇓ {T_p}            realizability          — projection defined for every role
-   ∀p. S_p ≤ G↾p        conformance            — declared skills refine their
-                                                  contracts (Gay–Hole subtyping)
+   ∀p. S_p ⊑ G↾p        direct conformance     — exact sender labels;
+                                                  receivers may offer more
    Γ; G ⊨ ◇goal         liveness               — goal may-reachable (z3)
    ─────────────────────
    Γ ⊢ {S_p} : G ▷ ◇goal
 ```
 
 Projection implements Proj-Sel / Proj-Brn / Proj-Mrg with the merge `⊓`
-(label-union on external branches); conformance implements Sub-Ext / Sub-Int
-coinductively.  Refutations name the failing premise:
+(label-union on external branches). The direct-conformance adapter requires
+exact internal selections and permits receiver-side external supersets. Its
+equivalence to the paper's declarative whole-session judgment is an open proof
+obligation. Refutations name the failing check:
 
 | reason | failure mode it catches |
 |---|---|
@@ -92,7 +121,7 @@ coinductively.  Refutations name the failing premise:
 | `NON_PROJECTABLE` | a role must act inside a branch it is never told about and the branches do not merge (unobserved choice → deadlock/handoff freeze) |
 | `NON_CONFORMANT` | a declared role behaviour does not refine its projected contract — the verdict on `G` cannot be transported to it |
 
-**The decidable fragment (Theorems 4–5).** Tail-recursive loops are explored
+**The decidable fragment (`thm:dec` / `thm:undec`).** Tail-recursive loops are explored
 with predicate-state saturation plus numeric widening on the back edge —
 widening only enlarges the reachable set, so refutation stays sound.  Dynamic
 participant spawning (`spawn`) crosses the autonomy boundary
@@ -100,7 +129,8 @@ participant spawning (`spawn`) crosses the autonomy boundary
 refutes what survives autonomy and otherwise answers **`UNKNOWN`** (exit
 code 3) instead of guessing.
 
-**Beyond the original paper** (proved in [`paper/`](paper/), §6.5–§7):
+**Implementation-only extensions** (useful capabilities not claimed by the
+current paper revision):
 
 - **Establisher-closure refutation** — a goal conjunct no capability
   establishes refutes *every* protocol over Γ in one SMT query, spawning
@@ -120,9 +150,9 @@ code 3) instead of guessing.
   structure-only repair round (it may not invent tools or weaken the goal);
   the verdict always comes from the trusted checker.
 
-Tolerance comes from may-reachability (detours allowed), interface slack in
-the safe direction (a skill may *offer more* receives and *make fewer*
-selections than its contract), and goal-relevant abstraction — extra status
+Tolerance comes from may-reachability (detours allowed), receiver-side
+interface slack (a role may offer more receives), and goal-relevant
+abstraction — extra status
 messages or beneficial branches never cause a refutation (Coq T2), and
 *adding* capabilities never flips `ACHIEVABLE` to `IMPOSSIBLE` (Coq T3,
 `cap_monotone`).
@@ -177,11 +207,11 @@ files mounted at `/mnt/skills`, or fetched with
 
 * **32/32 achievable under the `claude-ai` profile** — their home runtime.
   Zero false refutations on deployed skills (the empirical face of T1).
-* **16/32 refuted under the `claude-code` profile**, each with the exact
+* **15/32 refuted under the `claude-code` profile**, each with the exact
   missing tool named (`ask_user_input_v0`, `read_page`, `upload_file`,
   `create_file`, `str_replace`, `show_widget`, `search_mcp_registry`, …) and
   the source line.  Granting the named tools flips every one of them back to
-  achievable (T3 on real data).
+  achievable (an operational illustration of the contrapositive of T3).
 
 Full table: [`docs/REAL_SKILLS_REPORT.md`](docs/REAL_SKILLS_REPORT.md).
 
@@ -201,22 +231,24 @@ granting the frontier back flips it to achievable.
 On the 15-spec ground-truth corpus (`skillc eval`): **FN = 0** (no achievable
 goal ever refuted — T1) and the only false `ACHIEVABLE`s are the two planted
 `SPURIOUS` cases (payload faithfulness / intent fidelity), i.e. exactly the
-residues the compiler openly defers to runtime monitoring and human review —
-never a structural failure it should have caught.
+residues the compiler openly defers to runtime monitoring and human review.
+No structural failure was missed in this proof-of-concept corpus.
 
 ## Tests
 
 ```bash
-python3 -m pytest                          # 236 tests
+python -m pytest                           # 217 passing; optional suites may skip
 SKILLC_SKILLS_DIR=./real-skills pytest tests/test_real_skills.py   # real corpus
 SKILLC_LIVE_LLM=1 pytest tests/test_llm_frontend.py               # live LLM (opt-in)
-coqc proof/SkillAchievability.v && coqc proof/check_assumptions.v  # the proof
+coqc proof/SkillAchievability.v && coqc proof/DirectTyping.v
+coqc proof/DirectTypingSR.v && coqc proof/check_assumptions.v
+coqc proof/check_direct_typing.v
 ```
 
 The suite covers the formula language, the schema gate, every refutation
 reason, projection/merge/subtyping, tail recursion and the autonomy boundary
 (loops saturate, `spawn` degrades to `UNKNOWN`, refutation survives
-autonomy), conformance (Sub-Ext/Sub-Int both directions), the corpus
+autonomy), direct conformance (exact sender labels, receiver-side slack), the corpus
 confusion matrix (reproduced exactly: TP=6 FN=0 FP=2 TN=7) plus a 6-spec
 extended corpus for the fragment boundary, the markdown front-end
 (extraction, classification, profiles, embedded packs), the bundle audit
@@ -228,9 +260,9 @@ including the monotone-widening property.
 
 ```
 src/skillc/            the compiler package
-  checker.py             trusted core: the four-premise judgment over z3
+  checker.py             schema-gated decision procedure over z3
                          may-reachability, loops + widening, UNKNOWN boundary
-  session.py             projection (Proj-Sel/Brn/Mrg), merge, Gay-Hole subtyping
+  session.py             projection/merge, direct conformance, generic subtyping
   pack.py                pack model + deterministic schema gate
   formula.py             guard/goal mini-language
   profiles.py            capability contexts (claude-ai, claude-code, none)
@@ -242,8 +274,8 @@ src/skillc/            the compiler package
   data/                  built-in profiles + evaluation corpora
 paper/                 the paper (LaTeX + built PDF): full proofs +
                        implementation-driven extensions
-proof/                 the theorem checkers for the paper's claims (Coq 8.18,
-                       zero axioms) -- SkillAchievability.v certifies T1/T2/T3;
+proof/                 theorem checkers for specified fragments (Coq 8.18,
+                       zero axioms) -- SkillAchievability.v proves T1/T2/T3;
                        DirectTyping.v the direct-typing head-move safety;
                        DirectTypingSR.v subject reduction + session fidelity
                        (communication interleaving); the compiler itself is the

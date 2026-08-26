@@ -58,7 +58,7 @@ pdflatex skillachievability.tex && pdflatex skillachievability.tex
 ## Project Structure
 
 - **`src/skillc/`** — the compiler package (checker, session types, pack model, front-ends)
-- **`tests/`** — test suite (236 tests covering all major components)
+- **`tests/`** — test suite (217 passing tests plus opt-in/tool-dependent suites)
 - **`paper/`** — LaTeX source and built PDF with full proofs
 - **`proof/`** — Coq verification of theorems (zero axioms)
 - **`examples/`** — fixture skills for testing
@@ -66,7 +66,7 @@ pdflatex skillachievability.tex && pdflatex skillachievability.tex
 ## Key Components
 
 ### Checker (`src/skillc/checker.py`)
-The trusted core: decides the four-premise achievability judgment using z3 for may-reachability.
+The schema-gated decision procedure: runs four algorithmic checks using z3 for may-reachability.
 - **Capability soundness**: no hallucinated tools
 - **Realizability**: projection defined for every role
 - **Conformance**: declared skills refine their contracts
@@ -90,7 +90,7 @@ The test suite covers:
 - Projection, merge, and subtyping
 - Loop semantics with numeric widening
 - Autonomy boundary (spawn → UNKNOWN)
-- Conformance (both directions)
+- Direct conformance (exact sender labels, receiver-side safe slack)
 - 15-spec ground-truth corpus (TP=6, FN=0, FP=2, TN=7)
 - 6-spec extended corpus (decidable fragment, conformance)
 - Markdown front-end extraction and profiles

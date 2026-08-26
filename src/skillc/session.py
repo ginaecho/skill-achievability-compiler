@@ -15,7 +15,15 @@ judgment (paper section 5.2):
   structural recursion on equal prefixes.
 * **Subtyping** ≤ (Gay-Hole): a skill may offer MORE external (receive)
   choices and FEWER internal (send) choices than its contract (Sub-Ext /
-  Sub-Int), decided coinductively over the regular trees.
+  Sub-Int), decided coinductively over the regular trees.  Kept as a generic
+  utility; it is *not* what the checker's conformance premise uses.
+* **Direct conformance** ⊑ (canonical T-Comm): the relation the checker
+  adapter `conformance_failure` decides.  Sender/internal selections must
+  carry EXACTLY the contract's labels with conforming continuations;
+  receiver/external branches may safely offer a superset.  Full Sub-Int is
+  unsound here: a selector that drops a contract branch is not the protocol's
+  sender, yet the checker's reachability may still return a witness through
+  the excluded branch -- an unrealisable plan.
 
 Local types are hashable tuples:
 
@@ -274,18 +282,68 @@ def _sub(s: tuple, t: tuple, seen: set) -> bool:
     return False
 
 
+# --------------------------------------------------------------------------
+# Direct conformance   S |- T   (canonical T-Comm)
+# --------------------------------------------------------------------------
+
+def conforms(s: tuple, t: tuple) -> bool:
+    """Decide direct conformance S ⊑ T coinductively.
+
+    Identical to ≤ on prefixes, but on choices it follows the canonical
+    direct rule rather than Gay-Hole:
+
+    * internal choice (``select``, the role's own sends): the declared label
+      set must be EXACTLY the contract's.  Dropping a branch would leave the
+      checker free to witness the goal through a branch the deployed skill
+      never selects; adding one would emit a label no receiver expects.
+    * external choice (``branch``, receives): the declared label set may be a
+      SUPERSET of the contract's -- unrequested branches are simply never
+      triggered -- and every contract label must conform.
+    """
+    return _conf(s, t, set())
+
+
+def _conf(s: tuple, t: tuple, seen: set) -> bool:
+    s, t = _unfold(s), _unfold(t)
+    if (s, t) in seen:
+        return True                       # coinductive hypothesis
+    seen = seen | {(s, t)}
+    if s == END and t == END:
+        return True
+    if s[0] == t[0] == "act":
+        return s[1] == t[1] and _conf(s[2], t[2], seen)
+    if s[0] == t[0] == "send" or s[0] == t[0] == "recv":
+        return s[1] == t[1] and s[2] == t[2] and _conf(s[3], t[3], seen)
+    if s[0] == t[0] == "branch":          # receiver: superset of labels is safe
+        if s[1] != t[1]:
+            return False
+        ds, dt = dict(s[2]), dict(t[2])
+        return set(ds) >= set(dt) and all(
+            _conf(ds[l], dt[l], seen) for l in dt)
+    if s[0] == t[0] == "select":          # sender: exactly the contract labels
+        ds, dt = dict(s[1]), dict(t[1])
+        return set(ds) == set(dt) and all(
+            _conf(ds[l], dt[l], seen) for l in dt)
+    return False
+
+
 def conformance_failure(skills: dict[str, list],
                         protocol: list[dict]) -> Optional[str]:
-    """Check ∀p. S_p ≤ G↾p.  Returns None if conformant, else a reason."""
+    """Check ∀p. S_p ⊑ G↾p (direct conformance).  Returns None if conformant,
+    else a reason.
+
+    This is the adapter the checker's conformance premise calls, so it decides
+    the canonical *direct* rule (exact sender labels, receiver-side extra
+    branches only) rather than full Gay-Hole subtyping."""
     for role, ssteps in sorted(skills.items()):
         try:
             contract = project(protocol, role)
         except ProjectionError as e:
             return f"cannot project contract for role '{role}': {e}"
         declared = parse_local(ssteps)
-        if not subtype(declared, contract):
-            return (f"declared behaviour of role '{role}' does not refine its "
-                    f"projected contract (S_{role} </= G|{role}): declared "
+        if not conforms(declared, contract):
+            return (f"declared behaviour of role '{role}' does not conform to "
+                    f"its projected contract (S_{role} </= G|{role}): declared "
                     f"{_show(declared)}, contract {_show(contract)}")
     return None
 

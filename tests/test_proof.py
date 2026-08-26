@@ -1,4 +1,12 @@
-"""Type-check the mechanized soundness proof, when Coq is installed."""
+"""Type-check the mechanized soundness proof, when Coq is installed.
+
+Locally (no coqc on PATH) these tests are skipped so ordinary `pytest` runs
+stay green without a Coq toolchain. In the dedicated CI proof job, the
+SKILLC_REQUIRE_COQ_PROOFS=1 environment variable is set, which turns a
+missing coqc into a hard collection-time failure instead of a silent skip --
+the mechanized proofs must actually be checked there, not bypassed.
+"""
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -7,8 +15,17 @@ import pytest
 
 PROOF = Path(__file__).parent.parent / "proof"
 
-pytestmark = pytest.mark.skipif(shutil.which("coqc") is None,
-                                reason="coqc not installed")
+_COQC = shutil.which("coqc")
+_REQUIRE_COQ = os.environ.get("SKILLC_REQUIRE_COQ_PROOFS") == "1"
+
+if _COQC is None and _REQUIRE_COQ:
+    raise RuntimeError(
+        "SKILLC_REQUIRE_COQ_PROOFS=1 but coqc was not found on PATH. "
+        "The dedicated CI proof job must install a working Coq 8.18 "
+        "toolchain -- refusing to silently skip the mechanized proofs."
+    )
+
+pytestmark = pytest.mark.skipif(_COQC is None, reason="coqc not installed")
 
 
 def test_soundness_proof_typechecks(tmp_path):

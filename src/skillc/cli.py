@@ -8,7 +8,8 @@
   skillc profiles                                        list capability profiles
 
 Exit codes: 0 achievable / all pass, 1 impossible / soundness violation,
-2 usage or input error, 3 unknown (outside the decidable fragment).
+2 usage or input error, 3 unknown (an abstention: outside the decidable
+fragment, never a refutation).
 """
 from __future__ import annotations
 
@@ -83,7 +84,10 @@ def cmd_check(args) -> int:
               + (f" [{v.reason}]" if not v.achievable else ""))
         if v.detail and not v.achievable:
             print(f"  {v.detail}")
-        if res is not None and not v.achievable and v.reason == "MISSING_CAPABILITY":
+        if v.unknown:
+            print("  UNKNOWN is not a refutation: the pack falls outside the "
+                  "decidable fragment, so no claim is made either way.")
+        if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
             lines = {i.tool: i.line for i in reversed(res.invocations)}
             for capname in v.frontier:
                 loc = f" (line {lines[capname]})" if capname in lines else ""
@@ -107,12 +111,14 @@ def cmd_scan(args) -> int:
         try:
             pack, _ = _load_result(f, args)
             v = check(pack)
-            rows.append({"skill": str(rel), "verdict": v.label,
+            rows.append({"skill": rel.as_posix(), "verdict": v.label,
                          "reason": v.reason if not v.achievable else "",
-                         "frontier": list(v.frontier)})
+                         "frontier": list(v.frontier),
+                         "unknown": v.unknown, "refuted": v.refuted})
         except (PackError, ValueError) as e:
-            rows.append({"skill": str(rel), "verdict": "ERROR",
-                         "reason": type(e).__name__, "frontier": [str(e)]})
+            rows.append({"skill": rel.as_posix(), "verdict": "ERROR",
+                         "reason": type(e).__name__, "frontier": [str(e)],
+                         "unknown": False, "refuted": False})
     if args.json:
         print(json.dumps(rows, indent=2))
     else:
@@ -121,8 +127,11 @@ def cmd_scan(args) -> int:
             extra = f"  {r['reason']} {r['frontier']}" if r["reason"] else ""
             print(f"{r['skill']:<{w}}  {r['verdict']}{extra}")
         n_ok = sum(r["verdict"] == "ACHIEVABLE" for r in rows)
+        n_unknown = sum(r["unknown"] for r in rows)
+        n_refuted = sum(r["refuted"] for r in rows)
         print(f"\n{n_ok}/{len(rows)} achievable under profile "
-              f"'{args.profile}'")
+              f"'{args.profile}'; {n_refuted} refuted, {n_unknown} unknown "
+              f"(outside the decidable fragment -- not refutations)")
     return 0
 
 
