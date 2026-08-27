@@ -1,45 +1,144 @@
-SKILLC REAL-SKILL DEMO
-Sourced, manually declared packs; no upstream tool is executed.
+SKILLC END-TO-END REAL-SKILL DEMO
+Upstream: anthropics/skills@3b3fad96af16a10759d930941b4520ba0c40edae
+Pipeline: natural language -> untrusted LLM -> schema gate -> checker
 
-CASE 1: DOCX: create, render, inspect
-Source: anthropics/skills: skills/docx/SKILL.md
-Scenario: All mandatory verification capabilities are declared.
-PS> python -m skillc.cli check demo\real-skill-cases\01-docx-render-verify\SKILL.md -v
-docx-render-verify: ACHIEVABLE
-  witness: act:write_docx -> act:render_docx -> act:inspect_rendered_pages
-exit code: 0
+CASE 1: webapp-testing
+Source: https://github.com/anthropics/skills/blob/3b3fad96af16a10759d930941b4520ba0c40edae/skills/webapp-testing/SKILL.md
+Input: 3913 bytes, sha256:51b7349e77ec63b7744a6f63647e7566a0b4d2e301121cc10e8c2113af6556a2
 
-CASE 2: GitHub: PR and human review handoff
-Source: GitHub Copilot cloud agent + github-mcp-server
-Scenario: The agent goal stops at requesting review, not self-approval.
-PS> python -m skillc.cli check demo\real-skill-cases\02-github-pr-review\SKILL.md -v
-github-pr-review-handoff: ACHIEVABLE
-  witness: act:read_issue -> act:push_branch -> act:create_pull_request -> act:request_review -> msg:review_requested
-exit code: 0
+NATURAL-LANGUAGE SKILL (opening excerpt)
+---
+name: webapp-testing
+description: Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.
+license: Complete terms in LICENSE.txt
+---
 
-CASE 3: MCP fetch: retrieval is not search
-Source: modelcontextprotocol/servers: src/fetch
-Scenario: The workflow invokes search_web, but fetch only accepts known URLs.
-PS> python -m skillc.cli check demo\real-skill-cases\03-fetch-is-not-search\SKILL.md -v
-fetch-is-not-search: IMPOSSIBLE [MISSING_CAPABILITY]
-  protocol invokes undeclared capabilities: ['search_web']
-  missing: search_web
-exit code: 1
+# Web Application Testing
 
-CASE 4: GitHub Actions: protected deployment
-Source: GitHub Actions protected environments
-Scenario: Prevent-self-review leaves environment_approved unestablished.
-PS> python -m skillc.cli check demo\real-skill-cases\04-protected-deployment\SKILL.md -v
-protected-production-deployment: IMPOSSIBLE [BLOCKED_GUARD]
-  capability 'deploy_job' guard never satisfiable on this path (pre={'and': ['run_status_known', 'environment_approved']})
-exit code: 1
+To test local web applications, write native Python Playwright scripts.
 
-CASE 5: XLSX: recalculation is mandatory
-Source: anthropics/skills: skills/xlsx/SKILL.md
-Scenario: The restricted sandbox can write formulas but cannot verify them.
-PS> python -m skillc.cli check demo\real-skill-cases\05-xlsx-recalc-required\SKILL.md -v
-xlsx-recalculation-required: IMPOSSIBLE [GOAL_UNSAT]
-  protocol-independent refutation: no capability in Gamma establishes ['verified'] and the goal cannot hold without them -- every protocol over these capabilities is doomed, spawning included
-exit code: 1
+**Helper Scripts Available**:
+- `scripts/with_server.py` - Manages server lifecycle (supports multiple servers)
+...
 
-EXPECTED RESULTS: 5/5
+COMPACT> provider=azure-openai model=gpt-5.4 runtime=developer
+SCHEMA GATE attempt 1: ACCEPTED
+PACK> roles=['agent', 'user']
+PACK> capabilities=10, protocol_steps=1
+PACK> goal={"or": [{"and": ["playwright_script_written", "browser_closed"]}, {"and": ["frontend_actions_executed", "browser_closed"]}, {"and": ["screenshot_captured", "browser_closed"]}, {"and": ["browser_logs_viewed", "browser_closed"]}]}
+PACK> digest=sha256:e942fe2717c1f38563f8ac35c338f6292ec634817e96eaecfcbdccc0f42ebce3
+CHECK> ACHIEVABLE [OK]
+WITNESS> choose:static_html -> act:read_html_file -> choose:treat_as_dynamic -> choose:server_not_running -> act:run_help_for_with_server -> act:write_playwright_script -> act:run_with_server_playwright_script -> act:take_screenshot -> act:inspect_rendered_dom -> act:execute_actions_with_selectors -> choose:view_logs -> act:view_browser_logs -> act:close_browser
+
+CASE 2: mcp-builder
+Source: https://github.com/anthropics/skills/blob/3b3fad96af16a10759d930941b4520ba0c40edae/skills/mcp-builder/SKILL.md
+Input: 9092 bytes, sha256:0f4592dcb53cf2b5d6b7febee6b4152018b565551a1c29e3c612f57b218ab295
+
+NATURAL-LANGUAGE SKILL (opening excerpt)
+---
+name: mcp-builder
+description: Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).
+license: Complete terms in LICENSE.txt
+---
+
+# MCP Server Development Guide
+
+## Overview
+
+Create MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. The quality of an MCP server is measured by how well it enables LLMs to accomplish real-world tasks.
+
+...
+
+COMPACT> provider=azure-openai model=gpt-5.4 runtime=developer
+SCHEMA GATE attempt 1: REJECTED - cap[run_build_or_syntax_check].pre: bad formula ['server_implemented']
+SCHEMA GATE attempt 2: ACCEPTED
+PACK> roles=['agent', 'user']
+PACK> capabilities=7, protocol_steps=12
+PACK> goal={"and": ["server_implemented", "build_or_syntax_checked", "server_tested", "evaluations_xml_created", "answers_verified"]}
+PACK> digest=sha256:886ae2e552da6d2f26676d0c1c25a105f936e086362d54adf1b9636af46f4fa8
+CHECK> ACHIEVABLE [OK]
+WITNESS> choose:typescript -> act:read_local_reference -> act:fetch_web_doc -> act:fetch_web_doc -> act:read_local_reference -> act:search_web -> act:fetch_web_doc -> act:write_project_files -> act:write_project_files -> act:inspect_outputs -> act:run_build_or_checks -> act:read_local_reference -> act:inspect_outputs -> act:write_project_files
+
+CASE 3: frontend-design
+Source: https://github.com/anthropics/skills/blob/3b3fad96af16a10759d930941b4520ba0c40edae/skills/frontend-design/SKILL.md
+Input: 8260 bytes, sha256:1608ea77fbb6fc30d13a97d12cfa8ebf31358d40f0dd97beed24829d6b3f45dd
+
+NATURAL-LANGUAGE SKILL (opening excerpt)
+---
+name: frontend-design
+description: Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults.
+license: Complete terms in LICENSE.txt
+---
+
+# Frontend Design
+
+Approach this as the design lead at a small studio known for giving every client a visual identity that could not be mistaken for anyone else's. This client has already rejected proposals that felt templated, and is paying for a distinctive point of view: make deliberate, opinionated choices about palette, typography, and layout that are specific to this brief, and take one real aesthetic risk you can justify.
+
+## Ground it in the subject
+
+...
+
+COMPACT> provider=azure-openai model=gpt-5.4 runtime=developer
+SCHEMA GATE attempt 1: ACCEPTED
+PACK> roles=['assistant', 'user']
+PACK> capabilities=8, protocol_steps=8
+PACK> goal={"and": ["design_plan_created", "tokens_defined", "wireframes_defined", "signature_defined", "plan_unique_confirmed", "design_built", "quality_checked", "design_critiqued"]}
+PACK> digest=sha256:0e502361c630ecee0b5a97d76f1a29ce38e264132b17df315e2a53a38eceaa06
+CHECK> ACHIEVABLE [OK]
+WITNESS> choose:brief_complete -> act:make_design_plan -> act:review_and_revise_plan -> act:write_code -> act:run_local_checks -> choose:screenshot_supported -> act:capture_screenshot -> act:critique_design -> choose:needs_revision -> act:revise_implementation -> act:run_local_checks -> choose:screenshot_supported -> act:capture_screenshot -> act:critique_design
+
+CASE 4: slack-gif-creator
+Source: https://github.com/anthropics/skills/blob/3b3fad96af16a10759d930941b4520ba0c40edae/skills/slack-gif-creator/SKILL.md
+Input: 7841 bytes, sha256:2efca615ce55a3edd8fc05c779068a8085816617991987e446606403cd3abb22
+
+NATURAL-LANGUAGE SKILL (opening excerpt)
+---
+name: slack-gif-creator
+description: Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack."
+license: Complete terms in LICENSE.txt
+---
+
+# Slack GIF Creator
+
+A toolkit providing utilities and knowledge for creating animated GIFs optimized for Slack.
+
+## Slack Requirements
+
+...
+
+COMPACT> provider=azure-openai model=gpt-5.4 runtime=developer
+SCHEMA GATE attempt 1: ACCEPTED
+PACK> roles=['agent', 'user']
+PACK> capabilities=7, protocol_steps=7
+PACK> goal={"and": ["gif_delivered", {"cmp": ["gif_width", "==", 128]}, {"cmp": ["gif_height", "==", 128]}, {"cmp": ["gif_fps", ">=", 10]}, {"cmp": ["gif_fps", "<=", 30]}, {"cmp": ["gif_num_colors", ">=", 48]}, {"cmp": ["gif_num_colors", "<=", 128]}, {"cmp": ["slack_ready", "==", 1]}]}
+PACK> digest=sha256:8e6314339045a22028d1ed7bf7d2bb78c16686197a1fb0e8dde3abc5d3313792
+CHECK> ACHIEVABLE [OK]
+WITNESS> choose:ask_for_details -> act:ask_clarifying_question -> choose:use_uploaded_image -> act:inspect_user_upload -> act:install_dependencies -> act:create_gif -> choose:make_file_smaller -> act:optimize_gif -> act:validate_gif -> choose:valid -> act:deliver_gif
+
+CASE 5: algorithmic-art
+Source: https://github.com/anthropics/skills/blob/3b3fad96af16a10759d930941b4520ba0c40edae/skills/algorithmic-art/SKILL.md
+Input: 19769 bytes, sha256:3bc4092c09804853186524c826bc0621b940bb6122c05b84496dff95388e6eef
+
+NATURAL-LANGUAGE SKILL (opening excerpt)
+---
+name: algorithmic-art
+description: Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.
+license: Complete terms in LICENSE.txt
+---
+
+Algorithmic philosophies are computational aesthetic movements that are then expressed through code. Output .md files (philosophy), .html files (interactive viewer), and .js files (generative algorithms).
+
+This happens in two steps:
+1. Algorithmic Philosophy Creation (.md file)
+2. Express by creating p5.js generative art (.html + .js files)
+
+...
+
+COMPACT> provider=azure-openai model=gpt-5.4 runtime=developer
+SCHEMA GATE attempt 1: ACCEPTED
+PACK> roles=['assistant']
+PACK> capabilities=3, protocol_steps=3
+PACK> goal={"and": ["philosophy_md_written", "html_artifact_written", "viewer_template_read", "seed_controls_present", "parameter_controls_present", "actions_present", "template_structure_preserved", "self_contained_html", "p5js_inline", "reproducible_seeded_randomness", {"and": [{"cmp": ["philosophy_paragraphs", ">=", 4]}, {"cmp": ["philosophy_paragraphs", "<=", 6]}]}]}
+PACK> digest=sha256:449ded6a00c6faea9c69399c0b001a814b9c8b9244cfa080c3ede490edbed59f
+CHECK> ACHIEVABLE [OK]
+WITNESS> act:write_philosophy_md -> act:read_template_viewer -> act:write_single_html_artifact

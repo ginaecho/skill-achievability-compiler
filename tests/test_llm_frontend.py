@@ -1,16 +1,31 @@
-"""Live LLM compaction tests.  Opt-in: they call the Anthropic API.
+"""Live multi-provider LLM compaction tests.
 
-Run with:  SKILLC_LIVE_LLM=1 ANTHROPIC_API_KEY=... pytest tests/test_llm_frontend.py
+Configure Anthropic or Azure OpenAI, then set SKILLC_LIVE_LLM=1.
 """
 import os
+import shutil
 
 import pytest
 
 from skillc import check
 
+
+def _provider_configured() -> bool:
+    provider = os.environ.get("SKILLC_LLM_PROVIDER", "anthropic")
+    if provider == "anthropic":
+        return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    if provider == "azure-openai":
+        auth = (os.environ.get("AZURE_OPENAI_API_KEY")
+                or shutil.which("az.cmd") or shutil.which("az"))
+        return bool(os.environ.get("AZURE_OPENAI_ENDPOINT")
+                    and os.environ.get("AZURE_OPENAI_DEPLOYMENT") and auth)
+    return False
+
+
 pytestmark = pytest.mark.skipif(
-    not (os.environ.get("SKILLC_LIVE_LLM") and os.environ.get("ANTHROPIC_API_KEY")),
-    reason="live LLM tests are opt-in (set SKILLC_LIVE_LLM=1 and ANTHROPIC_API_KEY)")
+    not (os.environ.get("SKILLC_LIVE_LLM") and _provider_configured()),
+    reason="live LLM tests require opt-in and a configured LLM provider")
+
 
 HALLUCINATED = """
 # Skill: Book a flight and confirm

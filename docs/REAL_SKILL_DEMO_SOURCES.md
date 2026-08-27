@@ -247,8 +247,11 @@ before the file may ship ("Never ship while `recalc.py` reports `errors_found`")
 | 3 | `anthropic.com/engineering/building-effective-agents` | Anthropic's official engineering blog; short quotations only, for citation/attribution. |
 
 All quotations above are kept short and attributed; none of the five sources' full text is
-reproduced. This note proposes pack-shaped mappings for future authoring — it does not add any
-`SKILL.md`, pack, or corpus entry to this repository.
+reproduced. The original note proposed pack-shaped mappings. The current end-to-end demo
+instead downloads five Apache-2.0 natural-language skills from the pinned
+`anthropics/skills` commit, compacts them live, schema-gates the generated packs,
+and checks them. See `demo/real-skill-cases/results.json`; none of the proposed
+manual mappings in this note is used as a demo input.
 
 ## Gaps and uncertainties
 
@@ -260,6 +263,6 @@ reproduced. This note proposes pack-shaped mappings for future authoring — it 
 - `anthropics/skills` was restructured (from `public/`+`examples/` to a single `skills/` tree)
   since `docs/REAL_SKILLS_REPORT.md` was generated against an older layout/mount
   (`/mnt/skills`, `public/docx` etc.); path citations above use the current tree at commit `3b3fad9`.
-- No pack JSON, `SKILL.md`, or `skillc` run was produced or executed for this note — achievability
-  claims above are proposed demonstrations, not verified `skillc check` output. Actually compiling
-  and checking each proposed pack is suggested follow-up work.
+- The five end-to-end demo cases differ from the proposed mappings above: they
+  use the full upstream natural-language sources and preserve the actual Azure
+  OpenAI outputs under `demo/real-skill-cases/generated-packs/`.
