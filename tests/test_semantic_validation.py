@@ -5,6 +5,7 @@ The mutation machinery itself is deterministic and always tested; only the
 LLM compaction of the real skill is env-gated.
 """
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,18 @@ from skillc.mutate import (drop_invoked_capability, is_conjunctive,
                            strip_goal_establisher)
 
 SKILLS_DIR = Path(os.environ.get("SKILLC_SKILLS_DIR", "/mnt/skills"))
+
+
+def _provider_configured() -> bool:
+    provider = os.environ.get("SKILLC_LLM_PROVIDER", "anthropic")
+    if provider == "anthropic":
+        return bool(os.environ.get("ANTHROPIC_API_KEY"))
+    if provider == "azure-openai":
+        auth = (os.environ.get("AZURE_OPENAI_API_KEY")
+                or shutil.which("az.cmd") or shutil.which("az"))
+        return bool(os.environ.get("AZURE_OPENAI_ENDPOINT")
+                    and os.environ.get("AZURE_OPENAI_DEPLOYMENT") and auth)
+    return False
 
 
 def corpus_packs():
@@ -63,9 +76,9 @@ def test_mutants_of_fixture_pack():
 
 
 @pytest.mark.skipif(
-    not (os.environ.get("SKILLC_LIVE_LLM") and os.environ.get("ANTHROPIC_API_KEY")
+    not (os.environ.get("SKILLC_LIVE_LLM") and _provider_configured()
          and (SKILLS_DIR / "examples/call-to-book/SKILL.md").exists()),
-    reason="live semantic validation is opt-in (SKILLC_LIVE_LLM=1 + API key + corpus)")
+    reason="live semantic validation requires opt-in, an LLM provider, and corpus")
 def test_live_semantic_loop_on_a_real_skill():
     """The full paper pipeline on a real deployed skill: prose -> untrusted
     LLM compaction -> schema gate -> trusted checker, then two seeded

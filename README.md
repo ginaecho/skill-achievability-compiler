@@ -69,23 +69,27 @@ gate CI for skill repositories.
 
 ## Recorded real-skill demo
 
-Five small declared packs grounded in first-party Anthropic, GitHub, and MCP
-workflows are under [`demo/real-skill-cases`](demo/real-skill-cases). The actual
-compiler run accepts the DOCX verification and GitHub PR handoff workflows, then
-refutes fetch-without-search (`MISSING_CAPABILITY`), a protected deployment
-without external approval (`BLOCKED_GUARD`), and an XLSX workflow without
-recalculation (`GOAL_UNSAT`).
+The demo under [`demo/real-skill-cases`](demo/real-skill-cases) starts from five
+real Apache-2.0 natural-language `SKILL.md` files at a pinned
+`anthropics/skills` commit. Azure OpenAI `gpt-5.4` compacted each source live;
+the deterministic schema gate rejected one malformed MCP-builder response,
+accepted its retry, and the trusted checker found witnesses for all five
+accepted packs. Inputs, generated packs, source hashes, pack digests, schema
+attempts, and verdicts are committed as evidence.
 
-The 77-second 1080p recording is
+The 107-second 1080p recording is
 [`skillc-real-skills-demo.mp4`](demo/real-skill-cases/skillc-real-skills-demo.mp4).
-Reproduce the commands, transcript, structured results, and video with:
+Reproduce the complete natural-language → LLM → schema gate → checker pipeline
+using Azure OpenAI and the current `az login` identity:
 
 ```powershell
-python scripts\make_real_skill_demo.py
+$env:AZURE_OPENAI_ENDPOINT = "https://YOUR-RESOURCE.openai.azure.com/openai/v1"
+python scripts\make_real_skill_demo.py --provider azure-openai --model YOUR_DEPLOYMENT
 ```
 
-These are sourced, manually declared abstractions; they do not execute or copy
-the upstream skills. Primary-source and license notes are in
+`AZURE_OPENAI_API_KEY` may be used instead of Azure CLI authentication.
+Anthropic remains available through `--llm-provider anthropic`. Primary-source and
+license notes are in
 [`docs/REAL_SKILL_DEMO_SOURCES.md`](docs/REAL_SKILL_DEMO_SOURCES.md).
 
 ## What the checker decides
@@ -170,8 +174,9 @@ messages or beneficial branches never cause a refutation (Coq T2), and
 2. **Embedded pack**: a fenced block tagged ```` ```skillc-pack ```` inside
    the SKILL.md is validated and used verbatim — full checker power (guards,
    budgets, roles, choice) for authors who want precise semantics.
-3. **LLM compaction** (`skillc compile --llm`, needs `ANTHROPIC_API_KEY`):
-   semantic NL→pack distillation.  Untrusted by design — its output passes
+3. **LLM compaction** (`skillc compile --llm`): semantic NL→pack distillation
+   through Anthropic or Azure OpenAI. Azure supports an API key or the current
+   `az login` identity. The provider is untrusted by design — its output passes
    the same deterministic schema gate and trusted checker, so a hallucinated
    compaction can only produce a false `ACHIEVABLE` (caught by later layers),
    never a false `IMPOSSIBLE` about the pack it actually emitted.

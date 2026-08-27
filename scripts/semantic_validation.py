@@ -11,17 +11,20 @@ For each selected real SKILL.md:
        strip a goal atom's establisher -> GOAL_UNSAT, atom named
      and verify the compiler catches both.
 
-Writes docs/SEMANTIC_VALIDATION.md.  Requires ANTHROPIC_API_KEY (the LLM is
-only in the untrusted half; the verdicts come from the trusted checker).
+Writes docs/SEMANTIC_VALIDATION.md. Requires a configured Anthropic or Azure
+OpenAI provider (the LLM is only in the untrusted half; the verdicts come from
+the trusted checker).
 
 Usage: python3 scripts/semantic_validation.py [SKILLS_DIR] [N_SKILLS]
 """
 import json
+import os
 import sys
 from pathlib import Path
 
 from skillc import __version__, check
 from skillc.frontend.llm import (CONSUMER_ABILITIES, DEFAULT_MODEL,
+                                 DEFAULT_PROVIDER,
                                  compact_with_repair)
 from skillc.mutate import (drop_invoked_capability, is_conjunctive,
                            strip_goal_establisher)
@@ -90,6 +93,12 @@ def run_one(path: Path, lines: list[str]) -> dict:
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else "/mnt/skills")
     n = int(sys.argv[2]) if len(sys.argv) > 2 else len(DEFAULT_SKILLS)
+    provider = os.environ.get("SKILLC_LLM_PROVIDER", DEFAULT_PROVIDER)
+    model = (
+        os.environ.get("AZURE_OPENAI_DEPLOYMENT")
+        if provider == "azure-openai"
+        else DEFAULT_MODEL
+    )
     paths = [root / s for s in DEFAULT_SKILLS[:n] if (root / s).exists()]
     if not paths:
         print("no skills found", file=sys.stderr)
@@ -97,7 +106,8 @@ def main() -> int:
     lines = [
         "# Semantic validation on real skills",
         "",
-        f"`skillc {__version__}`, LLM compaction model `{DEFAULT_MODEL}` "
+        f"`skillc {__version__}`, LLM compaction provider `{provider}`, "
+        f"model/deployment `{model or '(not configured)'}` "
         "(untrusted front-end; every verdict below is produced by the "
         "trusted checker on the schema-gated pack).  Regenerate with "
         "`python3 scripts/semantic_validation.py`.",

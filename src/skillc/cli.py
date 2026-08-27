@@ -34,8 +34,12 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
     if getattr(args, "tool", None):
         profile = profile.with_tools(args.tool)
     if getattr(args, "llm", False):
-        from .frontend.llm import compact
-        pack = compact(path.read_text(encoding="utf-8"), model=args.model)
+        from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact
+        abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
+        abilities.extend(args.runtime_ability or [])
+        pack = compact(path.read_text(encoding="utf-8"), model=args.model,
+                       provider=args.llm_provider,
+                       runtime_abilities=abilities or None)
         return pack, None
     res = compile_file(path, profile)
     return res.pack, res
@@ -180,9 +184,16 @@ def _add_compile_opts(sp) -> None:
     sp.add_argument("--tool", action="append", metavar="NAME",
                     help="grant an extra tool capability (repeatable)")
     sp.add_argument("--llm", action="store_true",
-                    help="use the LLM compaction front-end (needs ANTHROPIC_API_KEY)")
-    sp.add_argument("--model", default="claude-sonnet-5",
-                    help="model for --llm compaction")
+                    help="use the semantic LLM compaction front-end")
+    sp.add_argument("--llm-provider", choices=("anthropic", "azure-openai"),
+                    help="LLM provider (default: SKILLC_LLM_PROVIDER or anthropic)")
+    sp.add_argument("--model",
+                    help="Anthropic model or Azure OpenAI deployment name")
+    sp.add_argument("--llm-runtime",
+                    choices=("none", "consumer", "developer"), default="none",
+                    help="runtime abilities supplied to semantic compaction")
+    sp.add_argument("--runtime-ability", action="append", metavar="TEXT",
+                    help="additional granted runtime ability (repeatable)")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -232,7 +243,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return args.fn(args)
-    except (PackError, KeyError, FileNotFoundError, json.JSONDecodeError) as e:
+    except (PackError, KeyError, FileNotFoundError, json.JSONDecodeError,
+            RuntimeError) as e:
         print(f"skillc: error: {e}", file=sys.stderr)
         return 2
 

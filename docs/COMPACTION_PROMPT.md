@@ -81,8 +81,10 @@ trust model, while the source file defines the exact prompt.
 
 ## Live vs. reference compaction
 
-`src/skillc/frontend/llm.py` calls `api.anthropic.com` only when
-`ANTHROPIC_API_KEY` is set; otherwise live compaction raises an explicit error.
-There is no silent reference-pack fallback. The reproducible checker and corpus
-evaluation do not depend on a live model because the LLM is an untrusted
+`src/skillc/frontend/llm.py` supports Anthropic (`ANTHROPIC_API_KEY`) and Azure
+OpenAI (`AZURE_OPENAI_ENDPOINT` plus either `AZURE_OPENAI_API_KEY` or the
+current `az login` identity). Select the provider with `--llm-provider`; no
+provider is contacted unless `--llm` is explicit. There is no silent
+reference-pack fallback. The reproducible checker and corpus evaluation do not
+depend on a live model because the LLM is an untrusted
 producer by design.
