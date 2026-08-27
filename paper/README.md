@@ -86,6 +86,21 @@ achievability reduction.
   direct conformance) is an *algorithmic* adapter for the *declarative*
   judgment of Appendix C.2 — asserted
   equivalent, not (yet) mechanized.
+- The adapter now also discharges the `prt` side conditions of
+  `T-Comm`/`T-Act`/`T-Goal`. `session.participants` transcribes `prt(G)` from
+  `tas.tex`; a declared role outside `prt(G)` is refuted (its contract is
+  `End`), and a participant the pack declares nothing for is *reported* on the
+  verdict (`assumed_conformant`) rather than silently assumed — the
+  Participant-agreement lemma (`prt(G) = prt(M)`) is a premise of the judgment,
+  but an undeclared role offers no behaviour to refute.
+- **Appendix E (token economics)** quantifies the broader-impact claim that
+  pre-execution refutation reduces wasted computation. The trusted path spends
+  zero tokens; compaction is linear and paid once per skill version; the run it
+  avoids is quadratic in turns and recurs per invocation. The model, its
+  conservative defaults and their justification live in
+  `../src/skillc/tokens.py` and `../docs/TOKEN_ECONOMICS.md`, and reproduce
+  with `skillc cost`. The runtime side is explicitly a model, reported as a
+  band — it prices a run that, if the refutation is right, never happens.
 
 This intentionally supersedes an earlier, more extended draft (establisher
 closure, `Proj-Obs`, adversarial achievability, the 32-bundle real-skill study)

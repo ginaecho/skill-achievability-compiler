@@ -46,7 +46,7 @@ import z3
 
 from .formula import CMP, atoms
 from .pack import Capability, Pack, normalize, pack_digest
-from .session import ProjectionError, conformance_failure, project
+from .session import ProjectionError, conformance_report, participants, project
 
 REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
            "NON_PROJECTABLE", "NON_CONFORMANT", "DYNAMIC_TOPOLOGY")
@@ -181,20 +181,13 @@ def initial_state(p: Pack) -> State:
 # --------------------------------------------------------------------------
 
 def roles_acting(steps: list[dict]) -> set[str]:
-    out: set[str] = set()
-    for s in steps:
-        if "act" in s:
-            out.add(s["act"].get("by", "?"))
-        if "msg" in s:
-            out.add(s["msg"]["from"])
-            out.add(s["msg"]["to"])
-        if "choice" in s:
-            out.add(s["choice"]["by"])
-            for br in s["choice"]["branches"].values():
-                out |= roles_acting(br)
-        if "rec" in s:
-            out |= roles_acting(s["rec"]["body"])
-    return out
+    """The protocol's participants, `prt(G)`.
+
+    Delegates to the canonical definition in `session.participants` so the
+    realizability sweep, the conformance premise and the paper's typing side
+    conditions all range over the same set of roles.
+    """
+    return set(participants(steps))
 
 
 def has_spawn(steps: list[dict]) -> bool:
@@ -224,6 +217,7 @@ class Verdict:
     unknown: bool = False        # outside the decidable fragment
     semantics: str = "may"       # judgment the verdict was decided under
     pack_digest: str = ""        # identity of the pack that was decided
+    assumed_conformant: tuple = ()   # prt(G) roles with no declared behaviour
 
     @property
     def label(self) -> str:
@@ -254,6 +248,7 @@ class Verdict:
             "refuted": self.refuted,
             "unknown": self.unknown,
             "semantics": self.semantics,
+            "assumed_conformant": list(self.assumed_conformant),
             "skillc_version": _skillc_version(),
             "pack_digest": self.pack_digest,
         }
@@ -287,6 +282,9 @@ class Checker:
         self.defeated: list[str] = []    # external branches that defeat the goal
         self.loop_seen: set = set()      # (rec name, pred-state) at back edges
         self.solver_unknown = False      # >=1 query hit the solver budget
+        # prt(G) roles the pack declares no behaviour for: the residue of the
+        # participant-agreement side condition (see session.ConformanceReport)
+        self.assumed_conformant: tuple = ()
 
     def _note_solver_unknown(self) -> None:
         self.solver_unknown = True
@@ -295,6 +293,7 @@ class Checker:
         """Decide the pack, then stamp the verdict with what decided it."""
         v = self._decide()
         v.semantics = self.semantics
+        v.assumed_conformant = self.assumed_conformant
         if self.solver_unknown:
             note = (f"solver returned unknown on at least one query "
                     f"(budget {SOLVER_TIMEOUT_MS} ms); resolved toward "
@@ -374,10 +373,10 @@ class Checker:
         # 4. conformance: every declared skill refines its projected contract
         #    (S_p <= G|p, Gay-Hole subtyping).  Refutes the *judgment*: the
         #    verdict on G cannot be transported to a non-conforming skill.
-        if self.p.skills:
-            fail = conformance_failure(self.p.skills, self.p.protocol)
-            if fail:
-                return Verdict(False, "NON_CONFORMANT", fail)
+        rep = conformance_report(self.p.skills, self.p.protocol)
+        if not rep.ok:
+            return Verdict(False, "NON_CONFORMANT", rep.failure)
+        self.assumed_conformant = rep.assumed
         # 5. tolerant may-reachability of the goal
         ok, end_state = self._reach(self.p.protocol, initial_state(self.p), {})
         if ok:

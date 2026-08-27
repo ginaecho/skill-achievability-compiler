@@ -1237,10 +1237,71 @@ while the intent-fidelity checkpoint keeps the irreducible semantic decision
 with a human. We treat such search as an application of the verifier, not as a
 contribution evaluated here.
 
+\section{Token economics of pre-execution refutation}\label{app:tokens}
+The practical case for deciding achievability \emph{before} execution is an
+economic one, so we state it in tokens rather than adjectives. Two asymmetries
+carry it. First, no model sits in the trusted path: the schema gate,
+projection, conformance and Z3 reachability spend \textbf{zero tokens}, and the
+deterministic front-end spends zero as well. Only the optional LLM compaction
+spends tokens, and it is paid \emph{once per skill version}. Second, an agent
+turn re-sends its whole context: writing $S$ for the harness prompt, $K$ for
+the loaded skill, $g$ for the mean tokens appended per turn and $o$ for output
+per turn, a run of $T$ turns reads $T(S{+}K)+g\,T(T{-}1)/2$ input and $To$
+output tokens. Compaction is linear in the skill and paid once; a doomed run is
+\emph{quadratic} in its turns and recurs on every invocation.
+
+Runtime waste is necessarily a model --- it prices a run that, if the
+refutation is correct, never happens --- so we publish the model rather than a
+single number. Each refutation reason carries a (low, typical, high) band for
+how long an agent flails before that failure stops it, and how many agents are
+billed. With conservative defaults ($S{=}2500$, $g{=}700$, $o{=}250$) and a
+median real consumer skill ($K\approx1.7$K tokens), compaction costs
+${\sim}2.8$K tokens against the following avoided waste per prevented
+invocation:
+
+\begin{center}\small
+\begin{tabular}{@{}llrr@{}}
+\toprule
+\textbf{Verdict reason} & \textbf{turns (lo--typ--hi)} & \textbf{waste/run} & \textbf{leverage}\\
+\midrule
+\textsc{Missing\_Capability} & 3--8--14, 1 agent   & 50\,240  & $18\times$\\
+\textsc{Goal\_Unsat}         & 8--18--30, 1 agent  & 176\,040 & $63\times$\\
+\textsc{Non\_Conformant}     & 6--15--30, 2 agents & 261\,900 & $94\times$\\
+\textsc{Non\_Projectable}    & 6--15--30, 2 agents & 261\,900 & $94\times$\\
+\textsc{Blocked\_Guard}      & 12--25--50, 1 agent & 305\,750 & $110\times$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The ordering is the robust part, and it is the expected one.
+\textsc{Missing\_Capability} is cheapest at run time: the agent calls a tool
+that is not there and learns immediately, and most of the cost is the
+improvisation that follows. \textsc{Blocked\_Guard} is dearest, because a
+precondition no run can satisfy is precisely the case an agent cannot learn
+from --- it retries to the harness turn cap. The two multi-party reasons bill
+two contexts. \textsc{Goal\_Unsat} additionally carries a cost the token bill
+does not show: a run whose goal conjunct has no establisher can terminate
+\emph{believing} it succeeded. \textsc{Dynamic\_Topology} claims no savings at
+all, because an abstention prevents nothing.
+
+Over the 15-spec corpus the seven structural refutations cost 12.2K tokens of
+compaction and avoid ${\sim}1.07$M tokens per round of invocations (band
+0.28M--3.15M): ${\sim}87\times$ leverage, or nothing at all on the
+deterministic path. Break-even therefore falls \emph{inside} the first
+prevented run in every mode --- between $0.9\%$ and $5.5\%$ of it. The honest
+denominator for a healthy skill, where the check buys nothing and still costs
+something, is $2.9\%$ of one successful run over the corpus and $4.0\%$ for a
+median real skill; with the deterministic front-end, zero. Prompt caching
+changes the price of the wasted tokens, not their number. Halving every waste
+default leaves leverage at $9\times$--$55\times$ and the ordering unchanged.
+The model, its defaults and their justification are in the artifact
+(\id{skillc.tokens}, \id{skillc cost}); the Coq development costs no tokens and
+is amortized over every skill ever checked.
+
 \endformalappendix
 
 \section{Implementation}\label{sec:implementation}
-The executable decision path is approximately 1.35K lines of Python, including
+The executable decision path is approximately 1.45K lines of Python, including
 the checker, pack gate, formula layer, and session adapter. The compaction
 front-end issues the artifact prompt to an LLM and passes the result through a deterministic
 \emph{schema gate} before the checker sees it, so malformed packs are rejected
@@ -1278,6 +1339,17 @@ Gay--Hole subtyping utility remains in the artifact but does not decide this
 premise. The verdict reason
 \textsc{Non\_Projectable} names this algorithmic engine's diagnostic;
 Section~\ref{sec:process-typing} is the specification it is checked against.
+
+
+The adapter also discharges the participant side conditions of
+\textsc{T-Comm}/\textsc{T-Act}/\textsc{T-Goal}: it computes $\prt G$ and
+compares it with the roles the pack declares behaviour for. One direction
+refutes --- a declared role outside $\prt G$ has contract $\End$, which nothing
+non-trivial refines. The other cannot: a participant the pack declares nothing
+for offers no behaviour to refute, yet the judgment of
+Section~\ref{sec:process-typing} ranges over a whole session with
+$\prt G=\prt\MM$, so the checker returns those roles alongside the verdict
+rather than leaving the assumption implicit.
 
 \section{Evaluation}\label{sec:evaluation}
 We assembled a corpus of 15 skills spanning the canonical failure modes ---
@@ -1323,6 +1395,17 @@ refinement violation --- budget unsatisfiable on every run & \textsc{Goal\_Unsat
 \bottomrule
 \end{tabular}
 \end{center}
+
+\paragraph{What the check costs.} With no model in the trusted path, the
+checker and the deterministic front-end spend \emph{zero} tokens; only
+compaction spends any, once per skill \emph{version} and linearly in the
+skill's length, against a run it avoids that recurs per \emph{invocation} and
+is quadratic in its turns. Under an explicit, conservative model of that run
+(Appendix~\ref{app:tokens}), compacting the 15-spec corpus costs 12.2K tokens
+and avoids ${\sim}1.07$M per round of invocations --- ${\sim}87\times$
+leverage, unbounded deterministically --- so break-even falls inside the first
+prevented run in every failure mode, while a skill that is \emph{not} broken
+pays $2.9\%$ of one successful run for the check, or nothing.
 
 A separate six-case fragment suite exercises behavior absent from the headline
 matrix: tail-recursive retry and non-terminating control, dynamic spawning,
@@ -1419,8 +1502,8 @@ abstract witnesses. The 21-pack evaluation remains a proof of concept.
 \end{itemize}
 
 \paragraph{Broader impact.}
-Pre-execution refutation can reduce wasted computation and prevent structurally
-impossible agent plans from reaching deployment. The same formal verdict can,
+Pre-execution refutation reduces wasted computation (Appendix~\ref{app:tokens})
+and prevents structurally impossible agent plans from reaching deployment. The same formal verdict can,
 however, create false confidence when an inaccurate pack omits a harmful tool
 effect or weakens the user's actual goal. We therefore expose the declared pack,
 witness or blocking frontier, and deferred obligations rather than presenting a

@@ -124,7 +124,25 @@ def compact(nl: str, model: str = DEFAULT_MODEL, timeout: int = 600,
     runtime_abilities: general abilities the target runtime grants (the
     Gamma_0 the prose presupposes without naming tools); without it the
     compactor under-grants and refutes deployed skills that assume a phone,
-    a browser, or a user to talk to."""
+    a browser, or a user to talk to.
+
+    Use `compact_measured` when the token cost of compaction matters: this
+    wrapper discards the API's usage block."""
+    return compact_measured(nl, model=model, timeout=timeout,
+                            runtime_abilities=runtime_abilities)[0]
+
+
+def compact_measured(nl: str, model: str = DEFAULT_MODEL, timeout: int = 600,
+                     runtime_abilities: list[str] | None = None,
+                     ) -> tuple[dict, dict]:
+    """`compact`, additionally returning the API's own ``usage`` block.
+
+    The usage block is the only *measured* number in the compiler's token
+    accounting (see `skillc.tokens`): everything downstream of it -- schema
+    gate, projection, conformance, z3 -- spends no tokens at all, and the
+    runtime waste it is compared against is by construction a run that never
+    happened.  Returning it here is what lets `skillc cost --measured` report
+    a real figure instead of a model."""
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set; the LLM front-end is "
@@ -150,7 +168,7 @@ def compact(nl: str, model: str = DEFAULT_MODEL, timeout: int = 600,
                    if b.get("type") == "text").strip()
     pack = _extract_json_object(text)
     validate_pack(pack)          # the deterministic gate on untrusted output
-    return pack
+    return pack, dict(out.get("usage") or {})
 
 
 REPAIR_PROMPT = (
@@ -167,7 +185,7 @@ REPAIR_PROMPT = (
 
 def compact_with_repair(nl: str, model: str = DEFAULT_MODEL,
                         runtime_abilities: list[str] | None = None,
-                        rounds: int = 2) -> tuple[dict, list[str]]:
+                        rounds: int = 1) -> tuple[dict, list[str]]:
     """Counterexample-guided compaction: compact, check, and when the trusted
     checker refutes with NON_PROJECTABLE (almost always an under-modelled
     conversation, not a real deadlock in the prose), feed the counterexample
@@ -175,13 +193,28 @@ def compact_with_repair(nl: str, model: str = DEFAULT_MODEL,
 
     Only NON_PROJECTABLE triggers repair: repairing MISSING_CAPABILITY or
     GOAL_UNSAT would tempt the model to invent tools or weaken the goal,
-    which rule 1 forbids.  Returns (pack, repair_log); soundness is untouched
-    -- every candidate passes the schema gate and the final verdict still
-    comes from the trusted checker.
+    which rule 1 forbids.  `rounds` defaults to the single bounded round the
+    paper describes.  Returns (pack, repair_log); soundness is untouched --
+    every candidate passes the schema gate and the final verdict still comes
+    from the trusted checker.
     """
+    pack, log, _ = compact_with_repair_measured(
+        nl, model=model, runtime_abilities=runtime_abilities, rounds=rounds)
+    return pack, log
+
+
+def compact_with_repair_measured(
+        nl: str, model: str = DEFAULT_MODEL,
+        runtime_abilities: list[str] | None = None,
+        rounds: int = 1) -> tuple[dict, list[str], "object"]:
+    """`compact_with_repair`, additionally returning the total measured token
+    cost of every round as a `skillc.tokens.Cost`."""
     from ..checker import check as _check
+    from ..tokens import Cost, usage_to_cost
     log: list[str] = []
-    pack = compact(nl, model=model, runtime_abilities=runtime_abilities)
+    pack, usage = compact_measured(nl, model=model,
+                                   runtime_abilities=runtime_abilities)
+    cost = usage_to_cost(usage, "LLM compaction")
     for _ in range(rounds):
         v = _check(pack)
         if v.achievable or v.reason != "NON_PROJECTABLE":
@@ -189,9 +222,11 @@ def compact_with_repair(nl: str, model: str = DEFAULT_MODEL,
         log.append(f"repair round: {v.reason}: {v.detail}")
         followup = REPAIR_PROMPT.format(reason=v.reason, detail=v.detail,
                                         pack=json.dumps(pack))
-        pack = compact(nl + "\n\n" + followup, model=model,
-                       runtime_abilities=runtime_abilities)
-    return pack, log
+        pack, usage = compact_measured(nl + "\n\n" + followup, model=model,
+                                       runtime_abilities=runtime_abilities)
+        cost = cost + usage_to_cost(usage, "LLM compaction")
+    assert isinstance(cost, Cost)
+    return pack, log, cost
 
 
 def _extract_json_object(text: str) -> dict:

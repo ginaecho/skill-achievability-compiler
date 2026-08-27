@@ -1,7 +1,8 @@
 """Projection (Proj-Sel/Proj-Brn/Proj-Mrg), merge, and Gay-Hole subtyping."""
 import pytest
 
-from skillc.session import (END, ProjectionError, conformance_failure, merge,
+from skillc.session import (END, ProjectionError, conformance_failure,
+                            conformance_report, merge, participants,
                             parse_local, project, subtype)
 
 
@@ -208,3 +209,86 @@ class TestDirectConformance:
             {"router": [{"select": {"branches": {
                 "a": [{"send": {"to": "handler", "label": "go_a"}}]}}}]},
             INFORMED) is not None
+
+
+class TestParticipants:
+    """`prt(G)`: the paper's participant function, transcribed onto the
+    pack's step-list encoding of global types."""
+
+    def test_prt_of_communication_and_action(self):
+        g = [{"msg": {"from": "p", "to": "q", "label": "l"}},
+             {"act": {"cap": "c", "by": "r"}}]
+        assert participants(g) == {"p", "q", "r"}
+
+    def test_goal_marker_involves_nobody(self):
+        assert participants([{"goal": "done"}]) == frozenset()
+        assert participants([]) == frozenset()
+
+    def test_prt_descends_into_branches_and_loops(self):
+        g = [{"choice": {"by": "router", "branches": {
+            "a": [{"act": {"cap": "c", "by": "handler"}}],
+            "b": [{"rec": {"name": "X", "body": [
+                {"act": {"cap": "d", "by": "escalator"}}]}}]}}}]
+        assert participants(g) == {"router", "handler", "escalator"}
+
+    def test_spawned_role_is_a_participant(self):
+        assert participants([{"spawn": {"role": "worker"}}]) == {"worker"}
+
+
+class TestParticipantAgreement:
+    """The `prt(G) = prt(M)` side condition of T-Comm/T-Act/T-Goal: a pack
+    that declares only some roles leaves the rest *assumed* to follow their
+    projected contract, and the checker must say so rather than imply it
+    decided the whole session."""
+
+    G = [{"choice": {"by": "router", "branches": {
+        "simple": [{"msg": {"from": "router", "to": "handler",
+                            "label": "go_simple"}},
+                   {"act": {"cap": "resolve", "by": "handler"}}]}}}]
+
+    def test_undeclared_participants_are_reported_not_refuted(self):
+        rep = conformance_report({"handler": [
+            {"branch": {"from": "router", "branches": {
+                "go_simple": [{"act": {"cap": "resolve"}}]}}}]}, self.G)
+        assert rep.ok
+        assert rep.assumed == ("router",)
+
+    def test_fully_declared_session_assumes_nothing(self):
+        rep = conformance_report({
+            "router": [{"select": {"branches": {
+                "simple": [{"send": {"to": "handler", "label": "go_simple"}}]}}}],
+            "handler": [{"branch": {"from": "router", "branches": {
+                "go_simple": [{"act": {"cap": "resolve"}}]}}}],
+        }, self.G)
+        assert rep.ok and rep.assumed == ()
+
+    def test_declaring_a_non_participant_with_behaviour_is_refuted(self):
+        # 'auditor' is not in prt(G), so its contract is `end`; a non-trivial
+        # declared behaviour cannot conform to it.
+        rep = conformance_report(
+            {"auditor": [{"act": {"cap": "resolve"}}]}, self.G)
+        assert not rep.ok
+        assert "auditor" in rep.failure
+
+    def test_a_pack_with_no_declared_skills_assumes_every_participant(self):
+        rep = conformance_report({}, self.G)
+        assert rep.ok
+        assert rep.assumed == ("handler", "router")
+
+
+class TestVerdictCarriesTheAssumption:
+    def test_verdict_reports_assumed_participants(self):
+        from skillc.checker import check
+        v = check({
+            "name": "partial", "roles": ["router", "handler"],
+            "capabilities": {"resolve": {"owner": "handler",
+                                         "add": ["resolved"]}},
+            "protocol": TestParticipantAgreement.G,
+            "goal": "resolved", "init_true": [],
+            "skills": {"handler": [
+                {"branch": {"from": "router", "branches": {
+                    "go_simple": [{"act": {"cap": "resolve"}}]}}}]},
+        })
+        assert v.achievable
+        assert v.assumed_conformant == ("router",)
+        assert v.to_dict()["assumed_conformant"] == ["router"]
