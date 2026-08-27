@@ -79,6 +79,17 @@ The live prompt is the `SYSTEM` constant in
 caused the documentation to drift; this document describes the interface and
 trust model, while the source file defines the exact prompt.
 
+## What compaction costs
+
+Compaction is the **only** stage of the pipeline that spends tokens: the schema
+gate and the trusted checker spend none, and neither does the deterministic
+front-end. `frontend.llm.compact_measured` returns the API's own `usage` block
+so that cost is measured rather than guessed, and
+`compact_with_repair_measured` accumulates it across the single bounded repair
+round. For a median real skill this is ~2.8K tokens — about 4% of one
+successful run of the same skill, against a doomed run it avoids entirely.
+See [`TOKEN_ECONOMICS.md`](TOKEN_ECONOMICS.md) and `skillc cost`.
+
 ## Live vs. reference compaction
 
 `src/skillc/frontend/llm.py` supports Anthropic (`ANTHROPIC_API_KEY`) and Azure

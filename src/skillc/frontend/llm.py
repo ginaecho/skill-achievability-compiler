@@ -327,11 +327,24 @@ def compact_with_repair(nl: str, model: str | None = None,
 
     Only NON_PROJECTABLE triggers repair: repairing MISSING_CAPABILITY or
     GOAL_UNSAT would tempt the model to invent tools or weaken the goal,
-    which rule 1 forbids.  Returns (pack, repair_log); soundness is untouched
-    -- every candidate passes the schema gate and the final verdict still
-    comes from the trusted checker.
+    which rule 1 forbids.  `rounds` defaults to the single bounded round the
+    paper describes.  Returns (pack, repair_log); soundness is untouched --
+    every candidate passes the schema gate and the final verdict still comes
+    from the trusted checker.
     """
+    pack, log, _ = compact_with_repair_measured(
+        nl, model=model, runtime_abilities=runtime_abilities, rounds=rounds)
+    return pack, log
+
+
+def compact_with_repair_measured(
+        nl: str, model: str = DEFAULT_MODEL,
+        runtime_abilities: list[str] | None = None,
+        rounds: int = 1) -> tuple[dict, list[str], "object"]:
+    """`compact_with_repair`, additionally returning the total measured token
+    cost of every round as a `skillc.tokens.Cost`."""
     from ..checker import check as _check
+    from ..tokens import Cost, usage_to_cost
     log: list[str] = []
     pack = compact(nl, model=model, runtime_abilities=runtime_abilities,
                    provider=provider)

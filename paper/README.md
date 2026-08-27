@@ -86,6 +86,30 @@ achievability reduction.
   direct conformance) is an *algorithmic* adapter for the *declarative*
   judgment of Appendix C.2 — asserted
   equivalent, not (yet) mechanized.
+- The adapter now also discharges the `prt` side conditions of
+  `T-Comm`/`T-Act`/`T-Goal`. `session.participants` transcribes `prt(G)` from
+  `tas.tex`; a declared role outside `prt(G)` is refuted (its contract is
+  `End`), and a participant the pack declares nothing for is *reported* on the
+  verdict (`assumed_conformant`) rather than silently assumed — the
+  Participant-agreement lemma (`prt(G) = prt(M)`) is a premise of the judgment,
+  but an undeclared role offers no behaviour to refute.
+- A **harness-framed introduction**: a skill is presented as one way of writing
+  down part of an agent's harness, motivated with measured multi-agent failure
+  rates and specification-level interventions, and the trust-boundary figure is
+  redrawn as two zones split by a single horizontal boundary that only the pack
+  crosses. Six new references come with it (`harnesssurvey`, `harnessfix`,
+  `agentskills`, `adas`, `aflow`, `cemri`).
+- A qualification to `thm:cap`: `cap_monotone` mechanizes the transport half
+  over an inclusion of step relations; reducing `Γ ⊆ Γ'` to that inclusion is
+  the `World-Act` argument, on paper.
+- **Appendix E (token economics)** quantifies the broader-impact claim that
+  pre-execution refutation reduces wasted computation. The trusted path spends
+  zero tokens; compaction is linear and paid once per skill version; the run it
+  avoids is quadratic in turns and recurs per invocation. The model, its
+  conservative defaults and their justification live in
+  `../src/skillc/tokens.py` and `../docs/TOKEN_ECONOMICS.md`, and reproduce
+  with `skillc cost`. The runtime side is explicitly a model, reported as a
+  band — it prices a run that, if the refutation is right, never happens.
 
 This intentionally supersedes an earlier, more extended draft (establisher
 closure, `Proj-Obs`, adversarial achievability, the 32-bundle real-skill study)
@@ -93,7 +117,12 @@ in favor of this direct-typing core; that material remains in git history and
 is not part of this revision's claims.
 
 The 2025--2026 related-work entries were verified against primary sources in
-`../docs/PILLAR3_PRIMARY_SOURCE_REVIEW.md`.
+`../docs/PILLAR3_PRIMARY_SOURCE_REVIEW.md`. **Not yet covered by that review:**
+the six entries added with the harness-framed introduction (`harnesssurvey`,
+`harnessfix`, `agentskills`, `adas`, `aflow`, `cemri`) and the figures quoted
+from them in Section 1 (the 41--86.7% failure range, the 15.6% task-success
+improvement, the 6.3--18.4 point completion lift). Those need the same
+primary-source pass before submission.
 
 ## Build
 

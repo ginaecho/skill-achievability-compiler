@@ -37,6 +37,7 @@ Local types are hashable tuples:
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional
 
 END = ("end",)
@@ -44,6 +45,53 @@ END = ("end",)
 
 class ProjectionError(ValueError):
     """Raised when the global type is not projectable to some role."""
+
+
+# --------------------------------------------------------------------------
+# Participants  prt(G)   (tas.tex; Lemma "participant agreement")
+# --------------------------------------------------------------------------
+
+def participants(steps: list[dict]) -> frozenset:
+    """`prt(G)`: the roles a global protocol actually involves.
+
+    Transcribes the paper's definition over the pack's step-list encoding of
+    global types::
+
+        prt(p->q:{l_i.G_i})  = {p,q} u U_i prt(G_i)
+        prt(a@p.G)           = {p} u prt(G)
+        prt(#phi.G)          = prt(G)          # a goal marker involves nobody
+        prt(End)             = {}
+
+    A `choice` by p is the encoding of an internal selection, so p is a
+    participant of it even when a branch is empty; `rec`/`continue` are the
+    tail-recursive encoding of mu X.G, so the binder contributes its body.
+    `spawn` names the role it creates -- that role is a participant of any
+    run in which the spawn fires, even though the pack as a whole then falls
+    outside the decidable fragment.
+
+    This is the `prt` of the paper's typing side conditions: T-Comm, T-Act
+    and T-Goal each require the protocol's participants to agree with the
+    session's, and the Participant-agreement lemma (`G |- (M;W)` implies
+    `prt(G) = prt(M)`) is what subject reduction re-establishes at every
+    step.
+    """
+    out: set[str] = set()
+    for s in steps:
+        if "act" in s:
+            out.add(s["act"].get("by", "?"))
+        elif "msg" in s:
+            out.add(s["msg"]["from"])
+            out.add(s["msg"]["to"])
+        elif "choice" in s:
+            out.add(s["choice"]["by"])
+            for br in s["choice"]["branches"].values():
+                out |= participants(br)
+        elif "rec" in s:
+            out |= participants(s["rec"]["body"])
+        elif "spawn" in s:
+            out.add(s["spawn"]["role"])
+        # "goal" and "continue" contribute no participants
+    return frozenset(out)
 
 
 # --------------------------------------------------------------------------
@@ -327,6 +375,59 @@ def _conf(s: tuple, t: tuple, seen: set) -> bool:
     return False
 
 
+@dataclass(frozen=True)
+class ConformanceReport:
+    """Outcome of the conformance premise, including what it had to assume.
+
+    `failure` is the refutation reason (None when the premise holds).
+    `assumed` are the participants of G for which the pack declares no
+    behaviour: the paper's judgment ranges over a whole session
+    `M = prod_p p[S_p]` with `prt(G) = prt(M)`, so a pack that declares only
+    some roles leaves the rest *assumed* to behave exactly as their projected
+    contract.  That assumption is sound-by-construction for the reachability
+    verdict (the checker decides G, not M), but it is a real premise of
+    transporting the verdict to a deployment, so it is reported rather than
+    left implicit.
+    """
+    failure: Optional[str] = None
+    assumed: tuple = ()
+
+    @property
+    def ok(self) -> bool:
+        return self.failure is None
+
+
+def conformance_report(skills: dict[str, list],
+                       protocol: list[dict]) -> ConformanceReport:
+    """Decide ∀p. S_p ⊑ G↾p and record the participant-agreement residue.
+
+    Two obligations, from the paper's side conditions:
+
+    1. **Direct conformance** of every declared behaviour against its
+       projected contract (exact sender labels, receiver-side extra branches
+       only) -- the canonical direct rule, not full Gay-Hole subtyping.
+    2. **Participant agreement** (`prt(G) = prt(M)`).  A declared role that
+       is not a participant of G projects to `end`, so a non-trivial
+       behaviour for it already fails obligation 1; the remaining direction
+       -- a participant of G with no declared behaviour -- cannot be refuted
+       (there is nothing to refute against), so it is returned in `assumed`.
+    """
+    for role, ssteps in sorted(skills.items()):
+        try:
+            contract = project(protocol, role)
+        except ProjectionError as e:
+            return ConformanceReport(
+                f"cannot project contract for role '{role}': {e}")
+        declared = parse_local(ssteps)
+        if not conforms(declared, contract):
+            return ConformanceReport(
+                f"declared behaviour of role '{role}' does not conform to "
+                f"its projected contract (S_{role} </= G|{role}): declared "
+                f"{_show(declared)}, contract {_show(contract)}")
+    assumed = tuple(sorted(participants(protocol) - set(skills)))
+    return ConformanceReport(None, assumed)
+
+
 def conformance_failure(skills: dict[str, list],
                         protocol: list[dict]) -> Optional[str]:
     """Check ∀p. S_p ⊑ G↾p (direct conformance).  Returns None if conformant,
@@ -335,17 +436,7 @@ def conformance_failure(skills: dict[str, list],
     This is the adapter the checker's conformance premise calls, so it decides
     the canonical *direct* rule (exact sender labels, receiver-side extra
     branches only) rather than full Gay-Hole subtyping."""
-    for role, ssteps in sorted(skills.items()):
-        try:
-            contract = project(protocol, role)
-        except ProjectionError as e:
-            return f"cannot project contract for role '{role}': {e}"
-        declared = parse_local(ssteps)
-        if not conforms(declared, contract):
-            return (f"declared behaviour of role '{role}' does not conform to "
-                    f"its projected contract (S_{role} </= G|{role}): declared "
-                    f"{_show(declared)}, contract {_show(contract)}")
-    return None
+    return conformance_report(skills, protocol).failure
 
 
 def _show(t: tuple, depth: int = 0) -> str:

@@ -28,7 +28,7 @@
 \definecolor{amber}{RGB}{201,138,24}
 \definecolor{okgreen}{RGB}{34,120,80}
 \definecolor{badred}{RGB}{178,52,52}
-\hypersetup{linkcolor=navy,citecolor=navy,urlcolor=steel}
+\hypersetup{colorlinks=true,linkcolor=navy,citecolor=navy,urlcolor=steel}
 
 \theoremstyle{plain}
 \newtheorem{theorem}{Theorem}
@@ -123,14 +123,36 @@ the fragment boundary, and the two deferred edges.
 
 \section{Introduction}\label{sec:introduction}
 
-A modern agent is rarely a single model call. It is a \emph{skill}: a
-specification --- increasingly authored in natural language and drafted by an LLM
-from a user's stated goal --- that names tools, describes a plan, and coordinates
-one or more agents toward an outcome. The appeal is that a non-expert can say
-\emph{what} they want and have the system assemble the \emph{how}. The hazard is
-that the assembled how is frequently \emph{impossible}, and nothing notices until
-execution has already spent tokens, taken actions, and, in the multi-agent case,
-deadlocked halfway.
+A modern agent is rarely a single model call, but neither is it simply a model.
+Around the model sits a \emph{harness}: the runtime infrastructure that fixes the
+execution environment, the tool interface, the context, the orchestration and the
+verification, and on which reliability depends at least as much as on the base
+model~\cite{harnesssurvey,harnessfix}. A \emph{skill} is one increasingly common way
+of writing part of that harness down --- a natural-language artifact, a folder of
+instructions the agent discovers and loads on demand~\cite{agentskills}, and
+increasingly drafted by an LLM from a user's stated goal~\cite{adas,aflow} --- that
+\emph{harnesses} a general-purpose agent toward a particular outcome, naming the
+tools it may use,
+prescribing the plan it should follow and, when several agents are involved, fixing
+who must talk to whom. A skill is behavioural guidance layered over an agent, not a
+substitute for it: the agent retains its latitude to interpret that guidance at run
+time. The appeal is that a non-expert can say \emph{what} they want and have the
+system assemble the \emph{how}. The question the arrangement leaves open --- and the
+question this paper answers --- is how anyone knows that the guidance is good enough
+to achieve what it claims.
+
+Today that answer arrives only by running the skill and reading the wreckage
+afterwards~\cite{harnessfix}. Across seven state-of-the-art open-source multi-agent
+systems, measured failure rates range from 41\% to 86.7\%~\cite{cemri}; on one of
+them a specification-level intervention alone --- adding a task-objective
+verification step, with the underlying model held fixed --- yields a 15.6\%
+improvement in task success~\cite[Appendix~H]{cemri}, and trace-driven repair of the
+harness alone lifts task completion by 6.3 to 18.4 points across four agent
+benchmarks~\cite{harnessfix}. A substantial share of the defect therefore lies in
+the guidance rather than in the model. Part of that share is worse
+than unlucky: the assembled how was \emph{impossible} before the first token was
+spent, and nothing noticed until execution had already taken actions and, in the
+multi-agent case, deadlocked halfway.
 
 The failures are structural and recurring. A plan \emph{books a flight and emails
 a confirmation} although no email tool is in scope (a hallucinated capability). A
@@ -161,84 +183,85 @@ about the pack it received (Figure~\ref{fig:trust}).
 
 \begin{figure}[t]
 \centering
-\resizebox{\textwidth}{!}{%
-\begin{tikzpicture}[font=\sffamily\scriptsize, >={Stealth[length=2.2mm]},
-  card/.style 2 args={draw={#1}, fill=white, rounded corners=3pt, line width=0.7pt,
-    inner xsep=7pt, inner ysep=6pt, align=center, minimum height=11mm,
-    drop shadow={shadow xshift=0.6pt, shadow yshift=-1.1pt, fill={#2}, opacity=0.5}},
-  pill/.style={draw={#1}, fill={#1!7}, rounded corners=8pt, line width=0.9pt,
-    inner xsep=8pt, inner ysep=4.5pt, align=left},
+\begin{tikzpicture}[x=1mm, y=1mm,
+  font=\sffamily\scriptsize, >={Stealth[length=2.4mm]},
+  card/.style 2 args={draw={#1}, fill=white, rounded corners=3pt, line width=0.8pt,
+    inner xsep=6pt, inner ysep=6pt, align=center,
+    minimum height=14mm, minimum width=36mm,
+    drop shadow={shadow xshift=0.7pt, shadow yshift=-1.2pt, fill={#2}, opacity=0.5}},
+  pill/.style={draw={#1}, fill={#1!7}, rounded corners=9pt, line width=1pt,
+    inner xsep=8pt, inner ysep=5pt, align=left, minimum width=56mm},
   badge/.style={fill={#1}, text=white, font=\sffamily\bfseries\tiny,
     rounded corners=5pt, inner xsep=5pt, inner ysep=2pt},
-  flow/.style={->, line width=1.15pt, draw=steel!85},
+  flow/.style={->, line width=1.2pt, draw=steel!85, rounded corners=2.5mm},
   note/.style={font=\sffamily\tiny, text=black!58, align=center}]
 
-% ---------- cards ----------
-\node[card={black!45}{black!30}] (nl) at (0,0)
-  {\textbf{natural-language skill}\\[1.5pt]
+% ============ ROW 1 : semantic, untrusted ============
+\node[card={black!45}{black!30}] (nl) at (-46,0)
+  {\textbf{natural-language skill}\\[2pt]
    \begin{tikzpicture}[x=1pt,y=1pt]
-     \fill[black!25,rounded corners=0.6pt] (0,8) rectangle (46,9.6);
-     \fill[black!25,rounded corners=0.6pt] (0,4) rectangle (52,5.6);
-     \fill[black!25,rounded corners=0.6pt] (0,0) rectangle (34,1.6);
+     \fill[black!25,rounded corners=0.6pt] (0,8) rectangle (52,9.8);
+     \fill[black!25,rounded corners=0.6pt] (0,4) rectangle (60,5.8);
+     \fill[black!25,rounded corners=0.6pt] (0,0) rectangle (38,1.8);
    \end{tikzpicture}};
 
-\node[card={amber!75!black}{amber!60}, right=11mm of nl] (llm)
-  {\textbf{LLM compaction}\\[1pt]{\tiny prose $\longmapsto$ formal pack}};
-\node[badge=amber!85!black, anchor=north] at ([yshift=2.2pt]llm.north) {UNTRUSTED};
+\node[card={amber!75!black}{amber!60}] (llm) at (0,0)
+  {\textbf{LLM compaction}\\[2pt]{\tiny prose $\longmapsto$ formal pack}};
+\node[badge=amber!85!black, anchor=north] at ([yshift=2.4pt]llm.north) {UNTRUSTED};
 
-\node[card={navy!70}{navy!45}, right=12.5mm of llm] (pack)
-  {\textbf{pack}\\[1pt]$\langle\,\Gamma,\ G,\ \gphi,\ W_0\,\rangle$};
+\node[card={navy!70}{navy!45}] (pack) at (46,0)
+  {\textbf{pack}\\[2.5pt]$\langle\,\Gamma,\ G,\ \gphi,\ W_0\,\rangle$};
 
-\node[card={okgreen!80}{okgreen!55}, right=12.5mm of pack] (chk)
-  {\textbf{checker}\\[1pt]$\Gamma\vdash\{S_{\mathsf p}\}:G\ \triangleright\ \Diamond\gphi$};
-\node[badge=okgreen!80!black, anchor=north] at ([yshift=2.2pt]chk.north) {COQ-SPECIFIED};
+% ============ ROW 2 : mechanical, deterministic ============
+\node[card={okgreen!80}{okgreen!55}, minimum width=40mm] (chk) at (-48,-39)
+  {\textbf{checker}\\[2.5pt]$\Gamma\vdash\{S_{\mathsf p}\}:G\ \triangleright\ \Diamond\gphi$};
+\node[badge=okgreen!80!black, anchor=north] at ([yshift=2.4pt]chk.north) {COQ-SPECIFIED};
 
-% ---------- verdict fork ----------
-\node[pill=okgreen, right=13mm of chk, yshift=12mm] (ok)
+\node[pill=okgreen] (ok)  at (32,-27)
   {\textcolor{okgreen!70!black}{\ding{51}}~\textbf{achievable} + witness path\\
    {\tiny\color{black!55}honest: two deferred edges}};
-\node[pill=steel, right=13mm of chk] (unk)
+\node[pill=steel]   (unk) at (32,-39)
   {\textcolor{steel}{?}~\textbf{unknown} + fragment reason\\
    {\tiny\color{black!55}abstention, not a refutation}};
-\node[pill=badred, right=13mm of chk, yshift=-12mm] (bad)
+\node[pill=badred]  (bad) at (32,-51)
   {\textcolor{badred}{\ding{55}}~\textbf{impossible} + blocking frontier\\
    {\tiny\color{black!55}Theorem~\ref{thm:ref}: \emph{never wrong}}};
 
-% ---------- zones (behind) ----------
+% ============ zones (behind) ============
 \begin{scope}[on background layer]
-  \node[fill=amber!11, rounded corners=7pt, inner sep=7pt,
-        fit=(llm)] (zoneU) {};
+  \node[fill=amber!11, rounded corners=7pt, inner sep=7pt, fit=(llm)] (zoneU) {};
   \node[fill=okgreen!8, rounded corners=7pt, inner sep=7pt,
         fit=(chk)(ok)(unk)(bad)] (zoneT) {};
-  \node[note, anchor=south] at ([yshift=1pt]zoneU.north)
-    {\textsc{\textcolor{amber!60!black}{semantic\, \(\cdot\)\, untrusted}}};
-  \node[note, anchor=south] at ([yshift=1pt]zoneT.north)
-    {\textsc{\textcolor{okgreen!60!black}{mechanical\, \(\cdot\)\, deterministic\, \(\cdot\)\, ms, no LLM}}};
-  % trust boundary through the pack
-  \draw[line width=1.1pt, dash pattern=on 3.2pt off 2.6pt, black!45]
-    ([yshift=3.2mm]pack.center |- zoneT.north) -- ([yshift=-4.5mm]pack.center |- zoneT.south);
 \end{scope}
-\node[note, anchor=north] at ([yshift=-5.2mm]pack.south) {trust boundary};
 
-% ---------- arrows ----------
-\draw[flow] (nl) -- (llm);
+% ============ the trust boundary : one horizontal line ============
+\draw[line width=1.1pt, dash pattern=on 3.4pt off 2.8pt, black!45]
+  (-72,-13) -- (72,-13);
+\node[note, anchor=west, align=left] at (-72,-9.2)
+  {\textsc{\textcolor{amber!55!black}{above: semantic $\cdot$ untrusted}}};
+\node[note, anchor=south east, fill=white, inner xsep=3pt, inner ysep=1pt]
+  at (71,-12.4) {\textbf{trust boundary}};
+\node[note, anchor=north west, align=left] at (-72,-59)
+  {\textsc{\textcolor{okgreen!45!black}{below: mechanical $\cdot$ deterministic $\cdot$ milliseconds, no llm}}};
+
+% ============ arrows ============
+\draw[flow] (nl)  -- (llm);
 \draw[flow] (llm) -- (pack);
-\draw[flow] (pack) -- (chk);
-\draw[flow, draw=okgreen!75!black] (chk.east) -- ++(3.5mm,0) |- (ok.west);
-\draw[flow, draw=steel!85] (chk.east) -- (unk.west);
-\draw[flow, draw=badred!85] (chk.east) -- ++(3.5mm,0) |- (bad.west);
+% the pack is the only thing that crosses the boundary
+\draw[flow] (pack.south) -- (46,-20) -- (-48,-20) -- (chk.north);
+\draw[flow, draw=okgreen!75!black] (chk.east) -- ++(4,0) |- (ok.west);
+\draw[flow, draw=steel!85]         (chk.east) -- (unk.west);
+\draw[flow, draw=badred!85]        (chk.east) -- ++(4,0) |- (bad.west);
 
-% ---------- the design move ----------
-\draw[decorate, decoration={brace, mirror, amplitude=4pt}, black!50, line width=0.7pt]
-  ([yshift=-2.2mm]zoneU.south west) -- ([yshift=-2.2mm]zoneU.south east);
-\node[note, anchor=north] at ([yshift=-4.6mm]zoneU.south)
-  {the semantic gap, \emph{concentrated}\\at one inspectable checkpoint};
-\end{tikzpicture}}
+% ============ the design move ============
+\node[note, anchor=center] at (-6,-16.4)
+  {the semantic gap, \emph{relocated and concentrated} at one inspectable checkpoint};
+\end{tikzpicture}
 \caption{The trust boundary. An untrusted LLM compacts prose into a formal pack;
-a deterministic checker governed by a Coq-verified abstraction theorem decides
-achievability over the pack. The
-verdicts are asymmetric: \emph{impossible} is sound (Theorem~\ref{thm:ref}),
-\emph{achievable} is honest about its deferred obligations
+below the line, a deterministic checker governed by a Coq-verified abstraction
+theorem decides achievability over the pack --- the pack is the only artifact that
+crosses. The verdicts are asymmetric: \emph{impossible} is sound
+(Theorem~\ref{thm:ref}), \emph{achievable} is honest about its deferred obligations
 (Section~\ref{sec:signals}).}
 \label{fig:trust}
 \end{figure}
@@ -288,11 +311,19 @@ compactions differ only in whether an email tool is in scope.
 \gphi \;=\; \mathsf{booked} \,\wedge\, \mathsf{confirmation\_sent}
 \]
 \begin{center}\small
-\begin{tabular}{@{}ll@{}}
-\textbf{variant A (no email tool)} & \textbf{variant B} \\
-$\mathsf{search}: \Add\,\{\mathsf{searched}\}$ & $\dots$ A, plus: \\
-$\mathsf{filter}: \pre\ \mathsf{searched};\ \Add\,\{\mathsf{filtered}\}$ & $\mathsf{email}: \pre\ \mathsf{booked};$ \\
-$\mathsf{book}: \pre\ \mathsf{filtered};\ \Add\,\{\mathsf{booked}\}$ & $\qquad\Add\,\{\mathsf{confirmation\_sent}\}$
+\begin{tabular}{@{}l l l@{}}
+\toprule
+capability & precondition & effect \\
+\midrule
+\multicolumn{3}{@{}l}{\emph{variant A} --- no email tool in scope} \\
+$\mathsf{search}$ & $\top$ & $\Add\,\{\mathsf{searched}\}$ \\
+$\mathsf{filter}$ & $\mathsf{searched}$ & $\Add\,\{\mathsf{filtered}\}$ \\
+$\mathsf{book}$   & $\mathsf{filtered}$ & $\Add\,\{\mathsf{booked}\}$ \\
+\addlinespace[2pt]
+\midrule
+\multicolumn{3}{@{}l}{\emph{variant B} --- variant A, plus:} \\
+$\mathsf{email}$ & $\mathsf{booked}$ & $\Add\,\{\mathsf{confirmation\_sent}\}$ \\
+\bottomrule
 \end{tabular}
 \end{center}
 Under STRIPS \emph{frame semantics} --- a predicate is false unless an effect
@@ -900,8 +931,10 @@ $\Gamma$. Hence $\Gamma'$ reaches $\gphi$ via the same witnessing run. The
 other premises of \textsc{Ach} are monotone in the same direction
 ($\caps(G)\subseteq\dom(\Gamma)\subseteq\dom(\Gamma')$ still holds, and
 realizability and conformance do not mention $\Gamma$ beyond
-$a\in\dom(\Gamma)$), so the whole judgment is preserved. Mechanized as
-\id{cap\_monotone}, axiom-free.
+$a\in\dom(\Gamma)$), so the whole judgment is preserved. The transport half is
+mechanized as \id{cap\_monotone}, axiom-free, stated over an inclusion of step
+relations; the reduction of $\Gamma\subseteq\Gamma'$ to that inclusion is the
+\textsc{World-Act} argument above, on paper.
 \end{proof}
 
 \noindent\textbf{Concrete instance.} The flight skill of
@@ -1237,10 +1270,71 @@ while the intent-fidelity checkpoint keeps the irreducible semantic decision
 with a human. We treat such search as an application of the verifier, not as a
 contribution evaluated here.
 
+\section{Token economics of pre-execution refutation}\label{app:tokens}
+The practical case for deciding achievability \emph{before} execution is an
+economic one, so we state it in tokens rather than adjectives. Two asymmetries
+carry it. First, no model sits in the trusted path: the schema gate,
+projection, conformance and Z3 reachability spend \textbf{zero tokens}, and the
+deterministic front-end spends zero as well. Only the optional LLM compaction
+spends tokens, and it is paid \emph{once per skill version}. Second, an agent
+turn re-sends its whole context: writing $S$ for the harness prompt, $K$ for
+the loaded skill, $g$ for the mean tokens appended per turn and $o$ for output
+per turn, a run of $T$ turns reads $T(S{+}K)+g\,T(T{-}1)/2$ input and $To$
+output tokens. Compaction is linear in the skill and paid once; a doomed run is
+\emph{quadratic} in its turns and recurs on every invocation.
+
+Runtime waste is necessarily a model --- it prices a run that, if the
+refutation is correct, never happens --- so we publish the model rather than a
+single number. Each refutation reason carries a (low, typical, high) band for
+how long an agent flails before that failure stops it, and how many agents are
+billed. With conservative defaults ($S{=}2500$, $g{=}700$, $o{=}250$) and a
+median real consumer skill ($K\approx1.7$K tokens), compaction costs
+${\sim}2.8$K tokens against the following avoided waste per prevented
+invocation:
+
+\begin{center}\small
+\begin{tabular}{@{}llrr@{}}
+\toprule
+\textbf{Verdict reason} & \textbf{turns (lo--typ--hi)} & \textbf{waste/run} & \textbf{leverage}\\
+\midrule
+\textsc{Missing\_Capability} & 3--8--14, 1 agent   & 50\,240  & $18\times$\\
+\textsc{Goal\_Unsat}         & 8--18--30, 1 agent  & 176\,040 & $63\times$\\
+\textsc{Non\_Conformant}     & 6--15--30, 2 agents & 261\,900 & $94\times$\\
+\textsc{Non\_Projectable}    & 6--15--30, 2 agents & 261\,900 & $94\times$\\
+\textsc{Blocked\_Guard}      & 12--25--50, 1 agent & 305\,750 & $110\times$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The ordering is the robust part, and it is the expected one.
+\textsc{Missing\_Capability} is cheapest at run time: the agent calls a tool
+that is not there and learns immediately, and most of the cost is the
+improvisation that follows. \textsc{Blocked\_Guard} is dearest, because a
+precondition no run can satisfy is precisely the case an agent cannot learn
+from --- it retries to the harness turn cap. The two multi-party reasons bill
+two contexts. \textsc{Goal\_Unsat} additionally carries a cost the token bill
+does not show: a run whose goal conjunct has no establisher can terminate
+\emph{believing} it succeeded. \textsc{Dynamic\_Topology} claims no savings at
+all, because an abstention prevents nothing.
+
+Over the 15-spec corpus the seven structural refutations cost 12.2K tokens of
+compaction and avoid ${\sim}1.07$M tokens per round of invocations (band
+0.28M--3.15M): ${\sim}87\times$ leverage, or nothing at all on the
+deterministic path. Break-even therefore falls \emph{inside} the first
+prevented run in every mode --- between $0.9\%$ and $5.5\%$ of it. The honest
+denominator for a healthy skill, where the check buys nothing and still costs
+something, is $2.9\%$ of one successful run over the corpus and $4.0\%$ for a
+median real skill; with the deterministic front-end, zero. Prompt caching
+changes the price of the wasted tokens, not their number. Halving every waste
+default leaves leverage at $9\times$--$55\times$ and the ordering unchanged.
+The model, its defaults and their justification are in the artifact
+(\id{skillc.tokens}, \id{skillc cost}); the Coq development costs no tokens and
+is amortized over every skill ever checked.
+
 \endformalappendix
 
 \section{Implementation}\label{sec:implementation}
-The executable decision path is approximately 1.35K lines of Python, including
+The executable decision path is approximately 1.45K lines of Python, including
 the checker, pack gate, formula layer, and session adapter. The compaction
 front-end issues the artifact prompt to an LLM and passes the result through a deterministic
 \emph{schema gate} before the checker sees it, so malformed packs are rejected
@@ -1278,6 +1372,16 @@ Gay--Hole subtyping utility remains in the artifact but does not decide this
 premise. The verdict reason
 \textsc{Non\_Projectable} names this algorithmic engine's diagnostic;
 Section~\ref{sec:process-typing} is the specification it is checked against.
+
+The adapter also discharges the participant side conditions of
+\textsc{T-Comm}/\textsc{T-Act}/\textsc{T-Goal}: it computes $\prt G$ and
+compares it with the roles the pack declares behaviour for. One direction
+refutes --- a declared role outside $\prt G$ has contract $\End$, which nothing
+non-trivial refines. The other cannot: a participant the pack declares nothing
+for offers no behaviour to refute, yet the judgment of
+Section~\ref{sec:process-typing} ranges over a whole session with
+$\prt G=\prt\MM$, so the checker returns those roles alongside the verdict
+rather than leaving the assumption implicit.
 
 \section{Evaluation}\label{sec:evaluation}
 We assembled a corpus of 15 skills spanning the canonical failure modes ---
@@ -1323,6 +1427,17 @@ refinement violation --- budget unsatisfiable on every run & \textsc{Goal\_Unsat
 \bottomrule
 \end{tabular}
 \end{center}
+
+\paragraph{What the check costs.} With no model in the trusted path, the
+checker and the deterministic front-end spend \emph{zero} tokens; only
+compaction spends any, once per skill \emph{version} and linearly in the
+skill's length, against a run it avoids that recurs per \emph{invocation} and
+is quadratic in its turns. Under an explicit, conservative model of that run
+(Appendix~\ref{app:tokens}), compacting the 15-spec corpus costs 12.2K tokens
+and avoids ${\sim}1.07$M per round of invocations --- ${\sim}87\times$
+leverage, unbounded deterministically --- so break-even falls inside the first
+prevented run in every failure mode, while a skill that is \emph{not} broken
+pays $2.9\%$ of one successful run for the check, or nothing.
 
 A separate six-case fragment suite exercises behavior absent from the headline
 matrix: tail-recursive retry and non-terminating control, dynamic spawning,
@@ -1419,8 +1534,8 @@ abstract witnesses. The 21-pack evaluation remains a proof of concept.
 \end{itemize}
 
 \paragraph{Broader impact.}
-Pre-execution refutation can reduce wasted computation and prevent structurally
-impossible agent plans from reaching deployment. The same formal verdict can,
+Pre-execution refutation reduces wasted computation (Appendix~\ref{app:tokens})
+and prevents structurally impossible agent plans from reaching deployment. The same formal verdict can,
 however, create false confidence when an inaccurate pack omits a harmful tool
 effect or weakens the user's actual goal. We therefore expose the declared pack,
 witness or blocking frontier, and deferred obligations rather than presenting a
@@ -1441,16 +1556,22 @@ structured, inspectable verification signal for agent skills and a path toward,
 rather than a completed proof of, stronger per-step safety.
 
 \begin{thebibliography}{9}\small
-\bibitem{honda} K.~Honda, N.~Yoshida, M.~Carbone. Multiparty Asynchronous Session Types. \emph{J. ACM} 63(1), 2016.
-\bibitem{liprojection} E.~Li, F.~Stutz, T.~Wies, D.~Zufferey. Complete Multiparty Session Type Projection with Automata. \emph{CAV} 2023.
-\bibitem{gayhole} S.~Gay, M.~Hole. Subtyping for Session Types in the Pi Calculus. \emph{Acta Informatica} 42(2--3), 2005.
+\bibitem{synthetic2023} S.-S.~Jongmans, F.~Ferreira. Synthetic Behavioural Typing: Sound, Regular Multiparty Sessions via Implicit Local Types. \emph{ECOOP}, LIPIcs 263, 2023.
+\bibitem{synthetic2026} D.~Castro-Perez, F.~Ferreira, S.-S.~Jongmans. A Synthetic Reconstruction of Multiparty Session Types. \emph{POPL}, 2026.
+\bibitem{harnesssurvey} J.~Li, X.~Xiao, Y.~Zhang, C.~Liu, L.~Zhao, X.~Liao, Y.~Ji, J.~Wang, J.~Gu, Y.~Ge, W.~Xu, X.~Fang, X.~Xu, T.~Zhao, Y.~Kim, T.~Wang, J.~Hamm, S.~Krishnaswamy, J.~Huan, C.~Reddy. Agent Harness Engineering: A Survey. 2026.
+\bibitem{harnessfix} M.~Chen, J.~Wang, Z.~Liu, Y.~Wang, H.~Zheng, Q.~Wang. From Failed Trajectories to Reliable LLM Agents: Diagnosing and Repairing Harness Flaws. arXiv:2606.06324, 2026.
+\bibitem{agentskills} Anthropic. Equipping Agents for the Real World with Agent Skills. Anthropic Engineering Blog, 16 Oct 2025; released as the open Agent Skills standard, \url{https://agentskills.io}, 18 Dec 2025.
+\bibitem{adas} S.~Hu, C.~Lu, J.~Clune. Automated Design of Agentic Systems. \emph{ICLR}, 2025.
+\bibitem{aflow} J.~Zhang, J.~Xiang, Z.~Yu, F.~Teng, X.~Chen, J.~Chen, M.~Zhuge, X.~Cheng, S.~Hong, J.~Wang, et~al. AFlow: Automating Agentic Workflow Generation. \emph{ICLR}, 2025.
+\bibitem{cemri} M.~Cemri, M.~Z.~Pan, S.~Yang, L.~A.~Agrawal, B.~Chopra, R.~Tiwari, K.~Keutzer, A.~Parameswaran, D.~Klein, K.~Ramchandran, M.~Zaharia, J.~E.~Gonzalez, I.~Stoica. Why Do Multi-Agent LLM Systems Fail? arXiv:2503.13657, 2025.
 \bibitem{yoshidagheri} N.~Yoshida, L.~Gheri. A Very Gentle Introduction to Multiparty Session Types. \emph{ICDCIT}, LNCS 11969, 2020.
 \bibitem{ghilezan} S.~Ghilezan, S.~Jak\v si\'c, J.~Pantovi\'c, A.~Scalas, N.~Yoshida. Precise Subtyping for Synchronous Multiparty Sessions. \emph{J.\ Log.\ Algebr.\ Meth.\ Program.} 104, 2019.
 \bibitem{scalasyoshida} A.~Scalas, N.~Yoshida. Less is More: Multiparty Session Types Revisited. \emph{Proc.\ ACM Program.\ Lang.} 3(POPL), 2019.
-\bibitem{synthetic2023} S.-S.~Jongmans, F.~Ferreira. Synthetic Behavioural Typing: Sound, Regular Multiparty Sessions via Implicit Local Types. \emph{ECOOP}, LIPIcs 263, 2023.
-\bibitem{synthetic2026} D.~Castro-Perez, F.~Ferreira, S.-S.~Jongmans. A Synthetic Reconstruction of Multiparty Session Types. \emph{POPL}, 2026.
-\bibitem{strips} R.~Fikes, N.~Nilsson. STRIPS: A New Approach to the Application of Theorem Proving to Problem Solving. \emph{Artif. Intell.} 2(3--4), 1971.
+\bibitem{honda} K.~Honda, N.~Yoshida, M.~Carbone. Multiparty Asynchronous Session Types. \emph{J. ACM} 63(1), 2016.
+\bibitem{gayhole} S.~Gay, M.~Hole. Subtyping for Session Types in the Pi Calculus. \emph{Acta Informatica} 42(2--3), 2005.
 \bibitem{bz} D.~Brand, P.~Zafiropulo. On Communicating Finite-State Machines. \emph{J. ACM} 30(2), 1983.
+\bibitem{liprojection} E.~Li, F.~Stutz, T.~Wies, D.~Zufferey. Complete Multiparty Session Type Projection with Automata. \emph{CAV} 2023.
+\bibitem{strips} R.~Fikes, N.~Nilsson. STRIPS: A New Approach to the Application of Theorem Proving to Problem Solving. \emph{Artif. Intell.} 2(3--4), 1971.
 \bibitem{msc} B.~Bollig, M.~F\"ugger, T.~Nowak. Provable Coordination for LLM Agents via Message Sequence Charts. \emph{ISoLA}, 2026. arXiv:2604.17612.
 \bibitem{veriguard} L.~Miculicich, M.~Parmar, H.~Palangi, K.~D.~Dvijotham, M.~Montanari, T.~Pfister, L.~T.~Le. VeriGuard: Enhancing LLM Agent Safety via Verified Code Generation. arXiv:2510.05156, 2025.
 \bibitem{abc} V.~P.~Bhardwaj. Agent Behavioral Contracts: Formal Specification and Runtime Enforcement for Reliable Autonomous AI Agents. arXiv:2602.22302, 2026.
