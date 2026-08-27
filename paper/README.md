@@ -93,6 +93,15 @@ achievability reduction.
   verdict (`assumed_conformant`) rather than silently assumed — the
   Participant-agreement lemma (`prt(G) = prt(M)`) is a premise of the judgment,
   but an undeclared role offers no behaviour to refute.
+- A **harness-framed introduction**: a skill is presented as one way of writing
+  down part of an agent's harness, motivated with measured multi-agent failure
+  rates and specification-level interventions, and the trust-boundary figure is
+  redrawn as two zones split by a single horizontal boundary that only the pack
+  crosses. Six new references come with it (`harnesssurvey`, `harnessfix`,
+  `agentskills`, `adas`, `aflow`, `cemri`).
+- A qualification to `thm:cap`: `cap_monotone` mechanizes the transport half
+  over an inclusion of step relations; reducing `Γ ⊆ Γ'` to that inclusion is
+  the `World-Act` argument, on paper.
 - **Appendix E (token economics)** quantifies the broader-impact claim that
   pre-execution refutation reduces wasted computation. The trusted path spends
   zero tokens; compaction is linear and paid once per skill version; the run it
@@ -108,7 +117,12 @@ in favor of this direct-typing core; that material remains in git history and
 is not part of this revision's claims.
 
 The 2025--2026 related-work entries were verified against primary sources in
-`../docs/PILLAR3_PRIMARY_SOURCE_REVIEW.md`.
+`../docs/PILLAR3_PRIMARY_SOURCE_REVIEW.md`. **Not yet covered by that review:**
+the six entries added with the harness-framed introduction (`harnesssurvey`,
+`harnessfix`, `agentskills`, `adas`, `aflow`, `cemri`) and the figures quoted
+from them in Section 1 (the 41--86.7% failure range, the 15.6% task-success
+improvement, the 6.3--18.4 point completion lift). Those need the same
+primary-source pass before submission.
 
 ## Build
 
