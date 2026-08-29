@@ -334,24 +334,28 @@ obligations }O,\\
 Each verdict records the pack digest, checker semantics, and artifact version.
 
 \paragraph{Guarantees.}
-Let a configuration consist of a protocol state and an abstract world state,
-and let $\mathit{abs}$ map concrete configurations to abstract configurations.
-Assume step and goal simulation for the declared pack
-(Appendix~\ref{app:metatheory}). If no abstract run reaches $\gphi$, no concrete
-run represented by that pack reaches the concrete goal
-(Theorem~\ref{thm:ref}). The analysis remains sound when the abstraction is
-made less detailed, and adding capabilities cannot turn an achievable goal into
-an \emph{impossible} one (Theorems~\ref{thm:tol}--\ref{thm:cap}). Direct
-conformance satisfies subject reduction and session fidelity
-(Theorems~\ref{thm:sr}--\ref{thm:sf}). The Coq development covers single-label
-communication with concurrent actions by other participants; \bgc interleaving
-two world-changing actions requires an explicit commutativity assumption. The
-restrictions above guarantee termination of the search: \emph{impossible} is
-sound for the pack, while \emph{achievable} is a statement about the abstract
-search (Proposition~\ref{prop:inc}).\egc\ Allowing an unbounded
-dynamic addition of participants is an explicit undecidable extension, for
-which the implementation returns \textsc{Unknown}. Full rules, assumptions,
-proofs, and mechanization scope appear in Appendix~\ref{app:metatheory}.
+Let a configuration contain both a protocol state and an abstract world state,
+and let $\mathit{abs}$ map concrete configurations to abstract ones. Under the
+step and goal simulation assumptions for the declared pack
+(Appendix~\ref{app:metatheory}), if the abstract search cannot reach $\gphi$,
+then no concrete execution represented by that pack can reach the concrete goal
+(Theorem~\ref{thm:ref}). This guarantee remains valid when the abstraction
+contains less detail, and adding more capabilities cannot cause an otherwise
+achievable goal to be reported as \emph{impossible}
+(Theorems~\ref{thm:tol}--\ref{thm:cap}).
+
+The direct conformance check also satisfies subject reduction and session
+fidelity (Theorems~\ref{thm:sr}--\ref{thm:sf}). The Coq development covers
+single-label communication together with concurrent actions by other
+participants. \bgc When two actions both change the world state, their
+interleaving requires an explicit commutativity assumption. The restrictions
+above ensure that the search terminates. An \emph{impossible} verdict is sound
+for the declared pack, while an \emph{achievable} verdict only states that the
+goal is reachable in the abstract search (Proposition~\ref{prop:inc}).\egc
+Allowing an unbounded number of new participants to be added during execution
+is an undecidable extension, so the implementation returns \textsc{Unknown} in
+such cases. Full rules, assumptions, proofs, and mechanization scope appear in
+Appendix~\ref{app:metatheory}.
 
 \subsection{Structured feedback and human oversight}\label{sec:signals}
 
@@ -829,15 +833,15 @@ The capability names used by a protocol are
 \end{mathpar}
 %closed under permutation of
 \bmr where $\ppar$ is commutative, associative \emr and $\mathsf p[\mathbf 0]\ppar\MM\equiv\MM$.
-A non-terminated configuration with no successor is \emph{stuck}; the
-deadlocking planner/worker handoff of Section~\ref{sec:introduction} is the
-stuck two-role configuration in
-which both processes begin with an input. \bgc A goal marker is \emph{not} carried by
-any process, and goal satisfaction is \emph{not} a session transition: it is
-observed by the predicate $\goal_{\gphi}$ below. Session labels $\Lambda$ are
-therefore communications and actions only, as in the Coq development. On the
-type side, marker discharge in the correspondence is fused with the next step
-(\textsc{G-Goal-F} below).\egc
+A non-terminated configuration with no successor is \emph{stuck}. The
+planner/worker deadlock from Section~\ref{sec:introduction} is one example:
+both processes wait for an input, so neither can take the next step. \bgc A
+goal marker is not part of any process, and satisfying the goal does not create
+a session transition. Instead, the predicate $\goal_{\gphi}$ below checks
+whether the goal holds. Session labels $\Lambda$ therefore contain only
+communications and actions, as in the Coq development. On the type side, the
+goal marker is discharged together with the next step by
+\textsc{G-Goal-F} below.\egc
 
 The checker relates a session to its protocol through a \emph{labelled} transition
 system on global types, $(G,W)\reach_{\!\Lambda}(G',W')$, built from \emph{head}
@@ -865,17 +869,17 @@ move by participants \emph{disjoint} from the head commute inward:
 \bgc\inferrule[G-Goal-F]{W\vDash\varphi \\ (G,W)\reach_{\!\Lambda}(G',W')}
   {(\checkmark\varphi.\,G,\,W)\reach_{\!\Lambda}(G',\,W')}\egc
 \end{mathpar}
-\bgc In \textsc{G-Comm-I} all branches take the same $\Lambda$ to the same $W'$;
-for a communication $W'=W$, the only case the correspondence needs.
-\textsc{G-Goal-E} discharges a goal marker when $W\vDash\varphi$; it belongs to
-the head-only reduction used for achievability, where an unsatisfied marker is a
-checkpoint and blocks the path. In the labelled correspondence the goal rule is
-\textsc{G-Goal-F}: it discharges the marker and performs the continuation step
-in one transition --- the same fused rule as \id{GS\_Goal} in the Coq
-development. The marker is checked at the world where the step happens, so no
-goal-stability hypothesis is needed, and $\checkmark\varphi$ is not a label of
-the correspondence.\egc\ The
-extraction (head) rules
+\bgc In \textsc{G-Comm-I}, all branches take the same $\Lambda$ and reach the
+same $W'$. For communication, $W'=W$, which is the only case needed here.
+\textsc{G-Goal-E} discharges a goal marker when $W\vDash\varphi$. In the
+achievability search, an unsatisfied goal marker blocks that path. In the
+labelled correspondence, \textsc{G-Goal-F} discharges the marker and takes the
+next step in the same transition, as in \id{GS_Goal} in the Coq development.
+The goal is checked in the world state where the step occurs, so no
+goal-stability assumption is needed. The goal marker $\checkmark\varphi$ is
+not a label in the correspondence.\egc
+
+The extraction (head) rules
 \textsc{G-Comm-E}/\textsc{G-Act-E}/\textsc{G-Goal-E} give the $\Lambda$-erased
 reduction $(G,W)\reach(G',W')$ that the achievability judgment below uses; the
 interleaving rules matter only for the operational correspondence of
@@ -884,8 +888,7 @@ their $\Lambda\in\cp G$ premise confines a commuting move to a capability the
 residual protocol actually offers. \textsc{G-Comm-E} is legitimate because choice
 is directed --- the branch is a communication both endpoints observe, and
 Section~\ref{sec:process-typing} checks that every third party can follow. A
-well-formed pack uses its
-declared goal $\gphi$ at each goal marker. A configuration is
+well-formed pack uses its declared goal $\gphi$ at each goal marker. A configuration is
 \emph{goal-satisfying} when control is at such a marker or at the terminus and
 the world entails that declared goal:
 \[
@@ -933,9 +936,8 @@ machinery to the universal $\Box$ over permission predicates.
 
 \section{The Achievability Type System}\label{app:types}
 
-Achievability now factors into three premises, \bgc each checked by a separate
-terminating procedure (over the widened symbolic worlds of
-Theorem~\ref{thm:dec})\egc,
+Achievability now factors into three premises, 
+\bgc each checked by a separate terminating procedure \egc,
 combined by the top rule \textsc{Ach}: no hallucinated capability, direct
 conformance of the declared skills to $G$, and reachability of the goal.
 
@@ -980,16 +982,16 @@ unobserved-choice check are structural side conditions of one rule.
    (\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}]\ppar
     \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}]\ppar\MM;W)}
 \end{mathpar}
-\textsc{T-Act} pairs type and world in lockstep with \textsc{World-Act}: the
-unconsumed type $a@\mathsf p.G$ sits with the \emph{pre}-effect world $W$ and the
-residual $G$ with the \emph{post}-effect world $W'$ --- the same convention as
-\textsc{G-Act-E} (Section~\ref{sec:semantics}). \bgc The second premise
-quantifies over \emph{every} successor world: an $\Nd$ effect is
-nondeterministic, the session may land in any successor, and subject reduction
-needs the residual typed at each. The first premise keeps the guard
-requirement. For capabilities without $\Nd$ the successor is unique and the
-rule reads as before.\egc\ In \textsc{T-Comm} the sender
-$\mathsf p$ offers exactly
+\textsc{T-Act} checks the protocol and world state together with
+\textsc{World-Act}. The type $a@\mathsf p.G$ is checked before the action in
+$W$, and the remaining type $G$ is checked after the action in $W'$ --- the
+same convention as \textsc{G-Act-E} (Section~\ref{sec:semantics}). \bgc The
+second premise considers every possible successor world because an $\Nd$
+effect may produce different outcomes. Subject reduction therefore requires
+the remaining type to be valid in each successor. For capabilities without
+$\Nd$, there is only one successor, so the rule is unchanged.\egc
+
+In \textsc{T-Comm} the sender $\mathsf p$ offers exactly
 the protocol's branch set $I$, while the receiver $\mathsf q$ may accept
 \emph{more} ($I\subseteq J$) --- the one subtyping direction the rule keeps
 (%\textsc{Sub-Ext}, 
@@ -1205,11 +1207,12 @@ session and its protocol step \emph{in lockstep} over the labelled transition
 systems of Section~\ref{sec:semantics}. This is the standard soundness backbone
 of a session
 calculus~\cite{honda,scalasyoshida}, obtained here \emph{directly}, with no
-projection and no merge. \bgc For world-changing interleavings, the statements
-below assume one explicit frame condition: effects of participant-disjoint
-actions commute. Communication-only reductions satisfy it vacuously; goal
-markers need no condition, because \textsc{G-Goal-F} checks the marker at the
-world where the step happens.\egc
+projection and no merge. 
+\bgc When actions by different participants change the world, we assume that
+their effects commute. Communication-only reductions satisfy this condition
+automatically. Goal markers require no additional condition because
+\textsc{G-Goal-F} checks the goal in the world state where the step occurs.\egc
+
 \begin{lemma}[Residual capability]\label{lem:res-cap}
 If $(G,W)\reach_{\!\Lambda}(G',W')$, then $\Lambda\in\cp G$.
 \end{lemma}
@@ -1439,19 +1442,18 @@ finite-control machines $M_1,M_2$ exchanging messages over unbounded FIFO
 channels, and a target control state $q_f$ of $M_1$; deciding whether a run reaches
 $q_f$ is undecidable.
 
-We compute, from this instance, a skill whose goal is achievable iff the CFSM
-reaches $q_f$. Each machine $M_i$ becomes a role whose process mirrors its control
-graph: a transition that sends message $m$ \bgc creates, during execution, a new
-\emph{courier} participant carrying $m$ (this is exactly the ability to add a
-new participant during execution that the proposition hypothesizes)\egc, and a transition that receives $m$
-synchronizes with the oldest outstanding courier for that channel, so the unbounded
-family of couriers realizes the unbounded FIFO. \bgc The required order is
-enforced through sequence numbers: the step that adds the courier writes the
-current send
-counter into the courier's fresh variable, and a receive is guarded on that
-variable matching the receive counter --- this is where the per-courier fresh
-variable of $G^+$ is essential, since the fixed $\Var$ of the base fragment
-cannot order unboundedly many couriers.\egc\ The $\Asg/\Nd$ machinery of
+We construct a skill whose goal is achievable iff the CFSM reaches $q_f$. Each
+machine $M_i$ becomes a role whose process follows its control graph. When a
+machine sends message $m$, \bgc the process adds a new participant carrying
+$m$. When a machine receives $m$, it synchronizes with the oldest outstanding
+participant for that channel. This unbounded set of participants represents
+the unbounded FIFO queue.\egc\ The message order is enforced using sequence
+numbers: each new participant stores the current send counter, and a receive
+is allowed only when that number matches the receive counter. \bgc This requires
+a fresh variable for each participant, which is available in $G^+$ but not in
+the base fragment with a fixed $\Var$.\egc
+
+The $\Asg/\Nd$ machinery of
 Section~\ref{sec:capabilities} supplies \bgc the counter updates\egc. A boolean predicate
 $\mathsf{at\_}q_f$ is established by the single capability guarding $M_1$'s entry
 into $q_f$, and we set $\gphi=\mathsf{at\_}q_f$. By construction a run of the skill
@@ -1466,12 +1468,13 @@ of Theorem~\ref{thm:dec} breaks at exactly the point this reduction exploits: an
 unbounded number of couriers makes the set of reachable controls infinite.)
 \end{proof}
 
-\noindent The two results isolate one concrete boundary: \bgc with static
-finite topology the widened search is total and refutation-sound, while
-adding an unbounded number of new participants during execution defeats any
-such finite search.\egc\
-This is a boundary on topology, not a claim that all forms of agent autonomy are
-undecidable.
+\noindent The two results identify a concrete boundary: \bgc when the set of
+participants is finite and fixed, the widened search terminates and its
+\emph{impossible} verdict is sound. If an unbounded number of new participants
+can be added during execution, no such finite search can decide the problem in
+general.\egc
+This result concerns only the number of participants; it does not mean that all
+forms of agent autonomy are undecidable.
 The implementation returns \textsc{Unknown} when a pack violates the
 static-topology side condition of Theorem~\ref{thm:dec}, unless an independent
 capability or establisher refutation has already proved it impossible.
