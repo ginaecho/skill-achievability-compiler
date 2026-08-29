@@ -1272,28 +1272,20 @@ is amortized over every skill ever checked.
 \endformalappendix
 
 \section{Implementation}\label{sec:implementation}
-The executable decision path is approximately 1.45K lines of Python, including
-the checker, pack gate, formula layer, and session adapter. The compaction
-front-end issues the artifact prompt to an LLM and passes the result through a deterministic
-\emph{schema gate} before the checker sees it, so malformed packs are rejected
-without crashing the trusted core. The Coq artifact contains three developments and two assumption-audit harnesses:
-reachability soundness core (Theorems~\ref{thm:ref}--\ref{thm:cap} plus
-\id{FlightInstance}, ${\sim}230$ lines); the direct-typing core (the head-move
-action safety plus \id{HandoffInstance}, ${\sim}310$ lines); and the
-operational-correspondence core (Theorems~\ref{thm:sr}--\ref{thm:sf} for the
-single-label communication fragment with full interleaving, ${\sim}250$ lines);
-all three are checked in CI under pinned Coq 8.18.0 with no axioms, verified by
-\id{Print Assumptions}. The
-checker implements the corresponding abstractions from
+
+We implemented the checker and its supporting components in Python. The
+compaction front-end sends the skill to an LLM and passes the result through a
+deterministic \emph{schema gate} before the checker processes it.
+Packs that do not satisfy the schema are rejected at this stage.
+The checker implements the abstractions from
 Appendices~\ref{app:syntax}--\ref{app:types}: STRIPS frame semantics for the
-world, existential search over the protocol control structure, and Z3 for
-guard/goal satisfiability and arithmetic refinements. On success it returns the
-witness path; on refutation, the blocking frontier (missing capability,
-unsatisfiable guard, unestablished goal conjunct, or non-projectable handoff).
-The optional LLM front-end may use a \textsc{Non\_Projectable} counterexample
-for one bounded, structure-only repair round; it may not invent capabilities or
-weaken the goal, and the deterministic checker remains the final referee. This
-is a small reflective-verification loop, not a general scaffold-search result.
+world, existential search over the protocol, and Z3 for guard and goal
+satisfiability and arithmetic refinements. On success it returns a witness
+path; on refutation, it reports the reason, such as a missing capability,
+unsatisfiable guard, unachievable goal condition, or non-projectable handoff.
+The optional LLM front-end may use a \textsc{Non_Projectable} counterexample
+for one bounded repair round. It may not invent capabilities or weaken the
+goal, and the deterministic checker remains the final decision maker.
 
 The conformance step ($G\vdash(\MM;W)$, Section~\ref{sec:process-typing}) is
 \bmr implemented by means of a simple \emph{type inference algorithm} since all typing rules are structural in $(\MM;W)$.
@@ -1311,84 +1303,83 @@ as premises of the typing rule. \emr
 %protocol labels, while a receiver may accept a superset. A separate generic
 %Gay--Hole subtyping utility remains in the artifact but does not decide this
 %premise. The verdict reason
-%\textsc{Non\_Projectable} names this algorithmic engine's diagnostic;
+%\textsc{Non_Projectable} names this algorithmic engine's diagnostic;
 %Section~\ref{sec:process-typing} is the specification it is checked against.
 
-The adapter also discharges the participant side conditions of
+The adapter also checks the participant side conditions of
 \textsc{T-Comm}/\textsc{T-Act}/\textsc{T-Goal}: it computes $\prt G$ and
-compares it with the roles the pack declares behaviour for. One direction
-refutes --- a declared role outside $\prt G$ has contract $\End$, which nothing
-non-trivial refines. The other cannot: a participant the pack declares nothing
-for offers no behaviour to refute, yet the judgment of
-Section~\ref{sec:process-typing} ranges over a whole session with
-$\prt G=\prt\MM$, so the checker returns those roles alongside the verdict
-rather than leaving the assumption implicit.
+compares it with the roles for which the pack declares behaviour. A declared
+role outside $\prt G$ has contract $\End$, so a non-trivial behavior for that
+role cannot conform. If the pack declares no behavior for a participant, the
+checker reports the missing role instead of leaving the assumption implicit.
 
 \section{Evaluation}\label{sec:evaluation}
-We assembled a corpus of 15 skills spanning the canonical failure modes ---
-hallucinated planning, retry-forever loops, coordination deadlock, refinement
-violations --- with achievable controls (including detours and informed branches)
-and two deliberately \emph{spurious} cases exercising the deferred edges. Each
-skill carries a ground-truth semantic label; the positive class is
-\emph{achievable}. Evaluation is deterministic and CPU-only: it requires no
-training or live model inference, completes the 15-case matrix in under one
-second on a commodity laptop, and gives each individual Z3 query a 10-second
-timeout.
+
+We assembled a corpus of 15 skills covering the main failure modes:
+hallucinated planning, retry-forever loops, coordination deadlock, and
+refinement violations. The corpus also includes achievable controls with
+detours and informed branches, plus two deliberately \emph{spurious} cases
+for the deferred checks. Each skill has a ground-truth semantic label; the
+positive class is \emph{achievable}. Evaluation is deterministic and CPU-only:
+it requires no training or live model inference, completes the 15-case matrix
+in under one second on a commodity laptop, and gives each individual Z3 query
+a 10-second timeout.
 
 \begin{center}\small
 \begin{tabular}{@{}lcc@{}}
 \toprule
- & predicted achievable & predicted impossible\\
+& predicted achievable & predicted impossible\
 \midrule
-truly achievable & $\mathrm{TP}=6$ & $\mathrm{FN}=0$\\
-truly impossible & $\mathrm{FP}=2$ & $\mathrm{TN}=7$\\
+truly achievable & $\mathrm{TP}=6$ & $\mathrm{FN}=0$\
+truly impossible & $\mathrm{FP}=2$ & $\mathrm{TN}=7$\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\noindent Two claims, both confirmed. \textbf{Soundness}: $\mathrm{FN}=0$ --- no
-achievable goal was wrongly refuted, the empirical face of Theorem~\ref{thm:ref}
-(achievability recall $6/6=100\%$). \textbf{Incompleteness, contained}:
-$\mathrm{FP}=2$, and both are exactly the planted spurious cases --- one a false
-payload post-condition (Layer-C obligation), one an under-specified goal (intent
-edge). No structural failure was missed in this proof-of-concept corpus; this is
-evidence of coverage, not a proof that the two residues exhaust all empirical
-failure modes. Each refutation reason fires on its matching mode:
+\noindent Two claims, both confirmed. \textbf{Soundness}: $\mathrm{FN}=0$ ---
+no achievable goal was wrongly refuted, consistent with Theorem~\ref{thm:ref}
+(achievability recall $6/6=100%$). \textbf{Incompleteness, contained}:
+$\mathrm{FP}=2$, and both are the planted spurious cases --- one a false
+payload post-condition (Layer-C obligation), and one an under-specified goal
+(intent edge). No structural failure was missed in this proof-of-concept
+corpus. This is evidence of coverage, not a proof that these are the only
+possible failure modes. Each refutation reason matches its intended failure
+mode:
 
 \begin{center}\small
 \begin{tabular}{@{}ll@{}}
 \toprule
-\textbf{Failure mode (source)} & \textbf{Verdict reason}\\
+\textbf{Failure mode (source)} & \textbf{Verdict reason}\
 \midrule
-hallucinated planning --- invokes a non-existent tool & \textsc{Missing\_Capability}\\
-hallucinated planning --- no establisher for a goal conjunct & \textsc{Goal\_Unsat}\\
-retry-forever loop --- guard never satisfiable & \textsc{Blocked\_Guard}\\
-coordination deadlock --- unobserved choice / bad handoff & \textsc{Non\_Projectable}\\
-refinement violation --- budget unsatisfiable on every run & \textsc{Goal\_Unsat}\\
+hallucinated planning --- invokes a non-existent tool & \textsc{Missing_Capability}\
+hallucinated planning --- no establisher for a goal conjunct & \textsc{Goal_Unsat}\
+retry-forever loop --- guard never satisfiable & \textsc{Blocked_Guard}\
+coordination deadlock --- unobserved choice / bad handoff & \textsc{Non_Projectable}\
+refinement violation --- budget unsatisfiable on every run & \textsc{Goal_Unsat}\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\paragraph{What the check costs.} With no model in the trusted path, the
-checker and the deterministic front-end spend \emph{zero} tokens; only
-compaction spends any, once per skill \emph{version} and linearly in the
-skill's length, against a run it avoids that recurs per \emph{invocation} and
-is quadratic in its turns. Under an explicit, conservative model of that run
-(Appendix~\ref{app:tokens}), compacting the 15-spec corpus costs 12.2K tokens
-and avoids ${\sim}1.07$M per round of invocations --- ${\sim}87\times$
-leverage, unbounded deterministically --- so break-even falls inside the first
-prevented run in every failure mode, while a skill that is \emph{not} broken
-pays $2.9\%$ of one successful run for the check, or nothing.
+\paragraph{What the check costs.}
+The checker and deterministic front-end use \emph{zero} LLM tokens. The LLM is
+used once to compact each skill \emph{version}, while a full agent run uses
+tokens on every \emph{invocation}. Under the conservative model in
+Appendix~\ref{app}, compacting the 15-spec corpus costs 12.2K tokens and
+avoids ${\sim}1.07$M tokens per round of invocations, giving ${\sim}87\times$
+leverage. For every failure mode, the cost of compaction is recovered by the
+first prevented run. For a skill that is \emph{not} broken, the check costs
+$2.9%$ of one successful run, or nothing.
 
-A separate six-case fragment suite exercises behavior absent from the headline
-matrix: tail-recursive retry and non-terminating control, dynamic spawning,
-protocol-independent refutation despite spawning, and conformant versus
-non-conformant declared role behavior. It yields two \textsc{Achievable}, three
-\textsc{Impossible}, and one \textsc{Unknown}. The abstention is reported
-separately rather than counted as a false negative, because \textsc{Unknown}
-makes no refutation claim. Together the suites contain 21 declared packs; the
-15-case matrix remains the only binary ground-truth matrix.
-
+A separate six-case suite tests behavior not covered by the main matrix:
+tail-recursive retry and non-terminating control, adding new participants during
+execution, refutation that remains valid when new participants are added, and
+conformant versus non-conformant declared role behavior. It yields two
+\textsc{Achievable}, three \textsc{Impossible}, and one \textsc{Unknown}. The
+abstention is reported separately rather than counted as a false negative
+because \textsc{Unknown} makes no refutation claim. Together the suites contain
+21 declared packs; the 15-case matrix remains the only binary ground-truth
+matrix.
+ 
 \section{Related Work}\label{sec:related}
 \noindent\textbf{Prior-art note.} The claims below reflect the authors' survey at
 submission time; the fusion's novelty should be confirmed against a systematic
