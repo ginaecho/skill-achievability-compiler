@@ -79,10 +79,14 @@
 \long\def\beginformalappendix#1\endformalappendix{%
   \gdef\formalappendixcontent{#1}}
   
-  \def \bmr {\begin{color}{red}} 
+  \def \bmr {\begin{color}{red}}
 \def \emr {\end{color}}
-\def \bmc {\begin{color}{red}Mariangiola:\ } 
+\def \bmc {\begin{color}{red}Mariangiola:\ }
 \def \emc {\end{color}}
+
+%%% blue marks: theory fixes in this revision (gc)
+\def \bgc {\begin{color}{blue}}
+\def \egc {\end{color}}
 
 
 \title{Can This Agent Even Do That?\\
@@ -127,7 +131,7 @@ The question, however, is how we can know whether such guidance is sufficient to
 
 Such failures are structural and recurring, yet today the only way to discover them is often to run the skill and inspect what went wrong afterwards~\cite{harnessfix}. By then, the agent may already have spent substantial time and tokens taking actions, and a multi-agent system may already have become stuck waiting for communication that will never occur. A simple static check could, in principle, identify these problems before execution.
 
-This paper asks a deliberately narrow question and answers it with a deterministic formal typing system: \textbf{given an LLM skill, can its goal be achieved at all?} We do not, here, verify that every step is safe, nor that the agent behaves correctly on every possible input. Instead, we decide \emph{achievability}. The analysis is tolerant: small details, detours, and payload variation should not trigger a false alarm. At the same time, it is \emph{sound for refutation}: when the compiler concludes that a goal is impossible, that verdict is correct.
+This paper asks a deliberately narrow question and answers it with a deterministic formal typing system: \textbf{given an LLM skill, can its goal be achieved at all?} We do not, here, verify that every step is safe, nor that the agent behaves correctly on every possible input. Instead, we \bgc check\egc\ \emph{achievability}. The analysis is tolerant: small details, detours, and payload variation should not trigger a false alarm. At the same time, it is \emph{sound for refutation}: when the compiler concludes that a goal is impossible, that verdict is correct.
 
 \subsection{The idea, and the trust boundary}
 
@@ -228,8 +232,8 @@ Crucially, the gap between \emph{what the user meant} and \emph{what was formali
 \item \textbf{A mechanized soundness specification}
 (Appendix~\ref{app:metatheory}) formalized in Coq. We prove a refutation-sound abstraction theorem parameterized by simulation hypotheses, together with tolerance soundness and capability monotonicity: adding capabilities cannot make an achievable goal impossible. We also establish operational correspondence through subject reduction and session fidelity for the direct judgment over a labelled transition system. For single-label communication, we mechanize the cases where other participants continue to act concurrently; the world-changing action cases are proved on paper under explicit side conditions.
 
-\item \textbf{A decidability boundary}
-(Appendix~\ref{app:metatheory}). Achievability is decidable when the set of participants is fixed. We also show that an extension allowing the dynamic addition of an unbounded number of participants becomes undecidable.
+\item \textbf{A termination boundary}
+(Appendix~\ref{app:metatheory}). \bgc When the set of participants is fixed, the widened symbolic search terminates on every pack and its \emph{impossible} verdict is sound. Exact achievability over unbounded integers is undecidable, so the checker decides the widened abstraction, not the exact judgment. An extension allowing the dynamic addition of an unbounded number of participants defeats any such finite search.\egc
 
 \item \textbf{An implementation and evaluation}
 (Sections~\ref{sec:implementation}--\ref{sec:evaluation}). We implement the checker together with an LLM-compaction front-end and a schema gate, and evaluate it on a corpus covering the main failure modes. The results are consistent with the theoretical guarantees: we observe no false impossibility verdicts, while every false achievability verdict falls into one of the two deferred cases.
@@ -259,6 +263,7 @@ Consider a one-agent skill whose goal is \emph{a flight is booked and a confirma
 \qquad
 \dom(\Gamma_B) = \dom(\Gamma_A) \cup \{\mathsf{email}\}
 \]
+\bgc Variant $A$ lacks the email tool; variant $B$ has it.\egc{}
 Under STRIPS~\cite{strips} frame semantics, the checker therefore returns \emph{impossible} and identifies the missing capability. If the email tool is available, the goal is reachable through the sequence $\mathsf{search}\cdot\mathsf{filter}\cdot\mathsf{book}\cdot\mathsf{email}$, which the checker returns as a witness. The same example is mechanized in Appendix~\ref{app:metatheory} (the instance \id{FlightInstance}). Importantly, the booking itself remains reachable in the first case; the refutation concerns only the missing capability needed to complete the goal.
 
 Tolerance is also important. A skill should not be rejected simply because an agent sends extra status messages, takes a clarifying step, or uses a different payload. Our analysis therefore allows these variations in three ways: \emph{existential may-reachability}, where one successful path is sufficient; \emph{session subtyping}, which allows safe interface variation; and \emph{goal-relevant abstraction}, which ignores payload details that do not affect the goal. These mechanisms are defined in Appendices~\ref{app:syntax}--\ref{app:types}.
@@ -270,7 +275,9 @@ The checker consumes
 $P=\langle\Gamma,G,\gphi,W_0\rangle$. Here, $\Gamma$ contains capability
 declarations with guards and STRIPS-style effects; $G$ is a goal-marked global
 protocol (a \emph{global type}; Appendix~\ref{app:syntax}); $\gphi$ is the
-logical goal; and $W_0$ is the initial abstract world state. The LLM produces
+logical goal; and $W_0$ is the initial abstract world state\bgc, given as a
+constraint $\mathit{init}\in\mathcal L$ whose satisfying worlds are the admissible
+initial worlds --- we write $W_0\vDash\mathit{init}$\egc. The LLM produces
 $P$ from the natural-language skill. A deterministic schema gate enforces the
 decidable restrictions: finite static roles, guarded recursion, finite-domain
 booleans, and quantifier-free linear integer arithmetic. The formal syntax and
@@ -324,9 +331,11 @@ made less detailed, and adding capabilities cannot turn an achievable goal into
 an \emph{impossible} one (Theorems~\ref{thm:tol}--\ref{thm:cap}). Direct
 conformance satisfies subject reduction and session fidelity
 (Theorems~\ref{thm:sr}--\ref{thm:sf}). The Coq development covers single-label
-communication with concurrent actions by other participants; world-changing
-interleavings require explicit stability and commutativity assumptions. The
-decidable restrictions above guarantee decidability. Allowing an unbounded
+communication with concurrent actions by other participants; \bgc interleaving
+two world-changing actions requires an explicit commutativity assumption. The
+restrictions above guarantee termination of the search: \emph{impossible} is
+sound for the pack, while \emph{achievable} is a statement about the abstract
+search (Proposition~\ref{prop:inc}).\egc\ Allowing an unbounded
 dynamic addition of participants is an explicit undecidable extension, for
 which the implementation returns \textsc{Unknown}. Full rules, assumptions,
 proofs, and mechanization scope appear in Appendix~\ref{app:metatheory}.
@@ -388,7 +397,9 @@ each available tool $a$ to a guarded effect:
 a\notin\dom(\Gamma)\quad\Longleftrightarrow\quad\text{the agent does \emph{not}
 possess tool }a\quad(\text{no hallucinated tools}).
 \]
-$\Add/\Del$ are the STRIPS add- and delete-lists; $\Asg$ gives deterministic
+$\Add/\Del$ are the STRIPS add- and delete-lists\bgc\ (well-formedness requires
+$\Add_a\cap\Del_a=\emptyset$, so the order of union and difference in
+$\apply$ below is immaterial)\egc; $\Asg$ gives deterministic
 numeric updates $x:=e$; $\Nd$ gives \emph{nondeterministic} updates $x:=\ast$
 constrained by a formula over the new value (used to model post-conditions such as
 \emph{``books a fare under 500''}).
@@ -474,6 +485,10 @@ v \text{ with } \langle B,N[x{\mapsto}v]\rangle\vDash\Nd_a(x) & \text{if } x\in\
 N(x) & \text{otherwise (frame)}
 \end{cases}
 \]
+\bgc $\llbracket e\rrbracket_N$ is the usual integer evaluation of $e$, reading
+each variable from $N$. When several variables are in $\dom(\Nd_a)$, each
+constraint is evaluated with only its own variable updated; the schema gate
+rejects an $\Nd_a(x)$ that mentions another updated variable.\egc
 
 % \bmc where is $\llbracket\Asg_a(x)\rrbracket_N$ defined? \emc
 
@@ -528,27 +543,18 @@ The capability names used by a protocol are
   {\Pair{\mathsf p[a.P]\ppar\MM} W
    \;\xrightarrow{\ a@\mathsf p\ }\;
    \Pair{\mathsf p[P]\ppar\MM}{W'}}
-\and
-\inferrule[S-Goal]{W\vDash\varphi}
-  {\Pair\MM W
-   \;\xrightarrow{\ \checkmark\varphi\ }\;
-   \Pair\MM W}
 \end{mathpar}
-%closed under permutation of 
+%closed under permutation of
 \bmr where $\ppar$ is commutative, associative \emr and $\mathsf p[\mathbf 0]\ppar\MM\equiv\MM$.
 A non-terminated configuration with no successor is \emph{stuck}; the
 deadlocking planner/worker handoff of Section~\ref{sec:introduction} is the
 stuck two-role configuration in
-which both processes begin with an input. A goal marker is \emph{not} carried by
-any process; instead \textsc{S-Goal} lets a configuration \emph{observe} that its
-world already entails one of its declared goals $\varphi$, emitting the label
-$\checkmark\varphi$ without altering $\MM$ or $W$. (Each session carries a set of
-goal formulas, and $\varphi$ ranges over that set --- not over every formula the
-world happens to satisfy --- so that each observation has a matching marker in the
-protocol.) This observable goal step is matched at the type level by
-\textsc{G-Goal-E} below, so that $\checkmark\varphi$ is a genuine label $\Lambda$
-of both transition systems and the operational correspondence of
-Section~\ref{sec:safety-meta} ranges over it uniformly.
+which both processes begin with an input. \bgc A goal marker is \emph{not} carried by
+any process, and goal satisfaction is \emph{not} a session transition: it is
+observed by the predicate $\goal_{\gphi}$ below. Session labels $\Lambda$ are
+therefore communications and actions only, as in the Coq development. On the
+type side, marker discharge in the correspondence is fused with the next step
+(\textsc{G-Goal-F} below).\egc
 
 The checker relates a session to its protocol through a \emph{labelled} transition
 system on global types, $(G,W)\reach_{\!\Lambda}(G',W')$, built from \emph{head}
@@ -565,26 +571,27 @@ move by participants \emph{disjoint} from the head commute inward:
 \inferrule[G-Goal-E]{W\vDash\varphi}
   {(\checkmark\varphi.\,G,\,W)\reach_{\!\checkmark\varphi}(G,\,W)}
 \and
-\inferrule[G-Comm-I]{(G_i,W)\reach_{\!\Lambda}(G_i',W') \\
-  \Lambda\in\cp{G_i} \ \ \forall i\in I\\ \prt\Lambda\cap\set{\mathsf p,\mathsf q}=\emptyset}
+\bgc\inferrule[G-Comm-I]{\forall i\in I.\ \big((G_i,W)\reach_{\!\Lambda}(G_i',W')
+  \ \wedge\ \Lambda\in\cp{G_i}\big) \\ \prt\Lambda\cap\set{\mathsf p,\mathsf q}=\emptyset}
   {(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i\}_{i\in I},\,W)
-   \reach_{\!\Lambda}(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i'\}_{i\in I},\,W')}
+   \reach_{\!\Lambda}(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i'\}_{i\in I},\,W')}\egc
 \and
 \inferrule[G-Act-I]{(G,W)\reach_{\!\Lambda}(G',W') \\ \Lambda\in\cp G \\ \prt\Lambda\cap\set{\mathsf p}=\emptyset}
   {(a@\mathsf p.\,G,\,W)\reach_{\!\Lambda}(a@\mathsf p.\,G',\,W')}
 \and
-\inferrule[G-Goal-I]{(G,W)\reach_{\!\Lambda}(G',W') \\ \Lambda\in\cp G}
-  {(\checkmark\varphi.\,G,\,W)\reach_{\!\Lambda}(\checkmark\varphi.\,G',\,W')}
+\bgc\inferrule[G-Goal-F]{W\vDash\varphi \\ (G,W)\reach_{\!\Lambda}(G',W')}
+  {(\checkmark\varphi.\,G,\,W)\reach_{\!\Lambda}(G',\,W')}\egc
 \end{mathpar}
-\textsc{G-Goal-E} discharges a goal marker when $W\vDash\varphi$, emitting the
-observable label $\checkmark\varphi$ that matches \textsc{S-Goal}. In the
-head-only reduction used for achievability, an unsatisfied marker is a checkpoint
-and blocks the path. In the full labelled correspondence,
-\textsc{G-Goal-I} lets a continuation step commute inward under a still-pending
-marker. When that step changes the world, the correspondence theorem uses the
-goal-stability hypothesis stated in Section~\ref{sec:safety-meta}; removing that
-hypothesis is future
-work. The
+\bgc In \textsc{G-Comm-I} all branches take the same $\Lambda$ to the same $W'$;
+for a communication $W'=W$, the only case the correspondence needs.
+\textsc{G-Goal-E} discharges a goal marker when $W\vDash\varphi$; it belongs to
+the head-only reduction used for achievability, where an unsatisfied marker is a
+checkpoint and blocks the path. In the labelled correspondence the goal rule is
+\textsc{G-Goal-F}: it discharges the marker and performs the continuation step
+in one transition --- the same fused rule as \id{GS\_Goal} in the Coq
+development. The marker is checked at the world where the step happens, so no
+goal-stability hypothesis is needed, and $\checkmark\varphi$ is not a label of
+the correspondence.\egc\ The
 extraction (head) rules
 \textsc{G-Comm-E}/\textsc{G-Act-E}/\textsc{G-Goal-E} give the $\Lambda$-erased
 reduction $(G,W)\reach(G',W')$ that the achievability judgment below uses; the
@@ -643,7 +650,9 @@ machinery to the universal $\Box$ over permission predicates.
 
 \section{The Achievability Type System}\label{app:types}
 
-Achievability now factors into three premises, each separately decidable,
+Achievability now factors into three premises, \bgc each checked by a separate
+terminating procedure (over the widened symbolic worlds of
+Theorem~\ref{thm:dec})\egc,
 combined by the top rule \textsc{Ach}: no hallucinated capability, direct
 conformance of the declared skills to $G$, and reachability of the goal.
 
@@ -674,9 +683,10 @@ unobserved-choice check are structural side conditions of one rule.
 \begin{mathpar}
 \inferrule[T-End]{ }{\End\vdash(\mathsf p[\mathbf 0];W)}
 \and
-\inferrule[T-Act]{G\vdash(\mathsf p[P]\ppar\MM;W') \\ \langle W\rangle\,a\,\langle W'\rangle \\
+\bgc\inferrule[T-Act]{\exists W'.\ \langle W\rangle\,a\,\langle W'\rangle \\
+  \forall W'.\ \langle W\rangle\,a\,\langle W'\rangle \implies G\vdash(\mathsf p[P]\ppar\MM;W') \\
   \prt G\cup\set{\mathsf p}=\prt\MM\cup\set{\mathsf p}}
-  {a@\mathsf p.\,G\vdash(\mathsf p[a.P]\ppar\MM;W)}
+  {a@\mathsf p.\,G\vdash(\mathsf p[a.P]\ppar\MM;W)}\egc
 \and
 \inferrule[T-Goal]{G\vdash(\MM;W) \\ W\vDash\varphi \\ \prt G=\prt\MM}
   {\checkmark\varphi.\,G\vdash(\MM;W)}
@@ -690,7 +700,12 @@ unobserved-choice check are structural side conditions of one rule.
 \textsc{T-Act} pairs type and world in lockstep with \textsc{World-Act}: the
 unconsumed type $a@\mathsf p.G$ sits with the \emph{pre}-effect world $W$ and the
 residual $G$ with the \emph{post}-effect world $W'$ --- the same convention as
-\textsc{G-Act-E} (Section~\ref{sec:semantics}). In \textsc{T-Comm} the sender
+\textsc{G-Act-E} (Section~\ref{sec:semantics}). \bgc The second premise
+quantifies over \emph{every} successor world: an $\Nd$ effect is
+nondeterministic, the session may land in any successor, and subject reduction
+needs the residual typed at each. The first premise keeps the guard
+requirement. For capabilities without $\Nd$ the successor is unique and the
+rule reads as before.\egc\ In \textsc{T-Comm} the sender
 $\mathsf p$ offers exactly
 the protocol's branch set $I$, while the receiver $\mathsf q$ may accept
 \emph{more} ($I\subseteq J$) --- the one subtyping direction the rule keeps
@@ -728,6 +743,8 @@ capabilities die, with \textsc{T-Miss} as the diagnostic.
   {\Gamma\vdash\{S_{\mathsf p}\}_{\mathsf p}\ :\ G\ \triangleright\ \Diamond\gphi}
 \end{mathpar}
 % \bmc who is ${\mathsf p}$? \emr
+\bgc where $\set{\mathsf p_1,\dots,\mathsf p_n}=\prt G$: the judgment takes one
+declared skill $S_{\mathsf p}$ per role of the protocol.\egc\
 Read top-to-bottom: no hallucinated tools; some plausible initial world exists
 from which the declared skills directly conform to the protocol (deadlock-free,
 every capability call guarded) \emph{and} that same world reaches the goal. The
@@ -735,14 +752,14 @@ reachability half is unchanged from Section~\ref{sec:semantics} and decided on
 $\Gamma,G$ alone, before
 any $S_{\mathsf p}$ is known --- exactly what lets the checker run on the
 LLM-compacted pack the moment it exists; conformance is the additional,
-separately decidable check once the skills are declared, and needs no transport
+\bgc separately checked\egc\ premise once the skills are declared, and needs no transport
 lemma: the receiver-side subtyping slack is already inside \textsc{T-Comm}.
 
 \subsection{Reachability rules}
 The diamond is derived by the following inductive system, realized by the checker
 as a finite forward search over $\reach$; unlike \textsc{T-Comm}/\textsc{T-Act}/
 \textsc{T-Goal}, it never mentions a session $\MM$, which is what makes it
-decidable on the pack alone.
+\bgc checkable\egc\ on the pack alone.
 \begin{mathpar}
 \inferrule[Reach-Goal]{W\vDash\gphi \\
   G=\End\ \vee\ \exists G'.\,G=\checkmark\gphi.G'}
@@ -753,6 +770,9 @@ decidable on the pack alone.
 \inferrule[Reach-Or]{\exists k\in I.\ \Gamma;(G_k,W)\achbox\gphi}
   {\Gamma;(\mathsf p{\to}\mathsf q{:}\{\ell_i.G_i\}_{i\in I},W)\achbox\gphi}
 \end{mathpar}
+\bgc\textsc{Reach-Or} is derivable from \textsc{Reach-Step} with
+\textsc{G-Comm-E}; we keep it because the search implements branching this
+way.\egc
 
 
 \section{Metatheory}\label{app:metatheory}
@@ -761,7 +781,7 @@ We separate what is \emph{mechanized in Coq} (Theorems~\ref{thm:ref}--\ref{thm:c
 Theorems~\ref{thm:sr}--\ref{thm:sf} for the single-label communication fragment with full
 interleaving; the head-move action case; and the concrete instances, all
 axiom-free) from what is \emph{proved on paper} (the action-interleaving cases,
-decidability, and the undecidability boundary).
+\bgc Lemma~\ref{lem:inst}, termination\egc, and the undecidability boundary).
 
 \subsection{Soundness of the abstraction}
 Let $\mathcal C$ be the concrete configuration space of protocol/world pairs,
@@ -822,6 +842,30 @@ Theorem refutation\_sound : forall s0,\\
 (* Print Assumptions refutation\_sound. => Closed under the global context *)
 \end{quote}
 
+\bgc
+\begin{lemma}[The symbolic abstraction satisfies the hypotheses]\label{lem:inst}
+Let $\mathit{abs}(G,\langle B,N\rangle)=(G,\langle B,\psi\rangle)$ for any
+accumulated constraint $\psi\in\mathcal L$ with $N\vDash\psi$. Let an abstract
+step apply the same $\Add/\Del$ update to $B$ and replace $\psi$ by the
+strongest postcondition of the numeric effect, and let
+$\hat\goal(G,\langle B,\psi\rangle)$ hold when $\goal$ holds at control $G$ and
+$\psi\wedge\gphi$ is satisfiable under $B$. Then \textsc{step-sim} and
+\textsc{goal-sim} hold, and the widening $\psi\mapsto\top$ preserves both.
+\end{lemma}
+\begin{proof}
+\textsc{goal-sim}: if $\langle B,N\rangle\vDash\gphi$ and $N\vDash\psi$, then
+$N$ itself witnesses satisfiability of $\psi\wedge\gphi$ under $B$.
+\textsc{step-sim}: a concrete firing needs $\langle B,N\rangle\vDash\pre_a$, so
+$\psi\wedge\pre_a$ is satisfiable ($N$ witnesses it) and the symbolic edge
+exists; the boolean update is identical on both sides, and the concrete
+successor satisfies the strongest postcondition by definition. Widening weakens
+$\psi$, which only adds abstract states and edges, so both properties are
+preserved (Theorem~\ref{thm:tol}). Hence Theorem~\ref{thm:ref} applies to the
+search the implementation runs. This lemma is on paper; mechanizing the
+symbolic state is future work (Section~\ref{sec:limitations}).
+\end{proof}
+\egc
+
 \begin{theorem}[Tolerance soundness]\label{thm:tol}
 If a \emph{coarser} over-approximation (more edges) cannot reach the goal, neither
 can any finer system. Hence coarsening $\alpha$ to tolerate more detail never
@@ -878,10 +922,11 @@ session and its protocol step \emph{in lockstep} over the labelled transition
 systems of Section~\ref{sec:semantics}. This is the standard soundness backbone
 of a session
 calculus~\cite{honda,scalasyoshida}, obtained here \emph{directly}, with no
-projection and no merge. For world-changing interleavings, the statements below
-assume two explicit frame conditions: effects of participant-disjoint actions
-commute, and an action moved under a pending marker preserves that marker's
-formula. Communication-only reductions satisfy both conditions vacuously.
+projection and no merge. \bgc For world-changing interleavings, the statements
+below assume one explicit frame condition: effects of participant-disjoint
+actions commute. Communication-only reductions satisfy it vacuously; goal
+markers need no condition, because \textsc{G-Goal-F} checks the marker at the
+world where the step happens.\egc
 \begin{lemma}[Residual capability]\label{lem:res-cap}
 If $(G,W)\reach_{\!\Lambda}(G',W')$, then $\Lambda\in\cp G$.
 \end{lemma}
@@ -909,63 +954,24 @@ interleaving cases reassociate independent updates.
 \begin{proof}[Proof of Theorem~\ref{thm:sr} (subject reduction)]
 By induction on $G\vdash(\MM;W)$.
 
-\emph{Case \textsc{T-End}} ($G=\End$, every role idle). Then $\MM$ has no
-output or pending action, so the only available transition is the goal
-observation \textsc{S-Goal} at $\Lambda=\checkmark\gphi$ when $W\vDash\gphi$, which
-leaves $(\MM,W)$ fixed; there is no residual type to preserve and the claim holds
-(otherwise no $\Lambda$-transition exists and it holds vacuously).
+\bgc\emph{Case \textsc{T-End}} ($G=\End$, every role idle). Then $\MM$ has no
+output or pending action, so no session transition exists and the claim holds
+vacuously.
 
 \emph{Case \textsc{T-Goal}} ($G=\checkmark\varphi.G_0$, with $W\vDash\varphi$ and
-$G_0\vdash(\MM;W)$, $\prt{G_0}=\prt\MM$). The transition $(\MM,W)\to_\Lambda
-(\MM',W')$ splits on its label.
-\begin{itemize}
-\item \emph{Goal observation} ($\Lambda=\checkmark\varphi$, by \textsc{S-Goal}, so
-$\MM'=\MM$ and $W'=W$). Since $W\vDash\varphi$, rule \textsc{G-Goal-E} discharges
-the marker, $(\checkmark\varphi.G_0,W)\reach_{\checkmark\varphi}(G_0,W)$, and
-$G_0\vdash(\MM;W)$ is the premise: take $G'=G_0$.
-\item \emph{Interleaving} ($\Lambda\neq\checkmark\varphi$). A goal marker is not a
-session construct, so this is already a transition of $G_0$'s session; the
-induction hypothesis gives $(G_0,W)\reach_\Lambda(G',W')$ with $\Lambda\in\cp{G_0}$
-and $G'\vdash(\MM';W')$. When the move is world-preserving (a communication,
-$W'=W$), \textsc{G-Goal-I} carries the still-pending marker along,
-$(\checkmark\varphi.G_0,W)\reach_\Lambda(\checkmark\varphi.G',W)$, and
-$\checkmark\varphi.G'\vdash(\MM';W)$ by \textsc{T-Goal} (the side condition
-$\prt{G'}=\prt{\MM'}$ is preserved because $\Lambda$ acts on the same participants
-on both sides). When the move is \emph{world-changing} (a capability firing,
-$W'\neq W$), \textsc{G-Goal-I} still commutes it under the marker,
-$(\checkmark\varphi.G_0,W)\reach_\Lambda(\checkmark\varphi.G',W')$; re-typing the
-residual by \textsc{T-Goal} then additionally asks $W'\vDash\varphi$. This follows from the goal-stability
-hypothesis on actions commuting under pending markers. The global type sequences
-the marker before $G_0$'s actions whereas the session may fire the action first;
-the interleaving rule lets the type catch up under that hypothesis. Removing the
-hypothesis, rather than this conditional case, is the open correspondence problem
-recorded in Section~\ref{sec:limitations}.
-\end{itemize}
-% NOTE (integration): G-Goal-I is intentionally general (per the professor's
-% reply). The inner reduction rules are essential for subject reduction: a
-% session that can already communicate/act may be typed by a global type whose
-% head is still a marker, because global types impose a sequentiality on actions
-% that sessions do not. The world-changing-under-marker case (a firing that can
-% falsify a pending phi) is therefore the crux of SR and is left to the
-% future-work programme -- NOT sidestepped by a W'=W restriction.
-%
-% NOTE (integration, 2): per the professor's reply, each session should carry a
-% set of goals, and S-Goal observes only formulas in that set (not any true
-% formula). The precise way a goal-set is attached to a session is not yet fixed
-% in the source; pending that, the proofs here read S-Goal as ranging over the
-% session's declared goals (equivalently checkmark-phi in cap(G)). To be
-% finalized once the session goal-set is formalized.
+$G_0\vdash(\MM;W)$, $\prt{G_0}=\prt\MM$). A marker is not a session construct,
+so the step $(\MM,W)\to_\Lambda(\MM',W')$ is a step of $G_0$'s session; the
+induction hypothesis gives $(G_0,W)\reach_\Lambda(G',W')$ with
+$G'\vdash(\MM';W')$. Since $W\vDash\varphi$, rule \textsc{G-Goal-F} discharges
+the marker and performs the same step,
+$(\checkmark\varphi.G_0,W)\reach_\Lambda(G',W')$; the residual typing is the one
+the induction hypothesis provides. No stability hypothesis is needed: the
+marker is checked at $W$, where the step happens.\egc
 
 \emph{Case \textsc{T-Comm}}, with head $\mathsf p{\to}\mathsf q$ and branches
 $G_i$. Here $\MM$ is $\mathsf p[\mathsf q!\dots]\ppar\mathsf q[\mathsf
 p?\dots]\ppar\MM_0$, and each branch satisfies $G_i\vdash(\mathsf p[P_i]\ppar
-\mathsf q[Q_i]\ppar\MM_0;W)$. If the transition is a goal observation
-$\Lambda=\checkmark\varphi$ (\textsc{S-Goal}, leaving $(\MM,W)$ fixed), it is
-matched by \textsc{G-Comm-I}: $\prt{\checkmark\varphi}=\emptyset$ makes the
-disjointness premise trivial, and each branch realises the same observation by
-the induction hypothesis, using $\checkmark\varphi\in\cp{G_i}$ --- the
-observation concerns a marker the protocol actually pends (see the note below).
-Otherwise the transition is a communication
+\mathsf q[Q_i]\ppar\MM_0;W)$. \bgc The transition is a communication\egc\
 $\Lambda=\mathsf r\,\ell\,\mathsf t$. Because $\mathsf p$ offers only outputs to
 $\mathsf q$ and $\mathsf q$ only inputs from $\mathsf p$, the sender/receiver
 shapes force a dichotomy.
@@ -994,10 +1000,8 @@ the independent updates via \id{ctypes\_ext}) gives the residual typing.
 Communications leave the world fixed, so no independence hypothesis is needed. For
 a world-changing action at the head (\textsc{T-Act}), \textsc{G-Act-E} matches and
 the residual $G$ is typed at the \emph{same} post-effect world the rule reaches
---- this is exactly where the lockstep world pairing of the corrected \textsc{T-Act}
-is used; a goal observation at an action-typed configuration is matched by
-\textsc{G-Act-I} exactly as in the \textsc{T-Comm} case, since
-$\prt{\checkmark\varphi}\cap\set{\mathsf p}=\emptyset$ trivially. Interleaving \emph{two} actions requires their effects to commute
+--- \bgc whichever successor world the session's firing picks, the universal
+premise of \textsc{T-Act} types the residual at it\egc. Interleaving \emph{two} actions requires their effects to commute
 ($\mathsf{eff}_a\circ\mathsf{eff}_b=\mathsf{eff}_b\circ\mathsf{eff}_a$ for
 disjoint $a,b$), a frame-independence side condition that participant-disjointness
 alone does not supply; under it the \textsc{T-Act} interleaving case goes through
@@ -1006,12 +1010,12 @@ identically.
 
 \begin{proof}[Proof of Theorem~\ref{thm:sf} (session fidelity)]
 By induction on $G\vdash(\MM;W)$, inverting the global step
-$(G,W)\reach_\Lambda(G',W')$. \textsc{T-End} admits only the goal observation
-\textsc{G-Goal-E} at $\checkmark\gphi$, matched on the session by \textsc{S-Goal}.
-For \textsc{T-Goal}, the step is either \textsc{G-Goal-E} --- matched by
-\textsc{S-Goal} on the session, the marker discharged --- or \textsc{G-Goal-I},
-whose premise $(G_0,W)\reach_\Lambda(G_0',W')$ the induction hypothesis realises as
-an underlying session step that carries the marker along. For
+$(G,W)\reach_\Lambda(G',W')$. \bgc\textsc{T-End} admits no global step in the
+correspondence, so the claim holds vacuously.
+For \textsc{T-Goal}, the step is \textsc{G-Goal-F}; its premise
+$(G_0,W)\reach_\Lambda(G',W')$ is realised by the induction hypothesis as a
+session step, which is the required one --- the marker exists only on the type
+side and is discharged by the same transition.\egc\ For
 \textsc{T-Comm}, the global step is either \textsc{G-Comm-E} --- and the
 prescribed head communication $\mathsf p\,\ell_k\,\mathsf q$ is enabled by
 \textsc{S-Comm}, landing in the $k$-th premise --- or \textsc{G-Comm-I} with
@@ -1037,10 +1041,11 @@ Theorem session\_fidelity : forall W G G' s L,\\
 \end{quote}
 The head-move case for world-changing \emph{actions} is additionally mechanized
 in \id{DirectTyping.v} (\id{type\_directed\_safety}, also \id{progress}).
-Observable goal labels appear in neither Coq development: the mechanized label
-alphabet is communication-only, and its goal rule fuses marker discharge with a
-continuation step. Participant-matching side conditions, labelled action
-interleaving, and multi-branch choice are likewise absent. Completing a faithful
+\bgc Goal labels appear in neither label alphabet: the paper's correspondence
+uses the same fused goal rule (\textsc{G-Goal-F}) as the Coq \id{GS\_Goal}.\egc\
+Participant-matching side conditions, labelled action
+interleaving, and multi-branch choice are \bgc still absent from the
+mechanization\egc. Completing a faithful
 mechanization of the paper rules remains work in Section~\ref{sec:limitations}.
 
 \noindent\textbf{Concrete instance.} \id{HandoffInstance} mechanizes the
@@ -1076,17 +1081,20 @@ checkpoint for human review.
 \end{itemize}
 
 \subsection{Decidability and the autonomy boundary}
-\begin{theorem}[Decidability]\label{thm:dec}
+\bgc\begin{theorem}[Termination and soundness of the widened search]\label{thm:dec}
 In the fragment with finitely many roles (static topology), regular global types
 represented by finite tail-recursive control graphs, decidable state logic
-$\mathcal L$, and $\mathcal L$-definable effects,
-$\Gamma;G\achinit\gphi$ is decidable.
-\end{theorem}
+$\mathcal L$, and $\mathcal L$-definable effects, the widened symbolic search
+terminates on every pack. It decides the widened abstract judgment; for
+$\Gamma;G\achinit\gphi$ its \textsc{impossible} answer is sound
+(Theorem~\ref{thm:ref} with Lemma~\ref{lem:inst}) and its \textsc{achievable}
+answer may be spurious (Proposition~\ref{prop:inc}).
+\end{theorem}\egc
 \begin{proof}
 The pack-level achievability judgment $\Gamma;G\achinit\gphi$
 (Section~\ref{sec:semantics}) is an existential reachability query over
-configurations $(G',W)$; we exhibit a terminating decision
-procedure and argue its completeness.
+configurations $(G',W)$; \bgc we exhibit the terminating procedure and place
+its two answers\egc.
 
 \emph{The search space is finite.} A configuration has two components.
 (i) \emph{Control}, the residual global type $G'$ reachable from $G$ by
@@ -1119,16 +1127,27 @@ maintains a visited set of (control, symbolic-world) pairs; because that set is
 finite it adds each pair at most once, so the search halts. It answers
 \textsc{achievable} iff it enumerates a goal-satisfying configuration, and
 \textsc{impossible} otherwise. Soundness of the \textsc{impossible} verdict is
-Theorem~\ref{thm:ref}; and widening only \emph{enlarges} the reachable set (it
+Theorem~\ref{thm:ref} \bgc with Lemma~\ref{lem:inst}\egc; and widening only \emph{enlarges} the reachable set (it
 weakens constraints, adding edges), so by Theorem~\ref{thm:tol} it never
-introduces a false refutation. Hence the procedure is a decision procedure for
-$\Gamma;G\achinit\gphi$.
+introduces a false refutation. \bgc Hence the search always terminates and
+decides the widened abstract judgment; \textsc{impossible} transfers to the
+exact judgment, \textsc{achievable} does not (Proposition~\ref{prop:inc}).\egc
 \end{proof}
+
+\bgc\noindent\emph{Why not exact decidability.} With unbounded integers,
+updates $x:=x\pm1$, and guards $x=0$, $x\ge1$ under recursive control, packs
+encode two-counter machines, so the exact judgment $\Gamma;G\achinit\gphi$ is
+undecidable even with a fixed set of participants. The widening is what buys
+termination; the price is the spurious-\textsc{achievable} residue of
+Proposition~\ref{prop:inc}.\egc
 \begin{proposition}[Undecidability in a dynamic-topology extension]\label{thm:undec}
 Consider the extension $G^+$ of the grammar with
-$\mathsf{spawn}\ \mathsf r.\,G$, which creates fresh participants at run time.
+$\mathsf{spawn}\ \mathsf r.\,G$, which creates fresh participants at run time\bgc:
+a spawned participant runs a declared finite behaviour template and brings one
+fresh numeric variable, initialized by the spawning step\egc.
 With an unbounded role population and dynamic channels, achievability in $G^+$
-is undecidable.
+is undecidable\bgc\ --- and no widening restores termination, since the
+reachable control space itself becomes infinite\egc.
 \end{proposition}
 \begin{proof}[Proof sketch]
 By reduction from the control-state reachability problem for communicating
@@ -1143,10 +1162,13 @@ graph: a transition that sends message $m$ spawns, at run time, a fresh
 \emph{courier} participant carrying $m$ (this is exactly the dynamic-spawning
 capability the theorem hypothesizes), and a transition that receives $m$
 synchronizes with the oldest outstanding courier for that channel, so the unbounded
-family of couriers realizes the unbounded FIFO. The required order can be made
-explicit by assigning sequence numbers through the numeric world state and
-guarding receives on the next sequence number; the $\Asg/\Nd$ machinery of
-Section~\ref{sec:capabilities} supplies those updates. A boolean predicate
+family of couriers realizes the unbounded FIFO. \bgc The required order is
+enforced through sequence numbers: the spawning step writes the current send
+counter into the courier's fresh variable, and a receive is guarded on that
+variable matching the receive counter --- this is where the per-courier fresh
+variable of $G^+$ is essential, since the fixed $\Var$ of the base fragment
+cannot order unboundedly many couriers.\egc\ The $\Asg/\Nd$ machinery of
+Section~\ref{sec:capabilities} supplies \bgc the counter updates\egc. A boolean predicate
 $\mathsf{at\_}q_f$ is established by the single capability guarding $M_1$'s entry
 into $q_f$, and we set $\gphi=\mathsf{at\_}q_f$. By construction a run of the skill
 reaches a state satisfying $\gphi$ iff the CFSM has a run reaching $q_f$: the
@@ -1160,8 +1182,9 @@ of Theorem~\ref{thm:dec} breaks at exactly the point this reduction exploits: an
 unbounded number of couriers makes the set of reachable controls infinite.)
 \end{proof}
 
-\noindent The two results isolate one concrete boundary: static finite topology
-admits a total decision procedure, while unbounded dynamic spawning does not.
+\noindent The two results isolate one concrete boundary: \bgc with static
+finite topology the widened search is total and refutation-sound, while
+unbounded dynamic spawning defeats any such finite search.\egc\
 This is a boundary on topology, not a claim that all forms of agent autonomy are
 undecidable.
 The implementation returns \textsc{Unknown} when a pack violates the
@@ -1178,7 +1201,7 @@ substrates:
 \toprule
 \textbf{Concern} & \textbf{Where} & \textbf{Mechanism}\\
 \midrule
-goal achievability & static, decidable & Coq specification; deterministic search; no LLM\\
+goal achievability & static, \bgc terminating\egc\ & Coq specification; deterministic search; no LLM\\
 per-step safety / least privilege & Layer~B (future) & same engine, $\Box$ + permission tiers\\
 payload faithfulness & Layer~C (future), runtime & deterministic monitors with blame\\
 intent fidelity & top edge, synthesis & one human checkpoint\\
@@ -1201,7 +1224,7 @@ contribution evaluated here.
 The practical case for deciding achievability \emph{before} execution is an
 economic one, so we state it in tokens rather than adjectives. Two asymmetries
 carry it. First, no model sits in the trusted path: the schema gate,
-projection, conformance and Z3 reachability spend \textbf{zero tokens}, and the
+\bgc direct conformance\egc\ and Z3 reachability spend \textbf{zero tokens}, and the
 deterministic front-end spends zero as well. Only the optional LLM compaction
 spends tokens, and it is paid \emph{once per skill version}. Second, an agent
 turn re-sends its whole context: writing $S$ for the harness prompt, $K$ for
@@ -1428,8 +1451,8 @@ resulting pack. A practical system should therefore also inspect
 \id{SKILL.md}, scripts, dependencies, manifests, and permission metadata before
 running the achievability check.
 
-\item \textbf{Adding participants during execution.} The current procedure is
-decidable when the set of participants is fixed. When new participants can be
+\item \textbf{Adding participants during execution.} The current procedure
+\bgc terminates\egc\ when the set of participants is fixed. When new participants can be
 added during execution, the procedure may return \textsc{Unknown} rather than
 make an unsupported decision (Proposition~\ref{thm:undec}).
 
@@ -1442,9 +1465,10 @@ refutation-sound abstraction theorem and concrete examples, head-move action
 safety, and subject reduction/session fidelity with full bystander interleaving
 for the single-label communication model, all axiom-free. The executable checker
 is schema-gated and tested against the formal specification, but its exact
-symbolic state is not yet fully mechanized. The Coq model also does not yet
-combine observable goal labels, participant matching, multi-branch choice, and
-world-changing interleaving in one development. Future work includes completing
+symbolic state is not yet fully mechanized\bgc\ (Lemma~\ref{lem:inst} is on
+paper)\egc. The Coq model also does not yet
+combine \bgc participant matching, multi-branch choice, and
+world-changing interleaving\egc\ in one development. Future work includes completing
 this mechanization, connecting interleaved session runs to the reachability
 search, proving equivalence between the declarative judgment and the
 projection-based adapter, and proving that abstract witnesses correspond to
