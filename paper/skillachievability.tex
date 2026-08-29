@@ -270,7 +270,7 @@ $\mathsf{email}$ & $\mathsf{booked}$ & $\Add\,\{\mathsf{confirmation\_sent}\}$ \
 \bottomrule
 \end{tabular}
 \end{center}
-Under STRIPS~\cite{strips} frame semantics, the checker therefore returns \emph{impossible} and identifies the missing capability. If the email tool is available, the goal is reachable through the sequence $\mathsf{search}\cdot\mathsf{filter}\cdot\mathsf{book}\cdot\mathsf{email}$, which the checker returns as a witness. The same example is mechanized in Appendix~\ref{app:metatheory} (the concrete instance \id{FlightInstance}). Importantly, the booking itself remains reachable in the first case; the refutation concerns only the missing capability needed to complete the goal.
+Under STRIPS~\cite{strips} frame semantics, the checker therefore returns \emph{impossible} and identifies the missing capability. If the email tool is available, the goal is reachable through the sequence $\mathsf{search}\cdot\mathsf{filter}\cdot\mathsf{book}\cdot\mathsf{email}$, which the checker returns as a witness. The same example is mechanized in Appendix~\ref{app:metatheory} (the instance \id{FlightInstance}). Importantly, the booking itself remains reachable in the first case; the refutation concerns only the missing capability needed to complete the goal.
 
 Tolerance is also important. A skill should not be rejected simply because an agent sends extra status messages, takes a clarifying step, or uses a different payload. Our analysis therefore allows these variations in three ways: \emph{existential may-reachability}, where one successful path is sufficient; \emph{session subtyping}, which allows safe interface variation; and \emph{goal-relevant abstraction}, which ignores payload details that do not affect the goal. These mechanisms are defined in Appendices~\ref{app:syntax}--\ref{app:types}.
 
@@ -278,83 +278,79 @@ Tolerance is also important. A skill should not be rejected simply because an ag
 
 \paragraph{Declared pack.}
 The checker consumes
-$P=\langle\Gamma,G,\gphi,W_0\rangle$: capability declarations $\Gamma$ with
-guards and STRIPS-style effects; a goal-marked global protocol $G$ (formally, a
-\emph{global type}; Appendix~\ref{app:syntax}); a logical goal $\gphi$; and an
-initial abstract world $W_0$. The LLM that compacts prose
-into $P$ is outside the trusted core. A deterministic schema gate first enforces
-the decidable fragment: finite static roles, guarded recursion, finite-domain
+$P=\langle\Gamma,G,\gphi,W_0\rangle$. Here, $\Gamma$ contains capability
+declarations with guards and STRIPS-style effects; $G$ is a goal-marked global
+protocol (a \emph{global type}; Appendix~\ref{app:syntax}); $\gphi$ is the
+logical goal; and $W_0$ is the initial abstract world state. The LLM produces
+$P$ from the natural-language skill. A deterministic schema gate enforces the
+decidable restrictions: finite static roles, guarded recursion, finite-domain
 booleans, and quantifier-free linear integer arithmetic. The formal syntax and
-labelled semantics are given in Appendices~\ref{app:syntax}--\ref{app:semantics}.
+semantics are given in Appendices~\ref{app:syntax}--\ref{app:semantics}.
 
-\paragraph{Heterogeneous verification signals.}
-Achievability is not reduced to a learned score. The judgment composes signals
-that live on different substrates:
+\paragraph{Verification signals.}
+The checker uses three static signals:
 \begin{center}\small
 \begin{tabular}{@{}p{.25\linewidth}p{.31\linewidth}p{.36\linewidth}@{}}
 \toprule
-\textbf{Signal} & \textbf{Formal role} & \textbf{Evidence returned}\\
+\textbf{Signal} & \textbf{Role} & \textbf{Output}\
 \midrule
-tool availability and effects & capability guards; world transition &
-missing capability or witness action\\
-coordination structure & direct global conformance & offending handoff or
-conformant protocol\\
-goal and cost refinements & logical reachability; QF-LIA & unsatisfied
-conjunct, blocked guard, or model\\
-human intent review & validates prose-to-pack fidelity & accepted or revised
-declared goal\\
-runtime payload checks & deferred monitor obligation & blame-bearing execution
-event\\
+tool availability and effects & capability reachability & missing capability
+or witness action\
+coordination structure & global protocol conformance & protocol mismatch or
+conformant protocol\
+goal and cost refinements & logical reachability & blocked guard or model\
 \bottomrule
 \end{tabular}
 \end{center}
-The first three signals are composed before execution. The latter two are
-explicit obligations rather than assumptions silently folded into the static
-verdict.
+These signals are checked before execution. Human review and runtime payload
+checks remain separate obligations and are not assumed by the static checker.
 
 \paragraph{Decision procedure.}
-After the schema gate, the checker (i) rejects references to undeclared
-capabilities and goal atoms with no establisher; (ii) checks declared role
-behaviors against $G$, requiring exact sender choices while allowing
+After the schema gate, the checker (i) rejects undeclared capabilities and goal
+conditions that cannot be achieved by any available capability; (ii) checks role
+behaviors against $G$, requiring exact sender choices while allowing safe
 receiver-side branch supersets; and (iii) explores existential protocol/world
-successors from $W_0$, using Z3 for guards and refinements. An unsatisfied goal
-marker is a blocking checkpoint. Solver timeouts and packs outside the static
-fragment cannot justify refutation. The interface is therefore tri-valued:
-\[
+successors from $W_0$, using Z3 for guards and refinements. A goal condition that
+cannot be satisfied blocks the search. If the solver times out or the pack falls
+outside these restrictions, the checker returns \textsc{Unknown} rather than
+\emph{impossible}. The checker therefore returns:
+[
 \begin{array}{ll}
-\textsc{Impossible}(F) & \text{a sound blocking frontier }F,\\
+\textsc{Impossible}(F) & \text{a sound explanation of why the goal cannot be reached},\
 \textsc{Achievable}(\pi,O) & \text{a witness path }\pi\text{ and deferred
-obligations }O,\\
-\textsc{Unknown}(r) & \text{an abstention with fragment reason }r.
+obligations }O,\
+\textsc{Unknown}(r) & \text{an abstention with a reason }r.
 \end{array}
-\]
-Verdicts also carry the pack digest, checker semantics, and artifact version so
-that feedback remains attributable to the exact declaration checked.
+]
+Each verdict records the pack digest, checker semantics, and artifact version.
 
 \paragraph{Guarantees.}
-Let $\mathit{abs}$ map concrete protocol/world configurations to abstract
-configurations, and assume step and goal simulation for the declared pack
+Let a configuration consist of a protocol state and an abstract world state,
+and let $\mathit{abs}$ map concrete configurations to abstract configurations.
+Assume step and goal simulation for the declared pack
 (Appendix~\ref{app:metatheory}). If no abstract run reaches $\gphi$, no concrete
 run represented by that pack reaches the concrete goal
 (Theorem~\ref{thm:ref}). Coarsening $\alpha$ and adding capabilities cannot
 create a false refutation (Theorems~\ref{thm:tol}--\ref{thm:cap}). Direct
-conformance has subject-reduction and session-fidelity results
-(Theorems~\ref{thm:sr}--\ref{thm:sf}); the Coq artifact covers single-label
-communication with bystander interleaving, while the paper states explicit
-stability and commutativity assumptions for world-changing interleavings. The
-static fragment is decidable; unbounded dynamic spawning is an explicit
-undecidable extension, for which the implementation abstains. Full rules,
-assumptions, proofs, and mechanization scope appear in
-Appendix~\ref{app:metatheory}.
+conformance satisfies subject reduction and session fidelity
+(Theorems~\ref{thm:sr}--\ref{thm:sf}). The Coq development covers single-label
+communication with concurrent actions by other participants; world-changing
+interleavings require explicit stability and commutativity assumptions. The
+decidable restrictions above guarantee decidability. Allowing an unbounded
+dynamic addition of participants is an explicit undecidable extension, for
+which the implementation returns \textsc{Unknown}. Full rules, assumptions,
+proofs, and mechanization scope appear in Appendix~\ref{app:metatheory}.
 
 \subsection{Structured feedback and human oversight}\label{sec:signals}
-The blocking frontier and witness are inspectable, heterogeneous feedback rather
-than a scalar reward. A bounded repair adapter may ask the untrusted LLM to fix a
-non-projectable protocol, but it may neither invent capabilities nor weaken the
-goal, and every revision is rechecked deterministically. This realizes a small
-agent-verifies-agent loop while keeping the human checkpoint at the irreducible
-intent-fidelity stage. Automated prompt or scaffold search is an application of
-these verdicts, not an empirical contribution claimed here.
+
+The checker returns an explanation for \textsc{Impossible} and a witness path
+for \textsc{Achievable}. These outputs provide concrete feedback rather than a
+single score. A bounded repair adapter may ask the LLM to fix a protocol, but
+it cannot invent capabilities or weaken the goal. Every revision is checked
+again by the deterministic checker. Human review remains necessary for the gap
+between the original intent and the formal pack. Automated prompt or scaffold
+search is an application of these verdicts, not an empirical contribution of
+this paper.
 
 \beginformalappendix
 \section{Syntax}\label{app:syntax}
