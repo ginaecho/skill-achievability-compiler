@@ -94,100 +94,46 @@ A Decidable Goal-Achievability Type Discipline for LLM-Synthesized Agent Skills}
 \maketitle
 
 \begin{abstract}
-\noindent
-Autonomous agents are increasingly configured by \emph{skills}: natural-language
-specifications that an LLM drafts from a user's stated intent and then executes,
-often across several cooperating agents. Such drafts fail expensively at run time
-on plans that were impossible from the start --- a step that invokes a tool the
-agent does not have, a goal conjunct nothing can establish, a budget no run can
-meet, or a multi-agent handoff that deadlocks. We present a \emph{skill compiler}
-that decides, before execution and without an LLM judge, whether a skill's
-\emph{goal is achievable at all}. The compiler fuses two mature disciplines not
-previously combined for this purpose: capability-guarded reachability from
-automated planning, and deadlock-freedom from \bmr simple multiparty sessions (SMPS), \emr %types (MPST), 
-decided
-\emph{directly} over session configurations and a goal-marked global type
-synthesized from intent, following the \bmr SMPS \emr %synthetic MPST 
-discipline of checking a
-session directly against a global protocol~\cite{synthetic2023,synthetic2026}.
-The LLM that compacts prose into a formal pack of
-preconditions, effects, and goals is treated as \emph{untrusted}; the checker is
-specified by a Coq-verified refutation-sound abstraction theorem. Relative to the
-declared pack, an \emph{impossible} verdict is never wrong; whether the pack is
-faithful to the prose is a separately deferred obligation. The positive
-verdict remains deliberately incomplete, with payload faithfulness and intent
-fidelity handed respectively to a runtime monitor and a human checkpoint. We
-also establish subject reduction and session fidelity for the direct discipline:
-the single-label communication fragment with bystander interleaving is
-mechanized, while world-changing action interleaving is proved on paper under
-explicit goal-stability and effect-commutativity hypotheses. We give the syntax,
-labelled operational semantics, typing and achievability judgments, and the
-metatheory: refutation, tolerance and capability-monotonicity soundness;
-operational correspondence; decidability within a static-topology fragment; and
-an undecidability boundary for an extension with dynamic participant spawning.
-An implementation and reproducible corpus exercise the canonical failure modes,
-the fragment boundary, and the two deferred edges.
+Modern autonomous agents rely on natural-language skills that specify tools,
+workflows, and desired outcomes. Such skills may be written by human experts or
+generated with LLM assistance, but their goals may be structurally impossible
+to achieve: a required tool may be unavailable, a constraint may be
+unsatisfiable, or agents may deadlock. We present a \emph{skill compiler} that
+checks goal achievability before execution, without relying on an LLM judge. It
+combines capability-based reachability from automated planning with direct
+checking of multiparty communication protocols~\cite{synthetic2023,synthetic2026}.
+An LLM may compact a skill into a formal pack of capabilities, preconditions,
+effects, goals, and protocol structure, which is then checked deterministically.
+A Coq-verified abstraction theorem guarantees that an \emph{impossible} verdict
+is correct for the formal pack being checked.
+On a deterministic corpus of 15 skills, the checker correctly identifies all 6
+achievable and all 7 genuinely impossible cases; the two false
+\emph{achievable} results are deliberately constructed cases outside the static
+guarantee. The full evaluation takes less than one second. The checker uses no
+LLM tokens, while compacting the corpus costs 12.2K tokens compared with
+approximately 1.07M tokens for one round of corresponding agent executions,
+an approximately $87\times$ reduction. These results show that a lightweight
+static check can identify structurally impossible skills before execution at
+low cost.
 \end{abstract}
 
 \section{Introduction}\label{sec:introduction}
 
-A modern agent is rarely a single model call, but neither is it simply a model.
-Around the model sits a \emph{harness}: the runtime infrastructure that fixes the
-execution environment, the tool interface, the context, the orchestration and the
-verification, and on which reliability depends at least as much as on the base
-model~\cite{harnesssurvey,harnessfix}. A \emph{skill} is one increasingly common way
-of writing part of that harness down --- a natural-language artifact, a folder of
-instructions the agent discovers and loads on demand~\cite{agentskills}, and
-increasingly drafted by an LLM from a user's stated goal~\cite{adas,aflow} --- that
-\emph{harnesses} a general-purpose agent toward a particular outcome, naming the
-tools it may use,
-prescribing the plan it should follow and, when several agents are involved, fixing
-who must talk to whom. A skill is behavioural guidance layered over an agent, not a
-substitute for it: the agent retains its latitude to interpret that guidance at run
-time. The appeal is that a non-expert can say \emph{what} they want and have the
-system assemble the \emph{how}. The question the arrangement leaves open --- and the
-question this paper answers --- is how anyone knows that the guidance is good enough
-to achieve what it claims.
+A modern agent is no longer merely a chatbot, but an autonomous system capable of taking actions beyond text generation---for example, writing code, sending emails, or executing trades. Such behaviour is often guided by natural-language artifacts that specify instructions, workflows, and constraints for the agent~\cite{harnesssurvey,harnessfix,adas,aflow}. A \emph{skill} is one common way of expressing such guidance. It is a folder containing instructions and tooling that an agent can discover and load as needed~\cite{agentskills}, thereby \emph{harnessing} a general-purpose agent toward a particular outcome.
 
-Today that answer arrives only by running the skill and reading the wreckage
-afterwards~\cite{harnessfix}. Across seven state-of-the-art open-source multi-agent
-systems, measured failure rates range from 41\% to 86.7\%~\cite{cemri}; on one of
-them a specification-level intervention alone --- adding a task-objective
-verification step, with the underlying model held fixed --- yields a 15.6\%
-improvement in task success~\cite[Appendix~H]{cemri}, and trace-driven repair of the
-harness alone lifts task completion by 6.3 to 18.4 points across four agent
-benchmarks~\cite{harnessfix}. A substantial share of the defect therefore lies in
-the guidance rather than in the model. Part of that share is worse
-than unlucky: the assembled how was \emph{impossible} before the first token was
-spent, and nothing noticed until execution had already taken actions and, in the
-multi-agent case, deadlocked halfway.
+There is growing evidence that this guidance matters. Across seven state-of-the-art open-source multi-agent systems, failure rates range from 41\% to 86.7\%~\cite{cemri}. More importantly, some of these failures can be addressed without changing the underlying model. In one system, simply adding a task-objective verification step to the specification improves task success by 15.6\%~\cite[Appendix~H]{cemri}. Likewise, repairing the harness based on execution traces improves task completion by 6.3 to 18.4 percentage points across four agent benchmarks~\cite{harnessfix}. These results show that the instructions and structure surrounding an agent can matter as much as the model itself.
 
-The failures are structural and recurring. A plan \emph{books a flight and emails
-a confirmation} although no email tool is in scope (a hallucinated capability). A
-plan pursues \emph{a flight under \$500} when the only booking tool returns
-premium fares (an unsatisfiable refinement). A planner waits for a worker's result
-while the worker waits for the planner's answer, each listening for a message the
-other never sends (a coordination deadlock). In every case the goal was unreachable
-\emph{a priori}, and a cheap static check could have said so.
+The question, however, is how we can know whether such guidance is sufficient to achieve the outcome it declares. A plan may \emph{book a flight and email a confirmation} even though no email tool is available. It may pursue \emph{a flight under \$500} even though the available booking tool can return only premium fares. Or a planner may wait for a worker's result while the worker waits for the planner's answer, with each expecting a message that the other will never send. These are not merely execution failures. In each case, the goal is already unreachable before execution begins.
 
-This paper asks a deliberately narrow question and answers it with a guarantee:
-\textbf{given an LLM-drafted skill, can its goal be achieved at all?} We are not
-(here) verifying that every step is safe, nor that the agent behaves correctly on
-every input. We decide \emph{achievability}, tolerantly --- small details, detours,
-and payload variation must not raise a false alarm --- and \emph{soundly for
-refutation}: when the compiler says a goal is impossible, it is right.
+Such failures are structural and recurring, yet today the only way to discover them is often to run the skill and inspect what went wrong afterwards~\cite{harnessfix}. By then, the agent may already have spent substantial time and tokens taking actions, and a multi-agent system may already have become stuck waiting for communication that will never occur. A simple static check could, in principle, identify these problems before execution.
+
+This paper asks a deliberately narrow question and answers it with a deterministic formal typing system: \textbf{given an LLM skill, can its goal be achieved at all?} We do not, here, verify that every step is safe, nor that the agent behaves correctly on every possible input. Instead, we decide \emph{achievability}. The analysis is tolerant: small details, detours, and payload variation should not trigger a false alarm. At the same time, it is \emph{sound for refutation}: when the compiler concludes that a goal is impossible, that verdict is correct.
 
 \subsection{The idea, and the trust boundary}
 
-The architecture has two halves separated by a trust boundary. An LLM performs
-\emph{compaction}: it reads the prose skill and distills it into a formal
-\emph{pack} --- capabilities annotated with preconditions and effects, a
-goal-marked global protocol, and an initial state. This step is \emph{untrusted};
-the LLM may misread the prose. A deterministic \emph{checker} then decides
-achievability over the pack, and the checker is mechanically proved sound. The
-division is what makes the system honest: a faulty compaction can only ever cause
-a false \emph{achievable} (caught downstream), never a false \emph{impossible}
-about the pack it received (Figure~\ref{fig:trust}).
+The architecture, shown in Figure~\ref{fig:trust}, has two parts separated by a trust boundary. First, an LLM performs \emph{compaction}: it reads the natural-language skill and turns it into a formal \emph{pack} containing capabilities with preconditions and effects, a goal-marked global protocol, and an initial state. This step is \emph{untrusted}: the LLM may misunderstand the skill or omit relevant details.
+
+A deterministic \emph{checker} then decides achievability using only the resulting pack. The checker is mechanically proved sound: if it returns \emph{impossible}, then the goal is impossible under the formal pack it received. If the LLM omits a constraint or capability from the original skill, the checker cannot recover information that is not present in the pack; it will instead reason about the incomplete pack. Conversely, if the LLM introduces a constraint that was not in the original skill, the checker may report the resulting goal as impossible. Thus, our guarantee is about the checker's verdict with respect to the formal pack, not about whether the pack perfectly represents the original natural-language skill.
 
 \begin{figure}[t]
 \centering
@@ -265,196 +211,155 @@ about the pack it received (Figure~\ref{fig:trust}).
 \node[note, anchor=center] at (-6,-16.4)
   {the semantic gap, \emph{relocated and concentrated} at one inspectable checkpoint};
 \end{tikzpicture}
-\caption{The trust boundary. An untrusted LLM compacts prose into a formal pack;
-below the line, a deterministic checker governed by a Coq-verified abstraction
-theorem decides achievability over the pack --- the pack is the only artifact that
-crosses. The verdicts are asymmetric: \emph{impossible} is sound
-(Theorem~\ref{thm:ref}), \emph{achievable} is honest about its deferred obligations
-(Section~\ref{sec:signals}).}
+\caption{The trust boundary. An untrusted LLM compacts natural-language instructions into a formal pack. A deterministic checker then decides achievability over the pack using a Coq-verified abstraction theorem. The verdicts are asymmetric: \emph{impossible} is sound (Theorem~\ref{thm:ref}), while \emph{achievable} depends on the accuracy of the pack (Section~\ref{sec:signals}).}
 \label{fig:trust}
 \end{figure}
 
-Crucially, the semantic gap between \emph{what the user meant} and \emph{what was
-formalized} is not eliminated --- it is \emph{relocated and concentrated} into one
-inspectable checkpoint at compaction time, rather than scattered, unobserved,
-across every run. That relocation is the central design move.
+This does not make the compaction step a weakness that we simply ignore. The formal pack provides a structured target for the LLM to extract. Rather than asking the LLM to freely invent a formal model, we give it a predefined logical structure: capabilities have preconditions and effects, goals are explicit, and the protocol follows a fixed syntax. This makes compaction a constrained translation task and gives us a concrete artifact that can be inspected before execution.
+
+Crucially, the gap between \emph{what the user meant} and \emph{what was formalized} cannot be eliminated. We instead make this gap explicit at the compaction step, where the resulting pack can be inspected and checked before execution. When the compaction is accurate, the checker can identify goals that are impossible before the agent spends time and tokens executing the skill. When the compaction is inaccurate, the checker still provides a sound verdict for the formal pack it received. The key design idea is therefore to move achievability checking from runtime execution to an explicit, inspectable checkpoint before execution.
 
 \subsection{Contributions}
 \begin{enumerate}\setlength{\itemsep}{2pt}
+
 \item \textbf{A goal-achievability type discipline}
-(Section~\ref{sec:model} and Appendices~\ref{app:syntax}--\ref{app:types}) that fuses
-capability-guarded reachability (planning) with deadlock-freedom (multiparty
-\bmr sessions) \emr %types) 
-over a goal-marked global type synthesized from intent. Following
-%synthetic MPST
-\bmr SMPS~\cite{synthetic2023,synthetic2026}, \emr the declarative discipline
-types whole session configurations directly; our contribution is to add the
-guarded world, goal observation, and refutation-sound/achievement-incomplete
-verification asymmetry for LLM-drafted agent skills.
+(Section~\ref{sec:model} and Appendices~\ref{app:syntax}--\ref{app:types}) that combines capability-guarded reachability from automated planning with deadlock-freedom from multiparty session types. The discipline checks whole session configurations directly against a goal-marked global type synthesized from the skill. Building on the multiparty session type tradition of Honda, Yoshida, and Carbone~\cite{honda1998language,honda}, and the direct session-checking approach of \bmr SMPS~\cite{synthetic2023,synthetic2026}, \emr it adds capabilities, explicit goals, and a refutation-sound but achievement-incomplete analysis for LLM-drafted skills.
+
 \item \textbf{A mechanized soundness specification}
-(Appendix~\ref{app:metatheory}) in Coq: a
-refutation-sound abstraction theorem parameterized by simulation hypotheses,
-tolerance soundness (coarsening the
-abstraction preserves refutation), and capability monotonicity (more tools never
-make a goal impossible) --- all axiom-free --- together with an
-\emph{operational-correspondence} metatheory (subject reduction and session
-fidelity) for the direct judgment over a labelled transition system. Full
-bystander interleaving is mechanized for single-label communication; the
-world-changing action cases are paper proofs under explicit side conditions.
-\item \textbf{A decidability boundary result}
-(Appendix~\ref{app:metatheory}): achievability is decidable
-in a static-topology fragment; an explicit extension with unbounded participant
-spawning crosses to undecidability.
+(Appendix~\ref{app:metatheory}) formalized in Coq. We prove a refutation-sound abstraction theorem parameterized by simulation hypotheses, together with tolerance soundness and capability monotonicity: adding capabilities cannot make an achievable goal impossible. We also establish operational correspondence through subject reduction and session fidelity for the direct judgment over a labelled transition system. For single-label communication, we mechanize the cases where other participants continue to act concurrently; the world-changing action cases are proved on paper under explicit side conditions.
+
+\item \textbf{A decidability boundary}
+(Appendix~\ref{app:metatheory}). Achievability is decidable when the set of participants is fixed. We also show that an extension allowing the dynamic addition of an unbounded number of participants becomes undecidable.
+
 \item \textbf{An implementation and evaluation}
-(Sections~\ref{sec:implementation}--\ref{sec:evaluation}): a checker, an
-LLM-compaction front-end with a schema gate, and a corpus spanning the canonical
-failure modes. Results match the theory: zero false impossibilities; every false
-achievability is one of the two deferred residues.
+(Sections~\ref{sec:implementation}--\ref{sec:evaluation}). We implement the checker together with an LLM-compaction front-end and a schema gate, and evaluate it on a corpus covering the main failure modes. The results are consistent with the theoretical guarantees: we observe no false impossibility verdicts, while every false achievability verdict falls into one of the two deferred cases.
+
 \end{enumerate}
+
 
 \section{Overview by Example}\label{sec:overview}
 
-Consider a one-agent skill whose goal is \emph{a flight is booked and a
-confirmation is sent}. The author writes prose; the LLM compacts it. Two
-compactions differ only in whether an email tool is in scope.
+Consider a one-agent skill whose goal is \emph{a flight is booked and a confirmation is sent}. The LLM compacts the skill into a formal pack. If no email tool is available, there is no action that can establish $\mathsf{confirmation\_sent}$.
 \[
 \gphi \;=\; \mathsf{booked} \,\wedge\, \mathsf{confirmation\_sent}
 \]
-\begin{center}\small
-\begin{tabular}{@{}l l l@{}}
-\toprule
-capability & precondition & effect \\
-\midrule
-\multicolumn{3}{@{}l}{\emph{variant A} --- no email tool in scope} \\
-$\mathsf{search}$ & $\top$ & $\Add\,\{\mathsf{searched}\}$ \\
-$\mathsf{filter}$ & $\mathsf{searched}$ & $\Add\,\{\mathsf{filtered}\}$ \\
-$\mathsf{book}$   & $\mathsf{filtered}$ & $\Add\,\{\mathsf{booked}\}$ \\
-\addlinespace[2pt]
-\midrule
-\multicolumn{3}{@{}l}{\emph{variant B} --- variant A, plus:} \\
-$\mathsf{email}$ & $\mathsf{booked}$ & $\Add\,\{\mathsf{confirmation\_sent}\}$ \\
-\bottomrule
-\end{tabular}
-\end{center}
-Under STRIPS \emph{frame semantics} --- a predicate is false unless an effect
-makes it true --- variant A has no action establishing
-$\mathsf{confirmation\_sent}$, so no reachable state satisfies the goal: the
-checker returns \emph{impossible} and points at the missing establisher. Variant B
-reaches the goal along $\mathsf{search}\cdot\mathsf{filter}\cdot\mathsf{book}\cdot
-\mathsf{email}$, returned as a witness. The same example is mechanized in
-Appendix~\ref{app:metatheory} (the
-concrete instance \id{FlightInstance}): variant A is \emph{provably} unachievable,
-yet a booking is still reachable --- the refutation is about the missing tool, not
-a dead protocol.
+\[
+\Gamma(a) \;=\; \langle\, \pre_a,\ \langle\, \Add_a,\ \Del_a,\ \Asg_a,\ \Nd_a \,\rangle\,\rangle
+\]
+\[
+\begin{array}{@{}l@{\;\mapsto\;}l@{\;}l@{\;}l@{}}
+\mathsf{search} & \langle\,\top,           & \langle\,\{\mathsf{searched}\},          & \emptyset,\,\emptyset,\,\emptyset\,\rangle\,\rangle\\
+\mathsf{filter} & \langle\,\mathsf{searched}, & \langle\,\{\mathsf{filtered}\},       & \emptyset,\,\emptyset,\,\emptyset\,\rangle\,\rangle\\
+\mathsf{book}   & \langle\,\mathsf{filtered}, & \langle\,\{\mathsf{booked}\},         & \emptyset,\,\emptyset,\,\emptyset\,\rangle\,\rangle\\
+\mathsf{email}  & \langle\,\mathsf{booked},   & \langle\,\{\mathsf{confirmation\_sent}\}, & \emptyset,\,\emptyset,\,\emptyset\,\rangle\,\rangle
+\end{array}
+\]
+\[
+\dom(\Gamma_A) = \{\mathsf{search},\mathsf{filter},\mathsf{book}\}
+\qquad
+\dom(\Gamma_B) = \dom(\Gamma_A) \cup \{\mathsf{email}\}
+\]
+Under STRIPS~\cite{strips} frame semantics, the checker therefore returns \emph{impossible} and identifies the missing capability. If the email tool is available, the goal is reachable through the sequence $\mathsf{search}\cdot\mathsf{filter}\cdot\mathsf{book}\cdot\mathsf{email}$, which the checker returns as a witness. The same example is mechanized in Appendix~\ref{app:metatheory} (the instance \id{FlightInstance}). Importantly, the booking itself remains reachable in the first case; the refutation concerns only the missing capability needed to complete the goal.
 
-Tolerance is essential, and is where a naive reachability check would misfire.
-Extra status messages, a clarifying detour, or payload variation must not refute
-the goal. We obtain this from three orthogonal relaxations made precise in
-Appendices~\ref{app:syntax}--\ref{app:types}:
-\emph{existential may-reachability} (a single good path suffices),
-\emph{session subtyping} (interface slack in the safe direction, folded directly
-into the single conformance rule rather than a separate relation), and
-\emph{goal-relevant abstraction} (payload detail collapsed before checking).
+Tolerance is also important. A skill should not be rejected simply because an agent sends extra status messages, takes a clarifying step, or uses a different payload. Our analysis therefore allows these variations in three ways: \emph{existential may-reachability}, where one successful path is sufficient; \emph{session subtyping}, which allows safe interface variation; and \emph{goal-relevant abstraction}, which ignores payload details that do not affect the goal. These mechanisms are defined in Appendices~\ref{app:syntax}--\ref{app:types}.
 
 \section{Verification Model and Signals}\label{sec:model}
 
 \paragraph{Declared pack.}
 The checker consumes
-$P=\langle\Gamma,G,\gphi,W_0\rangle$: capability declarations $\Gamma$ with
-guards and STRIPS-style effects; a goal-marked global protocol $G$ (formally, a
-\emph{global type}; Appendix~\ref{app:syntax}); a logical goal $\gphi$; and an
-initial abstract world $W_0$. The LLM that compacts prose
-into $P$ is outside the trusted core. A deterministic schema gate first enforces
-the decidable fragment: finite static roles, guarded recursion, finite-domain
+$P=\langle\Gamma,G,\gphi,W_0\rangle$. Here, $\Gamma$ contains capability
+declarations with guards and STRIPS-style effects; $G$ is a goal-marked global
+protocol (a \emph{global type}; Appendix~\ref{app:syntax}); $\gphi$ is the
+logical goal; and $W_0$ is the initial abstract world state. The LLM produces
+$P$ from the natural-language skill. A deterministic schema gate enforces the
+decidable restrictions: finite static roles, guarded recursion, finite-domain
 booleans, and quantifier-free linear integer arithmetic. The formal syntax and
-labelled semantics are given in Appendices~\ref{app:syntax}--\ref{app:semantics}.
+semantics are given in Appendices~\ref{app:syntax}--\ref{app:semantics}.
 
-\paragraph{Heterogeneous verification signals.}
-Achievability is not reduced to a learned score. The judgment composes signals
-that live on different substrates:
+\paragraph{Verification signals.}
+The checker uses three static signals:
 \begin{center}\small
 \begin{tabular}{@{}p{.25\linewidth}p{.31\linewidth}p{.36\linewidth}@{}}
 \toprule
-\textbf{Signal} & \textbf{Formal role} & \textbf{Evidence returned}\\
+\textbf{Signal} & \textbf{Role} & \textbf{Output}\\
 \midrule
-tool availability and effects & capability guards; world transition &
-missing capability or witness action\\
-coordination structure & direct global conformance & offending handoff or
+tool availability and effects & capability reachability & missing capability
+or witness action\\
+coordination structure & global protocol conformance & protocol mismatch or
 conformant protocol\\
-goal and cost refinements & logical reachability; QF-LIA & unsatisfied
-conjunct, blocked guard, or model\\
-human intent review & validates prose-to-pack fidelity & accepted or revised
-declared goal\\
-runtime payload checks & deferred monitor obligation & blame-bearing execution
-event\\
+goal and cost refinements & logical reachability & blocked guard or model\\
 \bottomrule
 \end{tabular}
 \end{center}
-The first three signals are composed before execution. The latter two are
-explicit obligations rather than assumptions silently folded into the static
-verdict.
+These signals are checked before execution. Runtime payload checks remain
+separate obligations and are not assumed by the static checker.
 
 \paragraph{Decision procedure.}
-After the schema gate, the checker (i) rejects references to undeclared
-capabilities and goal atoms with no establisher; (ii) checks declared role
-behaviors against $G$, requiring exact sender choices while allowing
+After the schema gate, the checker (i) rejects undeclared capabilities and goal
+conditions that cannot be achieved by any available capability; (ii) checks role
+behaviors against $G$, requiring exact sender choices while allowing safe
 receiver-side branch supersets; and (iii) explores existential protocol/world
-successors from $W_0$, using Z3 for guards and refinements. An unsatisfied goal
-marker is a blocking checkpoint. Solver timeouts and packs outside the static
-fragment cannot justify refutation. The interface is therefore tri-valued:
+successors from $W_0$, using Z3~\cite{z3} for guards and refinements. A goal condition that
+cannot be satisfied blocks the search. If the solver times out or the pack falls
+outside these restrictions, the checker returns \textsc{Unknown} rather than
+\emph{impossible}. The checker therefore returns:
 \[
 \begin{array}{ll}
-\textsc{Impossible}(F) & \text{a sound blocking frontier }F,\\
+\textsc{Impossible}(F) & \text{a sound explanation of why the goal cannot be reached},\\
 \textsc{Achievable}(\pi,O) & \text{a witness path }\pi\text{ and deferred
 obligations }O,\\
-\textsc{Unknown}(r) & \text{an abstention with fragment reason }r.
+\textsc{Unknown}(r) & \text{an abstention with a reason }r.
 \end{array}
 \]
-Verdicts also carry the pack digest, checker semantics, and artifact version so
-that feedback remains attributable to the exact declaration checked.
+Each verdict records the pack digest, checker semantics, and artifact version.
 
 \paragraph{Guarantees.}
-Let $\mathit{abs}$ map concrete protocol/world configurations to abstract
-configurations, and assume step and goal simulation for the declared pack
+Let a configuration consist of a protocol state and an abstract world state,
+and let $\mathit{abs}$ map concrete configurations to abstract configurations.
+Assume step and goal simulation for the declared pack
 (Appendix~\ref{app:metatheory}). If no abstract run reaches $\gphi$, no concrete
 run represented by that pack reaches the concrete goal
-(Theorem~\ref{thm:ref}). Coarsening $\alpha$ and adding capabilities cannot
-create a false refutation (Theorems~\ref{thm:tol}--\ref{thm:cap}). Direct
-conformance has subject-reduction and session-fidelity results
-(Theorems~\ref{thm:sr}--\ref{thm:sf}); the Coq artifact covers single-label
-communication with bystander interleaving, while the paper states explicit
-stability and commutativity assumptions for world-changing interleavings. The
-static fragment is decidable; unbounded dynamic spawning is an explicit
-undecidable extension, for which the implementation abstains. Full rules,
-assumptions, proofs, and mechanization scope appear in
-Appendix~\ref{app:metatheory}.
+(Theorem~\ref{thm:ref}). The analysis remains sound when the abstraction is
+made less detailed, and adding capabilities cannot turn an achievable goal into
+an \emph{impossible} one (Theorems~\ref{thm:tol}--\ref{thm:cap}). Direct
+conformance satisfies subject reduction and session fidelity
+(Theorems~\ref{thm:sr}--\ref{thm:sf}). The Coq development covers single-label
+communication with concurrent actions by other participants; world-changing
+interleavings require explicit stability and commutativity assumptions. The
+decidable restrictions above guarantee decidability. Allowing an unbounded
+dynamic addition of participants is an explicit undecidable extension, for
+which the implementation returns \textsc{Unknown}. Full rules, assumptions,
+proofs, and mechanization scope appear in Appendix~\ref{app:metatheory}.
 
 \subsection{Structured feedback and human oversight}\label{sec:signals}
-The blocking frontier and witness are inspectable, heterogeneous feedback rather
-than a scalar reward. A bounded repair adapter may ask the untrusted LLM to fix a
-non-projectable protocol, but it may neither invent capabilities nor weaken the
-goal, and every revision is rechecked deterministically. This realizes a small
-agent-verifies-agent loop while keeping the human checkpoint at the irreducible
-intent-fidelity stage. Automated prompt or scaffold search is an application of
-these verdicts, not an empirical contribution claimed here.
+
+The checker returns an explanation for \textsc{Impossible} and a witness path
+for \textsc{Achievable}. These outputs provide concrete feedback rather than a
+single score. A bounded repair adapter may ask the LLM to fix a protocol, but
+it cannot invent capabilities or weaken the goal. Every revision is checked
+again by the deterministic checker. Human review remains necessary for the gap
+between the original intent and the formal pack. Automated prompt or scaffold
+search is an application of these verdicts, not an empirical contribution of
+this paper.
 
 \beginformalappendix
 \section{Syntax}\label{app:syntax}
 
-We fix disjoint sets of predicates $p\in\Pred$ (boolean), numeric variables
+We use disjoint sets of predicates $p\in\Pred$ (boolean), numeric variables
 $x\in\Var$, roles $\mathsf{p},\mathsf{q},\mathsf{r}\in\mathcal R$, capability names
 $a\in\CapS$, and message labels $\ell\in\Lab$. Following the modern
-presentation of multiparty \bmr sessions~\cite{synthetic2023,synthetic2026} \emr 
+presentation of multiparty \bmr sessions~\cite{synthetic2023,synthetic2026} \emr
 %types~\cite{yoshidagheri,ghilezan,scalasyoshida},
-we proceed bottom-up: state and capabilities
+we define the model from the bottom up: state and capabilities
 (Sections~\ref{sec:state-logic}--\ref{sec:capabilities}), then
-\emph{processes} --- the programs skills execute as ---
-(Section~\ref{sec:processes}), then the global \emph{type} they are checked
-against directly (Section~\ref{sec:types-syntax}).
+\emph{processes} (Section~\ref{sec:processes}), and finally the global
+\emph{type} they are checked against directly (Section~\ref{sec:types-syntax}).
+
 In each grammar, ``$::=$'' lists the possible forms of an expression. In each
-inference rule below, the statement beneath the line follows when every premise
-above the line holds. Rule names identify the corresponding checker obligation;
+inference rule below, the statement below the line holds when all premises
+above the line hold. Rule names identify the corresponding checker obligation;
 they are not additional assumptions.
+
 
 \subsection{State logic}\label{sec:state-logic}
 \[
@@ -464,7 +369,7 @@ e &::=& x \mid n \mid e+e \mid e-e \mid c\cdot e & (c,n\in\mathbb Z)\\[1pt]
   \mid \varphi\vee\varphi \mid e\bowtie e & \bowtie\,\in\{<,\le,=,\ge,>,\ne\}
 \end{array}
 \]
-The state logic $\mathcal L$ is quantifier-free linear integer arithmetic with
+The state logic $\mathcal L$ is quantifier-free linear integer arithmetic~\cite{smtlib} with
 uninterpreted boolean predicates --- a decidable fragment for which entailment
 $\vDash$ and satisfiability are discharged by a satisfiability-modulo-theories
 (SMT) solver.
@@ -513,7 +418,8 @@ names pairwise distinct. The output $\mathsf{p}!\{\ell_i.P_i\}$
 $\mathsf{p}?\{\ell_i.P_i\}$ offers an \emph{external} choice; $a.P$ invokes
 capability $a$ --- the only construct that changes the world. 
 A skill $S_{\mathsf p}$ \emph{is} a process: the behaviour declared for role
-$\mathsf p$. \bmr why do you need skills? they are only used in C.3 and in a code where I think is would be better to use processes \emc
+$\mathsf p$.
+% \bmr why do you need skills? they are only used in C.3 and in a code where I think is would be better to use processes \emc
 
 \subsection{Global types}
 \label{sec:types-syntax}
@@ -569,7 +475,7 @@ N(x) & \text{otherwise (frame)}
 \end{cases}
 \]
 
-\bmc where is $\llbracket\Asg_a(x)\rrbracket_N$ defined? \emc
+% \bmc where is $\llbracket\Asg_a(x)\rrbracket_N$ defined? \emc
 
 \subsection{A labelled semantics for sessions and global types}
 \label{sec:semantics}
@@ -821,7 +727,7 @@ capabilities die, with \textsc{T-Miss} as the diagnostic.
   \ \wedge\ \Gamma;(G,W_0)\achbox\gphi}
   {\Gamma\vdash\{S_{\mathsf p}\}_{\mathsf p}\ :\ G\ \triangleright\ \Diamond\gphi}
 \end{mathpar}
-\bmc who is ${\mathsf p}$? \emr
+% \bmc who is ${\mathsf p}$? \emr
 Read top-to-bottom: no hallucinated tools; some plausible initial world exists
 from which the declared skills directly conform to the protocol (deadlock-free,
 every capability call guarded) \emph{and} that same world reaches the goal. The
@@ -1355,28 +1261,20 @@ is amortized over every skill ever checked.
 \endformalappendix
 
 \section{Implementation}\label{sec:implementation}
-The executable decision path is approximately 1.45K lines of Python, including
-the checker, pack gate, formula layer, and session adapter. The compaction
-front-end issues the artifact prompt to an LLM and passes the result through a deterministic
-\emph{schema gate} before the checker sees it, so malformed packs are rejected
-without crashing the trusted core. The Coq artifact contains three developments and two assumption-audit harnesses:
-reachability soundness core (Theorems~\ref{thm:ref}--\ref{thm:cap} plus
-\id{FlightInstance}, ${\sim}230$ lines); the direct-typing core (the head-move
-action safety plus \id{HandoffInstance}, ${\sim}310$ lines); and the
-operational-correspondence core (Theorems~\ref{thm:sr}--\ref{thm:sf} for the
-single-label communication fragment with full interleaving, ${\sim}250$ lines);
-all three are checked in CI under pinned Coq 8.18.0 with no axioms, verified by
-\id{Print Assumptions}. The
-checker implements the corresponding abstractions from
+
+We implemented the checker and its supporting components in Python. The
+compaction front-end sends the skill to an LLM and passes the result through a
+deterministic \emph{schema gate} before the checker processes it.
+Packs that do not satisfy the schema are rejected at this stage.
+The checker implements the abstractions from
 Appendices~\ref{app:syntax}--\ref{app:types}: STRIPS frame semantics for the
-world, existential search over the protocol control structure, and Z3 for
-guard/goal satisfiability and arithmetic refinements. On success it returns the
-witness path; on refutation, the blocking frontier (missing capability,
-unsatisfiable guard, unestablished goal conjunct, or non-projectable handoff).
+world, existential search over the protocol, and Z3 for guard and goal
+satisfiability and arithmetic refinements. On success it returns a witness
+path; on refutation, it reports the reason, such as a missing capability,
+unsatisfiable guard, unachievable goal condition, or non-projectable handoff.
 The optional LLM front-end may use a \textsc{Non\_Projectable} counterexample
-for one bounded, structure-only repair round; it may not invent capabilities or
-weaken the goal, and the deterministic checker remains the final referee. This
-is a small reflective-verification loop, not a general scaffold-search result.
+for one bounded repair round. It may not invent capabilities or weaken the
+goal, and the deterministic checker remains the final decision maker.
 
 The conformance step ($G\vdash(\MM;W)$, Section~\ref{sec:process-typing}) is
 \bmr implemented by means of a simple \emph{type inference algorithm} since all typing rules are structural in $(\MM;W)$.
@@ -1394,34 +1292,32 @@ as premises of the typing rule. \emr
 %protocol labels, while a receiver may accept a superset. A separate generic
 %Gay--Hole subtyping utility remains in the artifact but does not decide this
 %premise. The verdict reason
-%\textsc{Non\_Projectable} names this algorithmic engine's diagnostic;
+%\textsc{Non_Projectable} names this algorithmic engine's diagnostic;
 %Section~\ref{sec:process-typing} is the specification it is checked against.
 
-The adapter also discharges the participant side conditions of
+The adapter also checks the participant side conditions of
 \textsc{T-Comm}/\textsc{T-Act}/\textsc{T-Goal}: it computes $\prt G$ and
-compares it with the roles the pack declares behaviour for. One direction
-refutes --- a declared role outside $\prt G$ has contract $\End$, which nothing
-non-trivial refines. The other cannot: a participant the pack declares nothing
-for offers no behaviour to refute, yet the judgment of
-Section~\ref{sec:process-typing} ranges over a whole session with
-$\prt G=\prt\MM$, so the checker returns those roles alongside the verdict
-rather than leaving the assumption implicit.
+compares it with the roles for which the pack declares behaviour. A declared
+role outside $\prt G$ has contract $\End$, so a non-trivial behavior for that
+role cannot conform. If the pack declares no behavior for a participant, the
+checker reports the missing role instead of leaving the assumption implicit.
 
 \section{Evaluation}\label{sec:evaluation}
-We assembled a corpus of 15 skills spanning the canonical failure modes ---
-hallucinated planning, retry-forever loops, coordination deadlock, refinement
-violations --- with achievable controls (including detours and informed branches)
-and two deliberately \emph{spurious} cases exercising the deferred edges. Each
-skill carries a ground-truth semantic label; the positive class is
-\emph{achievable}. Evaluation is deterministic and CPU-only: it requires no
-training or live model inference, completes the 15-case matrix in under one
-second on a commodity laptop, and gives each individual Z3 query a 10-second
-timeout.
+
+We assembled a corpus of 15 skills covering the main failure modes:
+hallucinated planning, retry-forever loops, coordination deadlock, and
+refinement violations. The corpus also includes achievable controls with
+detours and informed branches, plus two deliberately \emph{spurious} cases
+for the deferred checks. Each skill has a ground-truth semantic label; the
+positive class is \emph{achievable}. Evaluation is deterministic and CPU-only:
+it requires no training or live model inference, completes the 15-case matrix
+in under one second on a commodity laptop, and gives each individual Z3 query
+a 10-second timeout.
 
 \begin{center}\small
 \begin{tabular}{@{}lcc@{}}
 \toprule
- & predicted achievable & predicted impossible\\
+& predicted achievable & predicted impossible\\
 \midrule
 truly achievable & $\mathrm{TP}=6$ & $\mathrm{FN}=0$\\
 truly impossible & $\mathrm{FP}=2$ & $\mathrm{TN}=7$\\
@@ -1429,14 +1325,15 @@ truly impossible & $\mathrm{FP}=2$ & $\mathrm{TN}=7$\\
 \end{tabular}
 \end{center}
 
-\noindent Two claims, both confirmed. \textbf{Soundness}: $\mathrm{FN}=0$ --- no
-achievable goal was wrongly refuted, the empirical face of Theorem~\ref{thm:ref}
+\noindent Two claims, both confirmed. \textbf{Soundness}: $\mathrm{FN}=0$ ---
+no achievable goal was wrongly refuted, consistent with Theorem~\ref{thm:ref}
 (achievability recall $6/6=100\%$). \textbf{Incompleteness, contained}:
-$\mathrm{FP}=2$, and both are exactly the planted spurious cases --- one a false
-payload post-condition (Layer-C obligation), one an under-specified goal (intent
-edge). No structural failure was missed in this proof-of-concept corpus; this is
-evidence of coverage, not a proof that the two residues exhaust all empirical
-failure modes. Each refutation reason fires on its matching mode:
+$\mathrm{FP}=2$, and both are the planted spurious cases --- one a false
+payload post-condition (Layer-C obligation), and one an under-specified goal
+(intent edge). No structural failure was missed in this proof-of-concept
+corpus. This is evidence of coverage, not a proof that these are the only
+possible failure modes. Each refutation reason matches its intended failure
+mode:
 
 \begin{center}\small
 \begin{tabular}{@{}ll@{}}
@@ -1452,135 +1349,137 @@ refinement violation --- budget unsatisfiable on every run & \textsc{Goal\_Unsat
 \end{tabular}
 \end{center}
 
-\paragraph{What the check costs.} With no model in the trusted path, the
-checker and the deterministic front-end spend \emph{zero} tokens; only
-compaction spends any, once per skill \emph{version} and linearly in the
-skill's length, against a run it avoids that recurs per \emph{invocation} and
-is quadratic in its turns. Under an explicit, conservative model of that run
-(Appendix~\ref{app:tokens}), compacting the 15-spec corpus costs 12.2K tokens
-and avoids ${\sim}1.07$M per round of invocations --- ${\sim}87\times$
-leverage, unbounded deterministically --- so break-even falls inside the first
-prevented run in every failure mode, while a skill that is \emph{not} broken
-pays $2.9\%$ of one successful run for the check, or nothing.
+\paragraph{What the check costs.}
+The checker and deterministic front-end use \emph{zero} LLM tokens. The LLM is
+used once to compact each skill \emph{version}, while a full agent run uses
+tokens on every \emph{invocation}. Under the conservative model in
+Appendix~\ref{app:tokens}, compacting the 15-spec corpus costs 12.2K tokens and
+avoids ${\sim}1.07$M tokens per round of invocations, giving ${\sim}87\times$
+leverage. For every failure mode, the cost of compaction is recovered by the
+first prevented run. For a skill that is \emph{not} broken, the check costs
+$2.9\%$ of one successful run, or nothing.
 
-A separate six-case fragment suite exercises behavior absent from the headline
-matrix: tail-recursive retry and non-terminating control, dynamic spawning,
-protocol-independent refutation despite spawning, and conformant versus
-non-conformant declared role behavior. It yields two \textsc{Achievable}, three
-\textsc{Impossible}, and one \textsc{Unknown}. The abstention is reported
-separately rather than counted as a false negative, because \textsc{Unknown}
-makes no refutation claim. Together the suites contain 21 declared packs; the
-15-case matrix remains the only binary ground-truth matrix.
-
+A separate six-case suite tests behavior not covered by the main matrix:
+tail-recursive retry and non-terminating control, adding new participants during
+execution, refutation that remains valid when new participants are added, and
+conformant versus non-conformant declared role behavior. It yields two
+\textsc{Achievable}, three \textsc{Impossible}, and one \textsc{Unknown}. The
+abstention is reported separately rather than counted as a false negative
+because \textsc{Unknown} makes no refutation claim. Together the suites contain
+21 declared packs; the 15-case matrix remains the only binary ground-truth
+matrix.
+ 
 \section{Related Work}\label{sec:related}
-\noindent\textbf{Prior-art note.} The claims below reflect the authors' survey at
-submission time; the fusion's novelty should be confirmed against a systematic
-search of the planning-meets-behavioural-types literature, which is dispersed
-across communities.
 
-\emph{Multiparty session types}~\cite{honda,liprojection,yoshidagheri} supply
-deadlock-freedom via projection and subtyping~\cite{gayhole,ghilezan}; our
-calculus and directed-choice global types follow the modern synchronous
-formulation of the Yoshida line~\cite{yoshidagheri,ghilezan,scalasyoshida}. We
-adopt the synthetic line~\cite{synthetic2023,synthetic2026}:
-Section~\ref{sec:process-typing} checks
-conformance directly against a whole session configuration rather than projected
-local types. Our direct rule corresponds to the conservative, plain-merge
-condition that bystanders behave uniformly across an unobserved choice; it does
-not subsume every protocol accepted by modern full merge. The new contribution
-is the world and goal layer: capability guards, effects, goal observation, and
+\emph{Multiparty session types}~\cite{honda,liprojection,yoshidagheri} provide
+formal methods for checking communication protocols, including
+deadlock-freedom through projection and subtyping~\cite{gayhole,ghilezan}.
+Our protocol follows the synchronous formulation of this line of work
+~\cite{yoshidagheri,ghilezan,scalasyoshida}. We also follow the recent approach
+of checking a whole session configuration directly against a global type
+~\cite{synthetic2023,synthetic2026}, rather than first projecting the global type to local types. 
+The new contribution is the world and goal layer: capability guards, effects, goal observation, and
 the asymmetric refutation guarantee are not modelled by classical 
 %or synthetic
 MPST \bmr or new SMPS. \emr
-\emph{Automated planning}~\cite{strips} supplies capability-guarded goal
-reachability; we reuse its frame semantics but embed it in a multiparty
-choreography. The contribution is the \emph{fusion}, decided over an
-goal-marked global type synthesized by an LLM. Recent agent-verification work is
-adjacent but differently aimed: \emph{provable coordination via message sequence
-charts}~\cite{msc} projects a global choreography for LLM agents but targets
-coordination correctness, not goal achievability; its runtime-planning extension
-also establishes that LLM synthesis of a coordination protocol is itself prior
-art. \emph{VeriGuard}~\cite{veriguard}
-separates offline policy verification from online monitoring as a safety shield;
-\emph{agent behavioural contracts}~\cite{abc} provide probabilistic,
-runtime-enforced compliance and composition conditions for multi-agent chains,
-whereas our verdict is static and sound for refutation relative to the pack.
+These are not part of classical MPST~\cite{honda,liprojection,yoshidagheri} or the recent
+direct-checking formulation~\cite{synthetic2023,synthetic2026}.
 
-\emph{Skill-bundle scanners and verified-skill catalogs} are complementary.
-NVIDIA's SkillSpector~\cite{skillspector} and Verified Agent Skills
-pipeline~\cite{verifiedskills} address the same deployment object---portable
-agent skills---but ask a different question. SkillSpector is a pre-publication
-security control: it normalizes a skill bundle and runs deterministic scanners
-such as static pattern detectors, AST and taint analyzers, manifest-consistency
-checks, metadata-poisoning checks, supply-chain checks, and optional LLM-backed
-semantic analyzers. This is valuable admission control for skills, but it is not
-a compiler or type discipline in the sense used here. As published,
-SkillSpector does not aim to provide an operational semantics of goal-marked
-skills, a goal-reachability decision, or a refutation-soundness theorem. A
-SkillSpector-like pass belongs at the boundary
-of the compiler: before or alongside LLM compaction, it can vet the incoming
-\id{SKILL.md}, code, dependencies, and MCP metadata; after compaction, it can
-help justify the honesty of declared capabilities and least-privilege metadata.
-The type checker then consumes the sanitized formal pack and proves the narrower
-claim that the declared goal is not structurally impossible.
+\emph{Automated planning}~\cite{strips} provides methods for deciding whether a
+goal can be reached from an initial state using available actions. We use the
+same basic idea of preconditions and effects, but apply it to agent skills and
+combine it with multiparty communication protocols. The resulting checker asks
+whether the declared goal can be achieved given both the available capabilities
+and the communication protocol.
 
-None of the above frames the static check as goal achievability over a declared
-world and goal-marked protocol, nor gives the same
-refutation-sound/achievement-incomplete asymmetry.
+Recent work on agent verification addresses related problems but has different
+goals. \emph{Provable coordination via message sequence charts}~\cite{msc}
+uses formal communication protocols for LLM agents and focuses on coordination
+correctness rather than goal achievability. Its runtime-planning extension also
+studies LLM-generated coordination protocols. \emph{VeriGuard}~\cite{veriguard}
+separates offline policy verification from online monitoring and uses the result
+as a safety mechanism. \emph{Agent behavioural contracts}~\cite{abc} provide
+probabilistic, runtime-enforced compliance and composition conditions for
+multi-agent systems. In contrast, our checker makes a static achievability
+decision and guarantees that an \emph{impossible} verdict is correct for the
+formal pack.
+
+\emph{Skill-bundle scanners and verified-skill catalogs} address the same
+deployment object: portable agent skills. NVIDIA's SkillSpector~\cite{skillspector}
+and Verified Agent Skills pipeline~\cite{verifiedskills} provide checks for
+skill bundles before deployment, including code, metadata, dependencies, and
+other security-related properties. These checks are complementary to our
+approach. They can inspect the original \id{SKILL.md} and its supporting files,
+while our checker operates on the formal pack produced from the skill. Their
+purpose is to identify security and consistency problems; ours is to determine
+whether the declared goal can be achieved with the available capabilities and
+protocol.
+
+To our knowledge, the work above does not combine capability-based goal
+reachability with multiparty protocol checking for agent skills, nor provide
+the same refutation-sound guarantee for an \emph{impossible} verdict.
 
 \section{Limitations and Future Work}\label{sec:limitations}
 \begin{itemize}\setlength{\itemsep}{1pt}
-\item \textbf{Relative soundness.} Everything is proved about the declared $\Gamma$
-and $S$. If the prose lies (a ``read-only'' tool that writes), the checker verifies
-a fiction; honest-declaration is a separate obligation, of which this makes only
-the interaction slice decidable. A practical compiler should therefore include a
-skill-bundle security pass---for example a SkillSpector-like scanner---to inspect
-\id{SKILL.md}, scripts, dependencies, manifests, and permission metadata before the
-formal pack is trusted by the achievability checker.
-\item \textbf{Static topology for totality.} Dynamic spawning drops the procedure
-to a semi-decision (Proposition~\ref{thm:undec}); a practical system answers
-\textsc{Unknown} rather than guessing.
-\item \textbf{Trusted abstraction.} A coarse $\alpha$ silently widens tolerance
-(more false achievable), never breaking Theorem~\ref{thm:ref} but weakening
-usefulness.
-\item \textbf{Engineering gaps.} The mechanization covers the generic
+\item \textbf{Dependence on the declared pack.} The guarantees apply to the
+declared $\Gamma$ and $S$. If the LLM incorrectly describes a capability or
+omits an important detail from the skill, the checker can only reason about the
+resulting pack. A practical system should therefore also inspect
+\id{SKILL.md}, scripts, dependencies, manifests, and permission metadata before
+running the achievability check.
+
+\item \textbf{Adding participants during execution.} The current procedure is
+decidable when the set of participants is fixed. When new participants can be
+added during execution, the procedure may return \textsc{Unknown} rather than
+make an unsupported decision (Proposition~\ref{thm:undec}).
+
+\item \textbf{Abstraction.} A coarse $\alpha$ allows more behaviors to be treated
+as equivalent. This preserves the refutation guarantee of Theorem~\ref{thm:ref},
+but may make the checker more likely to return \emph{achievable}.
+
+\item \textbf{Formalization gaps.} The Coq development covers the generic
 refutation-sound abstraction theorem and concrete examples, head-move action
 safety, and subject reduction/session fidelity with full bystander interleaving
 for the single-label communication model, all axiom-free. The executable checker
-is schema-gated and tested against that specification, but the
-\textsc{step-sim}/\textsc{goal-sim} instantiation for its exact symbolic state is
-not mechanized. The Coq correspondence model also does not yet combine observable
-goal labels, participant matching, multi-branch choice, and world-changing
-interleaving in one development. Still open are that faithful mechanization; a
-head-normalization/permutation bridge from interleaved session runs to the
-head-ordered reachability search; 
-equivalence between the declarative judgment
-and the projection-based adapter; 
-and a concrete-session realization theorem for
-abstract witnesses. The 21-pack evaluation remains a proof of concept.
+is schema-gated and tested against the formal specification, but its exact
+symbolic state is not yet fully mechanized. The Coq model also does not yet
+combine observable goal labels, participant matching, multi-branch choice, and
+world-changing interleaving in one development. Future work includes completing
+this mechanization, connecting interleaved session runs to the reachability
+search, proving equivalence between the declarative judgment and the
+projection-based adapter, and proving that abstract witnesses correspond to
+concrete sessions. The 21-pack evaluation is also only a proof of concept.
 \end{itemize}
 
 \paragraph{Broader impact.}
-Pre-execution refutation reduces wasted computation (Appendix~\ref{app:tokens})
-and prevents structurally impossible agent plans from reaching deployment. The same formal verdict can,
-however, create false confidence when an inaccurate pack omits a harmful tool
-effect or weakens the user's actual goal. We therefore expose the declared pack,
-witness or blocking frontier, and deferred obligations rather than presenting a
-single trust score. Intent review and runtime payload monitoring remain necessary
-before the method is used in consequential settings; this work does not evaluate
-fairness, privacy, or deployment safety.
+Pre-execution checking can reduce wasted computation (Appendix~\ref{app:tokens})
+and prevent structurally impossible plans from reaching execution. However, an
+incorrect pack can create false confidence, for example by omitting a tool
+effect or weakening the user's actual goal. We therefore report the formal pack,
+the result of the check, and any remaining conditions that still require
+attention. Human review and runtime checks are still needed for consequential
+use. This work does not evaluate fairness, privacy, or deployment safety.
 
 \section{Conclusion}\label{sec:conclusion}
-An LLM can draft an agent's plan from intent; the open question has been whether
-anything can tell, cheaply and before execution, that the plan is doomed. For the
-\emph{achievability} question the answer is yes, relative to a declared pack:
-combine planning's capability-guarded reachability with a synthetic,
-directly-typed global protocol; treat LLM compaction as untrusted; and use a
-refutation-sound abstraction so an \emph{impossible} verdict is never wrong about
-that declared model. \emph{Achievable} remains honest about payload and intent
-fidelity, while \emph{Unknown} abstains outside static topology. This yields a
-structured, inspectable verification signal for agent skills and a path toward,
-rather than a completed proof of, stronger per-step safety.
+
+Agent skills provide instructions, workflows, and tools that guide autonomous
+agents toward particular outcomes. Whether a skill is written by a human expert
+or generated with the help of an LLM, a basic question remains: \textbf{can the
+declared goal be achieved at all?} Our work answers this question before
+execution, using a deterministic checker over a formal pack derived from the
+skill. The checker combines capability-based reachability with a directly
+checked global protocol, and its \emph{impossible} verdict is sound for the
+formal pack it receives.
+
+This guarantee does not remove the gap between the original skill and its formal
+representation. An incorrect or incomplete pack can lead to an incorrect
+\emph{achievable} result, which is why the result must be understood relative
+to the declared pack. Nevertheless, when the pack is correct, the check can
+identify structural failures before the agent spends time and tokens executing
+the skill. This provides a simple and inspectable way to check whether an agent
+skill is achievable before execution.
+
+
 
 \begin{thebibliography}{9}\small
 %\bibitem{synthetic2023} S.-S.~Jongmans, F.~Ferreira. Synthetic Behavioural Typing: Sound, Regular Multiparty Sessions via Implicit Local Types. \emph{ECOOP}, LIPIcs 263, 2023.
@@ -1607,18 +1506,21 @@ rather than a completed proof of, stronger per-step safety.
   %\doi{10.46298/lmcs-19(1:3)2023}.
 \bibitem{harnesssurvey} J.~Li, X.~Xiao, Y.~Zhang, C.~Liu, L.~Zhao, X.~Liao, Y.~Ji, J.~Wang, J.~Gu, Y.~Ge, W.~Xu, X.~Fang, X.~Xu, T.~Zhao, Y.~Kim, T.~Wang, J.~Hamm, S.~Krishnaswamy, J.~Huan, C.~Reddy. Agent Harness Engineering: A Survey. 2026.
 \bibitem{harnessfix} M.~Chen, J.~Wang, Z.~Liu, Y.~Wang, H.~Zheng, Q.~Wang. From Failed Trajectories to Reliable LLM Agents: Diagnosing and Repairing Harness Flaws. arXiv:2606.06324, 2026.
-\bibitem{agentskills} Anthropic. Equipping Agents for the Real World with Agent Skills. Anthropic Engineering Blog, 16 Oct 2025; released as the open Agent Skills standard, \url{https://agentskills.io}, 18 Dec 2025.
+\bibitem{agentskills} Agent Skills Standard. Specification. \url{https://github.com/agentskills/agentskills/blob/main/docs/specification.mdx}, 2025.
 \bibitem{adas} S.~Hu, C.~Lu, J.~Clune. Automated Design of Agentic Systems. \emph{ICLR}, 2025.
 \bibitem{aflow} J.~Zhang, J.~Xiang, Z.~Yu, F.~Teng, X.~Chen, J.~Chen, M.~Zhuge, X.~Cheng, S.~Hong, J.~Wang, et~al. AFlow: Automating Agentic Workflow Generation. \emph{ICLR}, 2025.
 \bibitem{cemri} M.~Cemri, M.~Z.~Pan, S.~Yang, L.~A.~Agrawal, B.~Chopra, R.~Tiwari, K.~Keutzer, A.~Parameswaran, D.~Klein, K.~Ramchandran, M.~Zaharia, J.~E.~Gonzalez, I.~Stoica. Why Do Multi-Agent LLM Systems Fail? arXiv:2503.13657, 2025.
 \bibitem{yoshidagheri} N.~Yoshida, L.~Gheri. A Very Gentle Introduction to Multiparty Session Types. \emph{ICDCIT}, LNCS 11969, 2020.
 \bibitem{ghilezan} S.~Ghilezan, S.~Jak\v si\'c, J.~Pantovi\'c, A.~Scalas, N.~Yoshida. Precise Subtyping for Synchronous Multiparty Sessions. \emph{J.\ Log.\ Algebr.\ Meth.\ Program.} 104, 2019.
 \bibitem{scalasyoshida} A.~Scalas, N.~Yoshida. Less is More: Multiparty Session Types Revisited. \emph{Proc.\ ACM Program.\ Lang.} 3(POPL), 2019.
+\bibitem{honda1998language} K.~Honda, V.~T.~Vasconcelos, M.~Kubo. Language Primitives and Type Discipline for Structured Communication-Based Programming. \emph{ESOP}, LNCS 1381, pp.~122--138, 1998.
 \bibitem{honda} K.~Honda, N.~Yoshida, M.~Carbone. Multiparty Asynchronous Session Types. \emph{J. ACM} 63(1), 2016.
 \bibitem{gayhole} S.~Gay, M.~Hole. Subtyping for Session Types in the Pi Calculus. \emph{Acta Informatica} 42(2--3), 2005.
 \bibitem{bz} D.~Brand, P.~Zafiropulo. On Communicating Finite-State Machines. \emph{J. ACM} 30(2), 1983.
 \bibitem{liprojection} E.~Li, F.~Stutz, T.~Wies, D.~Zufferey. Complete Multiparty Session Type Projection with Automata. \emph{CAV} 2023.
 \bibitem{strips} R.~Fikes, N.~Nilsson. STRIPS: A New Approach to the Application of Theorem Proving to Problem Solving. \emph{Artif. Intell.} 2(3--4), 1971.
+\bibitem{z3} L.~de~Moura, N.~Bj{\o}rner. Z3: An Efficient SMT Solver. \emph{TACAS}, LNCS 4963, pp.~337--340, Springer, 2008.
+\bibitem{smtlib} C.~Barrett, P.~Fontaine, C.~Tinelli. The SMT-LIB Standard: Version 2.6. Technical Report, Department of Computer Science, The University of Iowa, 2017. \url{https://smt-lib.org}.
 \bibitem{msc} B.~Bollig, M.~F\"ugger, T.~Nowak. Provable Coordination for LLM Agents via Message Sequence Charts. \emph{ISoLA}, 2026. arXiv:2604.17612.
 \bibitem{veriguard} L.~Miculicich, M.~Parmar, H.~Palangi, K.~D.~Dvijotham, M.~Montanari, T.~Pfister, L.~T.~Le. VeriGuard: Enhancing LLM Agent Safety via Verified Code Generation. arXiv:2510.05156, 2025.
 \bibitem{abc} V.~P.~Bhardwaj. Agent Behavioral Contracts: Formal Specification and Runtime Enforcement for Reliable Autonomous AI Agents. arXiv:2602.22302, 2026.
