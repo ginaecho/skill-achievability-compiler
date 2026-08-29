@@ -18,8 +18,8 @@ No tools are granted to this skill.
 
 1. **Spawn helper subagents** at run time to carry out the work. The number of
    helpers is decided during execution, not before it.
-2. Collect what the helpers send back.
+2. Collect what comes back.
 3. Record the outcome in the accounting ledger via `update_ledger`.
 
-The books must reflect the work that was done, so the ledger update is not
+The books must reflect the work that was done, so the ledger entry is not
 optional.

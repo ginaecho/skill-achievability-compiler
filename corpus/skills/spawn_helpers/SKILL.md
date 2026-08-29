@@ -8,11 +8,13 @@ description: Fan research out to helper subagents spawned at run time, then deli
 A **planner** carries out this skill, together with helper subagents it
 creates while it runs.
 
-Your job is finished when the **report has been delivered**.
+Your job is finished when the report is **delivered**.
 
 ## Tools
 
 Tools: deliver.
+
+- `deliver` marks the report **delivered**.
 
 ## Workflow
 
@@ -20,7 +22,7 @@ Tools: deliver.
    the question — it is not fixed in advance.
 2. **Spawn a fresh helper subagent for each part**, at run time. The number of
    helpers is decided during execution, not before it.
-3. Collect what the helpers send back.
+3. Collect what comes back.
 4. Deliver the report.
 
 The set of participants is not known before the run starts: the planner

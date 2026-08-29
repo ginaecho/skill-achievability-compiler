@@ -30,8 +30,13 @@ meaning, so the pack can say what the skill is really claiming:
     failure the checker refutes.
   * **Tool notes.**  Sentences in the Tools section that name a tool:
     "`publish` requires the report to be **approved**" becomes a guard;
+    "`filter` ... marks the shortlist **filtered**" becomes an effect;
     "`book_premium` ... costs 800 or more" becomes a nondeterministic bound on
     the document's numeric quantity.
+  * **Loops.**  A workflow that writes "Loop:" above its steps repeats them;
+    a step that says the work goes back round ("go back to the start of the
+    loop") is where it repeats, and the prose saying it is past the loop
+    ("Once the loop has been left:") is where it stops.
   * **Declared role behaviour.**  A "Declared handler behaviour" section
     becomes `skills[handler]`, so the checker can test it against the
     handler's projected contract.
@@ -45,8 +50,9 @@ about any particular skill: it keys on ordinary English conventions
 Deliberate limits, stated rather than hidden:
   * at most ONE numeric quantity per document (a skill that budgets two
     different numbers is compacted as if they were the same one);
-  * loops are not modelled -- a retry loop is compacted as the straight-line
-    path through it, which is the path the author says reaches the goal.
+  * a loop is only read where the document draws one ("Loop:"); a retry
+    described in passing is compacted as the straight-line path through it,
+    which is the path the author says reaches the goal.
 """
 from __future__ import annotations
 
@@ -254,12 +260,26 @@ def condition_predicate(phrase: str) -> Optional[str]:
     "booked flight" -> booked; "a confirmation email has been sent" -> sent;
     "the ticket is resolved" -> resolved.  Returns None when the phrase names
     no state (nothing that reads as a past participle).
+
+    A clause whose whole content is *one noun and that participle* names a
+    state **of that noun**, and keeps the noun: "the ledger has been updated"
+    -> ledger_updated, "a confirmation has been sent" -> confirmation_sent,
+    "the order found" -> order_found.  Anything longer is read as before --
+    the extra words are scene-setting ("a confirmation email has been sent"),
+    not part of the state's name -- so the author picks which reading they
+    want by how tightly they bold the clause.
     """
-    words = [m.group(1) for m in _PARTICIPLE_RE.finditer(phrase)]
+    words = [m.group(1) for m in _PARTICIPLE_RE.finditer(phrase)
+             if m.group(1).lower() not in STOPWORDS]
     heads = [w for w in words if _is_participle(w)]
     if not heads:
         return None
-    return heads[-1].lower()
+    head = heads[-1].lower()
+    if (len(words) == 2 and words[1].lower() == head
+            and not _is_participle(words[0])
+            and words[0].lower() not in QUANTITY_NOUNS):
+        return words[0].lower() + "_" + head
+    return head
 
 
 @dataclass
@@ -275,6 +295,12 @@ class Condition:
     predicate: Optional[str] = None
     num: Optional[NumClause] = None
     context: str = ""
+
+
+def goal_clause(prose: str) -> Optional[str]:
+    """The raw text of the document's completion sentence, if it has one."""
+    m = DONE_RE.search(prose)
+    return m.group(1) if m else None
 
 
 def parse_goal(prose: str) -> tuple[list[Condition], Optional[str]]:
@@ -408,6 +434,54 @@ def numbered_steps(body: str) -> list[str]:
     if cur is not None:
         steps.append(cur)
     return ["\n".join(s) for s in steps]
+
+
+# A workflow that goes round: a line that is nothing but "Loop:" (or
+# "Repeat:") opens a repeated block, and the first later line that talks about
+# being past the loop ("Once the loop has been left:") closes it again.
+LOOP_OPEN_RE = re.compile(r"\A\s*(?:loop|repeat)\s*:\s*\Z", re.I)
+_LEAVE_RE = re.compile(
+    r"\b(?:after|once|outside|exits?|exited|leaves?|leaving|left|ends?|ended"
+    r"|finished|done\s+with)\b", re.I)
+
+
+def _closes_loop(line: str) -> bool:
+    return (bool(re.search(r"\bloop\b", line, re.I))
+            and bool(_LEAVE_RE.search(line))
+            and not STEP_RE.match(line) and not BULLET_RE.match(line)
+            and not line[:1].isspace())
+
+
+def split_loop_segments(body: str) -> list[tuple[str, str]]:
+    """Segment a workflow body into ("seq" | "loop", text) runs.
+
+    A document that writes "Loop:" above its steps is saying those steps go
+    round again; the block ends where the prose says it is past the loop, or
+    at the end of the section.
+    """
+    segs: list[tuple[str, str]] = []
+    kind = "seq"
+    cur: list[str] = []
+    for line in body.split("\n"):
+        if kind == "seq" and LOOP_OPEN_RE.match(line):
+            segs.append((kind, "\n".join(cur)))
+            cur, kind = [], "loop"
+            continue
+        if kind == "loop" and _closes_loop(line):
+            segs.append((kind, "\n".join(cur)))
+            cur, kind = [], "seq"
+            continue
+        cur.append(line)
+    segs.append((kind, "\n".join(cur)))
+    return [s for s in segs if s[1].strip()]
+
+
+# "go back to step 1", "start over", "round again": the step says the block
+# repeats rather than carrying on.
+CONTINUE_RE = re.compile(
+    r"\b(?:go(?:es)?\s+back\s+to|going\s+back\s+to|start\s+(?:again|over)"
+    r"|starts\s+(?:again|over)|round\s+again|again\s+from\s+the\s+(?:top|start)"
+    r"|repeat(?:s)?\s+(?:the\s+loop|from\s+the\s+(?:top|start)))\b", re.I)
 
 
 def split_bullets(text: str) -> tuple[str, list[str]]:

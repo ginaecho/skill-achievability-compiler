@@ -7,11 +7,14 @@ description: Pay an invoice by card or by bank transfer. Use this when an invoic
 
 Two participants take part: the billing **system** (`sys`) and the **payer**.
 
-Your job is finished when the **invoice is paid**.
+Your job is finished when the invoice is **paid**.
 
 ## Tools
 
 Tools: pay_card, pay_transfer.
+
+- `pay_card` marks the invoice **paid**.
+- `pay_transfer` marks the invoice **paid**.
 
 ## Workflow
 
@@ -21,6 +24,6 @@ Tools: pay_card, pay_transfer.
    - **transfer rail** — the system tells the payer `use_transfer`, and the
      payer settles the invoice with `pay_transfer`.
 
-Either branch reaches the goal — the invoice ends up paid either way. What
+Either branch reaches the goal — the invoice is settled either way. What
 matters is that the payer is always told which rail was chosen, so it never
 has to guess.

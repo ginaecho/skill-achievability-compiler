@@ -7,11 +7,14 @@ description: Route a support ticket down a simple or complex path and resolve it
 
 Two participants take part: a **router** and a **handler**.
 
-Your job is finished when the **ticket is resolved**.
+Your job is finished when the ticket is **resolved**.
 
 ## Tools
 
 Tools: resolve_simple, resolve_complex.
+
+- `resolve_simple` marks the ticket **resolved**.
+- `resolve_complex` marks the ticket **resolved**.
 
 ## Workflow
 

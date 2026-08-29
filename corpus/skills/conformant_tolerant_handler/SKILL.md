@@ -7,11 +7,14 @@ description: Route a support ticket down a simple or complex path and resolve it
 
 Two participants take part: a **router** and a **handler**.
 
-Your job is finished when the **ticket is resolved**.
+Your job is finished when the ticket is **resolved**.
 
 ## Tools
 
 Tools: resolve_simple, resolve_complex.
+
+- `resolve_simple` marks the ticket **resolved**.
+- `resolve_complex` marks the ticket **resolved**.
 
 ## Contract
 
@@ -27,7 +30,8 @@ The handler waits for any of three labels and acts on whichever arrives:
 
 - `go_simple` — resolve the ticket with `resolve_simple`.
 - `go_complex` — resolve the ticket with `resolve_complex`.
-- `go_escalate` — hand the ticket to a human reviewer.
+- `go_escalate` — flag it for a human reviewer, then resolve it with
+  `resolve_complex`.
 
 The contract above never sends `go_escalate`; the handler is simply prepared
 for a label this router will not use. Being ready for more than the contract

@@ -1,29 +1,28 @@
 ---
 name: research-then-answer
-description: Research a question and deliver an answer to the user, optionally sending a status note first. Use this for research requests where the worker may keep the user informed while working.
+description: Research a question and deliver an answer to the user, sending status notes along the way. Use this for research requests where the worker keeps the user informed while working.
 ---
 
-# Research then answer (with optional clarification)
+# Research then answer (with status notes)
 
 Two participants take part: a **worker** and the **user**.
 
-Your job is finished when a **researched answer has been delivered** to the
-user.
+Your job is finished when the question is **answered**.
 
 ## Tools
 
 Tools: search, deliver.
 
+- `search` marks the question **searched**.
+- `deliver` requires the question **searched** and marks it **answered**.
+
 ## Workflow
 
-The worker may first ping the user with a short status note — something like
-"looking into this now". This is optional and it does not change the outcome;
-it is a detour, not a step towards the goal.
+1. The worker tells the user `status_note`, to say it is starting.
+2. Search for the information needed.
+3. The worker tells the user `status_note2`, to say it is nearly there.
+4. Deliver the answer to the user.
 
-Then, in order:
-
-1. Search for the information needed to answer the question.
-2. Deliver the answer to the user.
-
-Sending the extra status note, or not sending it, must not change whether the
-answer eventually gets delivered. Both paths are acceptable.
+The status notes are a detour, not a step towards the goal: sending them, or
+not sending them, must not change whether the question eventually gets an
+answer. Both paths are acceptable.

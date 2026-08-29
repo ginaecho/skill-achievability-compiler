@@ -12,6 +12,8 @@ Your job is finished when the new employee has an **account created** and a
 
 Tools: create_account.
 
+- `create_account` marks the **account created**.
+
 The badge system is not integrated with this skill.
 
 ## Workflow

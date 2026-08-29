@@ -5,14 +5,19 @@ description: Book a flight for a customer so that the booking is confirmed. Use 
 
 # Book a flight and confirm
 
-Your job is finished when the flight is **booked** and the booking is
-**confirmed to the customer**.
+Your job is finished when the flight is **booked** and a **confirmation has
+been sent** to the customer.
 
 ## Tools
 
 Tools: search, filter, book.
 
-None of these tools sends anything to the customer.
+- `search` marks the route **searched**.
+- `filter` requires the route **searched** and marks the shortlist
+  **filtered**.
+- `book` requires the shortlist **filtered** and marks the flight **booked**.
+
+None of these tools reaches the customer at all.
 
 ## Workflow
 

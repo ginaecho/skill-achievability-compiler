@@ -22,10 +22,11 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from ..profiles import normalize_tool
-from .prose import (INVOKE_RE, Condition, Role, condition_predicate,
-                    content_stems, find_num_clause, find_section, negated_before,
-                    numbered_steps, parse_goal, parse_roles, quantity_var,
-                    sentences, split_bullets, split_sections, stem,
+from .prose import (BOLD_RE, CONTINUE_RE, INVOKE_RE, Condition, Role,
+                    condition_predicate, content_stems, find_num_clause,
+                    find_section, goal_clause, negated_before, numbered_steps,
+                    parse_goal, parse_roles, quantity_var, sentences,
+                    split_bullets, split_loop_segments, split_sections, stem,
                     stem_index)
 
 WORKFLOW_HEADING = r"\b(workflow|contract|steps|procedure|process|protocol|instructions)\b"
@@ -59,7 +60,7 @@ LABEL_NOISE = ("branch", "branches", "path", "paths", "rail", "rails",
 
 @dataclass
 class Event:
-    kind: str                       # "act" | "msg" | "spawn"
+    kind: str                       # "act" | "msg" | "spawn" | "continue"
     pos: int
     cap: str = ""
     by: str = ""
@@ -74,6 +75,8 @@ class Event:
         if self.kind == "msg":
             return {"msg": {"from": self.frm, "to": self.to,
                             "label": self.label}}
+        if self.kind == "continue":
+            return {"continue": self.label}
         return {"spawn": {"role": self.role}}
 
 
@@ -91,13 +94,22 @@ class Build:
 # --------------------------------------------------------------------------
 
 def register_predicate(build: Build, phrase: str) -> Optional[str]:
-    """Canonical predicate name for a state description, keyed by stem so
-    "a confirmation has been sent" and "Send the email" name one state."""
+    """Canonical predicate name for a state description.
+
+    Two clauses name one state when they name it the same way, so a guard
+    that requires the report **drafted** and the effect that marks it
+    **drafted** meet on `drafted`.
+    """
     head = condition_predicate(phrase)
     if head is None:
         return None
-    key = stem(head)
-    return build.predicates.setdefault(key, head)
+    return build.predicates.setdefault(head, head)
+
+
+def _mention_stem(name: str) -> str:
+    """The stem prose uses when it talks about a state: the verb at its head
+    (`ledger_updated` is talked about by "update the ledger")."""
+    return stem(name.rsplit("_", 1)[-1])
 
 
 # --------------------------------------------------------------------------
@@ -172,8 +184,13 @@ def _msg_events(text: str, roles: list[Role]) -> list[Event]:
 
 
 def scan_span(text: str, tools: list[str], roles: list[Role],
-              default_role: str) -> list[Event]:
-    """Ordered protocol events a span of prose describes."""
+              default_role: str, loop: Optional[str] = None) -> list[Event]:
+    """Ordered protocol events a span of prose describes.
+
+    `loop` is the name of the enclosing repeated block, when there is one: a
+    span that says the work goes back round ("go back to step 1") is then a
+    `continue` rather than a step of its own.
+    """
     events: list[Event] = _msg_events(text, roles)
     msg_labels = {e.label for e in events}
 
@@ -197,6 +214,11 @@ def scan_span(text: str, tools: list[str], roles: list[Role],
         events.append(Event("spawn", m.start(),
                             role=m.group(1).lower().rstrip("s") or "helper"))
 
+    if loop:
+        m = CONTINUE_RE.search(text)
+        if m is not None and not negated_before(text, m.start()):
+            events.append(Event("continue", m.start(), label=loop))
+
     return sorted(events, key=lambda e: e.pos)
 
 
@@ -217,12 +239,12 @@ def attribute_by_name(build: Build, conds: list[Condition],
     for c in conds:
         if not c.predicate:
             continue
-        name = build.predicates[stem(c.predicate)]
+        name = c.predicate
         if name in established:
             continue
         text = c.context or c.text
-        head = stem(c.predicate)
-        want = {s for s in content_stems(text) if s != head}
+        own = {stem(p) for p in name.split("_")}
+        want = {s for s in content_stems(text) if s not in own}
         if not want:
             continue
         for tool in invoked:
@@ -240,7 +262,8 @@ def attribute_effects(build: Build, text: str, events: list[Event]) -> None:
     if not acts:
         return
     idx = stem_index(text)
-    for key, name in build.predicates.items():
+    for name in build.predicates.values():
+        key = _mention_stem(name)
         if key not in idx:
             continue
         off = idx[key]
@@ -266,28 +289,85 @@ def branch_label(bullet: str, fallback: str) -> str:
 # Tool notes: guards and numeric bounds
 # --------------------------------------------------------------------------
 
+# What a tool note says about a state it names in bold.  "requires" and its
+# kin introduce a precondition; "marks"/"records"/"produces" and their kin
+# introduce something the tool brings about.  A bold clause belongs to
+# whichever cue most recently preceded it, so one sentence can state both:
+# "`filter` requires the route **searched** and marks the shortlist
+# **filtered**."
 REQUIRES_RE = re.compile(
-    r"\b(?:requires?|needs?|only\s+runs?|will\s+only\s+run|refuses?)\b"
-    r"[^.]*?\*\*([^*]+?)\*\*", re.I)
+    r"\b(?:requires?|needs?|only\s+runs?|will\s+only\s+run|refuses?"
+    r"|depends?\s+on|expects?)\b", re.I)
+ESTABLISHES_RE = re.compile(
+    r"\b(?:marks?|sets?|produces?|establishes?|records?|leaves?|yields?"
+    r"|results?\s+in|ends?\s+with)\b", re.I)
+
+
+# "It only books fares under 500." -- a follow-on sentence whose subject is a
+# pronoun is still about the tool the previous sentence named.
+PRONOUN_SUBJECT_RE = re.compile(
+    r"\A[^A-Za-z`]*(?:it|they|that|this)\b(?!\s+(?:is\s+)?(?:tool|one)\s+of)",
+    re.I)
+
+
+def _named_tools(sent: str, tools: list[str]) -> list[str]:
+    """Declared tools this sentence names in backticks, in the order it
+    names them."""
+    hits = []
+    for t in tools:
+        m = re.search(r"`" + re.escape(t) + r"`", sent, re.I)
+        if m:
+            hits.append((m.start(), t))
+    return [t for _, t in sorted(hits)]
 
 
 def read_tool_notes(build: Build, tools_body: str, tools: list[str],
-                    var: Optional[str]) -> tuple[dict, dict, Optional[str]]:
-    """Guards and numeric bounds the Tools section states about each tool."""
+                    var: Optional[str]
+                    ) -> tuple[dict, dict, Optional[str], bool]:
+    """Guards, effects and numeric bounds the Tools section states.
+
+    Returns (preconditions, numeric bounds, quantity name, whether the
+    section stated any effect at all).  The last flag matters: a document
+    that says what its tools establish has been explicit, and its word is
+    taken over the positional guess made from the workflow.
+    """
     pres: dict[str, list] = {}
     nondet: dict[str, dict] = {}
+    stated_effect = False
+    subject: Optional[str] = None
     for sent in sentences(tools_body):
-        named = [t for t in tools
-                 if re.search(r"`" + re.escape(t) + r"`", sent, re.I)]
-        if not named:
+        named = _named_tools(sent, tools)
+        if named:
+            subject = named[0]
+        elif not (subject and PRONOUN_SUBJECT_RE.match(sent)):
+            # A sentence that names no tool, and does not carry on about the
+            # last one, is not a note about any tool.
+            subject = None
             continue
-        subject = named[0]
-        for m in REQUIRES_RE.finditer(sent):
-            pred = register_predicate(build, m.group(1))
-            if pred:
+        cues = sorted(
+            [(m.start(), "pre") for m in REQUIRES_RE.finditer(sent)]
+            + [(m.start(), "add") for m in ESTABLISHES_RE.finditer(sent)])
+        for bm in BOLD_RE.finditer(sent):
+            kind = None
+            for pos, k in cues:
+                if pos < bm.start():
+                    kind = k
+            if kind is None:
+                continue
+            pred = register_predicate(build, bm.group(1))
+            if not pred:
+                continue
+            if kind == "pre":
                 pres.setdefault(subject, []).append(pred)
                 build.notes.append(
-                    f"guard: `{subject}` requires {pred} ({m.group(1).strip()})")
+                    f"guard: `{subject}` requires {pred} "
+                    f"({bm.group(1).strip()})")
+            else:
+                build.effects.setdefault(subject, set()).add(pred)
+                stated_effect = True
+                build.notes.append(
+                    f"effect: `{subject}` establishes {pred} "
+                    f"({bm.group(1).strip()})")
         num = find_num_clause(sent)
         if num is not None:
             v = var or quantity_var(num.noun)
@@ -295,7 +375,7 @@ def read_tool_notes(build: Build, tools_body: str, tools: list[str],
             nondet[subject] = {v: {"cmp": [v, num.op, num.value]}}
             build.notes.append(
                 f"bound: `{subject}` leaves {v} {num.op} {num.value}")
-    return pres, nondet, var
+    return pres, nondet, var, stated_effect
 
 
 # --------------------------------------------------------------------------
@@ -351,8 +431,8 @@ def build(name: str, prose: str, declared: dict[str, str]) -> Optional[SemanticR
     wf = find_section(sections, WORKFLOW_HEADING)
     if wf is None:
         return None
-    steps_text = numbered_steps(wf.body)
-    if not steps_text:
+    segments = split_loop_segments(wf.body)
+    if not any(numbered_steps(body) for _, body in segments):
         return None
 
     roles = parse_roles(prose) or [Role("agent", frozenset({"agent"}))]
@@ -362,39 +442,66 @@ def build(name: str, prose: str, declared: dict[str, str]) -> Optional[SemanticR
     build_ = Build()
     for c in conds:
         if c.predicate:
-            build_.predicates.setdefault(stem(c.predicate), c.predicate)
+            build_.predicates.setdefault(c.predicate, c.predicate)
+
+    # A budget stated outside the bolded state ("**booked** at a price below
+    # 500") still belongs to the goal.
+    goal_num = None
+    if not any(c.num for c in conds):
+        goal_num = find_num_clause(goal_clause(prose) or "")
+        if goal_num is not None and var is None:
+            var = quantity_var(goal_num.noun)
 
     tools_sec = find_section(sections, TOOLS_HEADING)
-    pres, nondet, var = read_tool_notes(
+    pres, nondet, var, stated_effect = read_tool_notes(
         build_, tools_sec.body if tools_sec else "", tools, var)
 
     # ---- protocol ------------------------------------------------------
     protocol: list[dict] = []
     choosers: list[str] = []
-    for text in steps_text:
-        head, bullets = split_bullets(text)
-        if bullets and CHOICE_CUE_RE.search(head):
-            chooser = _role_at(roles, head, len(head), default_role)
-            choosers.append(chooser)
-            branches: dict[str, list] = {}
-            for i, b in enumerate(bullets):
-                label = branch_label(b, f"b{i + 1}")
-                evs = scan_span(b, tools, roles, default_role)
-                attribute_effects(build_, b, evs)
-                _record_owners(build_, evs)
-                branches[label] = [e.as_step() for e in evs]
-            if branches:
-                protocol.append({"choice": {"by": chooser,
-                                            "branches": branches}})
+    loops = 0
+    for kind, body in segments:
+        steps_text = numbered_steps(body)
+        if not steps_text:
             continue
-        evs = scan_span(text, tools, roles, default_role)
-        attribute_effects(build_, text, evs)
-        _record_owners(build_, evs)
-        protocol.extend(e.as_step() for e in evs)
+        loop_name = None
+        if kind == "loop":
+            loops += 1
+            loop_name = "X" if loops == 1 else f"X{loops}"
+        block: list[dict] = []
+        for text in steps_text:
+            head, bullets = split_bullets(text)
+            if bullets and CHOICE_CUE_RE.search(head):
+                chooser = _role_at(roles, head, len(head), default_role)
+                choosers.append(chooser)
+                branches: dict[str, list] = {}
+                for i, b in enumerate(bullets):
+                    label = branch_label(b, f"b{i + 1}")
+                    evs = scan_span(b, tools, roles, default_role, loop_name)
+                    if not stated_effect:
+                        attribute_effects(build_, b, evs)
+                    _record_owners(build_, evs)
+                    branches[label] = [e.as_step() for e in evs]
+                if branches:
+                    block.append({"choice": {"by": chooser,
+                                             "branches": branches}})
+                continue
+            evs = scan_span(text, tools, roles, default_role, loop_name)
+            if not stated_effect:
+                attribute_effects(build_, text, evs)
+            _record_owners(build_, evs)
+            block.extend(e.as_step() for e in evs)
+        if not block:
+            continue
+        if loop_name:
+            protocol.append({"rec": {"name": loop_name, "body": block}})
+        else:
+            protocol.extend(block)
 
     if not protocol:
         return None
-    attribute_by_name(build_, conds, _invoked_caps(protocol))
+    if not stated_effect:
+        attribute_by_name(build_, conds, _invoked_caps(protocol))
 
     # ---- capabilities ---------------------------------------------------
     capabilities: dict[str, dict] = {}
@@ -412,10 +519,11 @@ def build(name: str, prose: str, declared: dict[str, str]) -> Optional[SemanticR
     conjuncts: list = []
     for c in conds:
         if c.predicate:
-            conjuncts.append(build_.predicates[stem(c.predicate)])
-        if c.num is not None:
-            v = var or quantity_var(c.num.noun)
-            conjuncts.append({"cmp": [v, c.num.op, c.num.value]})
+            conjuncts.append(c.predicate)
+    for num in [c.num for c in conds if c.num is not None] + \
+            ([goal_num] if goal_num is not None else []):
+        v = var or quantity_var(num.noun)
+        conjuncts.append({"cmp": [v, num.op, num.value]})
     if not conjuncts:
         return None
     goal = conjuncts[0] if len(conjuncts) == 1 else {"and": conjuncts}

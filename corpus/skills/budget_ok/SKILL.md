@@ -5,21 +5,24 @@ description: Book a flight under a 500 budget cap and confirm it by email. Use t
 
 # Book a flight under $500
 
-Your job is finished when a flight is **booked at a price below 500** and a
+Your job is finished when a flight is **booked** at a price below 500 and a
 **confirmation has been sent**.
 
 ## Tools
 
-Tools: search, book_cheap, send_email.
+Tools: search, book_cheap, email.
 
-`book_cheap` only books fares under 500 — if nothing under that price is
-available it will not book anything.
+- `search` marks the route **searched**.
+- `book_cheap` requires the route **searched** and marks the flight
+  **booked**. It only books fares under 500 — if nothing under that price is
+  available it will not book anything.
+- `email` requires the flight **booked** and records that the **confirmation
+  has been sent**.
 
 ## Workflow
 
 1. Search for flights on the requested route.
-2. Book with `book_cheap`. Because that tool only ever books fares under 500,
-   any booking it makes already satisfies the customer's price ceiling.
+2. Book with `book_cheap`.
 3. Send the confirmation email.
 
 The price constraint is part of the goal, not a preference: a booking at 500
