@@ -16,10 +16,23 @@ purely deterministic, inspectable way -- no LLM required:
      their own capability; unix-ish commands, scripts, and undeclared
      CamelCase code symbols (`pdftotext`, `thumbnail.py`, `PositionalTab`)
      act via the profile's shell (`bash`) capability.
-  4. The pack: one capability per granted tool establishing `used_<tool>`;
-     the protocol is the ordered sequence of invoked acts; the goal is the
-     conjunction of `used_<t>` over all invoked tools -- i.e. *the skill, as
-     written, can actually be carried out in this environment*.
+  4. **Semantic compaction** (`prose.py` + `semantic.py`).  When the document
+     says what "finished" means -- "Your job is finished when the flight is
+     **booked** and a **confirmation email has been sent**" -- and lists
+     workflow steps, the pack is built from what the document actually
+     claims: goal conditions (with numeric budgets), participants, guards and
+     bounds stated in the Tools section, choices/messages/spawns read from the
+     workflow, and any declared per-role behaviour.  That pack can be refuted
+     for reasons the weak reading cannot see: a goal condition with no
+     establisher, a guard nothing satisfies, a budget no tool can meet, an
+     unannounced choice that strands a role, a declared behaviour that does
+     not cover its contract.
+  5. Otherwise the pack falls back to the weak reading: one capability per
+     granted tool establishing `used_<tool>`; the protocol is the ordered
+     sequence of invoked acts; the goal is the conjunction of `used_<t>` over
+     all invoked tools -- i.e. *the skill, as written, can actually be carried
+     out in this environment*.  A document that never says when it is finished
+     gives the front-end nothing stronger to check.
 
 An author can bypass the heuristics entirely by embedding a precise pack in a
 fenced block tagged `skillc-pack`; that JSON is validated and used verbatim
@@ -41,14 +54,11 @@ import yaml
 
 from ..pack import PackError, validate_pack
 from ..profiles import Profile, normalize_tool
+from . import semantic
+from .prose import INVOKE_RE, NEGATION_RE
 
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.S)
 FENCE_RE = re.compile(r"^(```+|~~~+)([^\n]*)\n(.*?)^\1\s*$\n?", re.S | re.M)
-INVOKE_RE = re.compile(
-    r"\b(?:via|use[sd]?|using|call(?:s|ed|ing)?|invoke[sd]?|invoking|run(?:s|ning)?|through)"
-    r"\s+(?:the\s+)?`([A-Za-z][A-Za-z0-9_.:-]*)`",
-    re.I,
-)
 TOOLS_LINE_RE = re.compile(
     r"^\s*(?:\*\*)?tools(?:\s+available)?(?:\*\*)?\s*:\s*(.+)$", re.I | re.M)
 
@@ -56,7 +66,7 @@ AGENT_TOOL_RE = re.compile(r"\A(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Za-z0-9]
 SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
 # Matches a negation word ("not", "never") in the ~20 chars immediately
 # before an invocation verb, used to skip "do NOT use `X`" false positives.
-_NEGATION_BEFORE_VERB_RE = re.compile(r'\b(?:not|never)\b', re.I)
+_NEGATION_BEFORE_VERB_RE = NEGATION_RE
 
 SHELL_CAP = "bash"
 PACK_FENCE_TAG = "skillc-pack"
@@ -80,6 +90,7 @@ class CompileResult:
     invocations: list[Invocation] = field(default_factory=list)
     embedded: bool = False           # pack came from a ```skillc-pack block
     warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)   # semantic readings
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -191,12 +202,24 @@ def compile_markdown(text: str, profile: Profile,
             if t and re.match(r"\A[A-Za-z][A-Za-z0-9_-]*\Z", t):
                 declared[normalize_tool(t)] = "prose:tools-line"
 
-    warnings: list[str] = []
     if profile.shell and SHELL_CAP not in declared:
         declared[SHELL_CAP] = f"profile:{profile.name}(shell)"
 
     # --- invoked actions --------------------------------------------------
     invocations = extract(prose, set(declared))
+
+    # --- semantic compaction ----------------------------------------------
+    # If the document states what "finished" means and lists workflow steps,
+    # compile what it actually claims (goal conditions, guards, budgets,
+    # participants, choices) instead of the weaker used_<tool> reading.
+    warnings: list[str] = []
+    sem = semantic.build(skill_name, prose, declared)
+    if sem is not None:
+        validate_pack(sem.pack)
+        return CompileResult(pack=sem.pack, name=skill_name,
+                             profile=profile.name, declared=declared,
+                             invocations=invocations, notes=sem.notes)
+
     if not invocations:
         warnings.append("no tool invocations extracted; goal is trivially "
                         "achievable (the skill demands no tool actions)")

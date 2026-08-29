@@ -74,6 +74,8 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
         for inv in res.invocations:
             note = "" if inv.raw.lower() == inv.tool else f"  [{inv.raw} -> {inv.tool}]"
             print(f"  line {inv.line:>4}: {inv.tool} ({inv.kind}){note}", file=file)
+    for n in res.notes:
+        print(f"read: {n}", file=file)
     for w in res.warnings:
         print(f"warning: {w}", file=file)
 
