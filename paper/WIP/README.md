@@ -2,15 +2,34 @@
 
 Working draft of the **deviation-layer paper**: the base skill-achievability
 discipline extended so that *the participant's compliance itself* is typed.
-Target shape: ECOOP research paper (to be reformatted to LIPIcs when the
-rules stabilize). **Not for submission** — grep for
+**Already in ECOOP shape**: LIPIcs class (`lipics-v2021`, `anonymous` option
+for double-blind), ECOOP front matter (CCS concepts, keywords, running
+title), and the conventional ECOOP structure (intro with contribution
+bullets, §2 overview with a running example, formal sections, metatheory,
+related work, conclusion). **Not for submission** — grep for
 `DO-NOT-SUBMIT-WHILE-THIS-LINE-EXISTS`.
 
 ## Files
 
-- `main.tex` — the full draft: instrumented semantics, mode-graded typing
-  rules, well-formedness conditions, theorem statements T1–T7 with proof
-  obligations, the stochastic-game semantic model, pre-registered predictions.
+- `main.tex` — the full draft: §2 running example (booking session with an
+  injectable fetcher), instrumented semantics, mode-graded typing rules,
+  well-formedness conditions, seven theorems with proof obligations, the
+  stochastic-game semantic model, pre-registered predictions.
+- `lipics-v2021.cls`, `lipics-logo-bw.pdf`, `orcid.pdf`, `cc-by.pdf` —
+  Dagstuhl's LIPIcs author class and assets (from
+  `dagstuhl-publishing/styles`, master), vendored so the paper builds
+  anywhere.
+
+## Before actual submission (mechanical checklist)
+
+- Drop the `anonymous` class option only for the camera-ready; fill real
+  authors, ORCIDs, funding, acknowledgements, `\EventEditors` etc.
+- Convert the inline `thebibliography` to `plainurl` + a `.bib` file
+  (LIPIcs requirement) and resolve every entry marked `[to verify]`.
+- Remove the `\thanks` draft banner, the `WIP:` boxes, and the
+  `DO-NOT-SUBMIT` marker; re-enable `\linenumbers` if the CFP asks.
+- Check the ECOOP CFP page limit (recent years: ~25 pp excluding
+  references) and the double-blind instructions of that year.
 
 ## Authority and division of labor
 
@@ -63,5 +82,6 @@ rules stabilize). **Not for submission** — grep for
 pdflatex main.tex && pdflatex main.tex
 ```
 
-Plain `article` class for now (same toolchain as `tas.tex`); port to
-`lipics-v2021` once rules stabilize.
+Requires the `libertine`, `newtx`, and `inconsolata` font packages
+(TeX Live: `texlive-fonts-extra`) in addition to the base toolchain used by
+`tas.tex`. The LIPIcs class and its assets are vendored in this directory.
