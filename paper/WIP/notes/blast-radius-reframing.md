@@ -144,8 +144,14 @@ They are a refinement of `sev`, not the paper's core.
 - **T-C** **typing soundness**: `[T-Choice-Safe]`-well-typed with budget `k`
   ⟹ every run with ≤ `k` misselections satisfies `□¬H`. Profile-independent.
 - **T-D** repair soundness + minimality.
-- **T-E** monotonicity: enlarging `Γ` cannot increase severity (more recovery
-  options); `k`-resilience is downward closed in `k`.
+- **T-E** ~~enlarging `Γ` cannot increase severity~~ **— REFUTED by the
+  mechanization.** Reachability is monotone in `Γ`, so hazard reachability is
+  too: adding tools opens new paths to the hazard as well as new recoveries.
+  Corrected and proved: `k`-resilience is **anti-monotone** in `Γ`
+  (`resilience_antitone_in_ctx`) — granting a capability can only lower the
+  resilience degree. This is the formal argument for least privilege, and is a
+  better result than the one predicted. `k`-resilience is downward closed in
+  `k` (`resilience_downward_closed`).
 - **T-F** characterization: a deviation is catastrophic iff it crosses a point
   of no return, computable by establisher closure.
 
@@ -181,3 +187,19 @@ Defensible claim: **a static, pre-execution severity analysis that classifies
 each possible wrong choice of an agent participant by whether it is survivable,
 and a typing discipline that admits every survivable mistake while making
 unsurvivable ones structurally unreachable.**
+
+
+---
+
+## Status update (after mechanization)
+
+`proof/Severity.v` mechanizes this design, axiom-free, for the finite fragment.
+Proved: **T-C soundness AND completeness** (`TC_sound`, `TC_complete`,
+`TC_exact` — the rule system is an *exact* characterization of k-bounded
+hazard-freedom, so a typing failure is a genuine risk), the severity partition,
+the catastrophe/untypability correspondence, budget downward-closure,
+Γ-antitonicity (correcting T-E above), narrowing-repair soundness, and the
+worked instance (0-resilient, not 1-resilient, repaired).
+
+Not yet mechanized: recursion (the finite fragment only), and repairs 1, 2, 4
+(guard, compensate, reorder).
