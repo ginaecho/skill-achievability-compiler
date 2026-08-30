@@ -1,0 +1,964 @@
+\documentclass[11pt]{article}
+
+% ============================================================================
+% WIP DRAFT — Typing the Unreliable Participant
+% Status: internal working draft for co-author markup. NOT FOR SUBMISSION.
+% Grep-able marker: DO-NOT-SUBMIT-WHILE-THIS-LINE-EXISTS
+%
+% Relationship to the rest of paper/:
+%   * paper/tas.tex is the AUTHORITATIVE statement of the BASE discipline's
+%     rules (T-Comm, T-Act, T-Goal, T-End; S-Comm, S-Act; G-*-E/I).  This file
+%     restates them verbatim in Section 2 and EXTENDS them; on any divergence
+%     in the base rules, tas.tex wins.
+%   * paper/skillachievability.tex is the current (NeurIPS-workshop-shaped)
+%     paper about the base discipline.  This file is a NEW paper: the base
+%     system plus a deviation layer (modes, taint, grades) for approximately
+%     compliant agent participants.
+% ============================================================================
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools}
+\usepackage{stmaryrd}
+\usepackage{mathpartir}
+\providecommand{\llbracket}{[\![}
+\providecommand{\rrbracket}{]\!]}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{titlesec}
+\usepackage{pifont}
+\usepackage[colorlinks=true]{hyperref}
+
+\definecolor{navy}{RGB}{31,58,95}
+\definecolor{steel}{RGB}{46,74,107}
+\definecolor{boxbg}{RGB}{243,244,246}
+\definecolor{amber}{RGB}{201,138,24}
+\definecolor{okgreen}{RGB}{34,120,80}
+\definecolor{badred}{RGB}{178,52,52}
+\hypersetup{linkcolor=navy,citecolor=navy,urlcolor=steel}
+
+\titleformat{\section}{\normalfont\large\bfseries\sffamily\color{navy}}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalfont\normalsize\bfseries\sffamily\color{steel}}{\thesubsection}{0.5em}{}
+\titlespacing*{\section}{0pt}{1.4ex plus .3ex}{0.7ex}
+\titlespacing*{\subsection}{0pt}{1.0ex plus .2ex}{0.5ex}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{example}{Example}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+\newtheorem{prediction}{Prediction}
+
+% ---------------------------------------------------------------- base macros
+% (identical to tas.tex / skillachievability.tex)
+\newcommand{\reach}{\rightsquigarrow}
+\newcommand{\reachs}{\reach^{*}}
+\newcommand{\CapS}{\mathsf{Cap}}
+\newcommand{\Pred}{\mathsf{Pred}}
+\newcommand{\Var}{\mathsf{Var}}
+\newcommand{\Lab}{\mathsf{Lab}}
+\newcommand{\pre}{\mathit{pre}}
+\newcommand{\eff}{\mathit{eff}}
+\newcommand{\Add}{\mathit{Add}}
+\newcommand{\Del}{\mathit{Del}}
+\newcommand{\Asg}{\mathit{Asg}}
+\newcommand{\Nd}{\mathit{Nd}}
+\newcommand{\apply}{\mathrm{apply}}
+\newcommand{\seither}{\mathrm{sp}}
+\newcommand{\dom}{\mathrm{dom}}
+\newcommand{\caps}{\mathsf{caps}}
+\newcommand{\goal}{\mathit{goal}}
+\newcommand{\gphi}{\varphi_{\mathit{goal}}}
+\newcommand{\achbox}{\vDash\Diamond}
+\newcommand{\id}[1]{\texttt{#1}}
+\newcommand{\coind}{\mathrel{::=^{\mathit{coind}}}}
+\newcommand{\MM}{\mathbb{M}}
+\newcommand{\ppar}{\;\|\;}
+\newcommand{\cp}[1]{\mathsf{cap}(#1)}
+\newcommand{\Pair}[2]{(#1;#2)}
+\newcommand{\prt}[1]{\mathsf{prt}(#1)}
+\newcommand{\set}[1]{\{#1\}}
+\newcommand{\End}{\mathsf{End}}
+
+% ------------------------------------------------------------- new macros (WIP)
+\newcommand{\MC}{\mathbb{M}_{\mathsf c}}                 % mode lattice
+\newcommand{\mok}{\mathsf{ok}}                          % aligned
+\newcommand{\mdr}{\mathsf{dr}}                          % drifted
+\newcommand{\down}{\mathord{\downarrow}}                % downgrade
+\newcommand{\up}{\mathord{\uparrow}}                    % attested raise
+\newcommand{\Menv}{M}                                   % mode environment
+\newcommand{\Denv}{d}                                   % grade environment
+\newcommand{\Taint}{T}                                  % taint set
+\newcommand{\Crit}{\mathsf{Crit}}                       % critical atoms
+\newcommand{\Irr}{\mathsf{Irr}}                         % irreversible caps
+\newcommand{\Att}{\mathsf{Att}}                         % attestation caps
+\newcommand{\Rfr}{\mathsf{Rfr}}                         % refresh caps
+\newcommand{\provv}{\mathsf{prov}}                      % provenance
+\newcommand{\pint}{\mathsf{int}}
+\newcommand{\pext}{\mathsf{ext}}
+\newcommand{\writes}[1]{\mathrm{wr}(#1)}                % written atoms/vars
+\newcommand{\supp}[1]{\mathrm{supp}(#1)}                % support of a formula
+\newcommand{\tick}[2]{#1{+}_{#2}1}                      % grade tick
+\newcommand{\Conf}[5]{\langle #1;\,#2;\,#3;\,#4;\,#5\rangle} % extended config
+\newcommand{\dev}[1]{\mathsf{dev}(#1)}                  % deviation label
+\newcommand{\eps}{\varepsilon}
+\newcommand{\Eprof}{\mathcal E}                         % compliance profile
+\newcommand{\val}{\mathrm{val}}
+\newcommand{\Dmax}{D}
+\newcommand{\achgr}[1]{\vDash\Diamond_{\ge #1}}         % graded diamond
+\newcommand{\obl}[1]{\par\noindent\textcolor{steel}{\small\textsf{Proof obligation.} #1}}
+
+\setlength{\parskip}{0.35ex}
+\setlength{\parindent}{1.2em}
+\newcommand {\IInfer} [5] [] {
+  \inferrule*[%
+    fraction={===},
+    left={\textsc{#2}},%
+    right={$\begin{array}{l} #5 \end{array}$}, %
+    vcenter,%
+    #1
+  ]%
+  {#3}{#4}}
+
+\newcommand{\draftnote}[1]{\par\noindent\fcolorbox{amber}{boxbg}{\parbox{0.97\linewidth}{\small\textsf{\textcolor{amber}{WIP:}} #1}}\par}
+
+\title{\bfseries Typing the Unreliable Participant:\\
+\large Modes, Taint, and Grades for Goal Achievability of\\ Approximately Compliant Agents\\[1ex]
+\normalsize\normalfont\textcolor{badred}{WORKING DRAFT --- rules for co-author markup --- not for submission}}
+\author{Anonymous Authors\thanks{Working draft on top of the skill-achievability
+discipline; base rules follow \texttt{paper/tas.tex}, which remains authoritative
+for Section~\ref{sec:base}.}}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Multiparty session types deliver their guarantees under a hypothesis so
+standard it is rarely stated: every participant runs code that was checked
+against its type. A large language model acting as a participant breaks the
+hypothesis --- it \emph{approximately} follows the behaviour it was given, and
+every classical theorem silently loses its precondition. We extend the
+goal-marked, capability-guarded session discipline of the skill-achievability
+compiler with a \emph{deviation layer} that types non-compliance itself. Three
+empirical phenomena are internalized as structure in the rules, with no
+probabilities in the type system: correlated errors become per-role
+\emph{compliance modes} on a three-point lattice, monotonically downgraded by
+observed deviations and propagated by \emph{taint} through received data;
+context-dependent degradation becomes a per-role \emph{grade} (steps since last
+re-grounding) with a checkpoint well-formedness condition on recursion;
+adversarial deviation (prompt injection) becomes a \emph{demonic bottom mode}
+with game semantics and a typed irreversibility guard. Numbers enter only
+through a \emph{compliance profile} --- the behavioural sibling of the
+capability context $\Gamma$ --- interpreted over a Markov-modulated stochastic
+game, against which the graded achievability judgment
+$\Diamond_{\ge p}\,\gphi$ is sound. Safety is unconditional; achievement is
+graded. We state the metatheory as seven theorems with explicit proof
+obligations, a mechanization plan that keeps the qualitative layer in Coq and
+the game-theoretic layer on paper, and three pre-registered falsifiable
+predictions that the rule structure makes about measured agent traces.
+\end{abstract}
+
+\draftnote{This draft fixes the \emph{shape} of the extension: syntax,
+instrumented reduction rules, typing rules, well-formedness conditions, theorem
+statements, and the semantic model. Proofs are stated as obligations, not
+discharged. Open design points are marked \textsf{WIP} inline; the largest is
+the quarantine rule \textsc{T-Quar} (Remark~\ref{rem:quar}). Base-rule notation
+follows \texttt{tas.tex} exactly; any conflict there is a bug in this file.}
+
+\section{Introduction}\label{sec:intro}
+
+Classical multiparty session types (MPST) guarantee communication safety,
+session fidelity, and deadlock-freedom for systems whose participants
+\emph{are} their local behaviour: the code was typed, the type is the
+behaviour, and every run is a compliant run. The guarantees are, in other
+words, universally quantified over compliant runs. An LLM agent occupying a
+role changes the quantifier: the agent was \emph{instructed} with its
+behaviour, not compiled from it, and compliance is now a property a run may or
+may not have. Testing observes runs; typing quantifies over all of them ---
+but over all of \emph{which} runs, when the participant only approximately
+follows the type?
+
+The nearest formal answers each miss the phenomenon. Probabilistic session
+types put probability on the internal \emph{choices} of compliant
+processes~\cite{aman-ciobanu,inverso-concur20,prob-refinement,das-hoffmann};
+the dice are rolled exactly where the type permits. Crash-stop and affine
+disciplines~\cite{barwell-ecoop22,fowler-popl19} model participants that
+\emph{stop}; an LLM more often keeps going, wrongly. Runtime monitoring
+restores safety at the boundary~\cite{bocchi-forte13} but says nothing about
+whether the goal of the session is still \emph{achievable} once a participant
+has begun to drift. And none of these confront the three facts every measured
+agent trace exhibits:
+
+\begin{enumerate}
+\item \textbf{Correlation.} Errors are not i.i.d.\ coin flips: one
+  misunderstanding corrupts the remainder of the run. Deviations cluster.
+\item \textbf{Context-dependence.} Deviation rates grow with the distance from
+  the last re-grounding: depth of recursion, length of accumulated context.
+\item \textbf{Adversariality.} Prompt injection is not a coin flip at all; an
+  injected participant is best modelled as an adversary, not a noisy channel.
+\end{enumerate}
+
+A model that assumes ``each step deviates independently with probability
+$\eps$'' is therefore a model of a machine that does not exist, and any
+theorem proved about it inherits the fiction. Our design principle is to
+internalize each phenomenon as \emph{structure in the typing rules} while
+keeping all numbers out of them: probabilities live only in the semantic
+model, as parameters. The rules carry \emph{modes}, \emph{taint}, and
+\emph{grades}.
+
+\paragraph{Contributions.}
+\begin{itemize}
+\item[\textbf{C1}] A deviation-instrumented operational semantics for the
+  goal-marked session calculus of the skill-achievability discipline
+  (Section~\ref{sec:base} recaps the base system): configurations carry a mode
+  environment, a grade environment, and a taint set; deviant steps are blocked
+  stutters that downgrade modes (Section~\ref{sec:semantics}).
+\item[\textbf{C2}] A mode-graded type system in which compliance modes descend
+  a three-point lattice by evidence and ascend only by attestation; received
+  data propagates taint; goal markers $\checkmark\varphi$ double as taint
+  sanitizers; a demonic bottom mode types injected participants against
+  arbitrary behaviour; and an irreversibility rule forbids critical effects on
+  tainted data (Section~\ref{sec:typing}).
+\item[\textbf{C3}] A checkpoint well-formedness condition on recursion, with a
+  bounded-degradation theorem and its negative converse: uncheckpointed loops
+  admit no nontrivial achievability bound (Section~\ref{sec:meta}).
+\item[\textbf{C4}] A semantic model --- a Markov-modulated stochastic game
+  parameterized by a \emph{compliance profile} $\Eprof$, the behavioural
+  sibling of $\Gamma$ --- and a graded achievability judgment
+  $\Diamond_{\ge p}\gphi$ sound with respect to the game value
+  (Section~\ref{sec:model}).
+\item[\textbf{C5}] A metatheory of seven theorems with explicit proof
+  obligations and a mechanization plan (qualitative layer in Coq,
+  game-theoretic layer on paper), plus three pre-registered falsifiable
+  predictions the rule structure makes about measured agent traces
+  (Sections~\ref{sec:meta}--\ref{sec:predictions}).
+\end{itemize}
+
+Conservativity anchors the design (Proposition~\ref{prop:conserv}): with all
+modes $\mok$, empty taint, and a zero deviation profile, every rule collapses
+to its base counterpart and every base theorem is preserved. The deviation
+layer is a product construction over the base discipline, not a rewrite of it.
+
+\section{The Base Discipline in Sixty Seconds}\label{sec:base}
+
+We recap the skill-achievability discipline; \texttt{tas.tex} is authoritative
+for this section. Disjoint sets: predicates $p\in\Pred$, numeric variables
+$x\in\Var$, roles $\mathsf p,\mathsf q,\mathsf r$, capability names
+$a\in\CapS$, labels $\ell\in\Lab$. The state logic $\mathcal L$ is
+quantifier-free linear integer arithmetic with uninterpreted boolean
+predicates. A world $W=\langle B,N\rangle$ valuates predicates and variables.
+A capability context maps each possessed tool to a guarded STRIPS effect,
+$\Gamma(a)=\langle\pre_a,\eff_a\rangle$ with
+$\eff_a=\langle\Add_a,\Del_a,\Asg_a,\Nd_a\rangle$;
+$a\notin\dom(\Gamma)$ means the tool does not exist for this agent.
+
+Processes and global types are coinductive regular trees:
+\[
+\begin{array}{c}
+P \;\coind\; \mathbf{0}
+  \ \mid\ \mathsf{p}!\{\ell_i.\,P_i\}_{i\in I}
+  \ \mid\ \mathsf{p}?\{\ell_i.\,P_i\}_{i\in I}
+  \ \mid\ a.\,P
+\\[4pt]
+G \;\coind\; \mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}
+  \ \mid\ a@\mathsf{p}.\,G
+  \ \mid\ \checkmark\varphi.\,G
+  \ \mid\ \End
+\end{array}
+\]
+A session $\MM=\mathsf p_1[P_1]\ppar\cdots\ppar\mathsf p_n[P_n]$ reduces as a
+configuration $\Pair\MM W$; only capabilities touch the world
+(\textsc{World-Act}: $\langle W\rangle\,a\,\langle W'\rangle$ when
+$W\vDash\pre_a$ and $W'\in\apply(\eff_a,W)$). The session LTS has two rules:
+\begin{mathpar}
+\inferrule[S-Comm]{k\in I\subseteq J}
+  {\Pair{\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}] \ppar
+   \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}] \ppar \MM} W
+   \;\xrightarrow{\ \mathsf p\,\ell_k\,\mathsf q\ }\;
+   \Pair{\mathsf p[P_k]\ppar\mathsf q[Q_k]\ppar\MM} W}
+\and
+\inferrule[S-Act]{\langle W\rangle\;a\;\langle W'\rangle}
+  {\Pair{\mathsf p[a.P]\ppar\MM} W
+   \;\xrightarrow{\ a@\mathsf p\ }\;
+   \Pair{\mathsf p[P]\ppar\MM}{W'}}
+\end{mathpar}
+Global types have head rules \textsc{G-Comm-E}/\textsc{G-Act-E}/%
+\textsc{G-Goal-E} and interleaving rules \textsc{G-Comm-I}/\textsc{G-Act-I}/%
+\textsc{G-Goal-F} over $(G,W)\reach_{\!\Lambda}(G',W')$; achievability is
+existential may-reachability of a goal-satisfying configuration,
+$\Gamma;G\achbox_{\mathit{init}}\gphi$. The whole session is typed
+\emph{directly} against $G$ --- no local types, no projection, no separate
+subtyping --- by the coinductive judgment $G\vdash\Pair\MM W$ with the four
+rules \textsc{T-End}, \textsc{T-Act}, \textsc{T-Goal}, \textsc{T-Comm}, each
+carrying a participant-matching side condition ($\prt G$ against $\prt\MM$),
+receiver slack $I\subseteq J$ inside \textsc{T-Comm}, and plain-merge
+discipline via the shared-residual premise. The top rule \textsc{Ach} combines
+no-hallucinated-capabilities, conformance, and reachability. Subject reduction
+and session fidelity connect the two labelled systems.
+
+Everything above presumes each $\mathsf p[P]$ \emph{executes} $P$. The rest of
+this paper removes that presumption.
+
+\section{Deviation: Extended Packs and Instrumented Semantics}\label{sec:semantics}
+
+\subsection{What a deviation is}\label{sec:taxonomy}
+
+The monitored deployment (the gate of the compiler's runtime) observes each
+role at the message-and-capability boundary; it does not observe reasoning.
+Relative to a declared behaviour, an agent step can misbehave in exactly these
+observable ways:
+
+\begin{center}
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+class & attempted move & detected by & effect when gated\\
+\midrule
+$\delta_{\mathsf{lab}}$ & send a label outside the enabled branch set & gate (EFSM) & blocked stutter\\
+$\delta_{\mathsf{ord}}$ & send/receive not enabled at the current node & gate (EFSM) & blocked stutter\\
+$\delta_{\mathsf{cap}}$ & fire $a$ not enabled here, or with $W\nvDash\pre_a$ & gate ($\Gamma$, $W$) & blocked stutter\\
+$\delta_{\mathsf{pay}}$ & effect outside its declared $\Nd$ envelope & only later, by $\checkmark\varphi$ & \emph{latent}: taint\\
+$\delta_{\mathsf{sil}}$ & no move (abandonment/timeout) & scheduler & stutter, downgrade\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The first three and the last are caught at the boundary and become
+\emph{blocked stutters}; only $\delta_{\mathsf{pay}}$ is latent, which is
+exactly why taint exists: data whose validity the gate could not decide at
+write time is remembered as suspect until a $\checkmark\varphi$ check
+discharges it.
+
+\subsection{Extended packs}\label{sec:packs}
+
+A \emph{deviation-aware pack} extends the base pack
+$\langle\Gamma,G,\gphi,W_0\rangle$ with declarations that are all checkable at
+the schema gate:
+\[
+\mathcal P \;=\; \langle\,\Gamma,\ G,\ \gphi,\ W_0,\ \Crit,\ \provv,\ \Att,\ \Rfr\,\rangle
+\]
+\begin{itemize}
+\item $\Crit\subseteq\Pred$: \emph{critical atoms}. A capability is
+  \emph{irreversible}, $a\in\Irr$, iff $\Del_a\cap\Crit\neq\emptyset$ or $a$
+  carries a declared external-write flag.
+\item $\provv:\dom(\Gamma)\to\set{\pint,\pext}$: \emph{provenance}. An
+  $\pext$ capability's writes carry data originating outside the session
+  (web fetch, file read, tool output).
+\item $\Att\subseteq\dom(\Gamma)$: \emph{attestation capabilities} (human
+  sign-off, test execution). Well-formedness \textsc{WF-Att}:
+  $\Att\cap\Irr=\emptyset$ and $\provv(a)=\pint$ for $a\in\Att$. An
+  attestation names the role it vouches for; we write $a^{\up\mathsf q}$.
+\item $\Rfr\subseteq\dom(\Gamma)$: \emph{refresh capabilities}
+  (re-read the spec, compact the context). They have empty world effect
+  ($\eff_a$ is the identity) and exist to reset grades.
+\end{itemize}
+
+\subsection{Modes, grades, taint}\label{sec:envs}
+
+\begin{definition}[Compliance lattice]\label{def:lattice}
+$\MC=\set{\mok\sqsupset\mdr\sqsupset\bot}$: \emph{aligned}, \emph{drifted},
+\emph{compromised}. Downgrade $\down(\mok)=\mdr$, $\down(\mdr)=\bot$,
+$\down(\bot)=\bot$; attested raise $\up(\bot)=\mdr$, $\up(\mdr)=\mok$,
+$\up(\mok)=\mok$. Meet $\sqcap$ is the lattice meet.
+\end{definition}
+
+\begin{definition}[Extended configuration]\label{def:conf}
+$K=\Conf{\MM}{W}{\Menv}{\Denv}{\Taint}$ where
+$\Menv:\prt G\to\MC$ is the \emph{mode environment} (distinct from the
+session $\MM$), $\Denv:\prt G\to\set{0,\dots,\Dmax,\infty}$ the \emph{grade
+environment} (steps since last re-grounding, saturating at the cap $\Dmax$ ---
+the same one-point widening move the base checker uses for numerics), and
+$\Taint\subseteq\Pred\cup\Var$ the \emph{taint set} (state written under
+suspicion). Initially $\Menv_0\equiv\mok$, $\Denv_0\equiv 0$,
+$\Taint_0=\emptyset$.
+\end{definition}
+
+Grade ticks are written $\Denv'=\tick{\Denv}{\mathsf p}$ (increment
+$\Denv(\mathsf p)$, saturating). $\writes a=\Add_a\cup\Del_a\cup\dom(\Asg_a)\cup\dom(\Nd_a)$
+is the write set of a capability; $\supp\varphi$ the atoms and variables a
+formula mentions.
+
+\subsection{Instrumented reduction rules}\label{sec:ilts}
+
+The instrumented LTS refines the base LTS: every base transition has a
+\emph{compliant} instrumented form that additionally updates
+$\Menv,\Denv,\Taint$, and new \emph{deviant} transitions represent the
+gate-visible misbehaviours of Section~\ref{sec:taxonomy}. Contamination is a
+semantic bookkeeping rule of the monitor, not a typing fiction: the monitor
+\emph{knows} the sender's mode when it delivers a message.
+
+\begin{mathpar}
+\inferrule[I-Comm]{k\in I\subseteq J \\ \Menv(\mathsf p)\neq\bot \\ \Menv(\mathsf q)\neq\bot \\
+  \Menv'=\Menv[\mathsf q\mapsto \Menv(\mathsf q)\sqcap \Menv(\mathsf p)]\ \text{if}\ \Menv(\mathsf p)\sqsubseteq\mdr,\ \text{else}\ \Menv}
+  {\Conf{\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}] \ppar
+   \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}] \ppar \MM}{W}{\Menv}{\Denv}{\Taint}
+   \xrightarrow{\ \mathsf p\,\ell_k\,\mathsf q\ }
+   \Conf{\mathsf p[P_k]\ppar\mathsf q[Q_k]\ppar\MM}{W}{\Menv'}{\tick{\tick{\Denv}{\mathsf p}}{\mathsf q}}{\Taint}}
+\and
+\inferrule[I-Act]{\langle W\rangle\;a\;\langle W'\rangle \\ \Menv(\mathsf p)\neq\bot \\
+  a\in\Irr \implies \supp{\pre_a}\cap\Taint=\emptyset \wedge \Menv(\mathsf p)\sqsupseteq\mdr \\
+  \Taint'=\Taint\cup\writes a\ \text{if}\ \Menv(\mathsf p)\sqsubseteq\mdr \vee \provv(a)=\pext,\ \text{else}\ \Taint}
+  {\Conf{\mathsf p[a.P]\ppar\MM}{W}{\Menv}{\Denv}{\Taint}
+   \xrightarrow{\ a@\mathsf p\ }
+   \Conf{\mathsf p[P]\ppar\MM}{W'}{\Menv}{\tick{\Denv}{\mathsf p}}{\Taint'}}
+\and
+\inferrule[I-Refresh]{a\in\Rfr \\ \langle W\rangle\;a\;\langle W\rangle}
+  {\Conf{\mathsf p[a.P]\ppar\MM}{W}{\Menv}{\Denv}{\Taint}
+   \xrightarrow{\ a@\mathsf p\ }
+   \Conf{\mathsf p[P]\ppar\MM}{W}{\Menv}{\Denv[\mathsf p\mapsto 0]}{\Taint}}
+\and
+\inferrule[I-Att]{a\in\Att \\ \Menv(\mathsf p)=\mok \\ \langle W\rangle\;a\;\langle W'\rangle \\ \supp{\pre_a}\cap\Taint=\emptyset}
+  {\Conf{\mathsf p[a^{\up\mathsf q}.P]\ppar\MM}{W}{\Menv}{\Denv}{\Taint}
+   \xrightarrow{\ a@\mathsf p\ }
+   \Conf{\mathsf p[P]\ppar\MM}{W'}{\Menv[\mathsf q\mapsto\up(\Menv(\mathsf q))]}{\tick{\Denv}{\mathsf p}}{\Taint}}
+\and
+\inferrule[I-Dev]{\alpha\ \text{attempted by}\ \mathsf p\ \text{not enabled in}\ K\quad
+  (\text{classes}\ \delta_{\mathsf{lab}},\delta_{\mathsf{ord}},\delta_{\mathsf{cap}},\delta_{\mathsf{sil}})}
+  {K=\Conf{\MM}{W}{\Menv}{\Denv}{\Taint}
+   \xrightarrow{\ \dev{\mathsf p}\ }
+   \Conf{\MM}{W}{\Menv[\mathsf p\mapsto\down(\Menv(\mathsf p))]}{\tick{\Denv}{\mathsf p}}{\Taint}}
+\and
+\inferrule[I-Quar]{\Menv(\mathsf p)=\bot \\ \alpha\ \text{attempted by}\ \mathsf p}
+  {K \xrightarrow{\ \dev{\mathsf p}\ } K
+   \quad(\text{every move of a $\bot$-role is refused; only its
+   attestation/escalation path remains})}
+\end{mathpar}
+
+Three points deserve emphasis. First, \textsc{I-Dev} is a \emph{stutter}: the
+blocked message ``is never delivered, never advances anyone's state, and never
+becomes context for another agent'' --- the session and world are untouched;
+only the monitor's own state (mode, grade) records the event. Second, the
+irreversibility premise of \textsc{I-Act} is the operational form of
+authorization-before-irreversible: an $\Irr$ capability cannot fire on tainted
+support nor from a role below $\mdr$, \emph{no matter what the agent attempts}.
+Third, $\delta_{\mathsf{pay}}$ has no rule of its own: a payload deviation
+\emph{is} an ordinary \textsc{I-Act} whose $\Nd$ outcome the gate cannot
+audit --- that is precisely why its writes enter $\Taint$ when the writer is
+degraded or the source external, and why only $\checkmark\varphi$ can remove
+them (Section~\ref{sec:typing}).
+
+On the type side, deviations are invisible by design: the global type does not
+change under a stutter. The extended global configuration is
+$(G,W,\Menv,\Denv,\Taint)$; each base rule
+\textsc{G-Comm-E}/\textsc{G-Act-E}/\textsc{G-Goal-E} and each interleaving rule
+lifts pointwise with the same $\Menv/\Denv/\Taint$ updates as its
+\textsc{I-}counterpart, plus one new rule mirroring \textsc{I-Dev}:
+\begin{mathpar}
+\inferrule[G-Dev]{\mathsf p\in\prt G}
+  {(G,W,\Menv,\Denv,\Taint)\reach_{\!\dev{\mathsf p}}
+   (G,W,\Menv[\mathsf p\mapsto\down(\Menv(\mathsf p))],\tick{\Denv}{\mathsf p},\Taint)}
+\and
+\inferrule[G-Goal-San]{W\vDash\varphi \\ \supp\varphi\ \text{decided in}\ W}
+  {(\checkmark\varphi.\,G,W,\Menv,\Denv,\Taint)\reach_{\!\checkmark\varphi}
+   (G,W,\Menv,\Denv,\Taint\setminus\supp\varphi)}
+\end{mathpar}
+\textsc{G-Goal-San} refines \textsc{G-Goal-E}: discharging a goal marker whose
+formula the trusted monitor evaluates against the world \emph{sanitizes} the
+atoms it checked. The marker keeps its base role in achievability unchanged;
+sanitization is the second job.
+
+\section{The Mode-Graded Type System}\label{sec:typing}
+
+The judgment extends direct conformance with the three environments:
+\[
+G\vdash\Conf{\MM}{W}{\Menv}{\Denv}{\Taint}
+\]
+read: ``$G$ types session $\MM$ from world $W$ under modes $\Menv$, grades
+$\Denv$, taint $\Taint$.''
+It is coinductive, like the base judgment; the mode and grade components range
+over finite sets, so the extension preserves regularity (finitely many
+distinct judgment ``states'' per node of $G$).
+
+\subsection{Communication under downgrade and contamination}
+
+\begin{mathpar}
+\IInfer{T-Comm-M}
+ {\forall i\in I\subseteq J.\ \ G_i\vdash\Conf{\mathsf p[P_i]\ppar\mathsf q[Q_i]\ppar\MM}{W}{\Menv\rhd(\mathsf p,\mathsf q)}{\tick{\tick{\Denv}{\mathsf p}}{\mathsf q}}{\Taint} \\
+  G^{\circ}\vdash\Conf{\MM^{\circ}}{W}{\Menv[\mathsf p\mapsto\down(\Menv(\mathsf p))]}{\tick{\Denv}{\mathsf p}}{\Taint} \\
+  \Menv(\mathsf p)\neq\bot \quad \Menv(\mathsf q)\neq\bot \quad
+  \prt{\mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}}=\prt\MM\cup\set{\mathsf{p},\mathsf{q}}}
+ {\mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}\vdash
+  \Conf{\mathsf p[\mathsf q!\{\ell_i.P_i\}_{i\in I}] \ppar
+  \mathsf q[\mathsf p?\{\ell_j.Q_j\}_{j\in J}] \ppar \MM}{W}{\Menv}{\Denv}{\Taint}}{}{}
+\end{mathpar}
+where the \emph{contamination update} is
+\[
+\Menv\rhd(\mathsf p,\mathsf q)\;=\;
+\begin{cases}
+\Menv[\mathsf q\mapsto \Menv(\mathsf q)\sqcap\Menv(\mathsf p)] & \text{if }\Menv(\mathsf p)\sqsubseteq\mdr\\
+\Menv & \text{otherwise}
+\end{cases}
+\]
+and $(G^{\circ},\MM^{\circ})$ abbreviates \emph{the same node}: the second
+premise is the \emph{downgrade-closure} premise --- the configuration must
+remain typable at this node after a blocked deviation by the sender
+(\textsc{I-Dev} stutters, so type and session are unchanged; only $\Menv$
+drops). Because $\down$ strictly descends a three-point lattice, the closure
+premise unfolds at most twice per role before reaching $\bot$, where
+\textsc{T-Quar} takes over; typability remains decidable on the regular tree.
+
+The base rule's content is intact: sender offers exactly $I$, receiver may
+accept more ($I\subseteq J$), all branches check against the same bystanders
+$\MM$ (plain merge), and the participant-matching condition is verbatim. What
+is new is that \emph{who you last listened to} is part of the typing state:
+receiving from a drifted sender drags the receiver to $\mdr$ --- unless the
+protocol validates first, which is the whole point of placing
+$\checkmark\varphi$ nodes after untrusted exchanges.
+
+\subsection{Actions, grades, refresh}
+
+\begin{mathpar}
+\IInfer{T-Act-M}
+ {\exists W'.\ \langle W\rangle\,a\,\langle W'\rangle \\
+  \forall W'.\ \langle W\rangle\,a\,\langle W'\rangle \implies
+    G\vdash\Conf{\mathsf p[P]\ppar\MM}{W'}{\Menv}{\tick{\Denv}{\mathsf p}}{\Taint\oplus_a\Menv} \\
+  G^{\circ}\vdash\Conf{\MM^{\circ}}{W}{\Menv[\mathsf p\mapsto\down(\Menv(\mathsf p))]}{\tick{\Denv}{\mathsf p}}{\Taint} \\
+  \Menv(\mathsf p)\neq\bot \quad
+  a\in\Irr \implies \supp{\pre_a}\cap\Taint=\emptyset \wedge \Menv(\mathsf p)\sqsupseteq\mdr \quad
+  \prt G\cup\set{\mathsf p}=\prt\MM\cup\set{\mathsf p}}
+ {a@\mathsf p.\,G\vdash\Conf{\mathsf p[a.P]\ppar\MM}{W}{\Menv}{\Denv}{\Taint}}{}{}
+\end{mathpar}
+with the \emph{taint update}
+\[
+\Taint\oplus_a\Menv\;=\;
+\begin{cases}
+\Taint\cup\writes a & \text{if }\Menv(\mathsf p)\sqsubseteq\mdr\ \vee\ \provv(a)=\pext\\
+\Taint & \text{otherwise.}
+\end{cases}
+\]
+The base rule's existential/universal pairing over $\Nd$ successors is
+verbatim. The side condition marked $a\in\Irr$ is \textsc{T-Irreversible} as a
+premise: an irreversible capability types only on untainted support and only
+from a role at $\mdr$ or better. Note what this rules out statically: a
+protocol in which web-fetched data can reach the guard of a destructive tool
+without passing a $\checkmark\varphi$ node has \emph{no typing derivation} ---
+the compiler refutes it before any agent runs, with the refutation naming the
+untainted-support obligation that fails.
+
+\begin{mathpar}
+\IInfer{T-Refresh}
+ {a\in\Rfr \\ G\vdash\Conf{\mathsf p[P]\ppar\MM}{W}{\Menv}{\Denv[\mathsf p\mapsto 0]}{\Taint} \\
+  \prt G\cup\set{\mathsf p}=\prt\MM\cup\set{\mathsf p}}
+ {a@\mathsf p.\,G\vdash\Conf{\mathsf p[a.P]\ppar\MM}{W}{\Menv}{\Denv}{\Taint}}{}{}
+\and
+\IInfer{T-Att}
+ {a\in\Att \\ \Menv(\mathsf p)=\mok \\ \supp{\pre_a}\cap\Taint=\emptyset \\
+  \forall W'.\ \langle W\rangle\,a\,\langle W'\rangle \implies
+  G\vdash\Conf{\mathsf p[P]\ppar\MM}{W'}{\Menv[\mathsf q\mapsto\up(\Menv(\mathsf q))]}{\tick{\Denv}{\mathsf p}}{\Taint} \\
+  \prt G\cup\set{\mathsf p}=\prt\MM\cup\set{\mathsf p}}
+ {a^{\up\mathsf q}@\mathsf p.\,G\vdash\Conf{\mathsf p[a.P]\ppar\MM}{W}{\Menv}{\Denv}{\Taint}}{}{}
+\end{mathpar}
+Modes go down by evidence (\textsc{T-Comm-M}'s closure premise, \textsc{G-Dev});
+they go up \emph{only} through \textsc{T-Att}, whose own preconditions are
+strict: the attester must itself be $\mok$, and the attestation evidence must
+be untainted. That asymmetry --- cheap descent, expensive ascent --- is the
+design. Data validation and mode restoration are deliberately different rules:
+$\checkmark\varphi$ cleans \emph{data} (below); only attestation restores
+\emph{trust in a role}.
+
+\subsection{Goal markers as sanitizers}
+
+\begin{mathpar}
+\IInfer{T-Goal-San}
+ {G\vdash\Conf{\MM}{W}{\Menv}{\Denv}{\Taint\setminus\supp\varphi} \\
+  W\vDash\varphi \\ \supp\varphi\ \text{decided in}\ W \\ \prt G=\prt\MM}
+ {\checkmark\varphi.\,G\vdash\Conf{\MM}{W}{\Menv}{\Denv}{\Taint}}{}{}
+\end{mathpar}
+This is base \textsc{T-Goal} plus the taint discharge: a check the trusted
+monitor can actually decide against the world clears the atoms it inspected.
+$\checkmark\varphi$ thus has two jobs --- goal credit (unchanged) and
+sanitization --- and the protocol author controls \emph{where} trust is
+re-established by where markers are placed.
+
+\subsection{The demonic bottom}
+
+\begin{mathpar}
+\IInfer{T-Quar}
+ {\Menv(\mathsf p)=\bot \\
+  G\downharpoonright_{\mathsf p}\ \vdash\ \Conf{\MM}{W}{\Menv}{\Denv}{\Taint} \\
+  \forall a\in\Irr\ \text{with}\ a@\mathsf p\in\cp G:\ \text{unreachable in}\ G\downharpoonright_{\mathsf p}\ \text{before}\ \up}
+ {G\vdash\Conf{\mathsf p[P]\ppar\MM}{W}{\Menv}{\Denv}{\Taint}}{}{}
+\end{mathpar}
+
+\begin{remark}[Open design point: the quarantine residual]\label{rem:quar}
+\textsf{WIP.} $G\downharpoonright_{\mathsf p}$ is the \emph{quarantine
+residual} of $G$: the protocol with every interaction of $\mathsf p$ replaced
+by its declared escalation branch (crash-handling style), pending either an
+attestation $a^{\up\mathsf p}$ or $\End$. Two candidate formulations exist:
+(a) require every choice node involving $\mathsf p$ to carry an explicit
+escalation branch (syntactic; heavier protocols; trivially sound), or
+(b) define $\downharpoonright$ as a partial function whose undefinedness
+refutes achievability with a new reason code
+(\textsc{Unquarantinable\_Role}), in the spirit of undefined merge. We lean
+(b) --- it matches the discipline's refutation asymmetry --- but the co-author
+should rule. The demonic quantification itself needs no rule beyond
+\textsc{I-Quar}: at $\bot$ every attempted move is refused, so ``typed against
+arbitrary behaviour'' means the residual system must be typable with
+$\mathsf p$ contributing nothing but its escalation path.
+\end{remark}
+
+\subsection{Well-formedness}
+
+\begin{definition}[Checkpointed recursion]\label{def:wf-loop}
+\textsc{WF-Loop}: a global type $G$ (a regular tree) is \emph{checkpointed}
+iff every cycle of $G$ contains at least one $\checkmark\varphi$ node or one
+$a@\mathsf p$ with $a\in\Rfr$. A per-role refinement (every role active in the
+cycle is refreshed or validated in it) is strictly stronger; we state theorems
+for the basic condition and note where the refinement tightens constants.
+\end{definition}
+
+\begin{definition}[Attestation sanity]\label{def:wf-att}
+\textsc{WF-Att}: $\Att\cap\Irr=\emptyset$; $\provv(a)=\pint$ for all
+$a\in\Att$; every $a^{\up\mathsf q}$ occurrence in $G$ is preceded on every
+path by a $\checkmark\varphi$ whose support covers the evidence atoms of
+$\pre_a$.
+\end{definition}
+
+Both conditions are decidable on the regular tree by the same cycle analysis
+the base checker already performs for loop saturation.
+
+\subsection{The graded achievability judgment}
+
+Safety is unconditional; achievement is graded. The top rule refines
+\textsc{Ach}: conformance is checked once, qualitatively; the quantitative
+bound comes from the semantic model of Section~\ref{sec:model}.
+\begin{mathpar}
+\IInfer{Ach-M}
+ {\caps(G)\subseteq\dom(\Gamma) \\
+  \exists W_0\vDash\mathit{init}.\ \
+  G\vdash\Conf{\mathsf p_1[S_{\mathsf p_1}]\ppar\cdots\ppar\mathsf p_n[S_{\mathsf p_n}]}{W_0}{\Menv_0}{\Denv_0}{\emptyset}
+  \ \wedge\ \val_{\Eprof}(G,W_0)\ \ge\ p}
+ {\Gamma;\Eprof\vdash\{S_{\mathsf p}\}_{\mathsf p}\ :\ G\ \triangleright\ \Diamond_{\ge p}\,\gphi}{}{}
+\end{mathpar}
+The base judgment is the $p$-erasure: dropping the value premise and the three
+environments recovers \textsc{Ach} exactly. The verdict vocabulary refines
+accordingly: \textsc{Impossible} (no derivation; a proof, as before),
+\textsc{Achievable}$_{\ge p}$ (derivation plus bound), \textsc{Unknown}
+(abstention, as before).
+
+\section{The Semantic Model: a Markov-Modulated Stochastic Game}\label{sec:model}
+
+Numbers enter here and only here.
+
+\begin{definition}[Compliance profile]\label{def:profile}
+A \emph{compliance profile} is
+$\Eprof=\langle\eps,\ \kappa,\ \Dmax\rangle$ where
+$\eps:(\MC\setminus\set\bot)\times\set{0,\dots,\Dmax}\to[0,1]$ gives the
+per-step deviation probability of a role in mode $m$ at grade $d$, monotone
+in $d$ and antitone in $m$ ($\eps(\mok,d)\le\eps(\mdr,d)$ pointwise is
+\emph{not} required --- drifted roles deviate more:
+$\eps(\mok,d)\le\eps(\mdr,d)$); $\kappa$ is a kernel distributing a deviation
+over the classes of Section~\ref{sec:taxonomy}; and $\Dmax$ the grade cap.
+$\bot$ has no $\eps$: compromised roles are not stochastic.
+\end{definition}
+
+$\Eprof$ is the behavioural sibling of $\Gamma$: the capability context says
+what an agent \emph{can} do, the compliance profile what it \emph{will} do.
+Both are pack inputs; neither appears in any typing rule. Profiles are
+\emph{calibrated from measured traces} per model and task family
+(Section~\ref{sec:predictions}), and a profile may be an interval
+(upper/lower $\eps$), in which case all bounds below hold for the pessimistic
+end --- the imprecise-probability reading.
+
+\begin{definition}[The game $\mathcal G(\mathcal P,\Eprof)$]\label{def:game}
+States are extended global configurations $(G,W,\Menv,\Denv,\Taint)$ plus a
+scheduling component. Three players move:
+\begin{itemize}
+\item the \emph{orchestrator} (angelic) resolves scheduling and internal
+  choice among enabled compliant moves --- the existential $\Diamond$ of the
+  base discipline;
+\item \emph{nature} (probabilistic): a scheduled role $\mathsf p$ with
+  $\Menv(\mathsf p)\neq\bot$ follows the protocol with probability
+  $1-\eps(\Menv(\mathsf p),\Denv(\mathsf p))$ and otherwise emits a deviation
+  drawn from $\kappa$, which steps by \textsc{I-Dev} (blocked stutter,
+  downgrade) or, for $\delta_{\mathsf{pay}}$, perturbs an $\Nd$ outcome within
+  the gate-invisible envelope;
+\item the \emph{adversary} (demonic) controls every role at $\bot$: it
+  chooses that role's attempted moves arbitrarily, forever.
+\end{itemize}
+Transitions are exactly the instrumented rules of Section~\ref{sec:ilts}. The
+\emph{value} $\val_{\Eprof}(G,W_0)$ is the supremum over orchestrator
+strategies of the infimum over adversary strategies of the probability of
+reaching a goal-satisfying configuration.
+\end{definition}
+
+Because modes modulate $\eps$ and modes change by history, the stochastic
+process seen by any fixed strategy pair is Markov-modulated, not i.i.d.:
+after a first deviation the process runs at the $\mdr$ rate, which is the
+formal content of ``deviations cluster.'' With no $\bot$-reachable states the
+game degenerates to an MDP; with $\eps\equiv 0$ and $\Menv_0\equiv\mok$ it
+degenerates to the base transition system.
+
+\begin{proposition}[Conservativity]\label{prop:conserv}
+If $\Menv_0\equiv\mok$, $\Taint_0=\emptyset$, no capability has
+$\provv=\pext$, and $\eps\equiv 0$, then (i) every instrumented rule agrees
+with its base counterpart on the reachable fragment, (ii)
+$G\vdash\Conf{\MM}{W}{\Menv_0}{\Denv_0}{\emptyset}$ iff $G\vdash\Pair\MM W$,
+and (iii) $\val_{\Eprof}(G,W_0)\in\set{0,1}$ with value $1$ iff
+$\Gamma;(G,W_0)\achbox\gphi$.
+\end{proposition}
+\obl{(i) and (ii) by rule-by-rule inspection (the closure premise is vacuous
+at $\eps\equiv0$ only in the semantics; in the typing it must be discharged
+--- see Remark~\ref{rem:closure-cost}); (iii) by determinacy of reachability
+games. Mechanizable alongside T1.}
+
+\begin{remark}[Cost of the closure premise]\label{rem:closure-cost}
+\textsf{WIP.} Even at $\eps\equiv0$, \textsc{T-Comm-M}/\textsc{T-Act-M} demand
+typability under downgraded modes --- the static discipline insists the
+protocol \emph{could} survive a deviation even if the profile says none
+occurs. This is a deliberate strictness (profiles are estimates; the type
+system should not trust them), but it means conservativity holds for the
+judgment only up to the closure obligations. Alternative: make the closure
+premise conditional on a pack-level flag. Co-author call.
+\end{remark}
+
+\section{Metatheory}\label{sec:meta}
+
+Notation: T$n$ numbers are for this paper; they do not collide with the base
+paper's theorems. Each statement carries its proof obligation and its intended
+home (Coq vs.\ paper proof). Nothing below is discharged yet.
+
+\begin{theorem}[T1: Instrumented subject reduction]\label{thm:isr}
+If $G\vdash K$ and $K\xrightarrow{\Lambda}K'$ by any instrumented rule, then
+$(G,W,\Menv,\Denv,\Taint)\reach_{\!\Lambda}(G',W',\Menv',\Denv',\Taint')$ and
+$G'\vdash K'$. In particular a $\dev{\mathsf p}$ step preserves the type at the
+downgraded mode.
+\end{theorem}
+\obl{Extends the base subject-reduction proof (coinduction on typing, cases on
+the reduction rule); the deviant cases are new but easy --- \textsc{I-Dev} is a
+stutter matched by \textsc{G-Dev}, and the closure premise of
+\textsc{T-Comm-M}/\textsc{T-Act-M} is exactly what makes the downgraded
+configuration typable. Coq target, on top of the (to-be-extended)
+multi-branch mechanization. Session fidelity extends symmetrically.}
+
+\begin{theorem}[T2: Quarantine non-interference]\label{thm:noninterf}
+For every run of the instrumented semantics from a typable initial
+configuration, under \emph{every} behaviour of every $\bot$-role: no $a\in\Irr$
+fires in a state where $\supp{\pre_a}\cap\Taint\neq\emptyset$, and no $a\in\Irr$
+is fired by a role below $\mdr$.
+\end{theorem}
+\obl{Invariant argument over the instrumented LTS: the \textsc{I-Act}
+irreversibility premise is preserved by every rule; the demonic quantification
+is handled by \textsc{I-Quar} (all $\bot$ moves refused). This is the paper's
+headline safety theorem --- ``authorization-before-irreversible'' as a typed
+guarantee, covering prompt injection without modelling the attacker. Coq
+target; expected to be the easiest of the majors.}
+
+\begin{theorem}[T3: Mode monotonicity]\label{thm:modes}
+(i) Along any run, $\Menv(\mathsf p)$ decreases except across
+\textsc{I-Att} steps naming $\mathsf p$. (ii) Typability is closed under
+downgrade above $\bot$: if $G\vdash\Conf{\MM}{W}{\Menv}{\Denv}{\Taint}$ and
+$\Menv'\sqsubseteq\Menv$ pointwise with $\Menv'(\mathsf p)\neq\bot$ wherever
+used by a non-\textsc{T-Quar} rule, then
+$G\vdash\Conf{\MM}{W}{\Menv'}{\Denv}{\Taint}$. (iii) The graded value is
+monotone: $\Menv'\sqsubseteq\Menv$ implies
+$\val_{\Eprof}\le$ at $\Menv$ dominates $\val_{\Eprof}$ at $\Menv'$.
+\end{theorem}
+\obl{(i) by rule inspection; (ii) by coinduction, using that every premise is
+antitone in $\Menv$; (iii) by strategy transfer in the game. (i)--(ii) Coq;
+(iii) paper. This is the quantitative sibling of the base capability-monotonicity
+theorem, and the continuity argument for reviewers.}
+
+\begin{theorem}[T4: Graded soundness]\label{thm:graded}
+If $\Gamma;\Eprof\vdash\{S_{\mathsf p}\}:G\triangleright\Diamond_{\ge p}\gphi$
+then in $\mathcal G(\mathcal P,\Eprof)$ there is an orchestrator strategy
+achieving, against every adversary, goal probability at least $p$; moreover
+every run of that strategy satisfies the T2 safety invariant.
+\end{theorem}
+\obl{Soundness of the bound reduces to correctness of the value computation
+(T6) plus T1/T2; the interesting content is that conformance (qualitative)
+and value (quantitative) compose --- the typed strategy space is nonempty and
+the value is computed over exactly the typed moves. Paper proof.}
+
+\begin{theorem}[T5: Bounded degradation, and its converse]\label{thm:checkpoint}
+Let $G$ satisfy \textsc{WF-Loop} and let every cycle contain a sanitizing
+$\checkmark\varphi$ or refresh for each role it exercises (the per-role
+refinement). Then there is a bound $p^{*}>0$, independent of run length,
+with $\val_{\Eprof}(G,W_0)\ge p^{*}$ whenever the loop-free skeleton achieves
+the goal with positive probability. Conversely, if some cycle of $G$ exercises
+a role with neither refresh nor validation, and $\eps(m,\cdot)$ is strictly
+increasing and bounded away from $0$ at the cap $\Dmax$, then for the family
+$G^{(k)}$ of $k$-th unrollings, $\val_{\Eprof}(G^{(k)},W_0)\to 0$ as
+$k\to\infty$: no graded judgment certifies a nontrivial bound uniformly in
+horizon.
+\end{theorem}
+\obl{Positive direction: between consecutive checkpoints the grade is bounded
+by the cycle length, so per-cycle success probability is bounded below by a
+constant; a renewal argument (checkpoints as regeneration points of the
+modulated chain) gives horizon-independence. Negative direction: the grade
+saturates at $\Dmax$, per-step survival is at most $1-\eps(m,\Dmax)<1$, and
+failures accumulate geometrically. Paper proof; the renewal argument is the
+technically substantive step. This is the theorem that \emph{explains}
+long-horizon agent decay and prescribes the structural fix.}
+
+\begin{theorem}[T6: Decidability and complexity]\label{thm:complexity}
+For finite $\Pred$, finite-range $\Nd$ abstraction (the base checker's widened
+fragment), and a regular $G$: the state space of
+$\mathcal G(\mathcal P,\Eprof)$ has size
+$O\!\big(2^{|\Pred|}\cdot|\MC|^{n}\cdot(\Dmax+2)^{n}\cdot|G|\big)$ for $n$
+roles; the value of the simple stochastic game is computable, membership in
+$\mathrm{NP}\cap\mathrm{coNP}$ for the decision problem
+$\val\ge p$; and with no $\pext$ capability and no $\bot$-reachable state the
+game is an MDP whose value is computable in time polynomial in the (product)
+state space.
+\end{theorem}
+\obl{State-space bound by construction; SSG results are classical (Condon;
+Shapley) and imported, not re-proved; the MDP collapse by inspection of the
+player partition. Paper proof. This finally places a complexity statement in
+the discipline; the empirical scaling study must show real skills sit far from
+the $2^{|\Pred|}$ cliff.}
+
+\begin{theorem}[T7: Undecidability boundary, inherited]\label{thm:undec}
+Exact graded achievability (no widening, unbounded numerics) is undecidable;
+under dynamic topology it remains undecidable. The deviation layer does not
+restore decidability: the base reductions embed via
+Proposition~\ref{prop:conserv}.
+\end{theorem}
+\obl{Immediate from the base results once those proofs are written out fully
+(a known repair obligation in the base paper); the embedding is
+Proposition~\ref{prop:conserv}. Paper proof.}
+
+\paragraph{Mechanization plan.}
+Coq: T1, T2, T3(i--ii), Proposition~\ref{prop:conserv}(i--ii), on top of the
+extended multi-branch base mechanization; all axiom-free, CI-pinned, with the
+same \texttt{Print Assumptions} harness discipline as the base development.
+Paper: T3(iii), T4, T5, T6, T7, importing classical SSG/MDP results by
+citation. We will not claim mechanized probability, and the paper will say so
+in one sentence rather than blur the line.
+
+\section{Falsifiable Predictions and Evaluation Plan}\label{sec:predictions}
+
+Each mechanism makes a prediction that measured traces can refute. We
+pre-register them here; the evaluation runs real agents (strong and weak
+models) against monitors compiled from corpus and real-skill protocols,
+logging deviation events per class of Section~\ref{sec:taxonomy}, with
+$n\ge30$ runs per cell and bootstrap confidence intervals.
+
+\begin{prediction}[Modes: clustering]\label{pred:cluster}
+Deviation events cluster: a trace's post-first-deviation rate exceeds its
+pre-first-deviation rate. Test: fit i.i.d.\ vs.\ Markov-modulated deviation
+models to the trace corpus; likelihood-ratio test. Refutation of modulation
+refutes the mode structure (and simplifies the system --- we would report
+that).
+\end{prediction}
+
+\begin{prediction}[Grades: depth dependence and reset]\label{pred:depth}
+The hazard of a first deviation increases with steps since session start, and
+drops after a refresh action (context compaction / spec re-read). Test:
+survival analysis on the same traces, refresh as a covariate.
+\end{prediction}
+
+\begin{prediction}[Demonic bottom: injection is not noise]\label{pred:inject}
+Under a prompt-injection arm, (a) injected runs violate any $\eps$-bound
+calibrated on clean runs (the probabilistic layer alone is falsified exactly
+where it should be), and (b) across all injected runs, gated per T2, no
+$\Irr$ capability fires on tainted support --- zero occurrences, not a rate.
+Test: adversarial arm with seeded injections in $\pext$ payloads.
+\end{prediction}
+
+The calibration product is the compliance profile $\Eprof$ per model and task
+family, published with the artifact; a model-strength sweep bounds the ``our
+enforcement matters'' claim (strong models approach $\eps\to0$ on shallow
+tasks --- we will say so before a reviewer does). The predictive-validity
+experiment closes the loop: predicted $\Diamond_{\ge p}$ bounds from
+calibrated profiles against observed success rates, as a calibration plot.
+Either outcome is reportable; a divergence localized at long horizons would
+itself confirm Prediction~\ref{pred:depth}'s mechanism.
+
+\section{Related Work}\label{sec:related}
+
+\draftnote{Compressed here; the submission version engages each line in
+prose. The bibliography keys below are placeholders to be completed --- the
+base paper's known citation-key mis-resolution (\texttt{synthetic2023}/%
+\texttt{synthetic2026}) must be fixed before any of this text is reused.}
+
+\emph{Probabilistic session types} put probability on internal choices of
+compliant processes (binary probabilistic sessions~\cite{inverso-concur20,
+aman-ciobanu}; probabilistic refinement and resource-aware session
+types~\cite{prob-refinement,das-hoffmann}; interval-probability
+MPST~\cite{interval-mpst}). Our probability attaches to \emph{conformance},
+not choice; the type syntax stays qualitative. \emph{Failure-tolerant MPST}
+(crash-stop~\cite{barwell-ecoop22}, affine/exceptional~\cite{fowler-popl19})
+model participants that stop; deviation generalizes crash
+($\delta_{\mathsf{sil}}$ is one class among five). \emph{Monitoring}: the
+decentralized-monitor theorem~\cite{bocchi-forte13} restores safety at the
+boundary; our delta is goal achievability under deviation, plus taint and
+irreversibility. \emph{Information-flow session types}: the mode/taint layer
+descends directly from access- and information-flow control for
+sessions~\cite{capecchi-concur10}, redirected from confidentiality to trust in
+the participant itself. \emph{Synthetic MPST}~\cite{jongmans-ecoop23,
+castro-popl26}: we adopt the projection-free line; novelty weight sits on the
+world/goal/deviation layers, and the precision relationship (plain merge
+vs.\ full merge) is stated, not claimed away. \emph{LTL compliance monitoring
+of LLM agents}~\cite{trac-facct26,agentltl}: trace-level temporal properties
+with learned propositional abstraction and sampling-based predictive
+intervention; complementary on three axes --- multiparty vs.\ single-agent,
+deterministic pre-emission gating vs.\ predicted-violation intervention, and a
+deterministic trusted core vs.\ LLM labelers in the checking path. Their
+finding that violations concentrate in ordering/sequencing is independent
+evidence for the structural layer.
+
+\section{Honest Scoping}\label{sec:limits}
+
+(1) The mode lattice is three-point and the grade cap small by design; the
+state-space factor $|\MC|^{n}(\Dmax+2)^{n}$ is affordable for skill-sized
+protocols and must be shown affordable empirically, not asserted. (2) The
+$\kappa$ kernel and $\eps$ are estimates; all quantitative claims are
+conditional on the profile, which is why safety (T2) is deliberately
+profile-independent. (3) $\delta_{\mathsf{pay}}$ detection is only as strong
+as the $\checkmark\varphi$ nodes the author writes; an unvalidated latent
+corruption that never crosses an $\Irr$ guard is out of scope (it is also, by
+definition, never irreversible). (4) The quarantine residual
+(Remark~\ref{rem:quar}) is an open design point. (5) Mechanization covers the
+qualitative layer only. (6) Everything here presumes the gate architecture:
+an agent with un-gated side channels to the world voids T2's premise --- the
+theorem is about what the declared capability surface can do, which is exactly
+the base discipline's trust boundary.
+
+% ---------------------------------------------------------------------------
+\begin{thebibliography}{99}\small
+\bibitem{aman-ciobanu} B.~Aman, G.~Ciobanu. Probabilities in session types.
+  \emph{arXiv:1909.01748}, 2019.
+\bibitem{inverso-concur20} O.~Inverso, H.~Melgratti, L.~Padovani, C.~Tuosto.
+  Probabilistic analysis of binary sessions. \emph{CONCUR}, 2020.
+\bibitem{prob-refinement} Q.~Fu et al. Probabilistic refinement session types.
+  \emph{PACMPL (OOPSLA)}, 2025. \textsf{[key/venue to verify]}
+\bibitem{das-hoffmann} A.~Das, J.~Hoffmann. Probabilistic resource-aware
+  session types. \textsf{[venue/year to verify]}
+\bibitem{interval-mpst} B.~Aman, G.~Ciobanu. Safety of uncertain session types
+  with interval probability. \emph{Symmetry} 17(2), 2025. \textsf{[authors to verify]}
+\bibitem{barwell-ecoop22} A.~Barwell, A.~Scalas, N.~Yoshida. Generalised
+  multiparty session types with crash-stop failures. \emph{ECOOP}, 2022.
+\bibitem{fowler-popl19} S.~Fowler, S.~Lindley, J.~G.~Morris, S.~Fern\'andez
+  Reyes. Exceptional asynchronous session types. \emph{POPL}, 2019.
+\bibitem{bocchi-forte13} L.~Bocchi, T.-C.~Chen, R.~Demangeon, K.~Honda,
+  N.~Yoshida. Monitoring networks through multiparty session types.
+  \emph{FORTE} 2013; journal version \emph{TCS}, 2017.
+\bibitem{capecchi-concur10} S.~Capecchi, I.~Castellani,
+  M.~Dezani-Ciancaglini, T.~Rezk. Session types for access and information
+  flow control. \emph{CONCUR}, 2010.
+\bibitem{jongmans-ecoop23} S.-S.~Jongmans, F.~Ferreira. Synthetic behavioural
+  typing. \emph{ECOOP}, 2023. \textsf{[title to verify]}
+\bibitem{castro-popl26} D.~Castro-Perez, F.~Ferreira, S.-S.~Jongmans.
+  \emph{POPL}, 2026. \textsf{[title to verify]}
+\bibitem{trac-facct26} P.~A.~Alamdari, T.~Q.~Klassen, S.~A.~McIlraith. Formal
+  methods meet LLMs: auditing, monitoring, and intervention for compliance of
+  advanced AI systems. \emph{FAccT}, 2026.
+\bibitem{agentltl} AgentLTL: a trace-verification framework for procedural
+  compliance in tool-using LLM agents. \emph{arXiv:2607.02599}.
+  \textsf{[authors to verify]}
+\bibitem{condon} A.~Condon. The complexity of stochastic games.
+  \emph{Information and Computation}, 1992.
+\end{thebibliography}
+
+\end{document}
