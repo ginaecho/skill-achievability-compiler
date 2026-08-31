@@ -147,7 +147,7 @@ def test_check_local_skill_with_mcp_tools(monkeypatch, capsys):
     monkeypatch.setattr("skillc.mcp.discover_tools", lambda command, args: [
         {"name": "send_email_v2"}])
     rc = main(["check", str(FIXTURES / "hallucinated-mailer/SKILL.md"),
-               "--profile", "none", "--mcp-command", "python",
+               "--profile", "claude-code", "--mcp-command", "python",
                "--mcp-arg", "server.py", "--mcp-tools"])
     assert rc == 0
     assert "ACHIEVABLE" in capsys.readouterr().out
