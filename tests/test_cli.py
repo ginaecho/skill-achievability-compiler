@@ -1,7 +1,9 @@
+import base64
 import json
 from pathlib import Path
 
 from skillc.cli import main
+from skillc.mcp import MCPResourceError, decode_resource
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -44,6 +46,36 @@ def test_check_a_compiled_pack_json(tmp_path, capsys):
           "--profile", "claude-code", "-o", str(out), "-q"])
     rc = main(["check", str(out)])
     assert rc == 0
+
+
+def test_decode_mcp_fact_pack_text_and_blob():
+    pack = {"name": "remote", "capabilities": {}, "protocol": [], "goal": True}
+    payload = json.dumps(pack)
+    assert decode_resource({"contents": [{"text": payload}]}) == pack
+    encoded = base64.b64encode(payload.encode()).decode()
+    assert decode_resource({"contents": [{"blob": encoded}]}) == pack
+
+
+def test_decode_mcp_fact_pack_rejects_multiple_items():
+    import pytest
+
+    with pytest.raises(MCPResourceError, match="exactly one item"):
+        decode_resource({"contents": [{"text": "{}"}, {"text": "{}"}]})
+
+
+def test_check_mcp_fact_pack(monkeypatch, capsys):
+    pack = {"name": "remote", "capabilities": {}, "protocol": [], "goal": True}
+
+    def fake_load(command, args, uri):
+        assert (command, args, uri) == (
+            "python", ["server.py"], "skillc://packs/remote")
+        return pack
+
+    monkeypatch.setattr("skillc.mcp.load_pack", fake_load)
+    rc = main(["check", "skillc://packs/remote", "--mcp-command", "python",
+               "--mcp-arg", "server.py"])
+    assert rc == 0
+    assert capsys.readouterr().out == "remote: ACHIEVABLE\n"
 
 
 def test_scan_directory_json(capsys):

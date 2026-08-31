@@ -7,6 +7,7 @@
   skillc cost    FILE|DIR [--llm] [--json]                token economics of checking
   skillc eval                                            corpus evaluation
   skillc profiles                                        list capability profiles
+    skillc hook pre-session [--request FILE|-]              host skill admission
 
 Exit codes: 0 achievable / all pass, 1 impossible / soundness violation,
 2 usage or input error, 3 unknown (an abstention: outside the decidable
@@ -24,12 +25,18 @@ from . import __version__
 from .checker import check
 from .evaluate import evaluate, format_report, load_corpus
 from .frontend.markdown import CompileResult, compile_file
+from .hooks import HookRequestError, run_pre_session_hook
 from .pack import Pack, PackError
 from .profiles import builtin_profiles, load_profile
 
 
-def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
-    """Return (pack, compile_result_or_None) for a .json pack or markdown."""
+def _load_result(source: str | Path, args) -> tuple[dict, CompileResult | None]:
+    """Return (pack, compile result) for a local file or MCP resource."""
+    if getattr(args, "mcp_command", None):
+        from .mcp import load_pack
+        return load_pack(args.mcp_command, args.mcp_arg or [], str(source)), None
+
+    path = Path(source)
     if path.suffix == ".json":
         return json.loads(path.read_text(encoding="utf-8")), None
     profile = load_profile(args.profile)
@@ -48,7 +55,7 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
 
 
 def cmd_compile(args) -> int:
-    pack, res = _load_result(Path(args.file), args)
+    pack, res = _load_result(args.file, args)
     out = json.dumps(pack, indent=2)
     if args.output:
         Path(args.output).write_text(out + "\n", encoding="utf-8")
@@ -81,7 +88,7 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
 
 
 def cmd_check(args) -> int:
-    pack, res = _load_result(Path(args.file), args)
+    pack, res = _load_result(args.file, args)
     v = check(pack, semantics="adversarial" if args.adversarial else "may")
     if args.json:
         out = v.to_dict()
@@ -310,6 +317,167 @@ def cmd_profiles(args) -> int:
     return 0
 
 
+def cmd_hook_pre_session(args) -> int:
+    """Run the versioned pre-session hook over a file or stdin request."""
+    if args.stdio or args.request == "-":
+        request = json.load(sys.stdin)
+    else:
+        request = json.loads(Path(args.request).read_text(encoding="utf-8"))
+    result = run_pre_session_hook(request)
+    output = json.dumps(result, indent=2) + "\n"
+    if args.output:
+        Path(args.output).write_text(output, encoding="utf-8")
+    else:
+        sys.stdout.write(output)
+    return 1 if result["decision"] == "block-session" else 0
+
+
+def cmd_hook_agent_session(args) -> int:
+    """Run preflight for one configured agent and emit host hook JSON."""
+    request = {
+        "schema": "skillc.hook.pre-session/1",
+        "runtime": {
+            "profile": "agent-frontmatter",
+            "capabilities": [],
+            "shell": True,
+        },
+        "skills": [{
+            "id": Path(args.agent).stem,
+            "path": args.agent,
+            "audit": False,
+        }],
+        "policy": {
+            "impossible": "block-session",
+            "unknown": "warn",
+            "auditError": "block-session",
+        },
+        "semantics": "may",
+    }
+    result = run_pre_session_hook(request)
+    if result["decision"] == "block-session":
+        messages = [
+            diagnostic["message"]
+            for skill in result["results"]
+            if skill["action"] == "block-session"
+            for diagnostic in skill["diagnostics"]
+        ]
+        response = {
+            "continue": False,
+            "stopReason": "skillc blocked this agent session: "
+                          + "; ".join(messages),
+        }
+        exit_code = 2
+    elif result["decision"] == "allow-with-warnings":
+        response = {
+            "continue": True,
+            "systemMessage": "skillc admitted this agent with warnings.",
+        }
+        exit_code = 0
+    else:
+        response = {"continue": True}
+        exit_code = 0
+    print(json.dumps(response, separators=(",", ":")))
+    return exit_code
+
+
+def cmd_doctor(args) -> int:
+    """Verify runtime dependencies and optional workspace integration."""
+    import platform
+    import shutil
+
+    import yaml
+    import z3
+
+    failures = []
+    print(f"skillc {__version__}")
+    print(f"python {platform.python_version()} ({sys.executable})")
+    print(f"pyyaml {yaml.__version__}")
+    print(f"z3 {z3.get_version_string()}")
+    executable = shutil.which("skillc")
+    print(f"command {executable or 'not on PATH'}")
+    if not executable:
+        failures.append("skillc executable is not on PATH")
+
+    if args.workspace:
+        from .integrate import (HOOK_MARKER, discover_agents, resolve_agents)
+
+        workspace = Path(args.workspace).resolve()
+        scripts = [
+            workspace / ".github/hooks/scripts/skillc-pre-session.ps1",
+            workspace / ".github/hooks/scripts/skillc-pre-session.sh",
+        ]
+        for script in scripts:
+            present = script.is_file()
+            print(f"adapter {script.relative_to(workspace).as_posix()}: "
+                  f"{'ok' if present else 'missing'}")
+            if not present:
+                failures.append(f"missing adapter: {script}")
+        agents = resolve_agents(workspace, args.agent or [])
+        if args.configured:
+            agents.extend(
+                agent for agent in discover_agents(workspace)
+                if HOOK_MARKER in agent.read_text(encoding="utf-8")
+                and agent not in agents
+            )
+        if args.configured and not agents:
+            failures.append("no agents have a skillc hook")
+        for agent in agents:
+            configured = HOOK_MARKER in agent.read_text(encoding="utf-8")
+            print(f"agent {agent.relative_to(workspace).as_posix()}: "
+                  f"{'configured' if configured else 'missing hook'}")
+            if not configured:
+                failures.append(f"agent is missing skillc hook: {agent}")
+                continue
+            result = run_pre_session_hook({
+                "schema": "skillc.hook.pre-session/1",
+                "runtime": {
+                    "profile": "agent-frontmatter",
+                    "capabilities": [],
+                    "shell": True,
+                },
+                "skills": [{
+                    "id": agent.stem,
+                    "path": str(agent),
+                    "audit": False,
+                }],
+                "policy": {
+                    "impossible": "block-session",
+                    "unknown": "warn",
+                    "auditError": "block-session",
+                },
+                "semantics": "may",
+            })
+            print(f"preflight {agent.name}: {result['decision']}")
+            if result["decision"] == "block-session":
+                failures.append(f"preflight blocks agent: {agent}")
+
+    if failures:
+        for failure in failures:
+            print(f"ERROR: {failure}", file=sys.stderr)
+        return 1
+    print("doctor: PASS")
+    return 0
+
+
+def cmd_integrate(args) -> int:
+    """Install scoped SessionStart hooks for selected workspace agents."""
+    from .integrate import (choose_agents, discover_agents, install_integration,
+                            resolve_agents)
+
+    workspace = Path(args.workspace).resolve()
+    if args.all:
+        selected = discover_agents(workspace)
+    elif args.agent:
+        selected = resolve_agents(workspace, args.agent)
+    else:
+        selected = choose_agents(discover_agents(workspace))
+    result = install_integration(workspace, selected)
+    print(f"installed shared adapters under {result.scripts[0].parent}")
+    for agent in result.agents:
+        print(f"enabled preflight: {agent.relative_to(workspace).as_posix()}")
+    return 0
+
+
 def _add_compile_opts(sp) -> None:
     sp.add_argument("--profile", default="claude-ai",
                     help="capability profile (built-in name or JSON path)")
@@ -328,6 +496,14 @@ def _add_compile_opts(sp) -> None:
                     help="additional granted runtime ability (repeatable)")
 
 
+def _add_mcp_opts(sp) -> None:
+    sp.add_argument("--mcp-command", metavar="COMMAND",
+                    help="read FILE as a fact-pack resource URI from this "
+                         "stdio MCP server command")
+    sp.add_argument("--mcp-arg", action="append", default=[], metavar="ARG",
+                    help="argument for the MCP server command (repeatable)")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="skillc",
                                  description="Skill Achievability Compiler")
@@ -339,6 +515,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("-o", "--output")
     sp.add_argument("-q", "--quiet", action="store_true")
     _add_compile_opts(sp)
+    _add_mcp_opts(sp)
     sp.set_defaults(fn=cmd_compile)
 
     sp = sub.add_parser("check", help="decide achievability of a pack or SKILL.md")
@@ -349,6 +526,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="require the goal under EVERY resolution of choices "
                          "marked external (must-achievability)")
     _add_compile_opts(sp)
+    _add_mcp_opts(sp)
     sp.set_defaults(fn=cmd_check)
 
     sp = sub.add_parser("scan", help="batch-check every skill under a directory")
@@ -395,11 +573,46 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)
 
+    sp = sub.add_parser("doctor", help="verify runtime and hook dependencies")
+    sp.add_argument("--workspace", help="workspace containing installed hooks")
+    sp.add_argument("--agent", action="append", metavar="NAME_OR_PATH",
+                    help="configured agent to verify; repeatable")
+    sp.add_argument("--configured", action="store_true",
+                    help="verify every agent already carrying a skillc hook")
+    sp.set_defaults(fn=cmd_doctor)
+
+    sp = sub.add_parser(
+        "integrate", help="add scoped pre-session hooks to existing agents")
+    sp.add_argument("--workspace", default=".",
+                    help="workspace root (default: current directory)")
+    sp.add_argument("--agent", action="append", metavar="NAME_OR_PATH",
+                    help="agent to configure; repeatable (prompts when omitted)")
+    sp.add_argument("--all", action="store_true",
+                    help="configure every agent under .github/agents")
+    sp.set_defaults(fn=cmd_integrate)
+
+    sp = sub.add_parser("hook", help="agent-host hook integrations")
+    hook_sub = sp.add_subparsers(dest="hook_cmd", required=True)
+    hp = hook_sub.add_parser(
+        "pre-session", help="admit or filter skills before creating a session")
+    hp.add_argument("--request", default="-", metavar="FILE",
+                    help="JSON request file; default '-' reads stdin")
+    hp.add_argument("--stdio", action="store_true",
+                    help="read one JSON request from stdin")
+    hp.add_argument("-o", "--output", help="write JSON response to this file")
+    hp.set_defaults(fn=cmd_hook_pre_session)
+
+    hp = hook_sub.add_parser(
+        "agent-session", help="run one configured agent's host hook")
+    hp.add_argument("--agent", required=True,
+                    help="path to the selected agent markdown")
+    hp.set_defaults(fn=cmd_hook_agent_session)
+
     args = ap.parse_args(argv)
     try:
         return args.fn(args)
-    except (PackError, KeyError, FileNotFoundError, json.JSONDecodeError,
-            RuntimeError) as e:
+    except (PackError, HookRequestError, KeyError, ValueError, FileNotFoundError,
+            json.JSONDecodeError, RuntimeError) as e:
         print(f"skillc: error: {e}", file=sys.stderr)
         return 2
 
