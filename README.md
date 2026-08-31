@@ -91,6 +91,57 @@ passed directly without a shell; starting the MCP server still executes that
 command locally, so only use servers you trust. Arguments beginning with `-`
 can be passed as `--mcp-arg=--flag`.
 
+### Infer facts from MCP tools
+
+When the MCP exposes tools but not a complete fact-pack resource, `skillc`
+can call paginated `tools/list` and use the advertised tools as the runtime
+capability context for a local skill:
+
+```console
+$ skillc check SKILL.md --profile none --mcp-command python \
+    --mcp-arg server.py --mcp-tools
+```
+
+For every tool declaration, invocation establishes the deterministic fact
+`used_<normalized-tool-name>`. A server can publish additional facts through
+its tool metadata:
+
+```json
+{
+  "name": "reserve",
+  "inputSchema": {"type": "object"},
+  "_meta": {
+    "skillc": {
+      "owner": "agent",
+      "pre": "catalog_searched",
+      "add": ["reserved"]
+    }
+  }
+}
+```
+
+Supported `skillc` fields are `owner`, `pre`, `add`, `del`, `assigns`, and
+`nondet`. Annotated `add` effects are combined with the universal usage fact.
+Inferred capabilities fill only absent entries: facts explicitly declared by
+the skill or pack always win. The merged pack passes through the normal schema
+gate and checker.
+
+Covered scenarios:
+
+| MCP surface | Skill input | Result |
+|---|---|---|
+| `resources/read` returns a complete pack | MCP resource URI | Validate and check the supplied pack |
+| `tools/list` advertises a referenced tool | Local `SKILL.md` | Grant and infer the tool capability |
+| `tools/list` includes `_meta.skillc` | Local markdown or JSON pack | Apply declared preconditions and effects |
+| `tools/list` is paginated | Local markdown or JSON pack | Consume every page before compilation |
+| Skill already declares tool facts | Local markdown or JSON pack | Preserve explicit facts |
+| Referenced tool is not advertised or declared | Local `SKILL.md` | Existing `MISSING_CAPABILITY` refutation |
+
+`tools/list` proves only that a tool is advertised and potentially callable.
+It does not prove service health, authorization, argument validity, or truthful
+effects. Without `_meta.skillc`, it also cannot infer domain goals or ordering;
+those continue to come from the skill or a complete fact pack.
+
 Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (outside
 the decidable fragment) — so `skillc check` can
 gate CI for skill repositories.

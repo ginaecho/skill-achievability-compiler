@@ -1,9 +1,11 @@
+import asyncio
 import base64
 import json
 from pathlib import Path
 
 from skillc.cli import main
-from skillc.mcp import MCPResourceError, decode_resource
+from skillc.mcp import (MCPResourceError, collect_tool_pages, decode_resource,
+                        decode_tools_page, enrich_pack, infer_capabilities)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -76,6 +78,89 @@ def test_check_mcp_fact_pack(monkeypatch, capsys):
                "--mcp-arg", "server.py"])
     assert rc == 0
     assert capsys.readouterr().out == "remote: ACHIEVABLE\n"
+
+
+def test_infer_capabilities_from_tools_list():
+    tools = [
+        {"name": "Search_Catalog", "inputSchema": {"type": "object"}},
+        {"name": "reserve", "_meta": {"skillc": {
+            "pre": "catalog_searched", "add": ["reserved"]}}},
+    ]
+    capabilities = infer_capabilities(tools)
+    assert capabilities["search_catalog"] == {
+        "owner": "agent", "add": ["used_search_catalog"]}
+    assert capabilities["reserve"] == {
+        "owner": "agent", "pre": "catalog_searched",
+        "add": ["reserved", "used_reserve"]}
+
+
+def test_enrich_pack_preserves_explicit_capability_facts():
+    pack = {"name": "remote", "capabilities": {
+        "search": {"owner": "agent", "add": ["explicit_fact"]}},
+        "protocol": [], "goal": True}
+    enriched = enrich_pack(pack, [{"name": "search"}, {"name": "reserve"}])
+    assert enriched["capabilities"]["search"]["add"] == ["explicit_fact"]
+    assert enriched["capabilities"]["reserve"]["add"] == ["used_reserve"]
+
+
+def test_enrich_pack_can_replace_generated_fallback_with_mcp_facts():
+    pack = {"name": "remote", "capabilities": {
+        "reserve": {"owner": "agent", "add": ["used_reserve"]}},
+        "protocol": [], "goal": True}
+    tools = [{"name": "reserve", "_meta": {"skillc": {"add": ["reserved"]}}}]
+    enriched = enrich_pack(pack, tools, replace={"reserve"})
+    assert enriched["capabilities"]["reserve"]["add"] == [
+        "reserved", "used_reserve"]
+
+
+def test_decode_tools_page_supports_sdk_cursor_alias():
+    assert decode_tools_page({"tools": [{"name": "a"}],
+                              "next_cursor": "page-2"}) == (
+        [{"name": "a"}], "page-2")
+
+
+def test_collect_tool_pages_consumes_every_page():
+    cursors = []
+
+    async def list_page(cursor):
+        cursors.append(cursor)
+        if cursor is None:
+            return {"tools": [{"name": "a"}], "nextCursor": "page-2"}
+        return {"tools": [{"name": "b"}]}
+
+    tools = asyncio.run(collect_tool_pages(list_page))
+    assert [tool["name"] for tool in tools] == ["a", "b"]
+    assert cursors == [None, "page-2"]
+
+
+def test_collect_tool_pages_rejects_cursor_cycle():
+    import pytest
+
+    async def list_page(cursor):
+        return {"tools": [], "nextCursor": "same"}
+
+    with pytest.raises(MCPResourceError, match="repeated cursor"):
+        asyncio.run(collect_tool_pages(list_page))
+
+
+def test_check_local_skill_with_mcp_tools(monkeypatch, capsys):
+    monkeypatch.setattr("skillc.mcp.discover_tools", lambda command, args: [
+        {"name": "send_email_v2"}])
+    rc = main(["check", str(FIXTURES / "hallucinated-mailer/SKILL.md"),
+               "--profile", "none", "--mcp-command", "python",
+               "--mcp-arg", "server.py", "--mcp-tools"])
+    assert rc == 0
+    assert "ACHIEVABLE" in capsys.readouterr().out
+
+
+def test_check_local_skill_with_absent_mcp_tool_stays_impossible(
+        monkeypatch, capsys):
+    monkeypatch.setattr("skillc.mcp.discover_tools", lambda command, args: [])
+    rc = main(["check", str(FIXTURES / "hallucinated-mailer/SKILL.md"),
+               "--profile", "none", "--mcp-command", "python",
+               "--mcp-tools"])
+    assert rc == 1
+    assert "MISSING_CAPABILITY" in capsys.readouterr().out
 
 
 def test_scan_directory_json(capsys):
