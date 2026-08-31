@@ -32,14 +32,25 @@ from .profiles import builtin_profiles, load_profile
 
 def _load_result(source: str | Path, args) -> tuple[dict, CompileResult | None]:
     """Return (pack, compile result) for a local file or MCP resource."""
-    if getattr(args, "mcp_command", None):
+    mcp_tools = None
+    if getattr(args, "mcp_tools", False):
+        from .mcp import discover_tools
+        mcp_tools = discover_tools(args.mcp_command, args.mcp_arg or [])
+    elif getattr(args, "mcp_command", None):
         from .mcp import load_pack
         return load_pack(args.mcp_command, args.mcp_arg or [], str(source)), None
 
     path = Path(source)
     if path.suffix == ".json":
-        return json.loads(path.read_text(encoding="utf-8")), None
+        pack = json.loads(path.read_text(encoding="utf-8"))
+        if mcp_tools is not None:
+            from .mcp import enrich_pack
+            pack = enrich_pack(pack, mcp_tools)
+        return pack, None
     profile = load_profile(args.profile)
+    if mcp_tools is not None:
+        from .mcp import tool_names
+        profile = profile.with_tools(tool_names(mcp_tools))
     if getattr(args, "tool", None):
         profile = profile.with_tools(args.tool)
     if getattr(args, "llm", False):
@@ -49,8 +60,19 @@ def _load_result(source: str | Path, args) -> tuple[dict, CompileResult | None]:
         pack = compact(path.read_text(encoding="utf-8"), model=args.model,
                        provider=args.llm_provider,
                        runtime_abilities=abilities or None)
+        if mcp_tools is not None:
+            from .mcp import enrich_pack
+            pack = enrich_pack(pack, mcp_tools)
         return pack, None
     res = compile_file(path, profile)
+    if mcp_tools is not None:
+        from .mcp import enrich_pack, tool_names
+        inferred_names = set(tool_names(mcp_tools))
+        generated = {
+            name for name, source_name in res.declared.items()
+            if name in inferred_names and source_name.startswith("profile:")
+        }
+        res.pack = enrich_pack(res.pack, mcp_tools, replace=generated)
     return res.pack, res
 
 
@@ -502,6 +524,9 @@ def _add_mcp_opts(sp) -> None:
                          "stdio MCP server command")
     sp.add_argument("--mcp-arg", action="append", default=[], metavar="ARG",
                     help="argument for the MCP server command (repeatable)")
+    sp.add_argument("--mcp-tools", action="store_true",
+                    help="compile local FILE using capabilities inferred from "
+                         "the server's paginated tools/list response")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -609,6 +634,8 @@ def main(argv: list[str] | None = None) -> int:
     hp.set_defaults(fn=cmd_hook_agent_session)
 
     args = ap.parse_args(argv)
+    if getattr(args, "mcp_tools", False) and not args.mcp_command:
+        ap.error("--mcp-tools requires --mcp-command")
     try:
         return args.fn(args)
     except (PackError, HookRequestError, KeyError, ValueError, FileNotFoundError,
