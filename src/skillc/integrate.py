@@ -196,6 +196,7 @@ def install_integration(workspace: Path, agents: Iterable[Path]) -> IntegrationR
     bash = scripts_dir / "skillc-pre-session.sh"
     powershell.write_text(POWERSHELL_HOOK, encoding="utf-8", newline="\n")
     bash.write_text(BASH_HOOK, encoding="utf-8", newline="\n")
+    bash.chmod(bash.stat().st_mode | 0o111)
     for path in selected:
         add_agent_hook(path, workspace)
     return IntegrationResult(workspace, selected, (powershell, bash))

@@ -1,4 +1,5 @@
 ﻿import json
+import os
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,8 @@ def test_install_writes_adapters_and_scoped_hook_idempotently(tmp_path):
     assert all(path.is_file() for path in result.scripts)
     assert "python3" not in result.scripts[1].read_text(encoding="utf-8")
     assert "hook agent-session" in result.scripts[1].read_text(encoding="utf-8")
+    if os.name != "nt":
+        assert result.scripts[1].stat().st_mode & 0o111
 
     assert not add_agent_hook(alpha, tmp_path)
     assert alpha.read_text(encoding="utf-8") == text
