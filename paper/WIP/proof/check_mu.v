@@ -11,3 +11,11 @@ Print Assumptions TC_regular.
 Print Assumptions bridge_finite_via_mu.
 Print Assumptions reach_msteps.
 Print Assumptions reach_mu_iff_run.
+Print Assumptions closed_hguard.
+Print Assumptions gd_unfold.
+Print Assumptions pre_unfold.
+Print Assumptions progress_mu.
+Print Assumptions ctypes_mu_var.
+Print Assumptions unguarded_var_stuck.
+Print Assumptions unguarded_goal_stuck.
+Print Assumptions contractiveness_is_necessary.

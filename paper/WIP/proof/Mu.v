@@ -354,6 +354,156 @@ Proof.
   simpl in Hcomp. unfold unfold_mu, close in *. simpl in *. exact Hcomp.
 Qed.
 
+
+(* ================================================================= *)
+(*  GUARDEDNESS (contractiveness), MECHANISED.                        *)
+(*                                                                     *)
+(*  ctypes is COinductive, so a non-contractive body such as mu X. X   *)
+(*  is typable and yet can never take a step.  Contractiveness is      *)
+(*  therefore not decoration: it is exactly what progress needs, and   *)
+(*  nothing else in this file needs it (the decision procedure does    *)
+(*  not, because the candidate set is finite by construction).         *)
+(*                                                                     *)
+(*  Only a communication or an action guards.  A goal marker does not: *)
+(*  hstep erases it rather than firing on it, so mu X. checkmark-phi;X *)
+(*  is as stuck as mu X. X.                                            *)
+Fixpoint hguard (d : nat) (G : Gr) : Prop :=
+  match G with
+  | RVar n     => n <> d
+  | RMu G0     => hguard (S d) G0
+  | RGoal _ G0 => hguard d G0
+  | _          => True
+  end.
+
+Fixpoint gd (G : Gr) : Prop :=
+  match G with
+  | REnd          => True
+  | RComm _ _ brs => fold_right (fun b acc => gd (snd b) /\ acc) True brs
+  | RAct _ _ G0   => gd G0
+  | RGoal _ G0    => gd G0
+  | RMu G0        => hguard 0 G0 /\ gd G0
+  | RVar _        => True
+  end.
+
+(* the prefix hstep must peel before it can fire *)
+Fixpoint pre (G : Gr) : nat :=
+  match G with RMu G0 => S (pre G0) | RGoal _ G0 => S (pre G0) | _ => 0 end.
+
+Lemma gd_brs : forall (brs : list (Lab * Gd * Gr)) l g Gl,
+  fold_right (fun b acc => gd (snd b) /\ acc) True brs ->
+  In (l, g, Gl) brs -> gd Gl.
+Proof.
+  induction brs as [ | b tl IH ]; simpl; intros l g Gl Hf Hin; [ contradiction | ].
+  destruct Hf as [Hb Htl]. destruct Hin as [Heq | Hin].
+  - subst b. simpl in Hb. exact Hb.
+  - eapply IH; eauto.
+Qed.
+
+Lemma gd_comm_iff : forall p q (brs : list (Lab * Gd * Gr)),
+  gd (RComm p q brs) <-> (forall l g Gl, In (l, g, Gl) brs -> gd Gl).
+Proof.
+  intros p q brs. simpl. split.
+  - intros Hf l g Gl Hin. eapply gd_brs; eauto.
+  - induction brs as [ | [[l g] Gl] tl IH ]; intro H; simpl.
+    + exact I.
+    + split.
+      * apply (H l g Gl). left. reflexivity.
+      * apply IH. intros l' g' Gl' Hin. apply (H l' g' Gl'). right. exact Hin.
+Qed.
+
+(* a closed term is guarded at every depth: its head variable, if any, is
+   bound inside it *)
+Lemma closed_hguard : forall G k d, closed_at k G -> k <= d -> hguard d G.
+Proof.
+  intros G. induction G as [ | p q brs IH | a p G0 IH | g G0 IH | G0 IH | n ] using Gr_ind2;
+    intros k d Hc Hle; simpl in *; try exact I.
+  - eapply IH; eauto.
+  - apply (IH (S k) (S d)); [ exact Hc | lia ].
+  - lia.
+Qed.
+
+Lemma hguard_subst : forall G d rho,
+  hguard d G -> nth d rho None = None ->
+  (forall n P, nth n rho None = Some P -> closed_at 0 P) ->
+  hguard d (subst rho G).
+Proof.
+  intros G. induction G as [ | p q brs IH | a p G0 IH | g G0 IH | G0 IH | n ] using Gr_ind2;
+    intros d rho Hg Hd HS; simpl in *; try exact I.
+  - eapply IH; eauto.
+  - apply (IH (S d) (None :: rho)); [ exact Hg | exact Hd | ].
+    intros m P. destruct m as [ | m ]; simpl; [ discriminate | apply HS ].
+  - destruct (nth n rho None) as [P | ] eqn:Hn.
+    + apply (closed_hguard P 0); [ eapply HS; eauto | lia ].
+    + simpl. exact Hg.
+Qed.
+
+Lemma gd_subst : forall G rho,
+  gd G -> (forall n P, nth n rho None = Some P -> gd P /\ closed_at 0 P) ->
+  gd (subst rho G).
+Proof.
+  intros G. induction G as [ | p q brs IH | a p G0 IH | g G0 IH | G0 IH | n ] using Gr_ind2;
+    intros rho Hg HS; simpl in *; try exact I.
+  - change (gd (RComm p q (map (fun b => (fst (fst b), snd (fst b), subst rho (snd b))) brs))).
+    apply gd_comm_iff. intros l g Gl Hin. apply in_map_iff in Hin.
+    destruct Hin as [[[l0 g0] Gl0] [Heq Hin0]]. simpl in Heq. inversion Heq; subst.
+    eapply IH; eauto. eapply gd_brs; [ exact Hg | exact Hin0 ].
+  - eapply IH; eauto.
+  - eapply IH; eauto.
+  - destruct Hg as [Hh Hb]. split.
+    + apply hguard_subst; [ exact Hh | reflexivity | ].
+      intros m P. destruct m as [ | m ]; simpl; [ discriminate | ].
+      intro HP. apply (HS m P HP).
+    + apply IH; [ exact Hb | ].
+      intros m P. destruct m as [ | m ]; simpl; [ discriminate | apply HS ].
+  - destruct (nth n rho None) as [P | ] eqn:Hn.
+    + apply (HS n P Hn).
+    + exact I.
+Qed.
+
+Lemma closed_unfold : forall G0, closed_at 0 (RMu G0) -> closed_at 0 (unfold_mu G0).
+Proof.
+  intros G0 Hc. simpl in Hc. unfold unfold_mu.
+  apply subst_closed_at with (D := 1); [ exact Hc | | ].
+  - intros n P Hn. destruct n as [ | n ]; simpl in Hn.
+    + inversion Hn; subst. exact Hc.
+    + destruct n; discriminate.
+  - intros n Hn Hnone. destruct n as [ | n ]; simpl in Hnone; [ discriminate | lia ].
+Qed.
+
+Lemma gd_unfold : forall G0,
+  gd (RMu G0) -> closed_at 0 (RMu G0) -> gd (unfold_mu G0).
+Proof.
+  intros G0 [Hh Hb] Hc. unfold unfold_mu. apply gd_subst; [ exact Hb | ].
+  intros n P Hn. destruct n as [ | n ]; simpl in Hn.
+  - inversion Hn; subst. split; [ split; assumption | exact Hc ].
+  - destruct n; discriminate.
+Qed.
+
+(* guarded unfolding does not lengthen the prefix, so it strictly
+   shortens the prefix of the mu-term it came from *)
+Lemma pre_subst : forall G d M,
+  hguard d G -> pre (subst (nones d ++ [Some M]) G) = pre G.
+Proof.
+  intros G. induction G as [ | p q brs IH | a p G0 IH | g G0 IH | G0 IH | n ] using Gr_ind2;
+    intros d M Hg; simpl in *; try reflexivity.
+  - f_equal. eapply IH; eauto.
+  - f_equal. exact (IH (S d) M Hg).
+  - rewrite nth_nones_app. destruct (n <? d) eqn:Hnd; [ reflexivity | ].
+    apply Nat.ltb_ge in Hnd.
+    destruct (n - d) as [ | m ] eqn:Hm; [ lia | ].
+    simpl. destruct m; reflexivity.
+Qed.
+
+Lemma pre_unfold_eq : forall G0, hguard 0 G0 -> pre (unfold_mu G0) = pre G0.
+Proof.
+  intros G0 Hg. unfold unfold_mu.
+  change [Some (RMu G0)] with (nones 0 ++ [Some (RMu G0)]).
+  apply (pre_subst G0 0 (RMu G0) Hg).
+Qed.
+
+Lemma pre_unfold : forall G0, hguard 0 G0 -> pre (unfold_mu G0) < pre (RMu G0).
+Proof. intros G0 Hg. simpl. rewrite (pre_unfold_eq G0 Hg). lia. Qed.
+
 (* ---- the candidate set: every closed subterm-with-context ---- *)
 Fixpoint cands (ctx : list Gr) (G : Gr) : list Gr :=
   close ctx G ::
@@ -597,6 +747,146 @@ Inductive hrun : Gr -> Ss -> Wd -> list (Role * nat) -> Gr -> Ss -> Wd -> Prop :
     hrun G s w ((r, c) :: tr) G' s' w'.
 
 Definition total (tr : list (Role * nat)) : nat := fold_right (fun rc acc => snd rc + acc) 0 tr.
+
+
+(* ================================================================= *)
+(*  PROGRESS for the recursive layer -- and it is exactly here that    *)
+(*  guardedness is needed.  ctypes is coinductive, so mu X. X and      *)
+(*  mu X. checkmark-phi; X are both typable and both permanently       *)
+(*  stuck; gd rules them out and nothing weaker does.                  *)
+Inductive Fin : Gr -> Prop :=
+| F_end  : Fin REnd
+| F_goal : forall g G, Fin G -> Fin (RGoal g G)
+| F_mu   : forall G0, Fin (unfold_mu G0) -> Fin (RMu G0).
+
+Lemma progress_head : forall G s w,
+  (forall (g0 : Gd) (w0 : Wd), sat g0 w0 \/ ~ sat g0 w0) ->
+  ctypes G s w -> pre G = 0 -> closed_at 0 G -> ~ Fin G ->
+  exists G' s' w' r c, hstep G s w G' s' w' r c.
+Proof.
+  intros G s w Hdec Ht Hpre Hc Hf.
+  destruct G as [ | p q brs | a p G0 | g G0 | G0 | n ]; simpl in Hpre; try discriminate.
+  - exfalso. apply Hf. apply F_end.
+  - (* communication: the branch set is non-empty and every label is
+       covered on both sides, so some branch fires -- compliantly if its
+       guard holds at w, as a misselection if it does not *)
+    inversion Ht as [ | | | p' q' brs' s' w' sendb recvb Hpq Hout Hin Hnil
+                        Hcov1 Hcov2 Hcov3 Hbr | ]; subst.
+    destruct brs as [ | [[l g] Gl] tl ]; [ exfalso; apply Hnil; reflexivity | ].
+    assert (Hin0 : In (l, g, Gl) ((l, g, Gl) :: tl)) by (left; reflexivity).
+    destruct (Hcov1 l g Gl Hin0) as [P HP].
+    destruct (Hcov3 l g Gl Hin0) as [Q HQ].
+    destruct (Hdec g w) as [Hs | Hs].
+    + exists Gl, (supd (supd s p P) q Q), w, p, 0.
+      eapply H_Comm_ok; eauto.
+    + exists Gl, (supd (supd s p P) q Q), w, p, 1.
+      eapply H_Comm_dev; eauto.
+  - (* action: CT_Act records that the capability is enabled here *)
+    inversion Ht as [ | | a' p' G' s' w' P Hunf Hex Hnext | | ]; subst.
+    destruct Hex as [w' HE].
+    exists G0, (supd s p P), w', p, 0. eapply H_Act; eauto.
+  - exfalso. simpl in Hc. lia.
+Qed.
+
+Lemma progress_bound : forall n G s w,
+  (forall (g0 : Gd) (w0 : Wd), sat g0 w0 \/ ~ sat g0 w0) ->
+  pre G <= n -> ctypes G s w -> gd G -> closed_at 0 G -> ~ Fin G ->
+  exists G' s' w' r c, hstep G s w G' s' w' r c.
+Proof.
+  induction n as [ | n IHn ]; intros G s w Hdec Hle Ht Hg Hc Hf.
+  - apply progress_head; auto. lia.
+  - destruct G as [ | p q brs | a p G0 | g G0 | G0 | m ];
+      try (apply progress_head; auto; reflexivity).
+    + (* goal marker: erased, so the body must move *)
+      inversion Ht as [ | g' G' s' w' Hsat Hbody | | | ]; subst.
+      simpl in Hle, Hg, Hc.
+      destruct (IHn G0 s w Hdec ltac:(lia) Hbody Hg Hc
+                    ltac:(intro HF; apply Hf; apply F_goal; exact HF))
+        as [G' [s' [w' [r [c Hst]]]]].
+      exists G', s', w', r, c. apply H_Goal. exact Hst.
+    + (* recursion: guardedness makes the unfolded prefix strictly shorter *)
+      inversion Ht as [ | | | | G' s' w' Hunf ]; subst.
+      assert (Hgu : gd (unfold_mu G0)) by (apply gd_unfold; assumption).
+      assert (Hcu : closed_at 0 (unfold_mu G0)) by (apply closed_unfold; assumption).
+      assert (Hlt : pre (unfold_mu G0) = pre G0)
+        by (apply pre_unfold_eq; apply (proj1 Hg)).
+      destruct (IHn (unfold_mu G0) s w Hdec ltac:(simpl in Hle; lia) Hunf Hgu Hcu
+                    ltac:(intro HF; apply Hf; apply F_mu; exact HF))
+        as [G' [s' [w' [r [c Hst]]]]].
+      exists G', s', w', r, c. apply H_Mu. exact Hst.
+Qed.
+
+(* A guarded, closed, conforming recursive protocol that has not finished
+   can always take a step.  Without gd this is FALSE: ctypes is
+   coinductive, so ctypes (RMu (RVar 0)) s w holds for every s and w
+   while hstep (RMu (RVar 0)) has no derivation at all. *)
+Theorem progress_mu :
+  (forall (g0 : Gd) (w0 : Wd), sat g0 w0 \/ ~ sat g0 w0) ->
+  forall G s w, ctypes G s w -> gd G -> closed_at 0 G -> ~ Fin G ->
+  exists G' s' w' r c, hstep G s w G' s' w' r c.
+Proof.
+  intros Hdec G s w Ht Hg Hc Hf.
+  eapply progress_bound with (n := pre G); eauto.
+Qed.
+
+(* the two witnesses that guardedness is not decoration *)
+Lemma unguarded_var_stuck : forall s w G' s' w' r c,
+  ~ hstep (RMu (RVar 0)) s w G' s' w' r c.
+Proof.
+  intros s w G' s' w' r c H.
+  remember (RMu (RVar 0)) as X eqn:EX. revert EX.
+  induction H; intro EX; try discriminate.
+  apply IHhstep. inversion EX; subst. reflexivity.
+Qed.
+
+(* mu X. checkmark-phi; X is stuck too: the marker is erased, not fired,
+   so the two-term orbit {mu X. G, checkmark-phi; mu X. G} is closed under
+   every rule of hstep and none of them applies *)
+Lemma unguarded_goal_stuck : forall g X s w G' s' w' r c,
+  (X = RMu (RGoal g (RVar 0)) \/ X = RGoal g (RMu (RGoal g (RVar 0)))) ->
+  ~ hstep X s w G' s' w' r c.
+Proof.
+  intros g X s w G' s' w' r c HX H. revert HX.
+  induction H; intro HX; destruct HX as [HX | HX]; try discriminate.
+  - inversion HX; subst. apply IHhstep. left. reflexivity.
+  - inversion HX; subst. apply IHhstep. right. reflexivity.
+Qed.
+
+Lemma unguarded_not_gd : ~ gd (RMu (RVar 0)).
+Proof. intros [H _]. simpl in H. apply H. reflexivity. Qed.
+
+Lemma unguarded_goal_not_gd : forall g, ~ gd (RMu (RGoal g (RVar 0))).
+Proof. intros g [H _]. simpl in H. apply H. reflexivity. Qed.
+
+(* and mu X. X really is typable: ctypes is coinductive, so the infinite
+   chain of CT_Mu steps is a legitimate derivation *)
+Lemma ctypes_mu_var : forall s w, ctypes (RMu (RVar 0)) s w.
+Proof. cofix CH. intros s w. apply CT_Mu. exact (CH s w). Qed.
+
+Lemma not_fin_mu_var : ~ Fin (RMu (RVar 0)).
+Proof.
+  intro H. remember (RMu (RVar 0)) as X eqn:EX. revert EX.
+  induction H; intro EX; try discriminate.
+  apply IHFin. inversion EX; subst. reflexivity.
+Qed.
+
+(* THE POINT.  Without gd, progress_mu is false, and the counterexample is
+   the smallest non-contractive type there is: typable, unfinished, and
+   permanently stuck.  gd excludes it (unguarded_not_gd), which is why
+   progress_mu carries that hypothesis and no other theorem in this file
+   does -- the decision procedure decide_mu_correct in particular needs no
+   guardedness at all, because the candidate set is finite by
+   construction rather than by contractiveness. *)
+Theorem contractiveness_is_necessary : forall s w,
+  ctypes (RMu (RVar 0)) s w /\ ~ Fin (RMu (RVar 0)) /\ ~ gd (RMu (RVar 0)) /\
+  (forall G' s' w' r c, ~ hstep (RMu (RVar 0)) s w G' s' w' r c).
+Proof.
+  intros s w. repeat split.
+  - apply ctypes_mu_var.
+  - apply not_fin_mu_var.
+  - apply unguarded_not_gd.
+  - intros G' s' w' r c. apply unguarded_var_stuck.
+Qed.
 
 (* protocol paths with a misselection count *)
 Inductive msteps : nat -> Gr -> Wd -> Gr -> Wd -> Prop :=
