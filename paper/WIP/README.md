@@ -30,6 +30,7 @@ four TikZ figures, and the conventional structure.
 | `../../scripts/live_agents.py` | the live-agent experiment (`claude -p`, no tools) |
 | `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 162 real skills surveyed, 8 + 5 run as tasks at two input scales, 4 specification pairs, two runtimes, artifacts verified |
 | `../../scripts/token_economics.py`, `results/token_economics.json`, `../../docs/TOKEN_ECONOMICS.md` | tokens with and without the checker; when LLM compaction is needed and what it costs |
+| `../../scripts/scan_skills.py`, `results/security_scan.json`, `../../docs/CORPUS_SECURITY.md` | static security review of the third-party corpus (read-only; gated by `tests/test_corpus_security.py`) |
 | `../../src/skillc/autollm.py` | the escalation rule (`skillc autocheck`) |
 | `../../benchmarks/spec-cases/` | the four authored achievable/not-achievable pairs with mock tools |
 | `../../real-skills-ext/PROVENANCE.json`, `../../scripts/fetch_skills_ext.py` | the 28 third-party skills (re-fetchable; files not committed) |
@@ -90,6 +91,9 @@ four TikZ figures, and the conventional structure.
   refuted, where the skill's procedure is the only route, 0 verified out of 46
   with 7 fabrications; the five "computed by hand" skills reverse at realistic
   input size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
+- Corpus security: 162 documents scanned statically, no malicious skill and no
+  injection payload aimed at an agent; 9 benign flags reviewed in
+  `docs/CORPUS_SECURITY.md`; a test fails on any unreviewed hit.
 - Token economics: escalation to LLM compaction fires on 130/162 skills at
   home and 49/162 in the file-only runtime (108 free refutations);
   median compaction 22440 tokens = 31.2% of one agent run.
