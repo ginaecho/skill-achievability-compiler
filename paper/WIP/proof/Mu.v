@@ -687,7 +687,8 @@ Qed.
 Section MuDecide.
 Hypothesis Wd_dec : forall x y : Wd, {x = y} + {x <> y}.
 Hypothesis Gd_dec : forall x y : Gd, {x = y} + {x <> y}.
-Variable worlds : list Wd.  Hypothesis worlds_complete : forall w, In w worlds.
+Variable worlds : list Wd.
+Hypothesis worlds_closed : forall a w w', In w worlds -> E a w w' -> In w' worlds.
 Variable satb : Gd -> Wd -> bool.  Hypothesis sat_spec : forall g w, sat g w <-> satb g w = true.
 Variable succE : CapN -> Wd -> list Wd.  Hypothesis E_spec : forall a w w', E a w w' <-> In w' (succE a w).
 Variable hazb : Wd -> bool.  Hypothesis haz_spec : forall w, Haz w <-> hazb w = true.
@@ -769,20 +770,31 @@ Proof.
 Qed.
 
 Definition decide_mu (k : nat) (G0 : Gr) (w : Wd) : bool :=
-  decide_reachb Gr Wd (cands [] G0) worlds succ0 succ1 hazb k G0 w.
+  decide_reachb_fast Gr Wd Gr_eq_dec Wd_dec (cands [] G0) worlds succ0 succ1 hazb k G0 w.
+
+Lemma mstep_worlds : forall n w n' w',
+  In w worlds -> (mstep0 n w n' w' \/ mstep1 n w n' w') -> In w' worlds.
+Proof.
+  intros n w n' w' Hw [Hs | Hs]; inversion Hs; subst; try exact Hw.
+  eapply worlds_closed; eauto.
+Qed.
 
 Theorem decide_mu_correct : forall k G0 w,
-  closed_at 0 G0 -> (decide_mu k G0 w = true <-> reach_mu k G0 w).
+  closed_at 0 G0 -> In w worlds -> (decide_mu k G0 w = true <-> reach_mu k G0 w).
 Proof.
-  intros k G0 w Hc. unfold decide_mu.
+  intros k G0 w Hc Hw. unfold decide_mu.
+  assert (Hwclosed : forall n w0 n' w0', In w0 worlds ->
+            (step0 Gr Wd succ0 n w0 n' w0' \/ step1 Gr Wd succ1 n w0 n' w0') -> In w0' worlds).
+  { intros n w0 n' w0' Hin Hs. eapply mstep_worlds; [ exact Hin | ].
+    destruct Hs as [Hs | Hs]; [ left; apply succ0_iff; exact Hs | right; apply succ1_iff; exact Hs ]. }
   assert (Hclosed : forall n w0 n' w0', In n (cands [] G0) ->
             (step0 Gr Wd succ0 n w0 n' w0' \/ step1 Gr Wd succ1 n w0 n' w0') -> In n' (cands [] G0)).
   { intros n w0 n' w0' Hin Hs. eapply cands_closed; [ exact Hc | exact Hin | ].
     destruct Hs as [Hs | Hs]; [ left; apply succ0_iff; exact Hs | right; apply succ1_iff; exact Hs ]. }
   assert (Hstart : In G0 (cands [] G0)).
   { rewrite <- (close_nil G0 Hc) at 1. apply cands_head. }
-  rewrite (decide_reachb_correct Gr Wd Gr_eq_dec Wd_dec (cands [] G0) worlds worlds_complete
-             succ0 succ1 hazb Hclosed k G0 w Hstart).
+  rewrite (decide_reachb_fast_correct Gr Wd Gr_eq_dec Wd_dec (cands [] G0) worlds
+             succ0 succ1 hazb Hclosed Hwclosed k G0 w Hstart Hw).
   unfold reach_mu. apply reachb_equiv.
   - intros; unfold step0; apply succ0_iff.
   - intros; unfold step1; apply succ1_iff.

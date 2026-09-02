@@ -95,3 +95,27 @@ def test_live_agent_simulator_agrees_with_the_theorem():
             r = simulate(e, "scripted", "plain", seed, chooser)
             if r["outcome"] == "catastrophe":
                 assert k is not None and r["misselections"] > k, (pid, r)
+
+
+def test_bystander_check_flags_shared_variables():
+    import json
+    from skillc.severity import analyze
+    d = {e["id"]: e["pack"] for e in json.load(open(DATA / "severity_corpus.json"))}
+    audit = analyze(d["release_with_audit"], kmax=4).bystander
+    cache = analyze(d["release_with_cache"], kmax=4).bystander
+    assert audit["exact"] and audit["pairs"] > 0
+    assert not cache["exact"]
+    assert any("cache_warm" in c["reason"] for c in cache["conflicts"])
+
+
+def test_verified_kernel_agrees_with_analyzer():
+    import json, pytest
+    from skillc.kernel import run_kernel, kernel_available
+    from skillc.severity import analyze
+    if not kernel_available():
+        pytest.skip("verified kernel not built (make binary in paper/WIP/proof)")
+    for e in json.load(open(DATA / "severity_corpus.json")):
+        kr = run_kernel(e["pack"], kmax=4)
+        if "skipped" in kr:
+            continue
+        assert kr["tolerance_degree"] == analyze(e["pack"], kmax=4).tolerance_degree, e["id"]

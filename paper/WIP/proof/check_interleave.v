@@ -1,0 +1,11 @@
+Require Import Interleave.
+Print Assumptions swap_safe.
+Print Assumptions swap_ctypes.
+Print Assumptions swaps_safe.
+Print Assumptions swaps_ctypes.
+Print Assumptions bridge_interleaved.
+Print Assumptions strips_commute.
+Print Assumptions strips_enables.
+Print Assumptions strips_preserves.
+Print Assumptions strips_neutral.
+Print Assumptions strips_swap_act.
