@@ -39,10 +39,13 @@ def median(xs: list[float]) -> float:
 def main() -> int:
     claims = json.loads(MANIFEST.read_text())["claims"]
     env = {"load": load, "median": median, "sum": sum, "len": len, "min": min,
-           "max": max, "round": round, "abs": abs, "sorted": sorted, "set": set}
+           "max": max, "round": round, "abs": abs, "sorted": sorted, "set": set,
+           "__builtins__": {"set": set, "sum": sum, "len": len, "min": min,
+                            "max": max, "round": round, "abs": abs,
+                            "sorted": sorted, "True": True, "False": False}}
     bad = []
     for c in claims:
-        got = eval(c["compute"], {"__builtins__": {}}, env)   # noqa: S307 - our own manifest
+        got = eval(c["compute"], env, env)   # noqa: S307 - our own manifest
         want, tol = c["paper"], c.get("tol", 0)
         ok = abs(got - want) <= tol
         if not ok:

@@ -89,6 +89,10 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20260902)
     ap.add_argument("--kmax", type=int, default=3)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--reset", action="store_true",
+                    help="start a fresh campaign: do not accumulate onto the "
+                         "previous differential.json (the cumulative counter "
+                         "otherwise mixes campaigns and is easy to misread)")
     args = ap.parse_args()
     if not kernel_available():
         print("kernel binary not built: run `make binary` in paper/WIP/proof", file=sys.stderr)
