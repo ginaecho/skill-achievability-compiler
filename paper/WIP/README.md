@@ -28,7 +28,9 @@ four TikZ figures, and the conventional structure.
 | `results/live_agents.json`, `results/live_agents_runs.jsonl` | the live-agent experiment (every run, every reply) |
 | `../../docs/LIVE_AGENTS.md` | live-agent tables |
 | `../../scripts/live_agents.py` | the live-agent experiment (`claude -p`, no tools) |
-| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 45 real skills + 4 specification pairs, two runtimes, artifacts verified |
+| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 162 real skills surveyed, 8 + 5 run as tasks at two input scales, 4 specification pairs, two runtimes, artifacts verified |
+| `../../scripts/token_economics.py`, `results/token_economics.json`, `../../docs/TOKEN_ECONOMICS.md` | tokens with and without the checker; when LLM compaction is needed and what it costs |
+| `../../src/skillc/autollm.py` | the escalation rule (`skillc autocheck`) |
 | `../../benchmarks/spec-cases/` | the four authored achievable/not-achievable pairs with mock tools |
 | `../../real-skills-ext/PROVENANCE.json`, `../../scripts/fetch_skills_ext.py` | the 28 third-party skills (re-fetchable; files not committed) |
 | `../../docs/SEVERITY_RESULTS.md` | evaluation tables |
@@ -82,11 +84,15 @@ four TikZ figures, and the conventional structure.
 - Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
   violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1; 6 of 19
   Catastrophic verdicts taken by a real agent; repairs remove the catastrophes.
-- Usefulness (96 verified agent runs): certified configurations 48/48 verified
-  artifacts, 0 silent wrong; refuted configurations where the procedure is the
-  only route (documents, spec pairs) 0/28 verified, 2 fabrications, 24 honest
-  failures; refuted configurations where the task reduces to hand arithmetic
-  20/20 verified by abandoning the skill's scripts (the verdict's precision limit).
+- Corpus census (162 skills, 13 repositories, no model tokens, 1.8 s):
+  149 certified at home, 108 refuted in a file-only runtime, 95 flip.
+- Usefulness (134 verified agent runs): certified 64/68 verified artifacts;
+  refuted, where the skill's procedure is the only route, 0 verified out of 46
+  with 7 fabrications; the five "computed by hand" skills reverse at realistic
+  input size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
+- Token economics: escalation to LLM compaction fires on 130/162 skills at
+  home and 49/162 in the file-only runtime (108 free refutations);
+  median compaction 22440 tokens = 31.2% of one agent run.
 - Modularity: whole-system complete analysis 35.8 s at n=6 vs 0.13 s modular
   with the cone-of-influence interface (concrete interface: 2.9 s, 256 points).
   Re-check after a change: 172 ms vs 22 ms.
@@ -109,4 +115,5 @@ cd proof && make && make binary             # Coq 8.18 + OCaml 4.14
 pip install -e ../.. && python3 ../../scripts/severity_eval.py
 python3 ../../scripts/live_agents.py       # needs the Claude Code CLI
 python3 ../../scripts/fetch_skills_ext.py && python3 ../../scripts/usefulness.py
+python3 ../../scripts/token_economics.py --compact 24    # measures LLM compaction
 ```

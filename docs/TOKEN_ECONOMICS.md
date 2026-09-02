@@ -1,195 +1,81 @@
-# Token economics: what the check costs, and what it saves
+# Tokens with the checker and without it
 
-The paper's broader-impact section says pre-execution refutation "can reduce
-wasted computation." This document turns that sentence into arithmetic:
-**how many tokens does checking a skill cost, and how many does an unrefuted
-impossible skill burn at run time?**
+162 real skills. The deterministic check spends **no model tokens**; median 10.0 ms per skill, 1813 ms for the corpus.
 
-Everything here is reproducible:
+## When is an LLM needed?
 
-```console
-$ skillc cost --corpus                 # the 15-spec evaluation corpus
-$ skillc cost --corpus --price-llm     # priced against the LLM front-end
-$ skillc cost /mnt/skills --profile claude-code --json
-```
+The escalation detector (`skillc autocheck`) fires on **130 of 162** skills (80.2%): the document carries completion language, guards or irreversible verbs that the deterministic reader could not turn into a pack, and the deterministic verdict is a CERTIFICATION, which the weak reading cannot support. The other 32 are settled for free. In the file-only runtime the picture inverts: 108 skills are REFUTED, and a refutation on the weak reading is sound whatever the document means, so only 49 escalate there. 0 skills took the semantic path.
 
-The model lives in [`src/skillc/tokens.py`](../src/skillc/tokens.py); every
-parameter is overridable and every default is justified in that file's
-docstrings.
+## What escalation costs (measured)
 
----
+| | value |
+|---|---|
+| compactions measured (haiku) | 20 |
+| median tokens per compaction | 22440 |
+| median USD per compaction | 0.08793 |
+| tokens per input character | 2.991 |
+| estimate for unmeasured skills | 17939 + 0.595 x chars |
 
-## 1. Where the tokens go
+## Against what an agent run costs
 
-| stage | tokens | paid |
-|---|---|---|
-| deterministic markdown front-end | **0** | per skill |
-| LLM compaction (`--llm`) | system prompt + skill + emitted pack | per skill *version* |
-| schema gate | **0** | per check |
-| **trusted checker** (projection, conformance, z3) | **0** | per check |
-| Coq metatheory (T1–T3, SR, fidelity) | **0** | **once, ever** |
-| an agent run — *the thing being avoided* | quadratic in turns | **per invocation** |
+| | value |
+|---|---|
+| measured agent runs (usefulness experiment) | 114 |
+| median tokens per run | 72001 |
+| median USD per run | 0.0489 |
+| median turns per run | 5 |
+| tokens spent on runs the checker refuted and that failed | 5098701 |
+| USD on those runs | 4.259 |
 
-The headline fact is the one that is easy to miss: **the trusted core spends
-no tokens at all.** No model sits in the decision path, by construction — that
-is the same design choice that makes an `IMPOSSIBLE` verdict a proof rather
-than an opinion. So the entire token cost of a check is its *front-end's*, and
-the deterministic front-end's is zero too.
+## The comparison
 
-The LLM compaction front-end is the only stage that spends tokens, and it is
-optional, one-shot, and untrusted.
+Two regimes, and they are not close.
 
-## 2. Why a doomed run is expensive: the quadratic term
+**Where the check is free** (32 of 162 skills, including all 108 refutations in the file-only runtime): the check costs **0 model tokens** and 10.0 ms. Each refutation replaces an agent run whose measured median is 72001 tokens ($0.0489). In the usefulness experiment the runs the checker refuted and that then failed cost 5098701 tokens ($4.259) --- the checker would have spent none of it.
 
-An agent turn re-sends the whole conversation. Writing `S` for the harness
-prompt (system prompt + tool schemas), `K` for the skill loaded into context,
-`g` for the mean tokens appended per turn, and `o` for the assistant's output
-per turn, a run of `T` turns reads
+**Where the check needs an LLM** (130 skills in the home runtime, where the deterministic pack can only certify weakly): one compaction costs a median 22440 tokens, i.e. **31.2%** of one measured agent run (0.31 runs). It is paid once per skill version and amortizes over every run of that skill; against the per-skill runtime estimate the corpus share is 56.076% (median 68.465%).
 
-```
-input  =  T·(S + K)  +  g · T(T−1)/2
-output =  T·o
-```
+## Per skill
 
-The marginal cost of turn `T` is `S + K + (T−1)·g`. **A run that flails for 40
-turns costs far more than four runs that flail for 10.** Compaction, by
-contrast, reads the skill exactly once, so its cost is *linear* in the skill's
-length. Static refutation deletes the whole run — quadratic term included.
-
-Defaults (deliberately conservative — they understate the waste):
-`S = 2,500`, `g = 700`, `o = 250`, `K` = the skill's own token count.
-
-Prompt caching changes the **price** of the wasted tokens, not their
-**number**: a cached prefix is still read, just billed at a discount. `skillc
-cost --cache-hit-rate 0.9` shows the discounted dollars; the token counts do
-not move.
-
-## 3. What each refutation reason prevents
-
-Each verdict reason maps to a distinct flailing profile — how long an agent
-runs before that particular structural failure stops it, and how many agents
-are billed for it. Numbers below are for `call-to-book`, a median-sized real
-consumer skill (≈1.7K tokens), priced against the LLM front-end.
-
-| reason | turns (lo–typ–hi) | agents | wasted per run (typical) | check | leverage |
-|---|---|---|---|---|---|
-| `MISSING_CAPABILITY` | 3–8–14 | 1 | 50,240 | 2,778 | **18×** |
-| `GOAL_UNSAT` | 8–18–30 | 1 | 176,040 | 2,778 | **63×** |
-| `NON_CONFORMANT` | 6–15–30 | 2 | 261,900 | 2,778 | **94×** |
-| `NON_PROJECTABLE` | 6–15–30 | 2 | 261,900 | 2,778 | **94×** |
-| `BLOCKED_GUARD` | 12–25–50 | 1 | 305,750 | 2,778 | **110×** |
-
-The ordering is the robust part, and it is not arbitrary:
-
-* **`MISSING_CAPABILITY` is the cheapest** to hit at run time — the agent
-  calls a tool that is not there and finds out immediately. Most of its cost
-  is the *improvisation* that follows, not the error itself.
-* **`BLOCKED_GUARD` is the most expensive.** A precondition no run can satisfy
-  is the retry-forever cause: the agent has no way to *learn* that the guard
-  is unsatisfiable, so it runs to the harness turn cap. This is exactly the
-  failure mode a static checker is best at and an agent is worst at.
-* **The two multi-party reasons bill two contexts.** A deadlocked handoff
-  leaves both agents holding full context and waiting until a timeout.
-* **`GOAL_UNSAT` has a cost the token bill does not show.** When a goal
-  conjunct has no establisher, the run can terminate *believing it succeeded*
-  (`FailureProfile.silent`). The tokens are the small part; the trust is the
-  large part.
-
-`DYNAMIC_TOPOLOGY` deliberately has **no** profile. `UNKNOWN` is an
-abstention, not a refutation — nothing was prevented, so there is no avoided
-waste to claim.
-
-## 4. Break-even
-
-Verification is paid **once per skill version**, at authoring time. Waste is
-paid **on every invocation**, by every user. So the question is not "does the
-check pay for itself?" but "how far into the *first* prevented run?"
-
-| front-end | tokens per skill | break-even |
-|---|---|---|
-| deterministic | 0 | immediate — there is nothing to repay |
-| LLM compaction | ~2,800 | **0.9%–5.5% of one prevented run** |
-
-Even in the cheapest failure mode (`MISSING_CAPABILITY`), the check has repaid
-itself before 6% of the first doomed run has elapsed. In the retry-forever
-case it repays in under 1%.
-
-## 5. What it costs when the skill is fine
-
-The honest denominator. Most skills are *not* broken, and for those the check
-buys nothing and still costs something. So: **how much is that?**
-
-For a median real skill, LLM compaction is ≈2,800 tokens against a modelled
-10-turn successful run of ≈69,800 — **the check is 4.0% of running the skill
-once.** Over the 15-spec corpus (whose natural-language sources are short) the
-same figure is **2.9%**.
-
-With the deterministic front-end it is **0.0%**, exactly.
-
-That is the trade in one line: **a one-time 3–4% surcharge on skills that
-work, in exchange for deleting entire runs of the ones that don't** — or no
-surcharge at all if you use the deterministic front-end.
-
-## 6. Corpus results
-
-### The 15-spec evaluation corpus (`skillc cost --corpus --price-llm`)
-
-```
-refuted 7 skill(s) before execution
-  tokens spent checking : 12,239        ($0.09)
-  tokens NOT wasted     : 1,067,913 typical ($3.58), band 281,547–3,146,804
-  leverage (typical)    : 87×, per invocation avoided
-
-8 skill(s) not refuted — the check bought no savings, so this is what it cost:
-  tokens spent checking : 14,012
-  one successful run    : 476,280 (modelled)
-  checking is 2.9% of running each skill once
-```
-
-With the deterministic front-end the same seven refutations cost **0 tokens**.
-
-### 36 real public skills under `claude-code` (`skillc cost /mnt/skills --profile claude-code`)
-
-```
-refuted 16 skill(s) before execution
-  tokens spent checking : 0
-  tokens NOT wasted     : 930,384 typical, band 264,894–2,098,572
-  leverage (typical)    : unbounded — the check spends no tokens at all
-```
-
-Those sixteen are the consumer-app skills that invoke tools Claude Code does
-not grant. Each would fail on its first invocation under that profile; the
-deterministic front-end names the missing tool and the source line for free.
-
-## 7. What is measured and what is modelled
-
-This matters more than the numbers.
-
-**Measured.** Compaction usage, when a live API call reports it.
-`frontend.llm.compact_measured` returns the API's own `usage` block and
-`Cost.measured` is `True`. Nothing else in the pipeline has anything to
-measure — it spends no tokens.
-
-**Modelled.** Runtime waste, always. It is the cost of a run that, if the
-refutation is correct, *never happens* — so it cannot be measured, only
-estimated. It is reported as a low/typical/high band, produced by an explicit
-parameterized model with published defaults, and every parameter is
-overridable. `skillc cost` prints the caveat on every invocation.
-
-**Heuristic.** Token counts from `estimate_tokens` use a 3.8 chars/token
-ratio, not a tokenizer. `count_tokens_exact` upgrades them to real counts when
-`ANTHROPIC_API_KEY` is set, and refuses rather than silently estimating when
-it is not.
-
-The conclusion does not rest on the parameterization. Compaction is linear and
-one-shot; a run is quadratic and recurs. Halve every waste default and the
-leverage is still 9×–55×; the ordering of the failure modes does not move at
-all.
-
-## 8. The proof's amortization
-
-The Coq development costs zero tokens and is paid **once for the entire
-system**, not once per skill. T1 is what licenses acting on a refutation
-without re-litigating it: the theorem is proved once, and every `IMPOSSIBLE`
-verdict thereafter inherits it. Under any usage at all, its amortized
-per-skill cost rounds to zero.
+| skill | home | no-shell | escalate | compaction tokens | est. run tokens | check share |
+|---|---|---|---|---|---|---|
+| `real-skills/skills/claude-api/SKILL.md` | ok | MISSING_CAPABILITY | yes | 69182 | 133485 | 51.828% |
+| `real-skills/skills/skill-creator/SKILL.md` | ok | MISSING_CAPABILITY | yes | 36948 | 64155 | 57.592% |
+| `real-skills-ext/obra__superpowers/writing-skills/SKILL.md` | ok | MISSING_CAPABILITY | yes | 33558 (est) | 55305 | 60.678% |
+| `real-skills/skills/xlsx/SKILL.md` | ok | MISSING_CAPABILITY | yes | 32028 | 31990 | 100.119% |
+| `real-skills-ext/microsoft__skills/ui-widget-developer/SKILL.md` | ok | MISSING_CAPABILITY | yes | 31661 (est) | 51110 | 61.947% |
+| `real-skills-ext/alirezarezvani__claude-skills/terraform-patterns/SKILL.md` | ok | MISSING_CAPABILITY | yes | 30781 (est) | 49160 | 62.614% |
+| `real-skills-ext/wondelai__skills/monetizing-innovation/SKILL.md` | ok | ok | yes | 30391 (est) | 48300 | 62.921% |
+| `real-skills/skills/pptx/SKILL.md` | ok | MISSING_CAPABILITY | yes | 30220 (est) | 47920 | 63.063% |
+| `real-skills-ext/wondelai__skills/high-output-management/SKILL.md` | ok | ok | yes | 30155 (est) | 47775 | 63.119% |
+| `real-skills-ext/wondelai__skills/hundred-million-offers/SKILL.md` | ok | ok | yes | 29791 (est) | 46970 | 63.426% |
+| `real-skills/skills/algorithmic-art/SKILL.md` | ok | ok | yes | 29677 (est) | 46720 | 63.521% |
+| `real-skills/skills/doc-coauthoring/SKILL.md` | ok | ok | yes | 29182 | 41560 | 70.217% |
+| `real-skills-ext/microsoft__skills/kql/SKILL.md` | ok | ok | yes | 29155 (est) | 45565 | 63.986% |
+| `real-skills-ext/wondelai__skills/contagious/SKILL.md` | ok | ok | yes | 28423 (est) | 43945 | 64.679% |
+| `real-skills-ext/microsoft__skills/cloud-solution-architect/SKILL.md` | ok | ok | yes | 28314 (est) | 43705 | 64.784% |
+| `real-skills-ext/Security-Phoenix-demo__security-skills-claude-code/opengrep-rule-generator/SKILL.md` | ok | MISSING_CAPABILITY | yes | 28270 (est) | 43610 | 64.825% |
+| `real-skills-ext/wondelai__skills/cro-methodology/SKILL.md` | ok | ok | yes | 28092 (est) | 43215 | 65.005% |
+| `real-skills-ext/wondelai__skills/lean-startup/SKILL.md` | ok | ok | yes | 28031 (est) | 43080 | 65.067% |
+| `real-skills-ext/wondelai__skills/lean-analytics/SKILL.md` | ok | ok | yes | 28015 (est) | 43040 | 65.091% |
+| `real-skills-ext/wondelai__skills/mom-test/SKILL.md` | ok | ok | yes | 27942 (est) | 42880 | 65.163% |
+| `real-skills-ext/wondelai__skills/jobs-to-be-done/SKILL.md` | ok | ok | yes | 27749 (est) | 42455 | 65.361% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/diffdock/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27660 (est) | 42255 | 65.46% |
+| `real-skills-ext/wondelai__skills/clean-architecture/SKILL.md` | ok | ok | yes | 27637 (est) | 42205 | 65.483% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/10-cloud-security/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27627 (est) | 42185 | 65.49% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/biopython/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27506 (est) | 41915 | 65.623% |
+| `real-skills-ext/wondelai__skills/inspired-product/SKILL.md` | ok | ok | yes | 27372 (est) | 41620 | 65.766% |
+| `real-skills-ext/wondelai__skills/domain-driven-design/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27092 (est) | 41000 | 66.078% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/deeptools/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27051 (est) | 40910 | 66.123% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/14-red-team-ops/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27024 (est) | 40850 | 66.154% |
+| `real-skills-ext/wondelai__skills/design-sprint/SKILL.md` | ok | ok | yes | 27017 (est) | 40835 | 66.161% |
+| `real-skills-ext/Jeffallan__claude-skills/flutter-expert/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26973 | 28140 | 95.853% |
+| `real-skills-ext/alirezarezvani__claude-skills/helm-chart-builder/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26877 (est) | 40525 | 66.322% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/07-incident-response/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26783 (est) | 40315 | 66.434% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/09-web-security/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26693 (est) | 40120 | 66.533% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/05-malware-analysis/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26664 (est) | 40055 | 66.568% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/bulk-rnaseq/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26596 (est) | 39905 | 66.648% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/cobrapy/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26550 (est) | 39800 | 66.709% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/astropy/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26545 (est) | 39790 | 66.713% |
+| `real-skills-ext/wondelai__skills/crossing-the-chasm/SKILL.md` | ok | ok | yes | 26543 (est) | 39785 | 66.716% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/generate-image/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26525 (est) | 39745 | 66.738% |

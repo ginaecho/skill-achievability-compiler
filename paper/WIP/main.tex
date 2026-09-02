@@ -194,12 +194,15 @@ A live-agent experiment --- 340 runs of two production language models, with
 and without a requester's pressure to take shortcuts --- finds every observed
 catastrophe consistent with the theorem, the catastrophe rate ordered by
 tolerance degree, and six of the nineteen \Cat{} verdicts taken by a real
-agent. On forty-five real skills from public repositories and four authored
-specification pairs, run by the same agents in a shell and a file-only
-runtime with every artifact verified, the checker's refusals coincide with
-the runs that ended in wasted tokens, honest failure or a fabricated result
-wherever the skill's procedure is the only route to the artifact, and
-over-refuse exactly where the agent can compute the artifact by hand.
+agent. On 162 real skills from thirteen public repositories and four
+authored specification pairs, run by the same agents in a shell and a
+file-only runtime with every artifact verified by recomputation, the
+checker's refusals coincide with the runs that ended in wasted tokens, honest
+failure or a fabricated result: at realistic input sizes no refuted run
+produced a correct artifact, at 5.1\,M tokens spent to produce none.
+The check itself costs no model tokens on the refutations and
+31.2\% of one agent run where the
+document needs semantic compaction.
 \end{abstract}
 
 \draftnote{Status. Everything in Sections~\ref{sec:severity}--\ref{sec:why} is
@@ -302,9 +305,10 @@ decides the condition.
   corpora cannot even pose the question, and that the \Cat{} verdicts name
   branches real agents take; on the boolean fragment the tool's verdict is
   cross-checked against a kernel extracted from the verified decision
-  procedure (\coqok{kernel\_first\_spec}); and on real skills in two runtimes
-  the achievability verdicts predict which agent runs are wasted or wrong,
-  with their precision limit stated.
+  procedure (\coqok{kernel\_first\_spec}); and on 162 real skills in
+  two runtimes the achievability verdicts predict which agent runs are wasted
+  or wrong, with the token cost of the check measured against the token cost
+  of the runs it replaces.
 \end{itemize}
 A design expectation was refuted by the mechanization and a benchmark
 finding refines it: tolerance is anti-monotone in the capability context for
@@ -1001,18 +1005,21 @@ reflects the fix.
 that would have been wasted or wrong.} The achievability half of the discipline
 is only useful if its verdicts predict what happens when an agent actually
 runs a skill. We took real skills from public repositories --- the seventeen
-of the vendor's skills repository and twenty-eight more from four
-third-party collections, each with recorded provenance --- and, to make the
-question sharp, two runtimes: one with a shell and file tools, one with file
-tools only. A code fence the document expects the agent to execute is an
+of the vendor's skills repository and 145 more from twelve third-party
+collections, de-duplicated by content hash and each with recorded
+provenance --- and, to make the question sharp, two runtimes: one with a
+shell and file tools, one with file tools only. A code fence the document expects the agent to execute is an
 invocation of the shell (a front-end rule added for this experiment), so a
 skill built on scripts is certified in the first runtime and refuted with
-\textsc{MissingCapability} in the second. Of the forty-five skills, thirty are certified in their home runtime and refuted in the file-only one; eleven need no shell and are certified in both; four are refuted in both because the front end reads a code symbol as a tool, a misextraction we report rather than hide.
+\textsc{MissingCapability} in the second. Over the 162 skills, 149 are certified in
+their home runtime and 108 refuted in the file-only one,
+95 flipping between them; 13 are refuted even at
+home because they invoke a capability no runtime provides. The whole census
+takes 1.8\,s and no model tokens.
 
-For every skill with a task the sandbox can genuinely carry out (eight
-of the forty-five; the rest need a package, a GPU, a credential or a service
-the sandbox lacks, and are refuted in the file-only runtime for the same
-reason) and for four authored specification pairs whose B~variant makes a
+For eight skills with a task the sandbox can genuinely carry out (the rest
+need a package, a GPU, a credential or a service it lacks) and for four
+authored specification pairs whose B~variant makes a
 claim the tools cannot honour --- a bound the only tool cannot meet, a guard
 nothing establishes, a goal condition with no establisher, an undeclared tool
 (\texttt{benchmarks/spec-cases}) --- we ran the same two production models
@@ -1023,32 +1030,39 @@ recorded. A run that claims completion and fails verification is a
 \emph{silent wrong result}; one that says it failed is an \emph{honest
 failure}; either way its tokens are spent.
 
-Table~\ref{tab:use} summarizes 96 runs. On the 48 runs the
-checker certified, 48 produced a verified artifact and none produced a
-silent wrong result (three verified artifacts came without the status line
-because the run hit its turn limit). On the 48 runs it refuted, the
-picture splits exactly along the line the discipline draws. Where the
-skill's procedure is the only route to the artifact --- the three document
-skills, whose outputs are binary formats, and the four specification pairs
---- no run succeeded: 12 of
-12 document runs and 12 of
-16 specification runs ended in honest failure, 2
-in a silent wrong result (the small model fabricated the approval that no
-tool could give and reported the report published), and
-2 exhausted their turn budget
-without a verdict. Those 28 runs cost \$1.09 and
-1.56\,M tokens; the checker's refusals, at 165\,ms
-for all 24 configurations, would have spent none of it and
-would have caught the two fabrications. Where the procedure is not the only
-route --- five third-party skills whose tasks reduce to arithmetic over a
-dozen rows, seven boolean checks, or a frontmatter grammar --- the file-only
-agent ignored the skill's scripts and computed the artifact by hand in
-20 of 20 runs, and the artifact verified. The checker was
-right about the skill as written and wrong about the task: the gate would
-have refused those runs as out-of-set, at the price of an artifact that
-happened to be correct at this size and would not be at ten thousand rows.
-We report this as the achievability half's precision limit, not as a
-success.
+Table~\ref{tab:use} summarizes 134 runs. On the runs the checker
+certified, 32 of 32 real-skill runs and
+16 of 16 specification runs produced a verified artifact, with no
+silent wrong result. On the runs it refuted, the outcome depends on one
+thing: whether the skill's procedure is the only route to the artifact.
+
+\emph{Where it is}, no refuted run succeeded. The three document skills
+produce binary formats, and all 12 file-only runs failed honestly. The four
+specification B~variants make a claim their tools cannot honour, and
+12 of 16 runs failed honestly, 2 produced a
+silent wrong result --- the small model fabricated the approval no tool could
+give and reported the report published --- and 2 exhausted their turns.
+Those 28 runs cost \$1.09 and 1.56\,M tokens.
+
+\emph{Where it is not}, the first version of this experiment refuted five
+third-party skills whose tasks reduced to arithmetic over a dozen rows, seven
+boolean checks or a frontmatter grammar, and the file-only agent ignored the
+skill's scripts and computed the artifact by hand in 20 of 20 runs
+(\$1.29, 1.22\,M tokens). That was a measurement of our task sizes, not of
+the checker. We therefore rebuilt those five tasks at realistic scale --- a
+thousand transcripts across four samples, a thousand-row employee table, five
+hundred user records, a hundred and fifty manifests, a hundred and twenty
+draft files --- with verifiers that recompute the answer from the generated
+inputs and compare it exactly, so an estimate cannot pass. The checker's
+verdicts are unchanged by the scale-up. The agents' behaviour is not: in the
+certified runtime 19 of 20 runs still produced a verified artifact
+(\$1.64, 3.19\,M tokens, median 8 turns), while in the refuted one
+0 of 18 did: 6 honest failures, 5 silent wrong results and
+7 runs that exhausted their turn budget, at a median of 21 turns,
+\$13.21 and 14.28\,M tokens --- 4.5 times the tokens of the certified
+runtime for no artifact at all. Hand computation is a way past the checker
+only while the input is small enough to hold in a context window; the
+verdict was right and the earlier task was too easy.
 
 \begin{table}[t]
 \centering\small
@@ -1058,19 +1072,53 @@ success.
 configurations & checker & runs & verified & silent wrong & honest fail & no verdict & agent cost & agent tokens\\
 \midrule
 8 real skills, shell runtime & certified & 32 & 32 & 0 & 0 & 0 & \$1.83 & 3.03\,M\\
-3 document skills, file-only runtime & refuted & 12 & 0 & 0 & 12 & 0 & \$0.62 & 0.49\,M\\
-5 third-party skills, file-only runtime & refuted & 20 & 20 (by hand) & 0 & 0 & 0 & \$1.29 & 1.22\,M\\
+3 document skills, file-only & refuted & 12 & 0 & 0 & 12 & 0 & \$0.62 & 0.49\,M\\
 4 specification pairs, A & certified & 16 & 16 & 0 & 0 & 0 & \$0.5 & 1.14\,M\\
 4 specification pairs, B & refuted & 16 & 0 & 2 & 12 & 2 & \$0.47 & 1.07\,M\\
+\midrule
+5 skills, small inputs, file-only & refuted & 20 & 20 (by hand) & 0 & 0 & 0 & \$1.29 & 1.22\,M\\
+5 skills, realistic inputs, shell & certified & 20 & 19 & 1 & 0 & 0 & \$1.64 & 3.19\,M\\
+5 skills, realistic inputs, file-only & refuted & 18 & 0 & 5 & 6 & 7 & \$13.21 & 14.28\,M\\
 \bottomrule
 \end{tabular}}
 \caption{Real skills and specification cases, two runtimes, two models, two
-runs each; every artifact verified. ``Verified'' counts artifacts that pass
-the verifier whether or not the status line was reached. The checker's total
-time over all 24 configurations is 165\,ms.}
+runs each; every artifact verified by recomputation. ``Verified'' counts
+artifacts that pass the verifier whether or not the status line was reached.
+The last three rows are the same five skills at two input sizes. The
+checker's total time over all 34 configurations is 260\,ms.}
 \label{tab:use}
 \end{table}
 
+\subparagraph*{Finding 6: what the check costs in tokens, and when it needs a
+model at all.} The deterministic front end spends no model tokens; the
+question is when it is enough. The reading it falls back to --- one act per
+invoked tool --- \emph{under}-approximates the document, so a refutation on
+it (the skill names a tool the runtime lacks) is sound whatever the document
+means, while a certification on it says only that the named tools exist. That
+asymmetry is a decision procedure for spending money: escalate to LLM
+compaction exactly when the pack is weak, the verdict is a certification, and
+the document visibly carries meaning the reader did not capture --- completion
+language, conditional phrases, irreversible verbs. \texttt{skillc autocheck}
+implements it. Over the 162 skills it escalates on 130
+(80.2\%) in the home runtime, where almost everything is
+weakly certified, and on only 49 in the file-only one,
+where 108 skills are refuted for free.
+
+We measured the escalation on 20 skills with the small
+model: a median 22440 tokens and
+\$0.088 per compaction, fitted as
+$17939+0.595\times$ characters
+for the rest. Against the measured median agent run of
+72001 tokens
+(\$0.049), one compaction is
+31.2\% of a single run --- paid once per
+skill version, amortized over every run of it --- and zero for the
+32 skills that need no model. On the other side of the ledger,
+the runs this experiment's refuted configurations spent before failing came to
+5.1\,M tokens and
+\$4.259. The check is cheap in the cases that matter
+because the cases that matter are refutations, and refutations are the free
+half.
 
 \section{Repairs}\label{sec:repair}
 
@@ -1244,10 +1292,11 @@ anything --- harmlessly, since it only loops silently; contractiveness is
 assumed as usual. On the boolean fragment the tool's verdict is cross-checked
 against a kernel extracted from the proof; the elaboration into the kernel's
 input, environment choices, and the arithmetic fragment with widening remain
-trusted. The achievability verdict is about the skill \emph{as written}: a
-task an agent can complete by abandoning the skill's procedure is refuted
-with it (Finding~5), which is the gate's design and the verdict's precision
-limit. The hazard is a
+trusted. The achievability verdict is about the skill \emph{as written}: an
+agent that abandons the skill's procedure and computes the artifact by hand
+is refuted with the skill, which is the gate's design; at the input sizes
+those skills are for, that route closes (Finding~5), but the verdict does not
+claim it always does. The hazard is a
 declared or derived input; the discipline says what follows from it. \Ben{}
 inherits the checker's over-approximation; \Cat{} is a proof. The benchmark is
 ours, with expected verdicts stated in advance but authored by us. The

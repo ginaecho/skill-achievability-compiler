@@ -112,7 +112,8 @@ def run_agent(task: dict, runtime: str, model: str, seed: int, max_turns: int, b
     outcome = ("success" if claim == "done" and ok else "silent_wrong" if claim == "done"
                else "honest_fail" if claim == "failed" else ("verified_no_status" if ok else "no_status"))
     shutil.rmtree(d, ignore_errors=True)
-    return {"skill": task["skill"], "runtime": runtime, "model": model, "seed": seed,
+    return {"skill": task["skill"], "id": task.get("id", task["skill"]), "size": task.get("size"),
+            "runtime": runtime, "model": model, "seed": seed,
             "claim": claim, "verified": ok, "outcome": outcome, "turns": data.get("num_turns", 0),
             "cost_usd": round(data.get("total_cost_usd", 0.0) or 0.0, 5), "tokens": toks,
             "seconds": round(elapsed, 1), "tail": text[-300:]}
@@ -124,7 +125,7 @@ def load_runs() -> dict:
         for line in RUNS.read_text().splitlines():
             if line.strip():
                 r = json.loads(line)
-                runs[(r["skill"], r["runtime"], r["model"], r["seed"])] = r
+                runs[(r.get("id", r["skill"]), r["runtime"], r["model"], r["seed"])] = r
     return runs
 
 
@@ -139,9 +140,12 @@ def main():
     ap.add_argument("--report-only", action="store_true")
     args = ap.parse_args()
     tasks = json.load(open(TASKS)) if TASKS.exists() else []
-    spec = ROOT / "scripts" / "usefulness_spec_tasks.json"
-    if spec.exists():
-        tasks += json.load(open(spec))
+    for extra in ("usefulness_spec_tasks.json", "usefulness_tasks_large.json"):
+        f = ROOT / "scripts" / extra
+        if f.exists():
+            tasks += json.load(open(f))
+    for t in tasks:                       # scale-up entries share a skill path
+        t["id"] = t["skill"] + ("|" + t["size"] if t.get("size") else "")
     tasks = [t for t in tasks if t.get("feasible_with_shell") and t.get("needs_shell")]
     if args.only:
         want = set(args.only.split(","))
@@ -149,15 +153,15 @@ def main():
     models = args.models.split(",")
     def rts(t):
         return t.get("runtimes") or list(RUNTIMES)
-    verdicts = {(t["skill"], rt): checker_verdict(t["skill"], RUNTIMES[rt]["profile"])
+    verdicts = {(t["id"], rt): checker_verdict(t["skill"], RUNTIMES[rt]["profile"])
                 for t in tasks for rt in rts(t)}
     runs = load_runs()
     todo = [(t, rt, m, s) for t in tasks for rt in rts(t) for m in models for s in range(args.n)
-            if (t["skill"], rt, m, s) not in runs]
+            if (t["id"], rt, m, s) not in runs]
     print(f"{len(tasks)} tasks; {len(todo)} agent runs to do, {len(runs)} cached", file=sys.stderr)
     if not args.report_only:
         with ProcessPoolExecutor(max_workers=args.workers) as ex:
-            futs = {ex.submit(run_agent, t, rt, m, s, args.max_turns, args.budget): (t["skill"], rt, m, s)
+            futs = {ex.submit(run_agent, t, rt, m, s, args.max_turns, args.budget): (t["id"], rt, m, s)
                     for t, rt, m, s in todo}
             for f in as_completed(futs):
                 key = futs[f]
@@ -177,13 +181,13 @@ def report(tasks, verdicts, runs, models):
     rows = []
     for t in tasks:
         for rt in (t.get("runtimes") or list(RUNTIMES)):
-            v = verdicts[(t["skill"], rt)]
-            rs = [r for r in runs.values() if r["skill"] == t["skill"] and r["runtime"] == rt]
+            v = verdicts[(t["id"], rt)]
+            rs = [r for r in runs.values() if r.get("id", r["skill"]) == t["id"] and r["runtime"] == rt]
             c = defaultdict(int)
             for r in rs:
                 c[r["outcome"]] += 1
-            rows.append({"skill": t["skill"], "runtime": rt, "checker": "certified" if v["achievable"] else f"refuted:{v['reason']}",
-                         "checker_ms": v["ms"], "runs": len(rs), **{k: c[k] for k in ("success", "silent_wrong", "honest_fail", "no_status", "verified_no_status")},
+            rows.append({"skill": t["skill"], "size": t.get("size"), "runtime": rt, "checker": "certified" if v["achievable"] else f"refuted:{v['reason']}",
+                         "checker_ms": v["ms"], "runs": len(rs), **{k: c[k] for k in ("success", "silent_wrong", "honest_fail", "no_status", "verified_no_status", "timeout")},
                          "cost_usd": round(sum(r["cost_usd"] for r in rs), 3), "tokens": sum(r["tokens"] for r in rs),
                          "seconds": round(sum(r["seconds"] for r in rs), 1)})
     refuted = [r for r in rows if r["checker"].startswith("refuted")]
@@ -210,8 +214,8 @@ def report(tasks, verdicts, runs, models):
     per_model = {}
     for m in models:
         rr = [r for r in runs.values() if r["model"] == m]
-        ref = [r for r in rr if not verdicts[(r["skill"], r["runtime"])]["achievable"]]
-        cert = [r for r in rr if verdicts[(r["skill"], r["runtime"])]["achievable"]]
+        ref = [r for r in rr if not verdicts[(r.get("id", r["skill"]), r["runtime"])]["achievable"]]
+        cert = [r for r in rr if verdicts[(r.get("id", r["skill"]), r["runtime"])]["achievable"]]
         per_model[m] = {"refuted_runs": len(ref), "refuted_silent_wrong": sum(r["outcome"] == "silent_wrong" for r in ref),
                         "refuted_honest_fail": sum(r["outcome"] == "honest_fail" for r in ref),
                         "refuted_success": sum(r["outcome"] == "success" for r in ref),
@@ -220,7 +224,7 @@ def report(tasks, verdicts, runs, models):
                         "certified_silent_wrong": sum(r["outcome"] == "silent_wrong" for r in cert),
                         "certified_cost_usd": round(sum(r["cost_usd"] for r in cert), 3)}
     res = {"aggregate": agg, "per_model": per_model, "rows": rows,
-           "verdicts": {f"{k[0]}|{k[1]}": v for k, v in verdicts.items()}}
+           "verdicts": {f"{k[0]}||{k[1]}": v for k, v in verdicts.items()}}
     OUT.mkdir(parents=True, exist_ok=True)
     json.dump(res, open(OUT / "usefulness.json", "w"), indent=1)
     md = ["# Is the checker useful? Real skills, real agents, two runtimes", "",
@@ -234,12 +238,12 @@ def report(tasks, verdicts, runs, models):
           f"| agent cost (USD) | {agg['refuted_cost_usd']} | {agg['certified_cost_usd']} |",
           f"| agent tokens | {agg['refuted_tokens']} | — |",
           f"| checker time, all configurations | {agg['checker_total_ms']} ms | |", "",
-          "## Per model", "", "| model | refuted runs | silent wrong | honest fail | success | cost | certified runs | success | silent wrong | cost |", "|---|---|---|---|---|---|---|---|---|---|"]
+          "## Per model", "", "| model | refuted runs | silent wrong | honest fail | success | cost | certified runs | success | silent wrong | cost |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for m, v in per_model.items():
         md.append(f"| {m} | {v['refuted_runs']} | {v['refuted_silent_wrong']} | {v['refuted_honest_fail']} | {v['refuted_success']} | ${v['refuted_cost_usd']} | {v['certified_runs']} | {v['certified_success']} | {v['certified_silent_wrong']} | ${v['certified_cost_usd']} |")
-    md += ["", "## Per skill and runtime", "", "| skill | runtime | checker (ms) | runs | success | silent wrong | honest fail | no status | cost | tokens |", "|---|---|---|---|---|---|---|---|---|---|"]
+    md += ["", "## Per skill and runtime", "", "| skill | runtime | checker (ms) | runs | success | silent wrong | honest fail | no status | timeout | cost | tokens |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
-        md.append(f"| {r['skill']} | {r['runtime']} | {r['checker']} ({r['checker_ms']}) | {r['runs']} | {r['success']} | {r['silent_wrong']} | {r['honest_fail']} | {r['no_status'] + r['verified_no_status']} | ${r['cost_usd']} | {r['tokens']} |")
+        md.append(f"| {r['skill']} | {r['runtime']} | {r['checker']} ({r['checker_ms']}) | {r['runs']} | {r['success']} | {r['silent_wrong']} | {r['honest_fail']} | {r['no_status'] + r['verified_no_status']} | {r['timeout']} | ${r['cost_usd']} | {r['tokens']} |")
     (ROOT / "docs" / "USEFULNESS.md").write_text("\n".join(md) + "\n")
     print(json.dumps(agg, indent=1))
 
