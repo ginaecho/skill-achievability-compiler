@@ -119,8 +119,8 @@ four TikZ figures, and the conventional structure.
   question is invisible to them.
 - Severity benchmark (17 protocols, 55 branch verdicts, 0.33 s): 29 Benign / 7 Futile /
   19 Catastrophic; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase,
-  send, deploy, delete, ship, purge, refund, drop_old, commit. 14/15 matched
-  pre-stated expectations; the 15th was a benchmark authoring error, fixed.
+  send, deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
+  pre-stated expectations; the exception was a benchmark authoring error, fixed.
 - Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
   violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1 (one-sided Fisher
   p = 0.046, not conventionally significant); 6 of 19
