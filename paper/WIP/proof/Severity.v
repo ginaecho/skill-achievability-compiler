@@ -310,6 +310,108 @@ Qed.
 
 End Principal.
 
+(* ================================================================= *)
+(*  THE CONE OF INFLUENCE.                                             *)
+(*                                                                     *)
+(*  Modular checking (TC_seq_interface) is only cheap if the interface  *)
+(*  can be made coarse, and the principled coarsening is to project     *)
+(*  exit worlds onto the state variables the remaining protocol reads.  *)
+(*  The paper used to argue that soundness in prose.  Here it is: if    *)
+(*  the hazard, the capabilities and every guard of G look only at a    *)
+(*  set V of variables, then worlds agreeing on V are interchangeable   *)
+(*  for G at every budget -- so one representative per V-class suffices. *)
+(* ================================================================= *)
+Section Cone.
+Variable E : Ctx.
+Variable Haz : World -> Prop.
+Variable V : Var -> Prop.                    (* the cone *)
+
+Definition agree (W1 W2 : World) : Prop := forall x, V x -> W1 x = W2 x.
+
+Lemma agree_refl : forall W, agree W W.
+Proof. intros W x _. reflexivity. Qed.
+Lemma agree_sym : forall W1 W2, agree W1 W2 -> agree W2 W1.
+Proof. intros W1 W2 H x Hx. symmetry. apply H. exact Hx. Qed.
+
+(* the hazard reads only the cone *)
+Hypothesis haz_cone : forall W1 W2, agree W1 W2 -> (Haz W1 <-> Haz W2).
+(* the capabilities act only on the cone: agreeing worlds have agreeing
+   successors, which is a bisimulation up to V *)
+Hypothesis cap_cone : forall a W1 W2 W1',
+  agree W1 W2 -> E a W1 W1' -> exists W2', E a W2 W2' /\ agree W1' W2'.
+
+(* and so do the guards of the protocol at hand *)
+Fixpoint guards_in_cone (G : Gt) : Prop :=
+  match G with
+  | GEnd => True
+  | GAct _ _ G0 => guards_in_cone G0
+  | GGoal _ G0 => guards_in_cone G0
+  | GComm _ _ brs =>
+      fold_right (fun b acc =>
+        ((forall W1 W2, agree W1 W2 -> (snd (fst b) W1 <-> snd (fst b) W2))
+         /\ guards_in_cone (snd b)) /\ acc) True brs
+  end.
+
+Lemma guards_in_cone_br : forall (brs : list (Lab * (World -> Prop) * Gt)) l psi Gl,
+  fold_right (fun b acc =>
+    ((forall W1 W2, agree W1 W2 -> (snd (fst b) W1 <-> snd (fst b) W2))
+     /\ guards_in_cone (snd b)) /\ acc) True brs ->
+  In (l, psi, Gl) brs ->
+  (forall W1 W2, agree W1 W2 -> (psi W1 <-> psi W2)) /\ guards_in_cone Gl.
+Proof.
+  induction brs as [ | b tl IH ]; simpl; intros l psi Gl Hf Hin; [ contradiction | ].
+  destruct Hf as [Hb Htl]. destruct Hin as [Heq | Hin].
+  - subst b. simpl in Hb. exact Hb.
+  - eapply IH; eauto.
+Qed.
+
+Theorem reach_cone : forall b G W1 W2,
+  guards_in_cone G -> agree W1 W2 ->
+  reach_haz E Haz b G W1 -> reach_haz E Haz b G W2.
+Proof.
+  intros b G W1 W2 Hg Hag Hr. revert W2 Hg Hag.
+  induction Hr as [ b G W Hh | b a p G W W' HE Hr IH | b phi G W Hr IH
+                  | b p q brs l psi Gl W Hin Hpsi Hr IH
+                  | b p q brs l psi Gl W Hin Hpsi Hr IH ];
+    intros W2 Hg Hag.
+  - apply RH_here. apply (haz_cone W W2 Hag). exact Hh.
+  - simpl in Hg. destruct (cap_cone a W W2 W' Hag HE) as [W2' [HE2 Hag']].
+    eapply RH_act; [ exact HE2 | apply IH; assumption ].
+  - simpl in Hg. apply RH_goal. apply IH; assumption.
+  - simpl in Hg. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
+    eapply RH_comm_ok; [ exact Hin | apply (Hpc W W2 Hag); exact Hpsi | ].
+    apply IH; assumption.
+  - simpl in Hg. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
+    eapply RH_comm_dev; [ exact Hin | | apply IH; assumption ].
+    intro Hp2. apply Hpsi. apply (Hpc W W2 Hag). exact Hp2.
+Qed.
+
+(* worlds that agree on the cone are interchangeable for the condition *)
+Theorem safeT_cone : forall b G W1 W2,
+  guards_in_cone G -> agree W1 W2 ->
+  (safeT E Haz b G W1 <-> safeT E Haz b G W2).
+Proof.
+  intros b G W1 W2 Hg Hag. split; intro Hs;
+    apply (TC_complete E Haz (Gt_size G)); try apply le_n;
+    intro Hr; apply (TC_sound E Haz b G _ Hs).
+  - eapply reach_cone; [ exact Hg | apply agree_sym; exact Hag | exact Hr ].
+  - eapply reach_cone; [ exact Hg | exact Hag | exact Hr ].
+Qed.
+
+(* THE INTERFACE CONSEQUENCE: an interface need only contain one
+   representative of each cone-class, not one world per concrete exit *)
+Corollary interface_projection : forall b G (I : list World) W,
+  guards_in_cone G ->
+  (exists W0, In W0 I /\ agree W0 W) ->
+  (forall W0, In W0 I -> safeT E Haz b G W0) ->
+  safeT E Haz b G W.
+Proof.
+  intros b G I W Hg [W0 [Hin Hag]] Hall.
+  apply (safeT_cone b G W0 W Hg Hag). apply Hall. exact Hin.
+Qed.
+
+End Cone.
+
 Section AssuredS.
 Variable E : Ctx.
 Variable P : World -> Prop.

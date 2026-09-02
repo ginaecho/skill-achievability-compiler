@@ -35,3 +35,6 @@ Print Assumptions robust_benign.
 Print Assumptions principal_characterises.
 Print Assumptions principal_unique.
 Print Assumptions principal_exists.
+Print Assumptions reach_cone.
+Print Assumptions safeT_cone.
+Print Assumptions interface_projection.
