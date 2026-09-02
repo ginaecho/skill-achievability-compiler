@@ -29,3 +29,5 @@ Print Assumptions canon_other.
 Print Assumptions label_determines.
 Print Assumptions canon_conforms.
 Print Assumptions two_role_bridge_nonvacuous.
+Print Assumptions Gmiss_safe.
+Print Assumptions Gmiss_uninhabited.

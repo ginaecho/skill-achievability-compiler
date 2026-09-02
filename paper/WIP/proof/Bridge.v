@@ -1049,3 +1049,42 @@ Proof.
   apply (safeT_cone E0 Haz0 V0 V0_haz_cone V0_cap_cone b Ggood W0 W0'
            V0_guards_Ggood W0_W0'_agree).
 Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  THE COST OF THE MARKER, STATED.                                    *)
+(*                                                                     *)
+(*  A marker on a branch a misselection can take is an assertion about  *)
+(*  a world the protocol does not control, and the condition does not   *)
+(*  see it -- safeT treats a marker as transparent.  So the two can     *)
+(*  come apart: Gmiss is 0-tolerant and NO session conforms to it.      *)
+(*  That is the price of CT_Goal's premise, and the reason two_role     *)
+(*  excludes markers.  A reader deciding whether to use markers should  *)
+(*  weigh this against markers_are_met.                                 *)
+(* ----------------------------------------------------------------- *)
+Definition Gmiss : Gt :=
+  GComm 0 1 [ (10, (fun _ : World => True), GEnd) ;
+              (11, (fun _ : World => False), GGoal Phi0 GEnd) ].
+
+Lemma Gmiss_safe : safeT E0 Haz0 0 Gmiss W0.
+Proof.
+  apply ST_Comm; [ exact notHaz_W0 | | ].
+  - intros l psi Gl Hin Hpsi. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + apply ST_End. exact notHaz_W0.
+    + exfalso. exact Hpsi.
+  - intros l psi Gl Hin Hnpsi c Hb. discriminate Hb.
+Qed.
+
+Theorem Gmiss_uninhabited : forall s, ~ ctypes E0 Gmiss s W0.
+Proof.
+  intros s Hct.
+  inversion Hct as [ | | | p q brs s0 W0' sendb recvb
+                       Hpq Hsp Hsq Hne Hl1 Hl2 Hl3 Hcont ]; subst.
+  assert (Hin : In (11, (fun _ : World => False), GGoal Phi0 GEnd)
+                   [(10, (fun _ : World => True), GEnd);
+                    (11, (fun _ : World => False), GGoal Phi0 GEnd)])
+    by (right; left; reflexivity).
+  destruct (Hl1 _ _ _ Hin) as [P HP]. destruct (Hl3 _ _ _ Hin) as [Q HQ].
+  specialize (Hcont _ _ _ P Q Hin HP HQ).
+  inversion Hcont as [ | phi0 G0 s1 W1 Hphi _ | | ]; subst.
+  destruct Hphi as [Hb _]. unfold W0 in Hb. discriminate.
+Qed.
