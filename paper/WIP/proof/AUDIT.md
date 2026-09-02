@@ -177,7 +177,7 @@ Scope: head-move semantics of the finite fragment, matching the base
 
 | Result | Coq |
 |---|---|
-| Safe swaps preserve the condition / typing; interleaved runs are hazard-free within budget | `swap_safe`, `swap_ctypes`, `swaps_safe`, `swaps_ctypes`, `bridge_interleaved` |
+| Safe swaps (action/action, action/choice, action/goal in both directions, and two communications between disjoint role pairs) preserve the condition / typing; interleaved runs are hazard-free within budget | `swap_safe`, `swap_ctypes`, `swaps_safe`, `swaps_ctypes`, `bridge_interleaved` |
 | STRIPS variable disjointness discharges commutation, enabledness, guard preservation, hazard neutrality, and hence every side condition of an action swap | `strips_commute`, `strips_enables`, `strips_preserves`, `strips_neutral`, `strips_swap_act` |
 
 ## `Kernel.v` — the verified kernel (3 results) and `Regular.v` additions

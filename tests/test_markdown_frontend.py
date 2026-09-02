@@ -88,9 +88,24 @@ def test_declared_camelcase_is_a_tool():
 
 
 def test_code_fences_are_not_scanned():
+    # identifiers INSIDE a fence are never scanned; the fence itself, when the
+    # prose says to run it, is one shell invocation
     md = "Run the setup.\n```python\n# use `fake_tool_x` here\n```\nDone."
     res = compile_markdown(md, CLAUDE_AI)
-    assert res.invocations == []
+    assert all(i.tool == "bash" for i in res.invocations)
+    assert not any("fake_tool_x" in i.raw for i in res.invocations)
+
+
+def test_executable_fences_require_the_shell():
+    example = "For reference, the API looks like:\n```python\nx = 1\n```\n"
+    assert compile_markdown(example, CLAUDE_AI).invocations == []
+    shell = "Then:\n```bash\nls -la\n```\n"
+    inv = compile_markdown(shell, CLAUDE_AI).invocations
+    assert [i.tool for i in inv] == ["bash"]
+    from skillc.profiles import load_profile
+    from skillc.checker import check
+    res = compile_markdown(shell, load_profile("none"))
+    assert check(res.pack).reason == "MISSING_CAPABILITY"
 
 
 def test_line_numbers_survive_fence_stripping():
