@@ -16,7 +16,6 @@ Print Assumptions validates_ab_enabled.
 Print Assumptions reach_halted.
 Print Assumptions safeT_halted.
 Print Assumptions guard_abort_is_futile.
-Print Assumptions idle.
 Print Assumptions reach_idle.
 Print Assumptions safeT_inert.
 Print Assumptions guard_absorbs_misselection_ab.
