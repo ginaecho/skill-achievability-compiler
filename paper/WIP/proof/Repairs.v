@@ -406,6 +406,111 @@ Proof.
   - eapply ends_reach_gseq; eauto.
 Qed.
 
+(* ----------------------------------------------------------------- *)
+(*  CONGRUENCE.  Every repair above rewrites the ROOT of a protocol.   *)
+(*  The tool applies them at nested positions, which needs the         *)
+(*  condition to be a congruence for one-hole contexts.  It is.        *)
+(* ----------------------------------------------------------------- *)
+Inductive Cx : Type :=
+| CHole : Cx
+| CAct  : CapN -> Role -> Cx -> Cx
+| CGoal : (World -> Prop) -> Cx -> Cx
+| CComm : Role -> Role ->
+          list (Lab * (World -> Prop) * Gt) ->        (* branches before *)
+          Lab -> (World -> Prop) -> Cx ->             (* the branch with the hole *)
+          list (Lab * (World -> Prop) * Gt) ->        (* branches after *)
+          Cx.
+
+Fixpoint plug (C : Cx) (G : Gt) : Gt :=
+  match C with
+  | CHole => G
+  | CAct a p C0 => GAct a p (plug C0 G)
+  | CGoal phi C0 => GGoal phi (plug C0 G)
+  | CComm p q pre l psi C0 post =>
+      GComm p q (pre ++ (l, psi, plug C0 G) :: post)
+  end.
+
+Lemma safeT_not_haz_local : forall b G W, safeT E Haz b G W -> ~ Haz W.
+Proof. intros b G W H. destruct H; assumption. Qed.
+
+Theorem safeT_congruence : forall C b G1 G2 W,
+  (forall b' W', safeT E Haz b' G1 W' -> safeT E Haz b' G2 W') ->
+  safeT E Haz b (plug C G1) W ->
+  safeT E Haz b (plug C G2) W.
+Proof.
+  intros C. induction C as [ | a p C IH | phi C IH | p q pre l psi C IH post ];
+    intros b G1 G2 W Himp Hs; simpl in *.
+  - apply Himp. exact Hs.
+  - inversion Hs as [ | | b0 a0 p0 G0 W0 Hnh Hall | ]; subst.
+    apply ST_Act; [ exact Hnh | ]. intros W' HE. eapply IH; eauto.
+  - inversion Hs as [ | b0 phi0 G0 W0 Hnh Hbody | | ]; subst.
+    apply ST_Goal; [ exact Hnh | ]. eapply IH; eauto.
+  - inversion Hs as [ | | | b0 p0 q0 brs0 W0 Hnh Hok Hdev ]; subst.
+    apply ST_Comm; [ exact Hnh | | ].
+    + intros l' psi' Gl' Hin Hpsi.
+      apply in_app_or in Hin. destruct Hin as [Hin | [Heq | Hin]].
+      * eapply Hok; [ apply in_or_app; left; exact Hin | exact Hpsi ].
+      * inversion Heq; subst. eapply IH; [ exact Himp | ].
+        eapply Hok; [ apply in_or_app; right; left; reflexivity | exact Hpsi ].
+      * eapply Hok; [ apply in_or_app; right; right; exact Hin | exact Hpsi ].
+    + intros l' psi' Gl' Hin Hpsi c Hb.
+      apply in_app_or in Hin. destruct Hin as [Hin | [Heq | Hin]].
+      * eapply Hdev; [ apply in_or_app; left; exact Hin | exact Hpsi | exact Hb ].
+      * inversion Heq; subst. eapply IH; [ exact Himp | ].
+        eapply Hdev; [ apply in_or_app; right; left; reflexivity | exact Hpsi |
+                       first [ exact Hb | reflexivity ] ].
+      * eapply Hdev; [ apply in_or_app; right; right; exact Hin | exact Hpsi | exact Hb ].
+Qed.
+
+(* ---- the four repairs, off the root ---- *)
+
+Corollary repair_narrow_anywhere : forall C b p q brs brs' W,
+  brs_sub brs' brs ->
+  safeT E Haz b (plug C (GComm p q brs)) W ->
+  safeT E Haz b (plug C (GComm p q brs')) W.
+Proof.
+  intros C b p q brs brs' W Hsub Hs.
+  eapply safeT_congruence; [ | exact Hs ].
+  intros b' W' H. eapply repair_narrow_sound; eassumption.
+Qed.
+
+Corollary repair_guard_anywhere : forall C b p q brs l psi ab Gl a W,
+  (forall W', validates_ab a psi ab W') ->
+  (forall W', ~ Haz W' -> inert (ab W')) ->
+  (forall b' W', psi W' -> safeT E Haz b' Gl W') ->
+  safeT E Haz b (plug C (GComm p q brs)) W ->
+  safeT E Haz b (plug C (GComm p q ((l, psi, GAct a p Gl) :: brs))) W.
+Proof.
+  intros C b p q brs l psi ab Gl a W Hv Hin Hint Hs.
+  eapply safeT_congruence; [ | exact Hs ].
+  intros b' W' H. eapply repair_guard_sound_ab.
+  - apply Hv.
+  - apply Hin. eapply safeT_not_haz_local; eassumption.
+  - exact H.
+  - intro Hp. apply Hint. exact Hp.
+Qed.
+
+Corollary repair_reorder_anywhere : forall C b p q irr chk G W,
+  commutes irr chk -> harmless chk ->
+  safeT E Haz b (plug C (GAct irr p (GAct chk q G))) W ->
+  safeT E Haz b (plug C (GAct chk q (GAct irr p G))) W.
+Proof.
+  intros C b p q irr chk G W Hcom Hharm Hs.
+  eapply safeT_congruence; [ | exact Hs ].
+  intros b' W' H. apply repair_reorder_sound with (p := p) (q := q); assumption.
+Qed.
+
+Corollary repair_compensate_anywhere : forall C b Gl R W,
+  (forall b0 W0 b' W', ends E b0 Gl W0 b' W' -> safeT E Haz b' R W') ->
+  safeT E Haz b (plug C Gl) W ->
+  safeT E Haz b (plug C (gseq Gl R)) W.
+Proof.
+  intros C b Gl R W Hall Hs.
+  eapply safeT_congruence; [ | exact Hs ].
+  intros b' W' H. eapply repair_compensate_sound; [ exact H | ].
+  intros b'' W'' Hen. eapply Hall; eassumption.
+Qed.
+
 End Repairs.
 
 (* ================================================================= *)
