@@ -112,7 +112,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**190 results, every one axiom-free** (`Print Assumptions` harnesses).
+**189 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 `make check` at the repo root verifies both of the paper's mechanical

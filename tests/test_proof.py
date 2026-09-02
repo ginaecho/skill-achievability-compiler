@@ -96,3 +96,27 @@ def test_the_numbers_the_paper_states_match_the_shipped_results():
         pytest.skip("numbers checker not present")
     r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_every_audited_name_is_a_proof_not_a_definition():
+    """"N results, every one axiom-free" should count results.  A
+    `Print Assumptions` on a Definition always prints "Closed under the global
+    context" and proves nothing, so one in a harness inflates the number the
+    paper reports."""
+    import re
+    from pathlib import Path
+
+    proof = Path(__file__).resolve().parents[1] / "paper" / "WIP" / "proof"
+    if not proof.is_dir():
+        import pytest
+        pytest.skip("proof directory not present")
+    names = []
+    for f in sorted(proof.glob("check_*.v")):
+        names += re.findall(r"Print Assumptions\s+([A-Za-z0-9_']+)\s*\.", f.read_text())
+    src = "\n".join(f.read_text() for f in sorted(proof.glob("*.v"))
+                    if not f.stem.startswith("check_"))
+    defs = [n for n in names
+            if re.search(rf"^\s*(Definition|Fixpoint|Record|Inductive|CoInductive)\s+"
+                         rf"{re.escape(n)}\b", src, re.M)]
+    assert not defs, f"these audited names are definitions, not results: {defs}"
+    assert len(names) >= 150
