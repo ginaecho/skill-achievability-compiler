@@ -240,6 +240,78 @@ Qed.
 (*  residual configuration falls in exactly one class.               *)
 (* ================================================================= *)
 
+(* ================================================================= *)
+(*  THE OTHER QUANTIFIER.                                              *)
+(*                                                                     *)
+(*  reach_haz is EXISTENTIAL: some affordable path arrives.  For the    *)
+(*  HAZARD that is the right reading -- a possible catastrophe is a     *)
+(*  catastrophe.  For the GOAL it says only that the goal is still      *)
+(*  POSSIBLE, and possible over the future choices of exactly the       *)
+(*  participant the discipline says you cannot rely on.  assuredP gives *)
+(*  the universal reading: whatever the agent picks and whatever the    *)
+(*  environment returns, within budget b the run arrives at P.  A       *)
+(*  choice must have an intended branch -- otherwise a budget of 0      *)
+(*  would discharge the obligation vacuously -- every intended branch   *)
+(*  must deliver, and so must every misselection the budget can pay     *)
+(*  for.                                                                *)
+(* ================================================================= *)
+Section AssuredS.
+Variable E : Ctx.
+Variable P : World -> Prop.
+
+Inductive assuredP : nat -> Gt -> World -> Prop :=
+| AS_here : forall b G W,
+    P W -> assuredP b G W
+| AS_act : forall b a p G W,
+    (exists W', E a W W') ->
+    (forall W', E a W W' -> assuredP b G W') ->
+    assuredP b (GAct a p G) W
+| AS_goal : forall b phi G W,
+    assuredP b G W -> assuredP b (GGoal phi G) W
+| AS_comm : forall b p q brs W l0 psi0 Gl0,
+    In (l0, psi0, Gl0) brs -> psi0 W ->
+    (forall l psi Gl, In (l, psi, Gl) brs -> psi W -> assuredP b Gl W) ->
+    (forall l psi Gl c, In (l, psi, Gl) brs -> ~ psi W -> b = S c ->
+                        assuredP c Gl W) ->
+    assuredP b (GComm p q brs) W.
+
+(* what is assured is reachable: the universal reading refines the
+   existential one, so it strengthens the classes rather than changing
+   them *)
+Theorem assured_reach : forall b G W, assuredP b G W -> reach_haz E P b G W.
+Proof.
+  intros b G W H.
+  induction H as [ b G W Hp | b a p G W Hex Hall IH | b phi G W H IH
+                 | b p q brs W l0 psi0 Gl0 Hin Hpsi Hok IHok Hdev IHdev ].
+  - apply RH_here. exact Hp.
+  - destruct Hex as [W' HE]. eapply RH_act; [ exact HE | apply IH; exact HE ].
+  - apply RH_goal. exact IH.
+  - eapply RH_comm_ok; [ exact Hin | exact Hpsi | ].
+    exact (IHok l0 psi0 Gl0 Hin Hpsi).
+Qed.
+
+(* and it is monotone in the budget in the direction one expects: more
+   affordable mistakes is a STRONGER obligation, so assurance at a larger
+   budget implies assurance at a smaller one *)
+Lemma assured_downward : forall b b' G W,
+  assuredP b G W -> b' <= b -> assuredP b' G W.
+Proof.
+  intros b b' G W H. revert b'.
+  induction H as [ b G W Hp | b a p G W Hex Hall IH | b phi G W H IH
+                 | b p q brs W l0 psi0 Gl0 Hin Hpsi Hok IHok Hdev IHdev ];
+    intros b' Hle.
+  - apply AS_here. exact Hp.
+  - apply AS_act; [ exact Hex | ]. intros W' HE. apply IH; [ exact HE | exact Hle ].
+  - apply AS_goal. apply IH. exact Hle.
+  - eapply AS_comm; [ exact Hin | exact Hpsi | | ].
+    + intros l psi Gl Hin' Hp'. exact (IHok l psi Gl Hin' Hp' b' Hle).
+    + intros l psi Gl c Hin' Hnp Hb. subst b'.
+      destruct b as [ | b0 ]; [ lia | ].
+      exact (IHdev l psi Gl b0 Hin' Hnp eq_refl c ltac:(lia)).
+Qed.
+
+End AssuredS.
+
 Section Severity.
 Variable E : Ctx.
 Variable Haz : World -> Prop.
@@ -251,6 +323,21 @@ Definition Futile (b : nat) (G : Gt) (W : World) : Prop :=
   ~ reach_haz E Haz b G W /\ ~ reach_haz E Phi b G W.
 Definition Benign (b : nat) (G : Gt) (W : World) : Prop :=
   ~ reach_haz E Haz b G W /\ reach_haz E Phi b G W.
+
+(* The goal side, read universally.  Benign says the goal is still
+   POSSIBLE; Robust says it is still GUARANTEED -- no affordable
+   misselection, and no environment answer, can talk the run out of it.
+   Robust implies Benign and is strictly stronger (Bridge.v exhibits the
+   gap), so the two readings are kept apart rather than conflated. *)
+Definition Assured (b : nat) (G : Gt) (W : World) : Prop := assuredP E Phi b G W.
+
+Definition Robust (b : nat) (G : Gt) (W : World) : Prop :=
+  ~ reach_haz E Haz b G W /\ Assured b G W.
+
+Theorem robust_benign : forall b G W, Robust b G W -> Benign b G W.
+Proof.
+  intros b G W [Hnh Ha]. split; [ exact Hnh | apply assured_reach; exact Ha ].
+Qed.
 
 (* Failure is not disaster.  The three classes are pairwise disjoint,
    and (given decidability of the two reachability questions, which the

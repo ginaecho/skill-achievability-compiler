@@ -16,3 +16,5 @@ Print Assumptions Ggoal_marker_met.
 Print Assumptions ctypes_comm_labels.
 Print Assumptions narrowing_breaks_conformance.
 Print Assumptions narrowing_asymmetry.
+Print Assumptions Gloss_safe.
+Print Assumptions benign_is_not_robust.
