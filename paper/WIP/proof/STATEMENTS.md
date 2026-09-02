@@ -77,11 +77,11 @@ futile_downward
 interface_projection
      : forall (E : Ctx) (Haz : World -> Prop) (V : Var -> Prop),
        (forall W1 W2 : World, agree V W1 W2 -> Haz W1 <-> Haz W2) ->
-       (forall (a : CapN) (W1 W2 W1' : World),
-        agree V W1 W2 ->
-        E a W1 W1' -> exists W2' : World, E a W2 W2' /\ agree V W1' W2') ->
-       forall (b : nat) (G : Gt) (I : list World) (W : World),
+       forall (U : CapN -> Prop) (b : nat) (G : Gt) 
+         (I : list World) (W : World),
+       (forall a : CapN, U a -> cap_in_cone E V a) ->
        guards_in_cone V G ->
+       uses U G ->
        (exists W0 : World, List.In W0 I /\ agree V W0 W) ->
        (forall W0 : World, List.In W0 I -> safeT E Haz b G W0) ->
        safeT E Haz b G W
@@ -100,11 +100,10 @@ principal_unique
 reach_cone
      : forall (E : Ctx) (Haz : World -> Prop) (V : Var -> Prop),
        (forall W1 W2 : World, agree V W1 W2 -> Haz W1 <-> Haz W2) ->
-       (forall (a : CapN) (W1 W2 W1' : World),
-        agree V W1 W2 ->
-        E a W1 W1' -> exists W2' : World, E a W2 W2' /\ agree V W1' W2') ->
-       forall (b : nat) (G : Gt) (W1 W2 : World),
+       forall (U : CapN -> Prop) (b : nat) (G : Gt) (W1 W2 : World),
+       (forall a : CapN, U a -> cap_in_cone E V a) ->
        guards_in_cone V G ->
+       uses U G ->
        agree V W1 W2 -> reach_haz E Haz b G W1 -> reach_haz E Haz b G W2
 reach_mono_budget
      : forall (E : Ctx) (P : World -> Prop) (b : nat) (G : Gt) (W : World),
@@ -123,12 +122,10 @@ robust_benign
 safeT_cone
      : forall (E : Ctx) (Haz : World -> Prop) (V : Var -> Prop),
        (forall W1 W2 : World, agree V W1 W2 -> Haz W1 <-> Haz W2) ->
-       (forall (a : CapN) (W1 W2 W1' : World),
-        agree V W1 W2 ->
-        E a W1 W1' -> exists W2' : World, E a W2 W2' /\ agree V W1' W2') ->
-       forall (b : nat) (G : Gt) (W1 W2 : World),
+       forall (U : CapN -> Prop) (b : nat) (G : Gt) (W1 W2 : World),
+       (forall a : CapN, U a -> cap_in_cone E V a) ->
        guards_in_cone V G ->
-       agree V W1 W2 -> safeT E Haz b G W1 <-> safeT E Haz b G W2
+       uses U G -> agree V W1 W2 -> safeT E Haz b G W1 <-> safeT E Haz b G W2
 severity_classes_are_separated
      : forall (E : Ctx) (Haz Phi : World -> Prop) 
          (k : nat) (G : Gt) (W : World),
@@ -857,14 +854,9 @@ strips_cap_cone
        (forall a : Severity.CapN, supported (c_pre (tbl a)) (c_vars (tbl a))) ->
        (forall (a : Severity.CapN) (x : Severity.Var),
         List.In x (c_add (tbl a)) -> List.In x (c_del (tbl a)) -> False) ->
-       forall V : Severity.Var -> Prop,
-       (forall (a : Severity.CapN) (x : Severity.Var),
-        List.In x (c_vars (tbl a)) -> V x) ->
-       forall (a : Severity.CapN) (W1 W2 W1' : Severity.World),
-       Severity.agree V W1 W2 ->
-       Es tbl a W1 W1' ->
-       exists W2' : Severity.World,
-         Es tbl a W2 W2' /\ Severity.agree V W1' W2'
+       forall (V : Severity.Var -> Prop) (a : Severity.CapN),
+       (forall x : Severity.Var, List.In x (c_vars (tbl a)) -> V x) ->
+       Severity.cap_in_cone (Es tbl) V a
 strips_commute
      : forall tbl : Severity.CapN -> Cap,
        (forall a : Severity.CapN, supported (c_pre (tbl a)) (c_vars (tbl a))) ->
@@ -895,13 +887,14 @@ strips_safeT_cone
        (forall (a : Severity.CapN) (x : Severity.Var),
         List.In x (c_add (tbl a)) -> List.In x (c_del (tbl a)) -> False) ->
        forall (V : Severity.Var -> Prop) (Haz : Severity.World -> Prop)
-         (hvars : list Severity.Var),
+         (hvars : list Severity.Var) (U : Severity.CapN -> Prop),
        supported Haz hvars ->
        (forall x : Severity.Var, List.In x hvars -> V x) ->
        (forall (a : Severity.CapN) (x : Severity.Var),
-        List.In x (c_vars (tbl a)) -> V x) ->
+        U a -> List.In x (c_vars (tbl a)) -> V x) ->
        forall (b : nat) (G : Severity.Gt) (W1 W2 : Severity.World),
        Severity.guards_in_cone V G ->
+       Severity.uses U G ->
        Severity.agree V W1 W2 ->
        Severity.safeT (Es tbl) Haz b G W1 <->
        Severity.safeT (Es tbl) Haz b G W2

@@ -617,15 +617,13 @@ Proof.
   - eapply Hsup; [ | exact H ]. intros x Hx. symmetry. apply Hag. apply Hsub. exact Hx.
 Qed.
 
-Theorem strips_cap_cone : forall (V : Var -> Prop),
-  (forall a x, In x (c_vars (tbl a)) -> V x) ->
-  forall a W1 W2 W1', agree V W1 W2 -> Es a W1 W1' ->
-    exists W2', Es a W2 W2' /\ agree V W1' W2'.
+Theorem strips_cap_cone : forall (V : Var -> Prop) (a : CapN),
+  (forall x, In x (c_vars (tbl a)) -> V x) -> cap_in_cone Es V a.
 Proof.
-  intros V Hsub a W1 W2 W1' Hag HE.
+  intros V a Hsub W1 W2 W1' Hag HE.
   assert (Hpre2 : c_pre (tbl a) W2).
   { eapply pre_supported; [ | exact (proj1 HE) ].
-    intros x Hx. apply Hag. apply Hsub with (a := a). exact Hx. }
+    intros x Hx. apply Hag. apply Hsub. exact Hx. }
   exists (apply_cap a W2). split; [ apply apply_cap_E; exact Hpre2 | ].
   intros x Hx. unfold apply_cap.
   destruct (in_dec Nat.eq_dec x (c_add (tbl a))) as [Hadd | Hnadd].
@@ -636,18 +634,20 @@ Proof.
 Qed.
 
 (* so the cone-of-influence theorem applies to the tool's own capability
-   model, with the containment checked syntactically *)
-Corollary strips_safeT_cone : forall (V : Var -> Prop) (Haz : World -> Prop) hvars,
+   model, with the containment checked syntactically -- and only for the
+   tools the protocol at hand invokes *)
+Corollary strips_safeT_cone : forall (V : Var -> Prop) (Haz : World -> Prop) hvars
+                                     (U : CapN -> Prop),
   supported Haz hvars ->
   (forall x, In x hvars -> V x) ->
-  (forall a x, In x (c_vars (tbl a)) -> V x) ->
-  forall b G W1 W2, guards_in_cone V G -> agree V W1 W2 ->
+  (forall a x, U a -> In x (c_vars (tbl a)) -> V x) ->
+  forall b G W1 W2, guards_in_cone V G -> uses U G -> agree V W1 W2 ->
     (safeT Es Haz b G W1 <-> safeT Es Haz b G W2).
 Proof.
-  intros V Haz hvars Hsup Hhv Hcv b G W1 W2 Hg Hag.
-  apply (safeT_cone Es Haz V
-           (strips_haz_cone V Haz hvars Hsup Hhv)
-           (strips_cap_cone V Hcv) b G W1 W2 Hg Hag).
+  intros V Haz hvars U Hsup Hhv Hcv b G W1 W2 Hg Hu Hag.
+  apply (safeT_cone Es Haz V (strips_haz_cone V Haz hvars Hsup Hhv) U b G W1 W2);
+    try assumption.
+  intros a Hua. apply strips_cap_cone. intros x Hx. eapply Hcv; eauto.
 Qed.
 
 Theorem strips_neutral : forall (Haz : World -> Prop) hvars a,

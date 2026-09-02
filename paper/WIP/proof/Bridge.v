@@ -1021,10 +1021,12 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma V0_cap_cone : forall a W1 W2 W1',
-  agree V0 W1 W2 -> E0 a W1 W1' -> exists W2', E0 a W2 W2' /\ agree V0 W1' W2'.
+Definition U0 (a : CapN) : Prop := a = 1 \/ a = 2.
+
+Lemma V0_cap_cone : forall a, U0 a -> cap_in_cone E0 V0 a.
 Proof.
-  intros a W1 W2 W1' Hag HE.
+  intros a _.
+  intros W1 W2 W1' Hag HE.
   destruct HE as [[-> ->] | [-> ->]].
   - exists (wupd W2 verified 1). split; [ left; split; reflexivity | ].
     intros x Hx. destruct (Nat.eq_dec x verified) as [-> | Hxv].
@@ -1034,6 +1036,12 @@ Proof.
     intros x Hx. destruct (Nat.eq_dec x booked) as [-> | Hxb].
     + rewrite !wupd_same. reflexivity.
     + rewrite !wupd_other by exact Hxb. apply Hag. exact Hx.
+Qed.
+
+Lemma V0_uses_Ggood : uses U0 Ggood.
+Proof.
+  unfold Ggood, SafePath, U0. simpl. repeat split; try exact I;
+    [ left; reflexivity | right; reflexivity ].
 Qed.
 
 Lemma V0_guards_Ggood : guards_in_cone V0 Ggood.
@@ -1060,8 +1068,8 @@ Theorem cone_is_not_degenerate : forall b,
   W0 <> W0' /\ (safeT E0 Haz0 b Ggood W0 <-> safeT E0 Haz0 b Ggood W0').
 Proof.
   intro b. split; [ exact W0_W0'_differ | ].
-  apply (safeT_cone E0 Haz0 V0 V0_haz_cone V0_cap_cone b Ggood W0 W0'
-           V0_guards_Ggood W0_W0'_agree).
+  apply (safeT_cone E0 Haz0 V0 V0_haz_cone U0 b Ggood W0 W0'
+           V0_cap_cone V0_guards_Ggood V0_uses_Ggood W0_W0'_agree).
 Qed.
 
 (* ----------------------------------------------------------------- *)
