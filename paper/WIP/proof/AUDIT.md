@@ -153,7 +153,12 @@ Decidability of the two reachability questions is a hypothesis, as in
 |---|---|
 | A hazard is reachable within budget b iff some run with at most b misselections ends in a hazard state | `reach_msteps`, `reach_mu_iff_run` |
 
-## `Bridge.v` — from protocols to PROGRAMS (6 results)
+## `Bridge.v` — from protocols to PROGRAMS (9 results)
+
+| Result | Coq |
+|---|---|
+| **Non-vacuity**: explicit conforming sessions for the running example and its narrowed repair, and the bridge instantiated on one | `Gbad_inhabited`, `Ggood_inhabited`, `Gbad_bridge_nonvacuous` |
+
 
 | Result | Coq |
 |---|---|
