@@ -216,3 +216,33 @@ def test_grep_baseline_is_weaker_than_the_checker():
     assert res["grep_correct"] < res["checker_correct"]
     # every case the grep misses is a refutation that needs reachability
     assert all(not r["truth"] for r in res["grep_wrong"])
+
+
+def test_tolerance_degree_is_a_threshold_on_every_benchmark():
+    """The tool-side counterpart of Severity.v's principal_characterises: k*
+    is not merely where the scan stopped.  For every benchmark protocol with
+    a finite tolerance degree, no hazard is affordable at any budget <= k*
+    and one is affordable at every budget above it, up to kmax.  If that
+    failed, computing k* by an increasing scan would be unsound."""
+    from skillc.pack import Pack
+    from skillc.severity import SeverityAnalyzer, initial_state
+
+    KMAX = 4
+    checked = 0
+    for entry in BENCH.values():
+        raw = entry["pack"]
+        irreversible = raw.get("irreversible")
+        pack = Pack.load({k: v for k, v in raw.items() if k != "irreversible"})
+        rep = analyze(raw, kmax=KMAX)
+        k = rep.tolerance_degree
+        if k is None:                       # no hazard within kmax: nothing to test
+            continue
+        for b in range(0, KMAX + 1):
+            an = SeverityAnalyzer(pack, kmax=KMAX, irreversible=irreversible)
+            found, _, _ = an.hazard_within(list(pack.protocol), initial_state(pack),
+                                           {}, b, set(), record=False)
+            assert found == (b > k), (
+                f"{entry['id']}: hazard within {b} misselections is {found}, "
+                f"but k* = {k} says it should be {b > k}")
+        checked += 1
+    assert checked > 0, "no benchmark protocol had a finite tolerance degree"
