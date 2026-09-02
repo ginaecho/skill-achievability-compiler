@@ -246,3 +246,53 @@ Proof.
               (Gguarded_inhabited W2) (Gguarded_is_k_tolerant k) Hr Ht) as [H _].
   exact H.
 Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  The congruence is not degenerate either: here is a repair applied  *)
+(*  under a real context, with its premise discharged.                 *)
+(* ----------------------------------------------------------------- *)
+Lemma SafePath_safe_anywhere : forall b W, ~ Haz0 W -> safeT E0 Haz0 b SafePath W.
+Proof.
+  intros b W Hnh. apply ST_Act; [ exact Hnh | ]. intros W1 H1.
+  destruct H1 as [[_ ->] | [Hc _]]; [ | discriminate Hc ].
+  assert (Hnh1 : ~ Haz0 (wupd W verified 1))
+    by (intros [_ Hv]; rewrite wupd_same in Hv; discriminate).
+  apply ST_Act; [ exact Hnh1 | ]. intros W2 H2.
+  destruct H2 as [[Hc _] | [_ ->]]; [ discriminate Hc | ].
+  assert (Hnh2 : ~ Haz0 (wupd (wupd W verified 1) booked 1)).
+  { intros [_ Hv]. rewrite wupd_other in Hv; [ | unfold verified, booked; lia ].
+    rewrite wupd_same in Hv. discriminate. }
+  apply ST_End. exact Hnh2.
+Qed.
+
+(* verify, and only then choose: the choice sits one action below the root *)
+Definition Cverify : Cx := CAct 1 1 CHole.
+
+Lemma plug_Cverify_wide : safeT E0 Haz0 0 (plug Cverify Gbad) W0.
+Proof.
+  simpl. apply ST_Act; [ exact notHaz_W0 | ]. intros W1 H1.
+  destruct H1 as [[_ ->] | [Hc _]]; [ | discriminate Hc ].
+  assert (Hnh1 : ~ Haz0 (wupd W0 verified 1))
+    by (intros [_ Hv]; rewrite wupd_same in Hv; discriminate).
+  apply ST_Comm; [ exact Hnh1 | | ].
+  - intros l psi Gl Hin Hpsi. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + apply SafePath_safe_anywhere. exact Hnh1.
+    + exfalso. exact Hpsi.
+  - intros l psi Gl Hin Hnpsi c Hb. discriminate Hb.
+Qed.
+
+Theorem congruence_is_not_degenerate :
+  plug Cverify Gbad <> Gbad /\
+  safeT E0 Haz0 0 (plug Cverify Gbad) W0 /\
+  safeT E0 Haz0 0 (plug Cverify Ggood) W0.
+Proof.
+  repeat split.
+  - discriminate.
+  - apply plug_Cverify_wide.
+  - apply (repair_narrow_anywhere E0 Haz0 Cverify 0 0 1
+             [ (10, (fun _ : World => True), SafePath) ;
+               (11, (fun _ : World => False), FastPath) ]
+             [ (10, (fun _ : World => True), SafePath) ] W0).
+    + intros x Hx. destruct Hx as [Heq | []]. left. exact Heq.
+    + apply plug_Cverify_wide.
+Qed.
