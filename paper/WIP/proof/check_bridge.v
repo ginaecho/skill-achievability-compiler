@@ -18,3 +18,6 @@ Print Assumptions narrowing_breaks_conformance.
 Print Assumptions narrowing_asymmetry.
 Print Assumptions Gloss_safe.
 Print Assumptions benign_is_not_robust.
+Print Assumptions hrun_split.
+Print Assumptions bridge_every_configuration.
+Print Assumptions MBad_takes_the_wrong_branch.

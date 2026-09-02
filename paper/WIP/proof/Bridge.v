@@ -707,3 +707,62 @@ Proof.
                        (or_intror (or_introl eq_refl)) (fun H => H) eq_refl).
       inversion Hdev as [ b' G' W' Hp | | | ]; subst. exact (HnP Hp).
 Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  EVERY CONFIGURATION, not only the endpoint.                        *)
+(*                                                                     *)
+(*  bridge_run concludes about the world a run ends in.  The claim the *)
+(*  paper makes is stronger -- no configuration reachable within       *)
+(*  budget is hazardous -- and it needs runs to be prefix-closed.      *)
+(*  They are.                                                          *)
+(* ----------------------------------------------------------------- *)
+Lemma hrun_split : forall Ec G s W tr1 tr2 G' s' W',
+  hrun Ec G s W (tr1 ++ tr2) G' s' W' ->
+  exists G1 s1 W1, hrun Ec G s W tr1 G1 s1 W1 /\ hrun Ec G1 s1 W1 tr2 G' s' W'.
+Proof.
+  intros Ec G s W tr1. revert G s W.
+  induction tr1 as [ | [r c] tl IH ]; intros G s W tr2 G' s' W' Hr; simpl in Hr.
+  - exists G, s, W. split; [ apply HR_refl | exact Hr ].
+  - inversion Hr as [ | G0 s0 W0 G1 s1 W1 r0 c0 tr0 G2 s2 W2 Hst Hrest ]; subst.
+    destruct (IH G1 s1 W1 tr2 G' s' W' Hrest) as [Gm [sm [Wm [Ha Hb]]]].
+    exists Gm, sm, Wm. split; [ eapply HR_step; eassumption | exact Hb ].
+Qed.
+
+Lemma total_app : forall tr1 tr2, total (tr1 ++ tr2) = total tr1 + total tr2.
+Proof.
+  induction tr1 as [ | [r c] tl IH ]; intro tr2; simpl; [ reflexivity | ].
+  unfold total in *; simpl. rewrite IH. lia.
+Qed.
+
+Theorem bridge_every_configuration :
+  forall Ec Hz G s W b tr1 tr2 G' s' W',
+    ctypes Ec G s W ->
+    safeT Ec Hz b G W ->
+    hrun Ec G s W (tr1 ++ tr2) G' s' W' ->
+    total (tr1 ++ tr2) <= b ->
+    exists G1 s1 W1,
+      hrun Ec G s W tr1 G1 s1 W1 /\ ~ Hz W1 /\
+      ctypes Ec G1 s1 W1 /\ safeT Ec Hz (b - total tr1) G1 W1.
+Proof.
+  intros Ec Hz G s W b tr1 tr2 G' s' W' Hct Hsf Hr Ht.
+  destruct (hrun_split Ec G s W tr1 tr2 G' s' W' Hr) as [G1 [s1 [W1 [Ha Hb]]]].
+  rewrite total_app in Ht.
+  destruct (bridge_run Ec Hz G s W tr1 G1 s1 W1 b Hct Hsf Ha ltac:(lia))
+    as [Hnh [Hct1 Hsf1]].
+  exists G1, s1, W1. repeat split; assumption.
+Qed.
+
+(* and the misselected branch of the running example is a step a real
+   session takes, not a hypothetical one *)
+Theorem MBad_takes_the_wrong_branch :
+  (forall (psi : World -> Prop) (W : World), psi W \/ ~ psi W) ->
+  forall W, exists s' c,
+    hstep E0 Gbad MBad W FastPath s' W 0 c.
+Proof.
+  intros Hdec W.
+  apply (every_label_steps E0 Hdec 0 1
+           [(10, (fun _ : World => True), SafePath);
+            (11, (fun _ : World => False), FastPath)] MBad W
+           (Gbad_inhabited W) 11 (fun _ : World => False) FastPath).
+  right. left. reflexivity.
+Qed.

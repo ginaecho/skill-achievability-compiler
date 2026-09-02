@@ -255,6 +255,61 @@ Qed.
 (*  must deliver, and so must every misselection the budget can pay     *)
 (*  for.                                                                *)
 (* ================================================================= *)
+(* ================================================================= *)
+(*  PRINCIPAL BUDGET.  k* is not merely where a scan stopped: it is     *)
+(*  THE largest tolerated budget, and the set of tolerated budgets is   *)
+(*  exactly the interval below it.  So the tolerance degree is a        *)
+(*  principal solution in the type-theoretic sense -- every derivation  *)
+(*  of the condition for this residual is a derivation at some b <= k*, *)
+(*  and the one at k* subsumes them all by T-Sub.                       *)
+(* ================================================================= *)
+Section Principal.
+Variable E : Ctx.
+Variable Haz : World -> Prop.
+
+Definition principal (k : nat) (G : Gt) (W : World) : Prop :=
+  safeT E Haz k G W /\ ~ safeT E Haz (S k) G W.
+
+Theorem principal_characterises : forall k G W,
+  principal k G W -> forall b, safeT E Haz b G W <-> b <= k.
+Proof.
+  intros k G W [Hk Hnk] b. split.
+  - intro Hb. destruct (Nat.le_gt_cases b k) as [Hle | Hgt]; [ exact Hle | ].
+    exfalso. apply Hnk. apply (TC_complete E Haz (Gt_size G)); [ apply le_n | ].
+    intro Hr. apply (TC_sound E Haz b G W Hb).
+    eapply reach_mono_budget; [ exact Hr | lia ].
+  - intro Hle. apply (TC_complete E Haz (Gt_size G)); [ apply le_n | ].
+    intro Hr. apply (TC_sound E Haz k G W Hk).
+    eapply reach_mono_budget; [ exact Hr | exact Hle ].
+Qed.
+
+Theorem principal_unique : forall k k' G W,
+  principal k G W -> principal k' G W -> k = k'.
+Proof.
+  intros k k' G W Hp Hp'.
+  destruct Hp as [Hk Hnk]. destruct Hp' as [Hk' Hnk'].
+  assert (Hle : k <= k').
+  { apply (principal_characterises k' G W (conj Hk' Hnk')). exact Hk. }
+  assert (Hle' : k' <= k).
+  { apply (principal_characterises k G W (conj Hk Hnk)). exact Hk'. }
+  lia.
+Qed.
+
+(* and it exists exactly when tolerance is finite: if some budget is not
+   tolerated, there is a largest one that is *)
+Theorem principal_exists : forall n G W,
+  (forall b, safeT E Haz b G W \/ ~ safeT E Haz b G W) ->
+  safeT E Haz 0 G W -> ~ safeT E Haz n G W -> exists k, principal k G W.
+Proof.
+  intros n G W Hdec H0. induction n as [ | n IH ]; intro Hn.
+  - contradiction.
+  - destruct (Hdec n) as [Hy | Hn'].
+    + exists n. split; assumption.
+    + apply IH. exact Hn'.
+Qed.
+
+End Principal.
+
 Section AssuredS.
 Variable E : Ctx.
 Variable P : World -> Prop.

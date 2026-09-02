@@ -147,7 +147,7 @@ Section~\ref{sec:base}.}}
 \keywords{Session types, Multiparty, Behavioural types, Safety, Irreversibility,
 Fault tolerance, Mechanized metatheory}
 \category{}\relatedversion{}
-\supplement{Coq development (151 theorems, axiom-free, Coq 8.18), the
+\supplement{Coq development (157 theorems, axiom-free, Coq 8.18), the
 \texttt{skillc severity} implementation, the severity benchmark, and the
 evaluation scripts; anonymized for submission.}
 \funding{To be completed for the camera-ready.}
@@ -178,8 +178,9 @@ and every permutation of independent nodes. One syntax-directed rule characteriz
 exactly; each wrong selection is classified \Ben, \Fut{} or \Cat{} by outcome against a
 STRIPS-style world, and these are three consecutive intervals of budgets, not an arbitrary
 carve-up. The condition composes against an interface rather than a protocol's internals, and is
-decidable for regular protocols. Everything is mechanized in Coq, axiom-free, and the tool's
-decision on the boolean fragment is a kernel extracted from that proof.
+decidable for regular protocols. Everything is mechanized in Coq, axiom-free; the tool's own
+search is not extracted, but on the boolean fragment its verdict is cross-checked against a
+kernel that is.
 
 The evaluation asks whether any of this matters to a real agent. On a benchmark of seventeen
 protocols the analysis names the point-of-no-return action of every $0$-tolerant one; $340$ runs
@@ -191,7 +192,7 @@ sizes no refuted run produced a correct artifact.
 \end{abstract}
 
 \draftnote{Status. Everything in Sections~\ref{sec:severity}--\ref{sec:why} is
-mechanized (\texttt{proof/}, 151 results --- 137 for the present theory and 14
+mechanized (\texttt{proof/}, 157 results --- 143 for the present theory and 14
 for the audit of \S\ref{sec:whatchanged} --- all \texttt{Print Assumptions}
 closed). The evaluation numbers in Section~\ref{sec:eval} are real
 (\texttt{scripts/severity\_eval.py}, results in \texttt{paper/WIP/results/}).
@@ -664,9 +665,15 @@ not to the narrow one; narrowing both restores it
 a coercion along a subtyping preorder --- which is the honest reading of what
 the gate does, since it refuses the removed label at run time and a process
 that still offers it has stopped describing what can happen. That is also why
-narrowing is a repair (\S\ref{sec:repair}) rather than a coincidence. A
-minimal-budget (principal-$k$) result is future work: $\kstar$ is computed,
-not derived.
+narrowing is a repair (\S\ref{sec:repair}) rather than a coincidence.
+
+$\kstar$ is principal, not merely where a scan stopped. If a residual is
+$\kstar$-tolerant and not $(\kstar{+}1)$-tolerant, then the budgets at which
+it is tolerant are exactly those $\le\kstar$ (\coqok{principal\_characterises}),
+such a $\kstar$ is unique (\coqok{principal\_unique}), and one exists whenever
+tolerance is finite and the question is decidable (\coqok{principal\_exists}).
+So every derivation of the condition for that residual is a derivation at some
+$b\le\kstar$, and the one at $\kstar$ subsumes the rest by \textsc{T-Sub}.
 
 Reachability is also monotone in $\Gamma$, so for a \emph{fixed} hazard
 granting a tool can only lower $\kstar$
@@ -703,8 +710,9 @@ $r$.
 If $G\vdash(\MM;W)$ and $\safeT{k} G,W$, then every instrumented head step of
 cost $c\le$ the remaining budget preserves typing and debits the budget by
 exactly $c$ (\coqok{bridge\_step}); consequently, along every run of total
-cost at most $k$, no configuration is a hazard state
-(\coqok{bridge\_run}).
+cost at most $k$, no configuration is a hazard state --- runs are prefix-closed
+(\coqok{hrun\_split}), so this is every configuration and not only the last
+(\coqok{bridge\_run}, \coqok{bridge\_every\_configuration}).
 \end{theorem}
 
 Two questions come before any of this, and a discipline that skips them earns
@@ -717,8 +725,9 @@ The running example and its narrowed repair are inhabited: an explicit
 two-role session conforms to each, in every world
 (\coqok{Gbad\_inhabited}, \coqok{Ggood\_inhabited}). Hence
 Theorem~\ref{thm:bridge} applied to $G_{\mathsf{bad}}$ is a statement about a
-session that exists and can take the misselected branch
-(\coqok{Gbad\_bridge\_nonvacuous}).
+session that exists (\coqok{Gbad\_bridge\_nonvacuous}) and that really does
+take the misselected branch: the wrong label is a step that session performs
+(\coqok{MBad\_takes\_the\_wrong\_branch}).
 \end{theorem}
 
 Inhabitation in general is a projection question, and this discipline has no
@@ -819,13 +828,16 @@ b@\mathsf q.\,a@\mathsf r.\,G &\rightleftarrows& a@\mathsf r.\,b@\mathsf q.\,G
   & \mathsf r\notin\{\mathsf p,\mathsf q\},\ a\ \text{preserves each}\ \psi_i\\
 \checkmark\varphi.\,a@\mathsf r.\,G &\rightleftarrows& a@\mathsf r.\,\checkmark\varphi.\,G
   & a\ \text{preserves}\ \varphi\\
-\mathsf p{\to}\mathsf q\{\ell.\,\mathsf r{\to}\mathsf s\{m.\,K\}\}
-  &\rightleftarrows& \mathsf r{\to}\mathsf s\{m.\,\mathsf p{\to}\mathsf q\{\ell.\,K\}\}
-  & \{\mathsf p,\mathsf q\}\cap\{\mathsf r,\mathsf s\}=\emptyset\ \text{(no condition)}
+\mathsf p{\to}\mathsf q\{\ell_i.\,\mathsf r{\to}\mathsf s\{m_j.\,K_{ij}\}\}
+  &\rightleftarrows& \mathsf r{\to}\mathsf s\{m_j.\,\mathsf p{\to}\mathsf q\{\ell_i.\,K_{ij}\}\}
+  & \{\mathsf p,\mathsf q\}\cap\{\mathsf r,\mathsf s\}=\emptyset
 \end{array}
 \]
-Communications change no world, so their permutation is unconditional. An
-action's is not: $a$ must be \emph{hazard-neutral} (never change whether the
+Communications change no world, so their permutation needs no condition on
+guards or effects --- but it does need the two choices to be genuinely
+independent, which the rule expresses by requiring the full product: every
+pair $(\ell_i,m_j)$ present, with a residual $K_{ij}$ that depends on the pair
+and not on the order. An action's permutation is conditional: $a$ must be \emph{hazard-neutral} (never change whether the
 world is a hazard), $a$ and $b$ must \emph{commute} (one order re-serializes as
 the other with the same end world) and preserve each other's enabledness, and
 $a$ must preserve the guards and goal markers it passes.

@@ -32,3 +32,6 @@ Print Assumptions severity_classes_are_separated.
 Print Assumptions assured_reach.
 Print Assumptions assured_downward.
 Print Assumptions robust_benign.
+Print Assumptions principal_characterises.
+Print Assumptions principal_unique.
+Print Assumptions principal_exists.
