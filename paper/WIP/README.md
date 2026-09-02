@@ -115,7 +115,14 @@ four TikZ figures, and the conventional structure.
 **186 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
-`proof/STATEMENTS.md` lists the Coq statement of all 126 results the paper
+`make check` at the repo root verifies both of the paper's mechanical
+claims: that every number Section 10 states still matches `results/`
+(`results/CLAIMS.json` is the manifest; `scripts/check_paper_numbers.py`
+evaluates it), and that every Coq result the paper cites exists and is
+covered by a `Print Assumptions` harness. `make results` regenerates the
+token-free half of the evaluation; the model-dependent runs ship as recorded.
+
+`proof/STATEMENTS.md` lists the Coq statement of every result the paper
 cites, so a reader can check that each one says what the paper says it says
 without opening the sources. `python3 scripts/check_paper_citations.py` checks
 that every citation resolves and is covered by a harness (a test runs it);
