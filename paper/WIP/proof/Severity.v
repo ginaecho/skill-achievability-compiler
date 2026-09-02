@@ -190,9 +190,9 @@ Proof.
 Qed.
 
 (* ================================================================= *)
-(*  Budget monotonicity: k-resilience is downward closed in k.        *)
+(*  Budget monotonicity: k-misselection tolerance is downward closed in k.        *)
 (* ================================================================= *)
-Theorem resilience_downward_closed :
+Theorem tolerance_downward_closed :
   forall b G W, safeT b G W -> forall b', b' <= b -> safeT b' G W.
 Proof.
   intros b G W Hs.
@@ -283,7 +283,7 @@ End Severity.
 (*  Gamma monotonicity -- and the correction it forces.               *)
 (*                                                                     *)
 (*  Reachability of ANYTHING is monotone in the capability context.    *)
-(*  Hazard reachability is therefore monotone too, so k-resilience is  *)
+(*  Hazard reachability is therefore monotone too, so k-misselection tolerance is  *)
 (*  ANTI-monotone in Gamma: giving an agent more tools can only make   *)
 (*  it less resilient, never more.  (An earlier design note claimed    *)
 (*  severity was monotone-decreasing in Gamma on the grounds that more *)
@@ -306,7 +306,7 @@ Proof.
   - eapply RH_comm_dev; eauto.
 Qed.
 
-Corollary resilience_antitone_in_ctx :
+Corollary tolerance_antitone_in_ctx :
   forall E1 E2 Haz b G W,
     ctx_le E1 E2 -> safeT E2 Haz b G W -> ~ reach_haz E1 Haz b G W.
 Proof.
@@ -385,7 +385,7 @@ Proof.
 Qed.
 
 (* Gbad IS 0-resilient: if the agent never misselects, no hazard. *)
-Theorem Gbad_is_0_resilient : safeT E0 Haz0 0 Gbad W0.
+Theorem Gbad_is_0_tolerant : safeT E0 Haz0 0 Gbad W0.
 Proof.
   unfold Gbad. apply ST_Comm; [ apply notHaz_W0 | | ].
   - intros l psi Gl Hin Hpsi. simpl in Hin.
@@ -397,7 +397,7 @@ Qed.
 
 (* ... but NOT 1-resilient: a single wrong choice reaches the hazard.
    This is the actionable risk verdict. *)
-Theorem Gbad_not_1_resilient : ~ safeT E0 Haz0 1 Gbad W0.
+Theorem Gbad_not_1_tolerant : ~ safeT E0 Haz0 1 Gbad W0.
 Proof.
   intro Hs. unfold Gbad in Hs.
   inversion Hs as [ | | | b0 p0 q0 brs0 W1 Hnh Hok Hdev ]; subst.
@@ -415,7 +415,7 @@ Proof.
 Qed.
 
 (* The repair (narrow the offer) makes it resilient at every budget. *)
-Theorem Ggood_is_k_resilient : forall k, safeT E0 Haz0 k Ggood W0.
+Theorem Ggood_is_k_tolerant : forall k, safeT E0 Haz0 k Ggood W0.
 Proof.
   intro k. unfold Ggood. apply ST_Comm; [ apply notHaz_W0 | | ].
   - intros l psi Gl Hin Hpsi. simpl in Hin.
@@ -432,3 +432,114 @@ Proof.
   eapply repair_narrow_sound; [ | exact Hs ].
   unfold brs_sub. intros x Hin. simpl in Hin. simpl. tauto.
 Qed.
+
+(* ================================================================= *)
+(*  Section: COMPOSITIONALITY.                                        *)
+(*                                                                     *)
+(*  This is the theorem that answers the question -- why is this a type system and   *)
+(*  not a bounded model checker?  Sequential composition G1 ; G2 is  *)
+(*  typed MODULARLY: G2 is checked only against the INTERFACE that G1 *)
+(*  exposes -- the (remaining budget, world) pairs at which G1 can     *)
+(*  terminate -- never against G1's internal structure.  A whole-     *)
+(*  system reachability check of G1;G2 explores the product; the      *)
+(*  modular derivation explores |G1| plus |G2| per interface point.   *)
+(* ================================================================= *)
+
+Fixpoint gseq (G1 G2 : Gt) : Gt :=
+  match G1 with
+  | GEnd => G2
+  | GComm p q brs =>
+      GComm p q (map (fun br => match br with
+                                | (l, psi, Gl) => (l, psi, gseq Gl G2)
+                                end) brs)
+  | GAct a p G => GAct a p (gseq G G2)
+  | GGoal phi G => GGoal phi (gseq G G2)
+  end.
+
+Lemma in_gseq_brs :
+  forall G2 (brs : list (Lab * (World -> Prop) * Gt)) l psi Gl',
+    In (l, psi, Gl') (map (fun br => match br with
+                                    | (l0, psi0, Gl0) => (l0, psi0, gseq Gl0 G2)
+                                    end) brs) ->
+    exists Gl, In (l, psi, Gl) brs /\ Gl' = gseq Gl G2.
+Proof.
+  intros G2 brs l psi Gl' Hin.
+  apply in_map_iff in Hin.
+  destruct Hin as [[[l0 psi0] Gl0] [Heq Hin0]].
+  inversion Heq; subst. exists Gl0. split; [ exact Hin0 | reflexivity ].
+Qed.
+
+Section Compose.
+Variable E : Ctx.
+Variable Haz : World -> Prop.
+
+(* The INTERFACE of a protocol: the (budget-left, world) pairs at which it
+   can terminate, starting from budget b at world W. *)
+Inductive ends : nat -> Gt -> World -> nat -> World -> Prop :=
+| EN_end : forall b W,
+    ends b GEnd W b W
+| EN_act : forall b a p G W W' b' W'',
+    E a W W' -> ends b G W' b' W'' -> ends b (GAct a p G) W b' W''
+| EN_goal : forall b phi G W b' W',
+    ends b G W b' W' -> ends b (GGoal phi G) W b' W'
+| EN_comm_ok : forall b p q brs l psi Gl W b' W',
+    In (l, psi, Gl) brs -> psi W ->
+    ends b Gl W b' W' -> ends b (GComm p q brs) W b' W'
+| EN_comm_dev : forall b p q brs l psi Gl W b' W',
+    In (l, psi, Gl) brs -> ~ psi W ->
+    ends b Gl W b' W' -> ends (S b) (GComm p q brs) W b' W'.
+
+(* MODULAR TYPING OF SEQUENTIAL COMPOSITION.
+   G2 is typed only at the interface points of G1. *)
+Theorem TC_seq :
+  forall b G1 W,
+    safeT E Haz b G1 W ->
+    forall G2,
+      (forall b' W', ends b G1 W b' W' -> safeT E Haz b' G2 W') ->
+      safeT E Haz b (gseq G1 G2) W.
+Proof.
+  intros b G1 W Hs.
+  induction Hs as [ b W Hnh
+                  | b phi G W Hnh Hs IH
+                  | b a p G W Hnh Hall IH
+                  | b p q brs W Hnh Hok IHok Hdev IHdev ];
+    intros G2 Hiface; simpl.
+  - apply Hiface. apply EN_end.
+  - apply ST_Goal; [ assumption | ].
+    apply IH. intros b' W' He. apply Hiface. apply EN_goal; assumption.
+  - apply ST_Act; [ assumption | ].
+    intros W' Heff. apply (IH W' Heff).
+    intros b' W'' He. apply Hiface. eapply EN_act; eassumption.
+  - apply ST_Comm; [ assumption | | ].
+    + intros l psi Gl' Hin Hpsi.
+      destruct (in_gseq_brs G2 brs l psi Gl' Hin) as [Gl [Hin0 Heq]]; subst.
+      apply (IHok l psi Gl Hin0 Hpsi).
+      intros b' W' He. apply Hiface. eapply EN_comm_ok; eassumption.
+    + intros l psi Gl' Hin Hpsi c Hb; subst.
+      destruct (in_gseq_brs G2 brs l psi Gl' Hin) as [Gl [Hin0 Heq]]; subst.
+      apply (IHdev l psi Gl Hin0 Hpsi c eq_refl).
+      intros b' W' He. apply Hiface. eapply EN_comm_dev; eassumption.
+Qed.
+
+(* The INTERFACE-ABSTRACTION form: G2 need only be checked against a
+   declared invariant I that G1's terminations satisfy.  This is exactly
+   what a whole-system reachability check cannot offer -- one checks G2
+   once against I, not once per concrete G1 termination. *)
+Corollary TC_seq_interface :
+  forall (I : nat -> World -> Prop) b G1 G2 W,
+    safeT E Haz b G1 W ->
+    (forall b' W', ends b G1 W b' W' -> I b' W') ->
+    (forall b' W', I b' W' -> safeT E Haz b' G2 W') ->
+    safeT E Haz b (gseq G1 G2) W.
+Proof.
+  intros I b G1 G2 W Hs Hends HI.
+  apply TC_seq; [ exact Hs | ].
+  intros b' W' He. apply HI. apply Hends. exact He.
+Qed.
+
+(* Budget accounting is tight: the interface never reports more budget
+   than it started with. *)
+Lemma ends_budget_le : forall b G W b' W', ends b G W b' W' -> b' <= b.
+Proof. intros b G W b' W' H. induction H; lia. Qed.
+
+End Compose.

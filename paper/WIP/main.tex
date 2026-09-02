@@ -22,14 +22,17 @@
 \usepackage{stmaryrd}
 \usepackage{booktabs}
 \usepackage{pifont}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
 \providecommand{\llbracket}{[\![}
 \providecommand{\rrbracket}{]\!]}
 
 \definecolor{steel}{RGB}{46,74,107}
-\definecolor{amber}{RGB}{201,138,24}
+\definecolor{amber}{RGB}{230,159,0}
 \definecolor{boxbg}{RGB}{243,244,246}
 \definecolor{badred}{RGB}{178,52,52}
-\definecolor{okgreen}{RGB}{34,120,80}
+\definecolor{okgreen}{RGB}{0,158,115}
+\definecolor{verm}{RGB}{213,94,0}
 
 % ---------------------------------------------------------------- base macros
 % (identical to tas.tex / skillachievability.tex)
@@ -122,32 +125,28 @@
 \newcommand{\sev}{\mathrm{sev}}
 \newcommand{\coqok}[1]{\textcolor{okgreen}{\ding{51}}\,\texttt{\small #1}}
 
+\newcommand{\ktol}{$k$-misselection tolerance}
+\newcommand{\Ktol}{$k$-misselection-tolerant}
+
 \title{Affordable Mistakes: Severity-Aware Multiparty Session Types for
 Agents that Choose Wrongly\thanks{\textcolor{badred}{WORKING DRAFT --- not for
 submission.} Base rules follow \texttt{paper/tas.tex}, which remains
 authoritative for Section~\ref{sec:base}.}}
-
 \titlerunning{Affordable Mistakes}
-
 \author{Anonymous Author}{Anonymous Affiliation, Anonymous City, Anonymous Country}{anon@anon.org}{}{}
 \author{Anonymous Author}{Anonymous Affiliation, Anonymous City, Anonymous Country}{anon@anon.org}{}{}
-
 \authorrunning{Anonymous author(s)}
 \Copyright{Anonymous author(s)}
-
 \ccsdesc[500]{Theory of computation~Type structures}
 \ccsdesc[500]{Theory of computation~Process calculi}
 \ccsdesc[300]{Software and its engineering~Software verification}
-
-\keywords{Session types, Multiparty, LLM agents, Safety, Irreversibility,
-Resilience, Risk analysis}
-\category{}
-\relatedversion{}
+\keywords{Session types, Multiparty, Behavioural types, Safety, Irreversibility,
+Fault tolerance, Mechanized metatheory}
+\category{}\relatedversion{}
 \supplement{Coq development (axiom-free, Coq 8.18) and reference implementation;
 anonymized for submission.}
 \funding{To be completed for the camera-ready.}
 \acknowledgements{To be completed for the camera-ready.}
-
 \EventEditors{}\EventNoEds{0}\EventLongTitle{}\EventShortTitle{WIP draft}
 \EventAcronym{ECOOP}\EventYear{}\EventDate{}\EventLocation{}\EventLogo{}
 \SeriesVolume{0}\ArticleNo{0}
@@ -157,131 +156,159 @@ anonymized for submission.}
 
 \begin{abstract}
 Multiparty session types guarantee that well-typed participants interact
-correctly. A large language model occupying a role is not such a participant:
-at a choice point where it should select $A$ it may select $B$. Forbidding this
-is impossible and, if it were possible, useless --- an agent that may never err
-is an agent that may never act. We therefore change what the type system is
-for. It does not prevent wrong choices; it prevents \emph{catastrophic} ones,
-and reports the rest as risk. The central object is a \emph{severity}
-classification of each possible misselection, computed from the world state in
-which it occurs: a wrong branch is \Ben{} if the goal is still reachable,
-\Fut{} if the goal is lost but nothing is harmed, and \Cat{} if a hazard
-becomes reachable. Failure is not disaster, and a discipline that conflates
-them is unusable. We show that catastrophe is exactly the crossing of a
-\emph{point of no return}, decidable by the delete-list reachability the
-underlying checker already performs; that cascading is captured by a
-\emph{misselection budget} $k$, giving a purely possibilistic notion of
-$k$-resilience with no probabilities anywhere; and that a single syntax-directed
-rule, \textsc{T-Choice-Safe}, is \emph{sound and complete} for $k$-bounded
-hazard-freedom. All results in Sections~\ref{sec:severity}--\ref{sec:meta} are
-mechanized in Coq, axiom-free, for the finite fragment. A worked instance is
-$0$-resilient but not $1$-resilient, and the narrowing repair that fixes it is
-verified sound. One design expectation was refuted by the mechanization:
-resilience is \emph{anti}-monotone in the capability context, which is a formal
-argument for least privilege.
+correctly. A participant that was instructed rather than compiled --- a
+language-model agent, say --- is not such a participant: at a branch point
+where it should select $A$ it may select $B$. Forbidding this is impossible,
+and would be useless if it were possible: an agent that may never err may never
+act. We change what the type system is for. It does not prevent wrong choices;
+it prevents \emph{catastrophic} ones, and reports the rest as risk. The fault
+model is the participant's \emph{own selection at a protocol branch}, defined
+through the branch guards that established design-by-contract session types
+already carry; the consequence of a wrong selection is classified by
+\emph{outcome} against a STRIPS-style world --- goal still reachable, goal lost
+but nothing harmed, or hazard reachable. \emph{Failure is not disaster}, and a
+discipline that conflates them is unusable. Cascading is captured by a
+misselection budget $k$, giving a purely possibilistic notion of
+\ktol{} with no probabilities anywhere. A single syntax-directed rule,
+\textsc{T-Choice-Safe}, is \emph{sound and complete} for $k$-bounded
+hazard-freedom, and --- the property that makes it a type system rather than a
+model checker in disguise --- sequential composition is typed \emph{modularly}
+against an interface. All results are mechanized in Coq, axiom-free, for the
+finite fragment. A worked instance is $0$-tolerant but not $1$-tolerant and its
+repair is verified. One design expectation was refuted by the mechanization:
+tolerance is \emph{anti}-monotone in the capability context, a formal argument
+for least privilege.
 \end{abstract}
 
-\draftnote{Status. Sections~\ref{sec:severity}--\ref{sec:meta} are backed by
-\texttt{proof/Severity.v} (Coq 8.18, stdlib only, axiom-free), for the
-\emph{finite} fragment --- the same scope as the existing base mechanization.
-Recursion is future work. The predecessor draft of this paper (a
-mode/taint/grade ``deviation layer'') was withdrawn after its own mechanized
-audit found it vacuous; that audit is retained in \texttt{proof/AUDIT.md} and
-summarized in Section~\ref{sec:whatchanged}.}
+\draftnote{Status. Sections~\ref{sec:severity}--\ref{sec:why} are backed by
+\texttt{proof/Severity.v} (Coq 8.18, stdlib only, axiom-free; 18 theorems), for
+the \emph{finite} fragment --- the scope of the existing base mechanization.
+Recursion is future work. No experimental numbers are claimed. The predecessor
+draft (a mode/taint/grade ``deviation layer'') was withdrawn after its own
+mechanized audit found it vacuous; that audit is retained in
+\texttt{proof/AUDIT.md} and summarized in Section~\ref{sec:whatchanged}.}
 
 \section{Introduction}\label{sec:intro}
 
 Multiparty session types (MPST) guarantee communication safety, session
 fidelity and deadlock-freedom for systems whose participants \emph{are} their
 local types~\cite{honda-mpst}: the code was checked, so every run is a
-compliant run. An LLM agent occupying a role was \emph{instructed}, not
-compiled. At a choice point it may take branch $B$ where the task demanded
-branch $A$ --- not because it violated the protocol (both branches are in the
-type) but because it judged the situation wrongly.
+compliant run. A participant that was instructed rather than compiled breaks
+that hypothesis in a specific way. At a choice point it may take branch $B$
+where the situation demanded branch $A$ --- not by violating the protocol
+(both branches are in the type) but by judging the situation wrongly. This is
+the ordinary condition of a language-model agent occupying a role, and it is
+the reason such agents are employed: their latitude.
 
-The tempting response is to make the type system prevent this. That response
-is doubly wrong. It is impossible, because the judgement in question is the
-agent's, not the protocol's. And it is undesirable, because an agent that may
-never choose wrongly is an agent that may never choose: the reason to employ
-one is precisely its latitude. What is needed is not prevention but
-\emph{triage}.
+The tempting response is to make the type system prevent it. That is doubly
+wrong. It is impossible, because the judgement in question is the
+participant's, not the protocol's; and it is undesirable, because a
+participant that may never choose wrongly is one that may never choose. What
+is needed is not prevention but \emph{triage}.
 
 \subparagraph*{The reframing.}
-Do not ask whether the agent complied. Ask \emph{what a wrong choice costs}.
-Three answers matter and the middle one is the one existing disciplines cannot
-express:
-
+Do not ask whether the participant complied. Ask \emph{what a wrong choice
+costs}. Three answers matter and the middle one is what existing disciplines
+cannot express (Figure~\ref{fig:idea}):
 \begin{itemize}
-\item \Ben{} --- the wrong branch is a detour; the goal is still reachable.
+\item \Ben{} --- a detour; the goal is still reachable.
 \item \Fut{} --- the goal is lost, but nothing is harmed. \emph{Failure is not
   disaster.}
 \item \Cat{} --- a hazard becomes reachable.
 \end{itemize}
+A system that blocks \Fut{} is useless; one that permits \Cat{} is dangerous.
+Separating them is the whole job. Our thesis line: \emph{session types say
+what may happen; this says what you can survive.}
 
-A system that blocks \Fut{} is useless; a system that permits \Cat{} is
-dangerous. Separating them is the whole job. Our thesis line:
-\emph{session types say what may happen; this says what you can survive.}
+\subparagraph*{What is and is not new here.}
+We are explicit, because the ingredients are old and the combination is not.
+Branch guards on global types are design-by-contract
+MPST~\cite{bocchi-concur10,gheri-ecoop22,vassor-ecoop24}, and violation of a
+guard on selection is already the alarm condition of the monitoring
+line~\cite{bocchi-forte13}; we do not claim them. Deciding whether a goal is
+still reachable is dead-end detection in classical
+planning~\cite{steinmetz-aaai16,hoffmann-ecai14}, and deciding whether an
+effect can be undone is undoability
+checking~\cite{daum-icaps16,morak-kr25}; we do not claim those either. Bounded
+fault tolerance is classical, in planning~\cite{aineto-ecai23,domshlak-icaps13}
+and in MPST with crash-stop
+failures~\cite{barwell-concur22,barwell-ecoop23}. A syntax-directed type
+system that is \emph{equivalent} to a model checker is a known and valuable
+template~\cite{naik-palsberg,kobayashi-ong}. What we claim is one thing:
 
-\subparagraph*{Why this needs a world, not just a protocol.}
-Severity is a function of the \emph{node and the world state}, not of the label
-alone. ``Skip validation'' is benign before a payment is authorized and
+\begin{quote}\itshape
+The first behavioural type theory whose fault model is the participant's own
+selection at a protocol branch point --- misselection graded by an explicit
+budget, with typing a syntax-directed, mechanized, exact characterization of
+hazard-freedom under at most $k$ misselections, composed modularly --- and
+whose analytic payload is that pairing the protocol with a world state
+classifies each deviation by outcome rather than merely detecting it.
+\end{quote}
+
+\subparagraph*{Why this needs a world.}
+Severity is a function of the \emph{node and the world state}, not of the
+label. ``Skip validation'' is benign before a payment is authorized and
 catastrophic after. Plain MPST cannot state the difference because it has no
-world. The capability-guarded, goal-marked discipline we build on does, which
-is exactly what earns it the right to answer the question.
-
-\subparagraph*{Catastrophe is computable.}
-Effects are STRIPS-style. An atom deleted by $a$ returns only if some available
-capability adds it; if none does, the loss is permanent. Catastrophe is
-therefore \emph{irreversibility conjoined with unrecoverability} --- the
-crossing of a \emph{point of no return} --- and both halves are decided by the
-delete-list reachability search the underlying checker already runs. No new
-machinery is needed to \emph{detect} catastrophe; what is new is running that
-search pointwise at every branch of every choice, and turning the result into a
-typing rule.
-
-\subparagraph*{Cascading, without probabilities.}
-A single wrong choice may be harmless while two compose into disaster. We
-capture this with a \emph{misselection budget}: $G$ is \emph{$k$-resilient} if
-no run containing at most $k$ misselections reaches a hazard. This is
-possibilistic --- there are no probabilities in this paper. It is decided on
-the product of the existing abstract state space with a counter $0..k$.
+world. The capability-guarded, goal-marked discipline we build on does, and
+that is what earns it the right to answer the question. Because effects are
+STRIPS-style, catastrophe has a computable signature: an atom deleted by $a$
+returns only if some available capability adds it, so catastrophe is
+\emph{irreversibility conjoined with unrecoverability} --- the crossing of a
+\emph{point of no return} --- decided by the delete-list reachability search
+the underlying checker already runs.
 
 \subparagraph*{Contributions.}
 \begin{itemize}
-\item[\textbf{C1}] \emph{Guarded choice and misselection} (\S\ref{sec:mis}):
-  each branch carries the predicate that makes it the intended one, so ``should
-  choose $A$, chose $B$'' becomes a first-class, checkable notion; and a
-  budgeted operational semantics in which compliant progress is free and a
-  wrong branch costs one unit.
-\item[\textbf{C2}] \emph{The severity partition} (\S\ref{sec:severity}):
-  \Ben{}/\Fut{}/\Cat{} are pairwise disjoint and (given decidability of the two
-  reachability questions, which the QF-LIA fragment supplies) exhaustive
+\item[\textbf{C1}] \emph{Misselection and its severity} (\S\ref{sec:mis},
+  \S\ref{sec:severity}): guard failure at a branch as the fault model; a
+  budgeted semantics in which compliant progress is free and a wrong branch
+  costs one unit; the \Ben{}/\Fut{}/\Cat{} partition
   (\coqok{severity\_disjoint}, \coqok{severity\_exhaustive}).
-\item[\textbf{C3}] \emph{\textsc{T-Choice-Safe}, sound and complete}
-  (\S\ref{sec:typing}, \S\ref{sec:meta}): one syntax-directed rule system that
-  is an \emph{exact} characterization of $k$-bounded hazard-freedom
-  (\coqok{TC\_sound}, \coqok{TC\_complete}, \coqok{TC\_exact}). Completeness
-  matters: a typing failure is a genuine risk, never an artifact of the rules.
-\item[\textbf{C4}] \emph{Repairs} (\S\ref{sec:repair}): four protocol
-  transformations that convert unaffordable mistakes into affordable ones;
-  narrowing is verified sound (\coqok{repair\_narrow\_sound}).
-\item[\textbf{C5}] \emph{Mechanization and a refuted expectation}
-  (\S\ref{sec:meta}): an axiom-free Coq development, and the discovery that
-  resilience is \emph{anti}-monotone in the capability context
-  (\coqok{resilience\_antitone\_in\_ctx}) --- more tools can only make an agent
-  less resilient, a formal argument for least privilege.
+\item[\textbf{C2}] \emph{\textsc{T-Choice-Safe}, sound and complete}
+  (\S\ref{sec:typing}--\ref{sec:meta}): an exact syntax-directed
+  characterization of $k$-bounded hazard-freedom (\coqok{TC\_sound},
+  \coqok{TC\_complete}, \coqok{TC\_exact}). A typing failure is therefore a
+  genuine risk, never an artifact of conservative rules.
+\item[\textbf{C3}] \emph{Modularity} (\S\ref{sec:why}): sequential composition
+  is typed against an interface, not a product state space (\coqok{TC\_seq},
+  \coqok{TC\_seq\_interface}). This is our answer to ``why a type system''.
+\item[\textbf{C4}] \emph{Mechanization and a refuted expectation}: an
+  axiom-free Coq development, and the discovery that tolerance is
+  \emph{anti}-monotone in the capability context
+  (\coqok{tolerance\_antitone\_in\_ctx}): more tools can only make a
+  participant less tolerant of its own mistakes.
 \end{itemize}
+
+\subparagraph*{Organization.}
+\S\ref{sec:overview} walks the running example and the architecture.
+\S\ref{sec:base} fixes notation. \S\ref{sec:mis}--\S\ref{sec:meta} give the
+fault model, severity, the rule, and the metatheory. \S\ref{sec:why} argues
+why this is a type system. \S\ref{sec:repair} treats repairs briefly.
+\S\ref{sec:trac} positions the work against runtime compliance monitoring.
+\S\ref{sec:whatchanged} reports the refuted predecessor. \S\ref{sec:eval},
+\S\ref{sec:related} and \S\ref{sec:conclusion} close.
+
+\begin{figure}[t]
+\centering
+\input{fig/fig-idea}
+\caption{The idea. At a guarded choice in world $W$, the branch whose guard
+holds is \emph{intended}; taking the other is a \emph{misselection}. Its
+severity is a property of the residual: \Ben{} if the goal is still reachable,
+\Fut{} if the goal is lost but no hazard is reachable, \Cat{} if a hazard is
+reachable --- typically by crossing a \emph{point of no return}, an
+irreversible capability after which the goal cannot be recovered.}
+\label{fig:idea}
+\end{figure}
 
 \section{Overview}\label{sec:overview}
 
+\subparagraph*{Running example.}
 Two roles: a planner $\mathsf p$ and a worker $\mathsf q$ holding a purchase
-tool. Two boolean atoms, $\id{verified}$ and $\id{booked}$; $\id{purchase}$
-sets $\id{booked}$ and is externally visible, $\id{verify}$ sets
-$\id{verified}$. The hazard is booking without verification:
-$\Haz \equiv \id{booked} \wedge \neg\id{verified}$.
-
+tool. Atoms $\id{verified}$ and $\id{booked}$; $\id{verify}$ sets the first,
+$\id{purchase}$ sets the second and is externally visible. The hazard is
+booking without verification, $\Haz\equiv\id{booked}\wedge\neg\id{verified}$.
 The protocol offers two branches, each carrying the guard that makes it the
-\emph{intended} one:
+intended one:
 \[
 G_{\mathsf{bad}} \;=\;
 \mathsf p{\to}\mathsf q : \bigl\{\;
@@ -289,27 +316,47 @@ G_{\mathsf{bad}} \;=\;
   \;,\;\;
   \id{fast}[\bot].\ \id{purchase}@\mathsf q.\ \End \;\bigr\}
 \]
-The fast path's guard is never satisfied, so taking it is precisely a
-misselection: the agent that should choose $\id{safe}$ chooses $\id{fast}$.
-
-What the analysis reports, all three parts machine-checked:
+The fast path's guard never holds, so taking it is precisely a misselection.
+What the analysis reports, each part machine-checked:
 \begin{itemize}
-\item $G_{\mathsf{bad}}$ \emph{is} $0$-resilient (\coqok{Gbad\_is\_0\_resilient}):
-  if the agent never misselects, no hazard arises. Classical MPST stops here
-  and calls the protocol fine.
-\item $G_{\mathsf{bad}}$ is \emph{not} $1$-resilient
-  (\coqok{Gbad\_not\_1\_resilient}): one wrong choice books without verifying.
-  This is the actionable verdict, and no discipline without a world and a
-  misselection notion can produce it.
-\item Narrowing the offer yields $G_{\mathsf{good}}$, which is $k$-resilient
-  for every $k$ (\coqok{Ggood\_is\_k\_resilient}), and the narrowing is an
-  instance of the general repair theorem (\coqok{Ggood\_by\_narrowing}).
+\item $G_{\mathsf{bad}}$ \emph{is} $0$-tolerant (\coqok{Gbad\_is\_0\_tolerant}):
+  if the participant never misselects, no hazard arises. Classical MPST stops
+  here and calls the protocol fine.
+\item $G_{\mathsf{bad}}$ is \emph{not} $1$-tolerant
+  (\coqok{Gbad\_not\_1\_tolerant}): one wrong choice books without verifying.
+  No discipline without a world and a misselection notion can produce this
+  verdict.
+\item Narrowing the offer yields $G_{\mathsf{good}}$, $k$-tolerant for every
+  $k$ (\coqok{Ggood\_is\_k\_tolerant}), as an instance of the general
+  narrowing theorem (\coqok{Ggood\_by\_narrowing}).
 \end{itemize}
-
-The headline number for a protocol is therefore its \emph{resilience degree}:
-the largest $k$ it survives. ``This skill is $0$-resilient: one wrong branch at
+The headline number for a protocol is its \emph{tolerance degree} $k^{*}$: the
+largest $k$ it survives. ``This skill is $0$-tolerant: one wrong branch at
 step~3 fires an irreversible purchase'' is a finding an engineer can act on.
 ``Impossible'' is not.
+
+\begin{figure}[t]
+\centering
+\input{fig/fig-arch}
+\caption{Architecture. Compaction from prose to a pack is untrusted and may
+use a language model; nothing beyond the trust boundary does. The severity
+classifier runs the discipline's existing reachability search pointwise at
+every branch of every choice, at every abstract world and budget, and emits a
+per-branch severity, the tolerance degree $k^{*}$, a witness naming the
+point-of-no-return action, and repair suggestions. The certified pack drives
+the gated runtime that refuses out-of-protocol attempts.}
+\label{fig:arch}
+\end{figure}
+
+\subparagraph*{Architecture.}
+Figure~\ref{fig:arch} places the analysis. It is a compile-time check on the
+pack, before any participant runs, and its trusted core contains no language
+model --- the same trust boundary as the base discipline. The runtime gate is
+inherited unchanged: it refuses \emph{out-of-set} attempts (labels the
+protocol does not offer) before delivery, so those change no state and are
+safe by construction. The interesting deviation, and the only one this paper
+analyses, is \emph{in-set}: a branch the type permits and the situation
+forbids.
 
 \section{The Base Discipline}\label{sec:base}
 
@@ -318,49 +365,44 @@ discipline; \texttt{tas.tex} is authoritative and this section only fixes
 notation. Predicates $p\in\Pred$, numeric variables $x\in\Var$, roles
 $\mathsf p,\mathsf q$, capabilities $a\in\CapS$, labels $\ell\in\Lab$. The
 state logic is quantifier-free linear integer arithmetic with uninterpreted
-booleans. A world $W=\langle B,N\rangle$ valuates them. A capability context
+booleans; a world $W=\langle B,N\rangle$ valuates it. A capability context
 maps each possessed tool to a guarded STRIPS effect
-$\Gamma(a)=\langle\pre_a,\eff_a\rangle$ with
+$\Gamma(a)=\langle\pre_a,\eff_a\rangle$,
 $\eff_a=\langle\Add_a,\Del_a,\Asg_a,\Nd_a\rangle$; $a\notin\dom(\Gamma)$ means
 the tool does not exist. Firing is \textsc{World-Act}:
-$\langle W\rangle\,a\,\langle W'\rangle$ when $W\vDash\pre_a$ and
+$\langle W\rangle\,a\,\langle W'\rangle$ iff $W\vDash\pre_a$ and
 $W'\in\apply(\eff_a,W)$. Global types are coinductive regular trees
 \[
 G \;\coind\; \mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}
   \ \mid\ a@\mathsf{p}.\,G \ \mid\ \checkmark\varphi.\,G \ \mid\ \End
 \]
-typed \emph{directly} against a session --- no local types, no projection, no
-separate subtyping~\cite{jongmans-ecoop23,castro-popl26} --- and achievability
-is existential may-reachability of a goal-satisfying configuration. Everything
+typed directly against a session with no local types, projection, or
+separate subtyping~\cite{jongmans-ecoop23,castro-popl26}; achievability is
+existential may-reachability of a goal-satisfying configuration. Everything
 below adds one annotation to choice and one counter to the semantics.
 
-\section{Misselection}\label{sec:mis}
+\section{Misselection and the Budget}\label{sec:mis}
 
 \begin{definition}[Guarded choice]\label{def:guarded}
 A choice node carries, per branch, the predicate that makes that branch the
-intended one:
-$\mathsf p{\to}\mathsf q:\{\ell_i[\psi_i].\,G_i\}_{i\in I}$.
-In world $W$, branch $i$ is \emph{intended} if $W\vDash\psi_i$; taking a branch
+intended one: $\mathsf p{\to}\mathsf q:\{\ell_i[\psi_i].\,G_i\}_{i\in I}$. In
+world $W$, branch $i$ is \emph{intended} if $W\vDash\psi_i$; taking a branch
 with $W\nvDash\psi_i$ is a \emph{misselection}.
 \end{definition}
 
-This is the only new syntax. It is not an imposition: the guards are already
-present, informally, in the natural-language skill (``if the fare is under
-\$500, book it''), and formally in the biconditional choice guards of
-protocol-compiled agent runtimes. What is new is reading them as the definition
-of ``wrong''.
-
-Out-of-set attempts --- a label the protocol does not offer at all --- are
-refused by the runtime gate before delivery and change no state; they are
-therefore safe by construction and are not what this paper analyses. The
-interesting deviation is \emph{in-set}: a branch the type permits and the
-situation forbids.
+The syntax is that of asserted global types~\cite{bocchi-concur10}, whose
+well-formedness conditions exist precisely to guarantee that a compliant
+participant can always pick a satisfied branch. We keep the syntax and drop
+the guarantee: the guards are not a constraint on a well-typed implementation
+but the \emph{definition of wrong}. They are already present, informally, in
+the natural-language skill (``if the fare is under \$500, book it'') and
+formally in the biconditional choice guards of protocol-compiled agent
+runtimes.
 
 \begin{definition}[Budgeted reachability]\label{def:budget}
-$\reachh{b}$ relates $(G,W)$ to a hazard state using at most $b$
-misselections: compliant progress preserves $b$, a misselection consumes one
-unit. Formally (Coq: \texttt{reach\_haz}) the rules are the head rules of the
-base semantics, plus
+$(G,W)\reachh{b}$ holds when a hazard state is reachable from $(G,W)$ using at
+most $b$ misselections. The rules (Coq: \texttt{reach\_haz}) are the head
+rules of the base semantics, plus
 \begin{mathpar}
 \inferrule*[left=RH-Comm-Ok]
   {\ell_i[\psi_i].G_i \in \mathit{brs} \\ W\vDash\psi_i \\ (G_i,W)\reachh{b}}
@@ -370,21 +412,33 @@ base semantics, plus
   {\ell_i[\psi_i].G_i \in \mathit{brs} \\ W\nvDash\psi_i \\ (G_i,W)\reachh{b}}
   {(\mathsf p{\to}\mathsf q:\mathit{brs},W)\reachh{b{+}1}}
 \end{mathpar}
+Compliant progress preserves the budget; a misselection consumes one unit.
 \end{definition}
 
-\begin{definition}[$k$-resilience]\label{def:kres}
-$G$ is \emph{$k$-resilient} for hazard $\Haz$ under $\Gamma$ from $W_0$ if
-$\neg\,(G,W_0)\reachh{k}$: no run containing at most $k$ misselections reaches
-a hazard. $0$-resilience is classical MPST safety; $1$-resilience says no
-single wrong choice is fatal.
+\begin{definition}[\ktol{}]\label{def:ktol}
+$G$ is \emph{\Ktol{}} for hazard $\Haz$ under $\Gamma$ from $W_0$ if
+$\neg\,(G,W_0)\reachh{k}$.\footnote{We avoid two established names. In MPST,
+\emph{$k$-safety} is a buffer bound in $k$-multiparty
+compatibility~\cite{lange-yoshida-cav19}; in hyperproperties it is a property
+of $k$-tuples of traces~\cite{clarkson-schneider}. \emph{$k$-resilient} is
+used for plans surviving $k$ action failures~\cite{aineto-ecai23}; our fault
+is the participant's own selection and our target is a hazard rather than the
+goal.} $0$-tolerance is classical MPST safety; $1$-tolerance says no single
+wrong choice is fatal.
 \end{definition}
+
+The budget is possibilistic. There are no probabilities in this paper: the
+budget is a design parameter of the deployment, not a measurement of the
+participant, and the theorems below hold for every participant that
+misselects at most $k$ times, however it does so.
 
 \section{Severity}\label{sec:severity}
 
-Let $\varphi$ be the goal and $\Haz$ the hazard.
+Let $\varphi$ be the goal and $\Haz$ the hazard, and write $\reachg{b}$ for
+budgeted goal reachability, defined identically.
 
 \begin{definition}[Severity]\label{def:sev}
-For a residual configuration $(G,W)$ at budget $b$:
+For a residual $(G,W)$ at budget $b$:
 \[
 \sev_b(G,W)=
 \begin{cases}
@@ -393,22 +447,19 @@ For a residual configuration $(G,W)$ at budget $b$:
 \Ben & \text{if } \neg (G,W)\reachh{b} \text{ and } (G,W)\reachg{b}
 \end{cases}
 \]
-\Rec{} refines \Ben{} when the goal is reachable only through a designated
-compensation region; it plays no role in the safety theorem and we treat it as
-a sub-case of \Ben{} throughout.
 \end{definition}
 
 \begin{theorem}[Severity is a partition]\label{thm:partition}
-The three classes are pairwise disjoint, and exhaustive whenever the two
-reachability questions are decidable --- which the QF-LIA fragment supplies.
+The classes are pairwise disjoint, and exhaustive whenever the two
+reachability questions are decidable, which the QF-LIA fragment supplies.
+\coqok{severity\_disjoint}, \coqok{severity\_exhaustive}
 \end{theorem}
-\begin{proof}
-Mechanized: \texttt{severity\_disjoint}, \texttt{severity\_exhaustive}.
-\end{proof}
 
-The content of Theorem~\ref{thm:partition} is the separation of \Fut{} from
-\Cat{}. Most wrong choices lose the goal and harm nothing; a discipline that
-refuses them is not safe but merely unusable.
+The content is the separation of \Fut{} from \Cat{}: most wrong choices lose
+the goal and harm nothing, and a discipline that refuses them is not safe but
+merely unusable. In model-based safety assessment~\cite{xsap}, severity is
+supplied by the analyst; here it is computed from goal reachability, which is
+the gap this section fills.
 
 \begin{definition}[Point of no return]\label{def:pnr}
 $(G,W)$ is a \emph{point of no return} for $\varphi$ if $\neg(G,W)\reachg{b}$.
@@ -418,15 +469,19 @@ reachable before it fires and at no successor.
 
 Because effects are STRIPS, an atom in $\Del_a$ is restored only by some $b$
 with that atom in $\Add_b$; if $\Gamma$ contains no such $b$ the loss is
-permanent. Goal-destruction is thus decided by \emph{establisher closure} ---
+permanent, and goal-destruction is decided by \emph{establisher closure} ---
 the protocol-independent refutation the reference checker already computes.
-Catastrophe needs no new analysis, only a new place to run the old one.
+This is dead-end detection~\cite{steinmetz-aaai16,hoffmann-ecai14} and
+undoability checking~\cite{daum-icaps16} lifted to a protocol with roles and
+choice points; we note that unrestricted reversibility checking is harder than
+planning~\cite{morak-kr25}, and that our decidability rests on the widened
+finite-range fragment the checker already commits to, not on any new
+argument.
 
 \section{The Typing Rule}\label{sec:typing}
 
 The judgment $\safeT{b} G , W$ reads: \emph{from $(G,W)$, no hazard arises
 under any run with at most $b$ misselections}.
-
 \begin{mathpar}
 \inferrule*[left=T-End]{W\nvDash\Haz}{\safeT{b}\End,W}
 \and
@@ -442,259 +497,354 @@ under any run with at most $b$ misselections}.
    \forall i\in I.\ \ W\nvDash\psi_i \implies \forall c.\ b = c{+}1 \implies \safeT{c} G_i,W}
   {\safeT{b}\ \mathsf p{\to}\mathsf q:\{\ell_i[\psi_i].G_i\}_{i\in I},\,W}
 \end{mathpar}
+\textsc{T-Choice-Safe} is the formal content of ``affordable mistake''. An
+intended branch is checked at the same budget; a misselectable branch at one
+unit less, and not at all when the budget is exhausted. The rule does not
+forbid choosing $B$; it requires that choosing $B$, within the error budget
+the deployment tolerates, cannot reach a hazard.
 
-Read \textsc{T-Choice-Safe} as the formal content of ``affordable mistake''. An
-\emph{intended} branch is checked at the same budget: taking it is not an
-error. A \emph{misselectable} branch is checked at one unit less --- and, when
-the budget is exhausted, is not checked at all. The rule does not forbid the
-agent from choosing $B$. It requires that choosing $B$, within the error budget
-the deployment is willing to tolerate, cannot reach a hazard.
-
-Note what the rule does \emph{not} contain: no probability, no compliance
-estimate, no model of the agent. The budget is a design parameter of the
-deployment, not a measurement of the model.
+\subparagraph*{Not resource-aware typing.} The budget resembles the potential
+of resource-aware session types~\cite{das-lics18,das-popl23} and the indices
+of graded modal types~\cite{orchard-icfp19}, and the resemblance is
+misleading. Potential is consumed by the program's own execution and must be
+non-negative at the end; exhaustion is a type error. Our budget is consumed by
+an \emph{adversarial} choice the program does not make, so the rule quantifies
+over deviations rather than amortising cost, and exhaustion is
+\emph{unconstrained} --- a branch beyond the budget is simply not the type
+system's business. That is a universal quantifier over an environment, not an
+accounting of a resource.
 
 \section{Metatheory}\label{sec:meta}
 
-All results in this section are mechanized in Coq 8.18, stdlib only, axiom-free
-(\texttt{proof/Severity.v}; \texttt{Print Assumptions} harness in
-\texttt{check\_sev.v}), for the \emph{finite} fragment --- the same scope as the
-existing base mechanization. Recursion is future work.
+All results here and in \S\ref{sec:why} are mechanized in Coq 8.18, stdlib
+only, axiom-free (\texttt{proof/Severity.v}; \texttt{Print Assumptions}
+harness in \texttt{check\_sev.v}), for the finite fragment. Recursion is
+future work.
 
 \begin{theorem}[Soundness]\label{thm:sound}
-If $\safeT{k} G,W$ then no run from $(G,W)$ containing at most $k$
-misselections reaches a hazard. \coqok{TC\_sound}
+If $\safeT{k} G,W$ then no run from $(G,W)$ with at most $k$ misselections
+reaches a hazard. \coqok{TC\_sound}
 \end{theorem}
-
 \begin{theorem}[Completeness]\label{thm:complete}
 If no run from $(G,W)$ with at most $k$ misselections reaches a hazard, then
 $\safeT{k} G,W$. \coqok{TC\_complete}
 \end{theorem}
-
 \begin{corollary}[Exactness]\label{thm:exact}
-$\safeT{k} G,W \iff \neg (G,W)\reachh{k}$. \coqok{TC\_exact}
+$\safeT{k} G,W \iff \neg (G,W)\reachh{k}$; hence a branch is \Cat{} iff its
+residual is untypable. \coqok{TC\_exact},
+\coqok{catastrophe\_implies\_untypable}, \coqok{untypable\_implies\_catastrophe}
 \end{corollary}
-
-Corollary~\ref{thm:exact} is why the rule system is worth having rather than
-merely a reachability query in disguise: it is a \emph{syntax-directed} and
-therefore compositional and diagnosable characterization, and --- because it is
-complete --- a typing failure is a genuine risk rather than an artifact of
-conservative rules. The discipline's refutation asymmetry is preserved: a
-\Cat{} verdict is a proof, not a suspicion (\coqok{catastrophe\_implies\_untypable},
-\coqok{untypable\_implies\_catastrophe}).
-
 \begin{theorem}[Budget monotonicity]\label{thm:down}
-$k$-resilience is downward closed: $\safeT{k} G,W$ and $k'\le k$ imply
-$\safeT{k'} G,W$. \coqok{resilience\_downward\_closed}
+$\safeT{k} G,W$ and $k'\le k$ imply $\safeT{k'} G,W$.
+\coqok{tolerance\_downward\_closed}
 \end{theorem}
-
 \begin{theorem}[Anti-monotonicity in the capability context]\label{thm:antitone}
-Reachability is monotone in $\Gamma$; consequently, if $\Gamma\subseteq\Gamma'$
-and $G$ is $k$-resilient under $\Gamma'$, it is $k$-resilient under $\Gamma$,
-but \emph{not} conversely. \coqok{reach\_monotone\_in\_ctx},
-\coqok{resilience\_antitone\_in\_ctx}
+Reachability is monotone in $\Gamma$; hence if $\Gamma\subseteq\Gamma'$ and $G$
+is \Ktol{} under $\Gamma'$, it is \Ktol{} under $\Gamma$, and not conversely.
+\coqok{reach\_monotone\_in\_ctx}, \coqok{tolerance\_antitone\_in\_ctx}
+\end{theorem}
+Theorem~\ref{thm:antitone} refuted a design expectation. We had predicted
+severity would be monotone-\emph{decreasing} in $\Gamma$, reasoning that more
+tools give more ways to recover. That is false: the same tools open new paths
+to the hazard, and reachability is monotone in both directions at once.
+Granting a participant a capability can only lower its tolerance degree. This
+is the formal argument for least-privilege capability contexts, and a better
+result than the one we expected.
+
+\section{Why a Type System, and Not a Model Checker}\label{sec:why}
+
+Corollary~\ref{thm:exact} invites an objection: the judgment is definitionally
+bounded reachability, so the rules are a decision procedure in disguise. The
+objection is old --- a type system provably equivalent to a model checker is a
+known template~\cite{naik-palsberg,kobayashi-ong}, and Naik and Palsberg
+already gave the standard reply, that types explain why a program is
+\emph{accepted} where a model checker explains why one is \emph{rejected}. We
+do not rest on that reply. We rest on a theorem.
+
+\begin{figure}[t]
+\centering
+\input{fig/fig-compose}
+\caption{Modularity. A whole-system check of $G_1;G_2$ explores the product
+of both protocols with the world and the budget, and re-explores it when
+either side changes. \textsc{TC-Seq} types $G_2$ only at the \emph{interface}
+$G_1$ exposes --- the (remaining budget, world) pairs at which it can end ---
+so changing $G_2$ re-checks $G_2$ alone.}
+\label{fig:compose}
+\end{figure}
+
+Write $G_1;G_2$ for sequential composition (substituting $G_2$ for $\End$ in
+$G_1$), and let $\mathit{ends}_b(G_1,W)$ be the set of $(b',W')$ at which
+$G_1$ can terminate from budget $b$ at $W$ --- its \emph{interface}.
+
+\begin{theorem}[Modular composition]\label{thm:seq}
+If $\safeT{k} G_1,W$ and $\safeT{b'} G_2,W'$ for every
+$(b',W')\in\mathit{ends}_k(G_1,W)$, then $\safeT{k} G_1;G_2,\,W$.
+\coqok{TC\_seq}. In interface form: for any $I$ with
+$\mathit{ends}_k(G_1,W)\subseteq I$, it suffices that $\safeT{b'} G_2,W'$ for
+all $(b',W')\in I$. \coqok{TC\_seq\_interface}
 \end{theorem}
 
-Theorem~\ref{thm:antitone} refuted a design expectation of ours. We had
-predicted severity would be monotone-\emph{decreasing} in $\Gamma$, reasoning
-that more tools give more ways to recover. That is false: the same tools open
-new paths to the hazard, and reachability is monotone in both directions at
-once. Granting an agent a capability can only lower its resilience degree,
-never raise it. This is the formal argument for least-privilege capability
-contexts, and it is a better result than the one we expected.
+This is the distinction that matters (Figure~\ref{fig:compose}). Bounded
+reachability over $G_1;G_2$ is a whole-system exploration of
+$|G_1|\cdot|G_2|\cdot 2^{|\Pred|}\cdot(k{+}1)$ states, re-run when either side
+changes. Theorem~\ref{thm:seq} checks $G_2$ once against a declared invariant
+$I$ --- a published contract on the boundary --- and never looks inside $G_1$.
+That is precisely the axis on which MPST is currently being argued: the
+synthetic reconstruction of MPST~\cite{synthetic-pacmpl26} observes that
+projection-based techniques are compositional but limited, while the
+expressive recent techniques rely on whole-system model checking that scales
+poorly. Our answer to ``why a type system'' is that the budget becomes a
+contract on an interface, which a model-checking run cannot be. The community
+has already accepted this move: MPST typing parametric in a
+model-checked safety property~\cite{barwell-concur22} was extended at ECOOP
+with a Distinguished Paper~\cite{barwell-ecoop23}.
+
+\draftnote{Obligation. The rebuttal is rhetoric until demonstrated: the
+evaluation (\S\ref{sec:eval}) must show a composed protocol on which the
+product model checker times out and the modular derivation does not.}
 
 \section{Repairs}\label{sec:repair}
 
 When a branch is \Cat{} at the intended budget, four transformations make the
-mistake affordable. They are the actionable half of the tool's output.
-
-\begin{enumerate}
-\item \textbf{Guard.} Insert a $\checkmark\varphi$ or an attestation before the
-  irreversible branch, so the hazard is unreachable without a check the trusted
-  monitor performs.
-\item \textbf{Compensate.} Add a recovery path from the deviated branch back to
-  a goal-reachable configuration, converting \Cat{} or \Fut{} to \Rec{}.
-\item \textbf{Narrow the offer.} Remove the catastrophic label from the choice
-  set, so the runtime gate refuses it and the attempt becomes a blocked stutter
-  rather than a state change.
-\item \textbf{Reorder.} Move the irreversible action after the validation, so
-  no \emph{single} misselection can reach it. This is the transformation that
-  raises $k$.
-\end{enumerate}
+mistake affordable: \emph{guard} (insert a $\checkmark\varphi$ or attestation
+before the irreversible branch), \emph{compensate} (add a recovery path),
+\emph{narrow} (remove the branch so the gate refuses it), and \emph{reorder}
+(move the irreversible action after the validation, the one transformation
+that raises $k$). All have ancestors: amending asserted
+choreographies~\cite{bocchi-lange-tuosto}, interactional
+exceptions~\cite{carbone-concur08}, supervisory control and shield
+synthesis~\cite{ramadge-wonham,bloem-tacas15,alshiekh-aaai18}, and choreography
+repair~\cite{basu-bultan,lanese-wwv13}. We claim none of them as
+mechanisms; we record the one theorem we need.
 
 \begin{theorem}[Narrowing is sound]\label{thm:narrow}
 Removing branches from a choice node preserves well-typedness at the same
 budget. \coqok{repair\_narrow\_sound}
 \end{theorem}
 
-Narrowing is the one repair that is sound unconditionally, which is why the
-tool proposes it first; guarding and reordering change the protocol's
-reachable behaviour and must be re-checked, and compensation must itself be
-shown not to introduce a hazard. Verifying the remaining three is the main
-outstanding mechanization task.
+Narrowing is a supervisory-control disabling of a controllable event; its
+soundness is unsurprising and it is the repair the tool proposes first.
+\emph{Reorder} is the interesting one, because it is the only repair that uses
+the world-state analysis rather than control-flow surgery: it is well-defined
+exactly when the point-of-no-return action commutes with the validation, and
+its soundness is the principal outstanding mechanization.
+
+\section{Relation to Runtime Compliance Monitoring}\label{sec:trac}
+
+\begin{figure}[t]
+\centering
+\input{fig/fig-trac}
+\caption{Two answers to ``will the agent misbehave?''. Left: TRAC observes a
+single agent's trace at run time, abstracts events to propositions with
+language-model labelers, checks an LTL constraint, predicts violations by
+sampling continuations, and intervenes. Right: this paper classifies every
+branch of a multiparty protocol before any run, deterministically and exactly,
+and outputs severity, tolerance degree, and repair. The two are
+complementary: TRAC's constraints can supply $\Haz$; its monitor can enforce at
+run time what typing certified.}
+\label{fig:trac}
+\end{figure}
+
+The closest work by goal is runtime compliance monitoring of language-model
+agents, of which TRAC~\cite{trac-facct26} is the most developed: behavioural
+constraints in linear temporal logic, offline auditing of traces, online
+monitoring, predictive monitors that sample likely continuations, and
+intervening monitors that preempt a predicted violation, evaluated on
+text-based agent environments. We share the question and differ on every
+mechanism (Figure~\ref{fig:trac}, Table~\ref{tab:trac}).
+
+\begin{table}[t]
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+& TRAC~\cite{trac-facct26} & this paper\\
+\midrule
+when & run time (audit, monitor, intervene) & compile time, before any run\\
+scope & one agent's input/output trace & multiparty protocol\\
+specification & LTL over propositions & protocol $+$ world $+$ goal $+$ hazard\\
+abstraction & language-model labelers (learned) & structured boundary (no LLM)\\
+prediction & sampling continuations (probabilistic) & exact reachability (deterministic)\\
+output & violation, witness, intervention & severity per branch, $k^{*}$, repair\\
+guarantee & empirical reduction of violation rate & Theorems~\ref{thm:sound}--\ref{thm:seq}\\
+\bottomrule
+\end{tabular}
+\caption{Axes on which the two approaches differ.}
+\label{tab:trac}
+\end{table}
+
+Two differences are the deep ones. \emph{Prediction versus projection.} TRAC
+must \emph{estimate} whether a violation is coming, by sampling continuations
+of a black-box process. Here no estimate is needed: the guards determine the
+intended branch and the reachability search determines the consequence of the
+others, so ``prediction'' is exact and free of any model of the agent. The
+price is expressiveness: TRAC's LTL can constrain event vocabularies that never
+appear as protocol messages, and our hazards are predicates on a declared
+world. \emph{The trusted seam.} TRAC's soundness bottoms out in the labelers
+that produce its propositional abstraction, and its own results show
+language-model temporal reasoning degrades with event distance and constraint
+count --- which is its argument for LTL over judges. Ours bottoms out in a
+deterministic checker over structured payloads, with the language model
+confined to authoring. The approaches compose: an LTL safety constraint is a
+natural source for $\Haz$, and TRAC's intervening monitor is a natural
+enforcer at run time of the tolerance degree typing certified statically.
+TRAC's finding that violations concentrate in ordering and sequencing is
+independent evidence that the structural layer is where the leverage is.
+
+We note two adjacent framings. Choreographic languages with first-class agent
+choice mapped to games~\cite{pact} own the quantitative version of ``the agent
+may choose badly''; we are qualitative and static. Message-sequence-chart
+coordination for agents~\cite{msc-agents} establishes deadlock-freedom
+independently of agent nondeterminism; we take that independence as the
+starting point and ask what the nondeterminism costs.
 
 \section{What Changed, and Why}\label{sec:whatchanged}
 
-An earlier version of this work typed \emph{compliance} rather than
-\emph{severity}: per-role modes on a trust lattice, taint propagation, and
-staleness grades. We mechanized its metatheory and it did not survive. The
-audit is retained in the artifact (\texttt{proof/AUDIT.md}, axiom-free) and
-its three findings shaped the present design:
-
-\begin{itemize}
-\item The mode-downgrade closure premise recursed at the same protocol node
-  with the acting role's mode lowered. Since the lattice is finite, the chain
-  terminated at bottom, where only a quarantine rule applied --- and the
-  quarantine residual was left partial. The two choices are inconsistent, and
-  the system was \emph{vacuous}: nothing containing a capability was typable
-  at all (\coqok{act\_vacuous\_with\_partial\_qres}), coinductively as well as
-  inductively (\coqok{act\_vacuous\_coinductive}). The present design has no
-  such premise: deviation is quantified in the \emph{semantics}, by the budget.
-\item The taint update consulted the writer's mode and the capability's
-  provenance but never what the capability \emph{read}, so a trusted internal
-  copy laundered external data into an irreversible action's guard
-  (\coqok{taint\_laundering\_refutes\_noninterference}). Taint is no longer
-  load-bearing here.
-\item The loop well-formedness condition accepted cycles whose only checkpoint
-  was a goal marker, but goal markers sanitize taint while only refreshes reset
-  grades (\coqok{goal\_only\_cycle\_hits\_cap}). Grades are gone; horizon
-  effects are a budget question.
-\end{itemize}
-
-We report this because the negative result is what produced the positive one,
-and because a discipline whose first formulation was vacuous is worth stating
-only alongside the evidence that the second is not (\S\ref{sec:meta}).
+An earlier version typed \emph{compliance} rather than \emph{severity}:
+per-role modes on a trust lattice, taint propagation, staleness grades. We
+mechanized its metatheory and it did not survive; the audit is retained in the
+artifact. Its closure premise recursed at the same protocol node with a role's
+mode lowered and, the lattice being finite, terminated at bottom where only a
+quarantine rule with a \emph{partial} residual applied: the system was
+vacuous, nothing containing a capability was typable
+(\coqok{act\_vacuous\_with\_partial\_qres}, coinductively too,
+\coqok{act\_vacuous\_coinductive}). Its taint update ignored what a capability
+\emph{read}, so a trusted copy laundered external data into an irreversible
+guard (\coqok{taint\_laundering\_refutes\_noninterference}). Its loop condition
+accepted cycles whose only checkpoint was a goal marker, which sanitized taint
+but never reset a grade (\coqok{goal\_only\_cycle\_hits\_cap}). The present
+design has no closure premise --- deviation lives in the semantics, as the
+budget --- no taint, and no grades. We report this because the negative
+result produced the positive one.
 
 \section{Evaluation Plan}\label{sec:eval}
 
-\draftnote{Measurement pending; no numbers are claimed in this draft.}
+\draftnote{Measurement pending; no numbers are claimed.}
 
-Three experiments, each testing a claim the design makes.
-\emph{(i) Resilience degrees in the wild.} Compute the resilience degree of
-every protocol in the corpus and of the public skill collection, reporting the
-distribution and, for each $0$-resilient protocol, the branch and the
-point-of-no-return action. The prediction is that $0$-resilience is common and
-concentrated at irreversible tool calls.
-\emph{(ii) Predictive validity.} Run agents against the gated runtime, log
-in-set misselections against the guards, and check that runs which reach a
-hazard are exactly those exceeding the computed resilience degree. This is the
-falsifiable core: a hazard reached within budget refutes
-Theorem~\ref{thm:sound}'s applicability to the deployment.
-\emph{(iii) Repair efficacy.} Apply the four repairs to the $0$-resilient
-protocols and measure the resulting degree, plus the cost in extra steps.
-Mutation testing over the severity classifier (seed known hazards, measure
-detection) measures the tool rather than the theory.
+\emph{(i) Tolerance degrees in the wild.} Compute $k^{*}$ for every corpus
+protocol and the public skill collection; report the distribution and, for
+each $0$-tolerant protocol, the branch and the point-of-no-return action.
+Prediction: $0$-tolerance is common and concentrated at irreversible tool
+calls. \emph{(ii) Modularity.} Compose corpus protocols sequentially and
+compare wall-clock of whole-system bounded reachability against the modular
+derivation of Theorem~\ref{thm:seq}, as $k$ and $|\Pred|$ grow; the claim of
+\S\ref{sec:why} stands or falls here. \emph{(iii) Predictive validity.} Run
+agents against the gated runtime, log in-set misselections against the guards,
+and check that hazard-reaching runs are exactly those exceeding $k^{*}$; a
+hazard within budget refutes Theorem~\ref{thm:sound}'s applicability to the
+deployment. \emph{(iv) Repair efficacy.} Apply the repairs to $0$-tolerant
+protocols and report the resulting degree and the cost in extra steps.
+Mutation testing of the classifier (seed hazards, measure detection) measures
+the tool rather than the theory.
 
 \section{Related Work}\label{sec:related}
 
-\subparagraph*{Failure and recovery in session types.} Crash-stop
-MPST~\cite{barwell-ecoop22} and affine/exceptional
-sessions~\cite{fowler-popl19} model participants that \emph{stop};
-protocol-induced recovery~\cite{neykova-cc17} computes safe recovery points
-statically. Misselection is orthogonal: the participant continues, wrongly, and
-neither line classifies the consequence by severity or tracks goal
-reachability.
+\subparagraph*{MPST with a fault model.} Crash-stop
+failures~\cite{barwell-concur22,barwell-ecoop23,peters-forte22},
+affine and exceptional sessions~\cite{fowler-popl19,lagaillardie-ecoop22},
+and protocol-induced recovery~\cite{neykova-cc17} model participants that
+\emph{stop} or are cancelled; misselection is a participant that
+\emph{continues, wrongly}, and none of these classify the consequence or track
+a goal. Asserted and refined global
+types~\cite{bocchi-concur10,zhou-oopsla20,gheri-ecoop22,vassor-ecoop24} supply
+our syntax; monitoring~\cite{bocchi-forte13} and blame~\cite{jia-popl16} treat
+guard violation as an alarm rather than as an object of analysis.
 
-\subparagraph*{Dead ends and irreversibility.} Detecting states from which a
-goal is unreachable is well studied in classical planning (unsolvability
-heuristics, dead-end detection), and reversibility and side-effect measures are
-studied in reinforcement-learning safety. We lift the question to a
-\emph{protocol} with roles and choice points, and turn it into a static,
-pre-execution typing discipline.
+\subparagraph*{Bounded faults and dead ends.} Fault-tolerant
+planning~\cite{domshlak-icaps13,aineto-ecai23} bounds action failures against
+goal reachability; we bound selections against hazard reachability.
+Dead-end detection~\cite{steinmetz-aaai16,hoffmann-ecai14}, undoability
+checking~\cite{daum-icaps16,morak-kr25} and excuse
+generation~\cite{gobelbecker-icaps10} supply the point-of-no-return machinery;
+reversibility measures in reinforcement-learning safety~\cite{turner-aies20}
+share the intuition without types.
 
-\subparagraph*{Information flow and robustness.} Robust
-declassification~\cite{zdancewic-robust,myers-jcs06} quantifies a property over
-all attacker behaviour at low-integrity holes; nonmalleable
-IFC~\cite{cecchetti-ccs17} restricts endorsement dually. Session-typed IFC with
-integrity labels and governed regrading is
-established~\cite{derakhshan-ecoop24,capecchi-concur10}. Our hazards are not
-confidentiality properties and our quantification is over \emph{misselections
-within a budget} rather than over adversary code, but the lineage should be
-read as ours.
+\subparagraph*{Types equivalent to model checkers.} Naik and
+Palsberg~\cite{naik-palsberg} and Kobayashi and Ong~\cite{kobayashi-ong} set
+the template we instantiate; \S\ref{sec:why} says what we add.
+Resource-aware~\cite{das-lics18,das-popl23} and graded~\cite{orchard-icfp19}
+session types index judgments by a quantity, as we do, with the difference
+drawn in \S\ref{sec:typing}.
 
-\subparagraph*{Adversarial participants.} Multiparty session integrity against
-an adversary controlling an arbitrary subset of
-participants~\cite{bhargavan-csf09}, and honesty-by-typing~\cite{bartoletti-lmcs16}
-(a process honours its contracts even among dishonest peers), are the
-worst-case ($k=\infty$, demonic) end of our spectrum. The budget is what makes
-the middle of the spectrum expressible.
-
-\subparagraph*{Agent-side enforcement.} Provenance- and capability-gating of
-tool calls~\cite{camel,fides,progent} and effect-typed agent
-languages~\cite{etas} enforce related properties at runtime or in the host
-language; LTL trace monitoring with predictive
-intervention~\cite{trac-facct26,agentltl} detects and preempts violations on a
-single agent's trace. All are complementary: they act on runs, we classify
-branches before any run exists.
+\subparagraph*{Agents.} Runtime enforcement and provenance gating of tool
+calls~\cite{agentspec,camel,fides,progent}, effect-typed agent
+languages~\cite{etas}, network-enforced session types~\cite{nest-ecoop26},
+and LTL trace monitoring~\cite{trac-facct26,agentltl} act on runs or on the
+host language; we classify branches before any run exists
+(\S\ref{sec:trac}).
 
 \section{Limitations and Conclusion}\label{sec:conclusion}
 
-\subparagraph*{Scope.} (1) The mechanization covers the finite fragment;
-recursion is future work, and with it the interaction between loops and the
-budget. (2) The hazard predicate $\Haz$ is a declared input; the discipline
-says what follows from it, not whether it is the right hazard. (3) Three of the
-four repairs are argued, not yet mechanized. (4) Severity is computed over the
-checker's widened abstraction, so a \Ben{} verdict inherits that
-over-approximation --- \Cat{} remains a proof, \Ben{} remains a
-non-refutation. (5) Everything presumes the gated architecture: an agent with
-un-gated side channels to the world falsifies the premise, not the theorem.
+\subparagraph*{Scope.} The mechanization covers the finite fragment; recursion,
+and with it the interaction between loops and the budget, is future work, and
+a reviewer comparing scope against the mechanised subject-reduction
+development of~\cite{tirore-ecoop25} will be right to ask. The hazard
+predicate is a declared input. Three of the four repairs are argued, not
+mechanized. Severity is computed over the checker's widened abstraction, so
+\Ben{} inherits that over-approximation while \Cat{} remains a proof. The
+modularity claim awaits its experiment. Everything presumes the gated
+architecture: an un-gated side channel falsifies the premise, not the
+theorem.
 
-\subparagraph*{Conclusion.} An agent that may never err may never act. The
-useful question is not whether the agent will choose wrongly --- it will ---
-but whether the protocol it is embedded in can survive the choice, and if not,
-what to change. Severity makes that question precise, the point-of-no-return
-characterization makes it computable with machinery the checker already has,
-and the misselection budget makes cascading expressible without a single
-probability. The result is a type system whose well-typedness condition reads:
-\emph{every affordable mistake is allowed, and every unaffordable one is
-structurally unreachable.}
+\subparagraph*{Conclusion.} A participant that may never err may never act.
+The useful question is not whether it will choose wrongly --- it will --- but
+whether the protocol around it can survive the choice, and if not, what to
+change. Severity makes the question precise; the point of no return makes it
+computable with machinery the checker already has; the budget makes cascading
+expressible without a probability; and modular composition makes the answer a
+contract rather than a run. The well-typedness condition reads: \emph{every
+affordable mistake is allowed, and every unaffordable one is structurally
+unreachable.}
 
 \begin{thebibliography}{99}\small
-\bibitem{honda-mpst} K.~Honda, N.~Yoshida, M.~Carbone. Multiparty asynchronous
-  session types. \emph{POPL} 2008; \emph{JACM} 63(1), 2016.
-\bibitem{barwell-ecoop22} A.~Barwell, A.~Scalas, N.~Yoshida, F.~Zhou.
-  Generalised multiparty session types with crash-stop failures. \emph{ECOOP},
-  2022.
-\bibitem{fowler-popl19} S.~Fowler, S.~Lindley, J.~G.~Morris, S.~Decova.
-  Exceptional asynchronous session types. \emph{POPL}, 2019.
-\bibitem{neykova-cc17} R.~Neykova, N.~Yoshida. Let it recover: multiparty
-  protocol-induced recovery. \emph{CC}, 2017.
-\bibitem{zdancewic-robust} S.~Zdancewic, A.~C.~Myers. Robust declassification.
-  \emph{CSFW}, 2001.
-\bibitem{myers-jcs06} A.~C.~Myers, A.~Sabelfeld, S.~Zdancewic. Enforcing robust
-  declassification and qualified robustness. \emph{J.\ Computer Security}
-  14(2), 2006.
-\bibitem{cecchetti-ccs17} E.~Cecchetti, A.~C.~Myers, D.~Stefan. Nonmalleable
-  information flow control. \emph{CCS}, 2017.
-\bibitem{derakhshan-ecoop24} F.~Derakhshan, S.~Balzer, Y.~Yao. Regrading
-  policies for flexible information flow control in session-typed concurrency.
-  \emph{ECOOP}, 2024.
-\bibitem{capecchi-concur10} S.~Capecchi, I.~Castellani, M.~Dezani-Ciancaglini,
-  T.~Rezk. Session types for access and information flow control.
-  \emph{CONCUR}, 2010; \emph{Information and Computation} 238, 2014.
-\bibitem{bhargavan-csf09} K.~Bhargavan, R.~Corin, P.-M.~Deni\'elou, C.~Fournet,
-  J.~J.~Leifer. Cryptographic protocol synthesis and verification for
-  multiparty sessions. \emph{CSF}, 2009.
-\bibitem{bartoletti-lmcs16} M.~Bartoletti, T.~Cimoli, M.~Murgia, A.~S.~Podda,
-  L.~Pompianu. Honesty by typing. \emph{LMCS} 12(4:7), 2016.
-\bibitem{jongmans-ecoop23} S.-S.~Jongmans, F.~Ferreira. Synthetic behavioural
-  typing. \emph{ECOOP}, 2023. \textsf{[title to verify]}
-\bibitem{castro-popl26} D.~Castro-Perez, F.~Ferreira, S.-S.~Jongmans.
-  \emph{POPL}, 2026. \textsf{[title to verify]}
-\bibitem{camel} E.~Debenedetti et al. Defeating prompt injections by design
-  (CaMeL). \emph{arXiv:2503.18813}, 2025.
-\bibitem{fides} M.~Costa et al. Securing AI agents with information-flow
-  control (FIDES). \emph{arXiv:2505.23643}, 2025.
-\bibitem{progent} T.~Shi et al. Progent: securing AI agents with privilege
-  control. \emph{arXiv:2504.11703}, 2025.
-\bibitem{etas} Tan et al. ETAS: an effect-typed language for agent systems.
-  \emph{arXiv:2607.17780}, 2026. \textsf{[authors to verify]}
-\bibitem{trac-facct26} P.~A.~Alamdari, T.~Q.~Klassen, S.~A.~McIlraith. Formal
-  methods meet LLMs: auditing, monitoring, and intervention for compliance of
-  advanced AI systems. \emph{FAccT}, 2026.
-\bibitem{agentltl} AgentLTL: a trace-verification framework for procedural
-  compliance in tool-using LLM agents. \emph{arXiv:2607.02599}.
-  \textsf{[authors to verify]}
+\bibitem{honda-mpst} K.~Honda, N.~Yoshida, M.~Carbone. Multiparty asynchronous session types. \emph{POPL} 2008; \emph{JACM} 63(1), 2016.
+\bibitem{bocchi-concur10} L.~Bocchi, K.~Honda, E.~Tuosto, N.~Yoshida. A theory of design-by-contract for distributed multiparty interactions. \emph{CONCUR}, 2010.
+\bibitem{bocchi-forte13} L.~Bocchi, T.-C.~Chen, R.~Demangeon, K.~Honda, N.~Yoshida. Monitoring networks through multiparty session types. \emph{FMOODS/FORTE} 2013; \emph{TCS} 669, 2017.
+\bibitem{gheri-ecoop22} L.~Gheri, I.~Lanese, N.~Sayers, E.~Tuosto, N.~Yoshida. Design-by-contract for flexible multiparty session protocols. \emph{ECOOP}, 2022.
+\bibitem{vassor-ecoop24} M.~Vassor, N.~Yoshida. Refinements for multiparty message-passing protocols: specification-agnostic theory and implementation. \emph{ECOOP}, 2024.
+\bibitem{zhou-oopsla20} F.~Zhou, F.~Ferreira, R.~Hu, R.~Neykova, N.~Yoshida. Statically verified refinements for multiparty protocols. \emph{OOPSLA}, 2020.
+\bibitem{jia-popl16} L.~Jia, H.~Gommerstadt, F.~Pfenning. Monitors and blame assignment for higher-order session types. \emph{POPL}, 2016.
+\bibitem{barwell-concur22} A.~D.~Barwell, P.~Hou, N.~Yoshida, F.~Zhou. Generalised multiparty session types with crash-stop failures. \emph{CONCUR}, 2022; \emph{LMCS}, 2025.
+\bibitem{barwell-ecoop23} A.~D.~Barwell, P.~Hou, N.~Yoshida, F.~Zhou. Designing asynchronous multiparty protocols with crash-stop failures. \emph{ECOOP}, 2023 (Distinguished Paper).
+\bibitem{peters-forte22} K.~Peters, U.~Nestmann, C.~Wagner. Fault-tolerant multiparty session types. \emph{FORTE}, 2022.
+\bibitem{fowler-popl19} S.~Fowler, S.~Lindley, J.~G.~Morris, S.~Decova. Exceptional asynchronous session types. \emph{POPL}, 2019.
+\bibitem{lagaillardie-ecoop22} N.~Lagaillardie, R.~Neykova, N.~Yoshida. Stay safe under panic: affine Rust programming with multiparty session types. \emph{ECOOP}, 2022.
+\bibitem{neykova-cc17} R.~Neykova, N.~Yoshida. Let it recover: multiparty protocol-induced recovery. \emph{CC}, 2017.
+\bibitem{lange-yoshida-cav19} J.~Lange, N.~Yoshida. Verifying asynchronous interactions via communicating session automata. \emph{CAV}, 2019.
+\bibitem{clarkson-schneider} M.~R.~Clarkson, F.~B.~Schneider. Hyperproperties. \emph{J.\ Computer Security} 18(6), 2010.
+\bibitem{jongmans-ecoop23} S.-S.~Jongmans, F.~Ferreira. Synthetic behavioural typing: sound, regular multiparty sessions via implicit local types. \emph{ECOOP}, 2023.
+\bibitem{castro-popl26} D.~Castro-Perez, F.~Ferreira, S.-S.~Jongmans. \emph{POPL}, 2026. \textsf{[title to verify]}
+\bibitem{synthetic-pacmpl26} A synthetic reconstruction of multiparty session types. \emph{PACMPL}, 2026. \textsf{[authors to verify]}
+\bibitem{tirore-ecoop25} D.~Tirore, J.~Bengtson, M.~Carbone. Multiparty asynchronous session types: a mechanised proof of subject reduction. \emph{ECOOP}, 2025.
+\bibitem{nest-ecoop26} Larsen, Scalas, Amir, Jacobs, Wagemaker, Foster. NEST: network enforced session types. \emph{ECOOP}, 2026.
+\bibitem{naik-palsberg} M.~Naik, J.~Palsberg. A type system equivalent to a model checker. \emph{ESOP} 2005; \emph{TOPLAS} 30(5), 2008.
+\bibitem{kobayashi-ong} N.~Kobayashi, C.-H.~L.~Ong. A type system equivalent to the modal mu-calculus model checking of higher-order recursion schemes. \emph{LICS}, 2009.
+\bibitem{das-lics18} A.~Das, J.~Hoffmann, F.~Pfenning. Work analysis with resource-aware session types. \emph{LICS}, 2018.
+\bibitem{das-popl23} A.~Das, D.~Wang, J.~Hoffmann. Probabilistic resource-aware session types. \emph{POPL}, 2023.
+\bibitem{orchard-icfp19} D.~Orchard, V.-B.~Liepelt, H.~Eades III. Quantitative program reasoning with graded modal types. \emph{ICFP}, 2019.
+\bibitem{aineto-ecai23} D.~Aineto, A.~Gaudenzi, A.~Gerevini, A.~Rovetta, E.~Scala, I.~Serina. Action-failure resilient planning. \emph{ECAI}, 2023.
+\bibitem{domshlak-icaps13} C.~Domshlak. Fault tolerant planning: complexity and compilation. \emph{ICAPS}, 2013.
+\bibitem{steinmetz-aaai16} M.~Steinmetz, J.~Hoffmann. Towards clause-learning state space search: learning to recognize dead-ends. \emph{AAAI}, 2016.
+\bibitem{hoffmann-ecai14} J.~Hoffmann, P.~Kissmann, \'A.~Torralba. ``Distance''? Who cares? Tailoring merge-and-shrink heuristics to detect unsolvability. \emph{ECAI}, 2014.
+\bibitem{daum-icaps16} J.~Daum, \'A.~Torralba, J.~Hoffmann, P.~Haslum, I.~Weber. Practical undoability checking via contingent planning. \emph{ICAPS}, 2016.
+\bibitem{morak-kr25} Non-deterministic action reversibility: complexity results. \emph{KR}, 2025. \textsf{[authors to verify]}
+\bibitem{gobelbecker-icaps10} M.~G\"obelbecker, T.~Keller, P.~Eyerich, M.~Brenner, B.~Nebel. Coming up with good excuses: what to do when no plan can be found. \emph{ICAPS}, 2010.
+\bibitem{turner-aies20} A.~M.~Turner, D.~Hadfield-Menell, P.~Tadepalli. Conservative agency via attainable utility preservation. \emph{AIES}, 2020.
+\bibitem{xsap} B.~Bittner, M.~Bozzano, R.~Cavada, A.~Cimatti, et al. The xSAP safety analysis platform. \emph{TACAS}, 2016.
+\bibitem{bocchi-lange-tuosto} L.~Bocchi, J.~Lange, E.~Tuosto. Three algorithms and a methodology for amending contracts for choreographies. \emph{Sci.\ Ann.\ Comp.\ Sci.} 22(1), 2012.
+\bibitem{carbone-concur08} M.~Carbone, K.~Honda, N.~Yoshida. Structured interactional exceptions in session types. \emph{CONCUR}, 2008.
+\bibitem{ramadge-wonham} P.~J.~Ramadge, W.~M.~Wonham. Supervisory control of a class of discrete event processes. \emph{SIAM J.\ Control Optim.} 25(1), 1987.
+\bibitem{bloem-tacas15} R.~Bloem, B.~K\"onighofer, R.~K\"onighofer, C.~Wang. Shield synthesis: runtime enforcement for reactive systems. \emph{TACAS}, 2015.
+\bibitem{alshiekh-aaai18} M.~Alshiekh, R.~Bloem, R.~Ehlers, B.~K\"onighofer, S.~Niekum, U.~Topcu. Safe reinforcement learning via shielding. \emph{AAAI}, 2018.
+\bibitem{basu-bultan} S.~Basu, T.~Bultan. Automated choreography repair. \emph{FASE}, 2016.
+\bibitem{lanese-wwv13} I.~Lanese, F.~Montesi, G.~Zavattaro. Amending choreographies. \emph{WWV}, 2013.
+\bibitem{trac-facct26} P.~A.~Alamdari, T.~Q.~Klassen, S.~A.~McIlraith. Formal methods meet LLMs: auditing, monitoring, and intervention for compliance of advanced AI systems. \emph{FAccT}, 2026.
+\bibitem{agentltl} AgentLTL: a trace-verification framework for procedural compliance in tool-using LLM agents. \emph{arXiv:2607.02599}. \textsf{[authors to verify]}
+\bibitem{pact} K.~Gopinathan, J.~Feser, et al. Pact: a choreographic language for agentic ecosystems. \emph{arXiv:2605.03143}, 2026. \textsf{[authors to verify]}
+\bibitem{msc-agents} Provable coordination for LLM agents via message sequence charts. \emph{arXiv:2604.17612}, 2026. \textsf{[authors to verify]}
+\bibitem{agentspec} H.~Wang, C.~M.~Poskitt, et al. AgentSpec: customizable runtime enforcement for safe and reliable LLM agents. \emph{ICSE}, 2026.
+\bibitem{camel} E.~Debenedetti et al. Defeating prompt injections by design (CaMeL). \emph{arXiv:2503.18813}, 2025.
+\bibitem{fides} M.~Costa et al. Securing AI agents with information-flow control (FIDES). \emph{arXiv:2505.23643}, 2025.
+\bibitem{progent} T.~Shi et al. Progent: securing AI agents with privilege control. \emph{arXiv:2504.11703}, 2025.
+\bibitem{etas} ETAS: an effect-typed language for agent systems. \emph{arXiv:2607.17780}, 2026. \textsf{[authors to verify]}
 \end{thebibliography}
-
 \end{document}
