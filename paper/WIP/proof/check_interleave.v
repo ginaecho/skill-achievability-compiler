@@ -12,3 +12,5 @@ Print Assumptions strips_swap_act.
 Print Assumptions strips_haz_cone.
 Print Assumptions strips_cap_cone.
 Print Assumptions strips_safeT_cone.
+Print Assumptions SW_comm.
+Print Assumptions SW_comm_rev.
