@@ -219,6 +219,63 @@ Proof.
 Qed.
 
 (* ================================================================= *)
+(*  HOW THE KERNEL'S GOAL NOTION RELATES TO THE THEORY'S.              *)
+(*                                                                     *)
+(*  goal_reach is NOT reach_haz for the goal predicate.  It demands    *)
+(*  the protocol RUN TO COMPLETION -- the witness must end at REnd --   *)
+(*  and it spends no budget, taking compliant and misselection edges    *)
+(*  alike.  One direction holds, with the budget read off the witness   *)
+(*  path; the other fails, because the goal can hold before the         *)
+(*  protocol ends.  So the kernel's notion of "achieves the goal" is    *)
+(*  strictly the stronger one at the budget it uses, and a Benign       *)
+(*  verdict computed with it is conservative: it can call a residual    *)
+(*  Futile that the theory calls Benign, never the reverse.             *)
+(* ================================================================= *)
+Lemma goal_path_reach_mu : forall hz tbl goal x y,
+  reach GW (gsucc hz tbl) x y ->
+  fst y = REnd Gd -> satf goal (snd y) = true ->
+  exists k, reach_mu Wd Gd satg (Ek hz tbl) (fun v => satf goal v = true)
+                     k (fst x) (snd x).
+Proof.
+  intros hz tbl goal x y Hr.
+  induction Hr as [ x | x y z He Hr IH ]; intros Hend Hg.
+  - exists 0. apply RB_here. exact Hg.
+  - destruct (IH Hend Hg) as [k Hk].
+    destruct x as [Gx wx]. destruct y as [Gy wy]. simpl in *.
+    unfold edge, gsucc in He. simpl in He. apply in_app_or in He.
+    destruct He as [He | He].
+    + exists k. eapply RB_ok; [ | exact Hk ].
+      apply (succ0_iff Wd Gd satg (Ek hz tbl) satb satb_spec (succE hz tbl)
+               (fun a w w' => iff_refl _)). exact He.
+    + exists (S k). eapply RB_dev; [ | exact Hk ].
+      apply (succ1_iff Wd Gd satg satb satb_spec). exact He.
+Qed.
+
+Theorem goal_reach_implies_reach_mu : forall hz tbl goal G w,
+  goal_reach hz tbl goal G w ->
+  exists k, reach_mu Wd Gd satg (Ek hz tbl) (fun v => satf goal v = true) k G w.
+Proof.
+  intros hz tbl goal G w [w' [Hr Hg]].
+  apply (goal_path_reach_mu hz tbl goal (G, w) (REnd Gd, w') Hr);
+    [ reflexivity | exact Hg ].
+Qed.
+
+(* the converse fails: a protocol whose goal already holds but which
+   cannot run to completion *)
+Definition Gstuck : Gr Gd := RAct Gd 0 0 (REnd Gd).
+
+Theorem goal_reach_strictly_stronger :
+  reach_mu Wd Gd satg (Ek 0 []) (fun v => satf FTrue v = true) 0 Gstuck [false]
+  /\ ~ goal_reach 0 [] FTrue Gstuck [false].
+Proof.
+  split.
+  - apply RB_here. reflexivity.
+  - intros [w' [Hr Hg]].
+    inversion Hr as [ x1 Hx1 | x1 y1 z1 He Hr' ]; subst.
+    unfold edge, gsucc in He. simpl in He. exact He.
+Qed.
+
+(* ================================================================= *)
 (*  Elaboration (trusted front end): the tool's protocol tree, with    *)
 (*  explicit or RATIONAL guards, becomes a guarded regular type whose  *)
 (*  guard tables and hazard tables are computed with goal_reachable.   *)
