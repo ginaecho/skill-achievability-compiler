@@ -1,0 +1,11 @@
+Require Import Abort.
+Print Assumptions E2_cap_enabled.
+Print Assumptions E2_no_halted.
+Print Assumptions E2_idle_aborted.
+Print Assumptions E2_inert_abort.
+Print Assumptions E2_validates.
+Print Assumptions Gbad3_not_1_tolerant.
+Print Assumptions SafePath_E2_safe.
+Print Assumptions Gguarded_is_k_tolerant.
+Print Assumptions Gguarded_inhabited.
+Print Assumptions Gguarded_bridge_nonvacuous.

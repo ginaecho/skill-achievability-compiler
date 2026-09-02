@@ -43,13 +43,18 @@ Definition validates (a : CapN) (psi : World -> Prop) : Prop :=
 (* ----------------------------------------------------------------- *)
 Definition halted (W : World) : Prop := forall a W', ~ E a W W'.
 
-Definition validates_ab (a : CapN) (psi : World -> Prop) (ab : World -> World) : Prop :=
-  forall W W', E a W W' <-> ((psi W /\ W' = W) \/ (~ psi W /\ W' = ab W)).
+(* `validates_ab` is stated AT a world: that is all any proof below uses,
+   and it is what a concrete runtime can satisfy (Abort.v exhibits one).
+   A global version would force the equation to hold inside the abort
+   world too, where it is false. *)
+Definition validates_ab (a : CapN) (psi : World -> Prop)
+                        (ab : World -> World) (W : World) : Prop :=
+  forall W', E a W W' <-> ((psi W /\ W' = W) \/ (~ psi W /\ W' = ab W)).
 
 (* the point of the change: the capability is ALWAYS enabled, so CT_Act is
    satisfiable and the repaired protocol has conforming sessions *)
 Lemma validates_ab_enabled : forall a psi ab W,
-  validates_ab a psi ab -> exists W', E a W W'.
+  validates_ab a psi ab W -> exists W', E a W W'.
 Proof.
   intros a psi ab W Hv.
   destruct (classic_psi psi W) as [Hp | Hp].
@@ -57,45 +62,78 @@ Proof.
   - exists (ab W). apply Hv. right. split; [ exact Hp | reflexivity ].
 Qed.
 
-(* nothing at all is reachable from a halted world that is not already there *)
-Lemma reach_halted : forall (P : World -> Prop) b G W,
-  reach_haz E P b G W -> halted W -> ~ P W -> False.
+(* ---- where the abort branch goes ----------------------------------- *)
+(*  The first draft of this section sent a failed validation to a HALTED  *)
+(*  world, one with no successors at all.  That discharges the safety     *)
+(*  obligation, but it is the same vacuity one constructor further on:    *)
+(*  the branch a guard protects begins with an action, and CT_Act asks    *)
+(*  for a successor, so no session conforms there either.  Worse,         *)
+(*  `halted` is satisfiable in NO capability model in this development,   *)
+(*  because every capability of E0, E1 and E2 is enabled everywhere.      *)
+(*                                                                        *)
+(*  An abort world is not a world where nothing is enabled.  It is a      *)
+(*  world where everything is enabled and nothing changes: the runtime    *)
+(*  keeps answering tool calls, and the answers are errors.  That is      *)
+(*  IDLE, and it is satisfiable -- Abort.v builds one and exhibits a      *)
+(*  session that conforms through it.                                     *)
+Definition idle (W : World) : Prop := forall a W', E a W W' -> W' = W.
+
+Definition inert (W : World) : Prop := ~ Haz W /\ idle W.
+
+Lemma halted_idle : forall W, halted W -> idle W.
+Proof. intros W Hh a W' HE. exfalso. exact (Hh a W' HE). Qed.
+
+(* nothing that is not already true of an idle world is reachable from it *)
+Lemma reach_idle : forall (P : World -> Prop) b G W,
+  idle W -> ~ P W -> ~ reach_haz E P b G W.
 Proof.
-  intros P b G W Hr.
+  intros P b G W Hi Hp Hr. revert Hi Hp.
   induction Hr as [ b G W1 Hpw | b a p G W1 W' HE Hr IH | b phi G W1 Hr IH
                   | b p q brs l psi Gl W1 Hin Hpsi Hr IH
-                  | b p q brs l psi Gl W1 Hin Hpsi Hr IH ]; intros Hh Hp.
+                  | b p q brs l psi Gl W1 Hin Hpsi Hr IH ]; intros Hi Hp.
   - exact (Hp Hpw).
-  - exact (Hh a W' HE).
-  - exact (IH Hh Hp).
-  - exact (IH Hh Hp).
-  - exact (IH Hh Hp).
+  - assert (Heq : W' = W1) by (apply (Hi a); exact HE). subst W'.
+    exact (IH Hi Hp).
+  - exact (IH Hi Hp).
+  - exact (IH Hi Hp).
+  - exact (IH Hi Hp).
+Qed.
+
+Corollary reach_halted : forall (P : World -> Prop) b G W,
+  reach_haz E P b G W -> halted W -> ~ P W -> False.
+Proof.
+  intros P b G W Hr Hh Hp. eapply reach_idle; [ apply halted_idle; exact Hh | exact Hp | exact Hr ].
 Qed.
 
 Corollary not_reach_halted : forall (P : World -> Prop) b G W,
   halted W -> ~ P W -> ~ reach_haz E P b G W.
 Proof. intros P b G W Hh Hp Hr. eapply reach_halted; eassumption. Qed.
 
-(* so every protocol is safe from a halted, hazard-free world ... *)
-Theorem safeT_halted : forall b G W,
+(* so every protocol is safe from an inert world ... *)
+Theorem safeT_inert : forall b G W, inert W -> safeT E Haz b G W.
+Proof.
+  intros b G W [Hnh Hi]. apply (TC_complete E Haz (Gt_size G)); [ apply le_n | ].
+  apply reach_idle; assumption.
+Qed.
+
+Corollary safeT_halted : forall b G W,
   halted W -> ~ Haz W -> safeT E Haz b G W.
 Proof.
-  intros b G W Hh Hnh. apply (TC_complete E Haz (Gt_size G)); [ apply le_n | ].
-  apply not_reach_halted; assumption.
+  intros b G W Hh Hnh. apply safeT_inert. split; [ exact Hnh | apply halted_idle; exact Hh ].
 Qed.
 
 (* ... and a misselected guarded branch is FUTILE, not stuck: the run is
    wasted and nothing is harmed. *)
 Theorem guard_abort_is_futile : forall (Phi : World -> Prop) a psi ab p Gl W b,
-  validates_ab a psi ab -> ~ psi W -> ~ Haz W ->
-  halted (ab W) -> ~ Haz (ab W) -> ~ Phi (ab W) ->
+  validates_ab a psi ab W -> ~ psi W -> ~ Haz W ->
+  inert (ab W) -> ~ Phi (ab W) ->
   safeT E Haz b (GAct a p Gl) W /\ Futile E Haz Phi b Gl (ab W).
 Proof.
-  intros Phi a psi ab p Gl W b Hv Hnp HnhW Hh Hnh Hnphi. split.
+  intros Phi a psi ab p Gl W b Hv Hnp HnhW Hin Hnphi. split.
   - apply ST_Act; [ exact HnhW | ].
     intros W' HE. apply Hv in HE. destruct HE as [[Hp _] | [_ ->]]; [ contradiction | ].
-    apply safeT_halted; assumption.
-  - split; apply not_reach_halted; assumption.
+    apply safeT_inert. exact Hin.
+  - destruct Hin as [Hnh Hi]. split; apply reach_idle; assumption.
 Qed.
 
 (* ----------------------------------------------------------------- *)
@@ -149,6 +187,62 @@ Proof.
       inversion Hok as [ | | b1 a1 p1 G1 W1 Hnh1 Hact | ]; subst.
       apply Hact. apply Hv. split; [ exact Hpsi | reflexivity ].
   - intros [Hs Hint]. apply repair_guard_sound; assumption.
+Qed.
+
+(* ---- the same repair, in the aborting model ------------------------ *)
+(*  This is the theorem the paper's repair section actually needs: the     *)
+(*  validation is live, so the guarded branch is inhabited, and the        *)
+(*  misselection is absorbed because the abort world is inert rather than  *)
+(*  because the action was unfirable.  Note the hypothesis has content --  *)
+(*  `inert (ab W)` is a property of the runtime, discharged concretely in  *)
+(*  Abort.v -- where the blocking version discharged its obligation with   *)
+(*  an empty quantifier.                                                   *)
+Lemma guard_absorbs_misselection_ab : forall a psi ab p Gl W c,
+  validates_ab a psi ab W -> ~ Haz W -> ~ psi W -> inert (ab W) ->
+  safeT E Haz c (GAct a p Gl) W.
+Proof.
+  intros a psi ab p Gl W c Hv Hnh Hnp Hin.
+  apply ST_Act; [ exact Hnh | ].
+  intros W' HE. apply Hv in HE. destruct HE as [[Hp _] | [_ ->]]; [ contradiction | ].
+  apply safeT_inert. exact Hin.
+Qed.
+
+Theorem repair_guard_sound_ab : forall b p q brs l psi ab Gl a W,
+  validates_ab a psi ab W -> inert (ab W) ->
+  safeT E Haz b (GComm p q brs) W ->
+  (psi W -> safeT E Haz b Gl W) ->
+  safeT E Haz b (GComm p q ((l, psi, GAct a p Gl) :: brs)) W.
+Proof.
+  intros b p q brs l psi ab Gl a W Hv Hin Hs Hint.
+  inversion Hs as [ | | | b0 p0 q0 brs0 W0' Hnh Hok Hdev ]; subst.
+  apply ST_Comm; [ exact Hnh | | ].
+  - intros l' psi' Gl' Hin' Hpsi. destruct Hin' as [Heq | Hin'].
+    + inversion Heq; subst. apply ST_Act; [ exact Hnh | ].
+      intros W' HE. apply Hv in HE.
+      destruct HE as [[_ ->] | [Hnp _]]; [ apply Hint; exact Hpsi | contradiction ].
+    + eapply Hok; eauto.
+  - intros l' psi' Gl' Hin' Hpsi c Hb. destruct Hin' as [Heq | Hin'].
+    + inversion Heq; subst. eapply guard_absorbs_misselection_ab; eassumption.
+    + eapply Hdev; eauto.
+Qed.
+
+(* and the exact characterization survives the change of model, which is
+   what the earlier draft asserted without proof *)
+Theorem repair_guard_exact_ab : forall b p q brs l psi ab Gl a W,
+  validates_ab a psi ab W -> inert (ab W) ->
+  (safeT E Haz b (GComm p q ((l, psi, GAct a p Gl) :: brs)) W
+   <-> (safeT E Haz b (GComm p q brs) W /\ (psi W -> safeT E Haz b Gl W))).
+Proof.
+  intros b p q brs l psi ab Gl a W Hv Hin. split.
+  - intro Hs. split.
+    + eapply repair_narrow_sound; [ | exact Hs ].
+      intros x Hx. right. exact Hx.
+    + intro Hpsi.
+      inversion Hs as [ | | | b0 p0 q0 brs0 W0' Hnh Hok Hdev ]; subst.
+      specialize (Hok l psi (GAct a p Gl) (or_introl eq_refl) Hpsi).
+      inversion Hok as [ | | b1 a1 p1 G1 W1 Hnh1 Hact | ]; subst.
+      apply Hact. apply Hv. left. split; [ exact Hpsi | reflexivity ].
+  - intros [Hs Hint]. eapply repair_guard_sound_ab; eassumption.
 Qed.
 
 (* ----------------------------------------------------------------- *)
@@ -249,6 +343,27 @@ Proof.
     destruct Hs as [_ Hall]. destruct (Hall W1 Hirr) as [Hnh1 _]. exact (Hnh1 Hh1).
   - apply (reorder_reordered_exact b p q irr chk psi G W Hv).
     split; [ exact Hnh | ]. intro Hpsi. contradiction.
+Qed.
+
+(* ---- reorder, in the aborting model -------------------------------- *)
+(*  The blocking model made the reordered protocol safe by making the      *)
+(*  validation unfirable when its predicate failed, which is the same      *)
+(*  vacuity as before.  With a live validation the conclusion still holds  *)
+(*  and now says something: whichever way the check comes out, the         *)
+(*  irreversible action is no longer past the point of no return.          *)
+Theorem repair_reorder_pnr_ab : forall b p q irr chk psi ab G W,
+  validates_ab chk psi ab W -> ~ Haz W -> ~ psi W -> inert (ab W) ->
+  (exists W1, E irr W W1 /\ Haz W1) ->
+  ~ safeT E Haz b (GAct irr p (GAct chk q G)) W /\
+    safeT E Haz b (GAct chk q (GAct irr p G)) W.
+Proof.
+  intros b p q irr chk psi ab G W Hv Hnh Hnp Hin [W1 [Hirr Hh1]]. split.
+  - intro Hs. inversion Hs as [ | | b0 a0 p0 G0 W0' Hnh0 Hall | ]; subst.
+    specialize (Hall W1 Hirr).
+    inversion Hall as [ | | b1 a1 p1 G1 W2 Hnh1 _ | ]; subst. exact (Hnh1 Hh1).
+  - apply ST_Act; [ exact Hnh | ]. intros W' HE. apply Hv in HE.
+    destruct HE as [[Hp _] | [_ ->]]; [ contradiction | ].
+    apply safeT_inert. exact Hin.
 Qed.
 
 (* ----------------------------------------------------------------- *)
