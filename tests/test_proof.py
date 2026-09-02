@@ -58,3 +58,22 @@ def test_direct_typing_proof_typechecks(tmp_path):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert r.stdout.count("Closed under the global context") >= 9, r.stdout
+
+
+def test_every_coq_result_the_paper_cites_exists_and_is_checked():
+    """The paper's claim is not only that these theorems are proved but that
+    all of them are `Print Assumptions` closed.  A citation naming a result no
+    harness checks is a hole in that claim; a citation naming nothing at all
+    is worse.  Both directions are checked here so the paper cannot drift
+    away from the development between rounds."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts" / "check_paper_citations.py"
+    if not script.exists():
+        import pytest
+        pytest.skip("citation checker not present")
+    r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
