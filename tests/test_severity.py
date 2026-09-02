@@ -57,3 +57,41 @@ def test_corpus_does_not_crash():
     for f in ("corpus.json", "corpus_extended.json"):
         for e in json.load(open(DATA / f)):
             analyze(e["pack"], kmax=2)
+
+
+def test_cli_output_fits_a_paper_column(capsys):
+    """The verbatim block in the paper is the tool's output: keep it narrow."""
+    import json as _json
+    import tempfile
+    from skillc.cli import main
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        _json.dump(BENCH["migration_backup"]["pack"], fh)
+    rc = main(["severity", fh.name])
+    out = capsys.readouterr().out
+    assert rc == 3                                   # k* finite
+    assert "tolerance degree k* = 1" in out
+    assert "PNR=drop_old" in out
+    assert all(len(line) <= 78 for line in out.splitlines()), out
+
+
+def test_live_agent_simulator_agrees_with_the_theorem():
+    """A scripted (wrong-one-in-three) agent driven through the benchmark by
+    the live-agent harness: a catastrophe needs more than k* misselections,
+    and never happens on a protocol tolerant at every tested budget."""
+    import random
+    import sys
+    sys.path.insert(0, str(DATA.parents[2] / "scripts"))
+    from live_agents import simulate
+    rng = random.Random(7)
+
+    def chooser(labels, intended):
+        bad = [l for l in labels if not intended[l]]
+        good = [l for l in labels if intended[l]] or labels
+        return rng.choice(bad) if bad and rng.random() < 0.34 else rng.choice(good)
+
+    for pid, e in BENCH.items():
+        k = analyze(e["pack"], kmax=4).tolerance_degree
+        for seed in range(6):
+            r = simulate(e, "scripted", "plain", seed, chooser)
+            if r["outcome"] == "catastrophe":
+                assert k is not None and r["misselections"] > k, (pid, r)

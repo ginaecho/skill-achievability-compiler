@@ -320,19 +320,29 @@ def cmd_severity(args) -> int:
     if args.json:
         print(_json.dumps(d, indent=1))
         return 0
+    import textwrap
     ks = f">={args.kmax + 1}" if rep.tolerance_degree is None else str(rep.tolerance_degree)
-    print(f"{rep.pack}: tolerance degree k* = {ks}   "
-          f"(choice nodes {rep.choice_nodes}, branches {rep.branches}, "
-          f"irreversible {sorted(rep.irreversible_caps) or 'none'})")
+    print(f"{rep.pack}: tolerance degree k* = {ks}")
+    print(f"  choice nodes {rep.choice_nodes}, branches {rep.branches}, "
+          f"irreversible {sorted(rep.irreversible_caps) or 'none'}")
+    by_node: dict = {}
     for v in rep.verdicts:
-        tag = "intended" if v.intended else "misselection"
-        extra = f"  PNR={v.pnr_action}" if v.pnr_action else ""
-        print(f"  {v.node:40s} {v.branch:22s} {v.severity:13s} ({tag}){extra}")
+        by_node.setdefault(v.node, []).append(v)
+    for node in sorted(by_node, key=lambda n: (n.count("/"), n)):
+        print(f"  {node}")
+        for v in by_node[node]:
+            tag = "intended" if v.intended else "misselection"
+            extra = f"  PNR={v.pnr_action}" if v.pnr_action else ""
+            print(f"    {v.branch:18s} {v.severity:13s} {tag}{extra}")
     if rep.pnr_action:
-        print(f"  first catastrophe within budget {(rep.tolerance_degree or 0) + 1}: "
-              f"{' > '.join('/'.join(map(str, x)) for x in rep.hazard_witness)}")
+        path = " > ".join("/".join(map(str, x)) for x in rep.hazard_witness)
+        print(f"  first catastrophe within budget {(rep.tolerance_degree or 0) + 1}:")
+        for line in textwrap.wrap(path, 70):
+            print(f"    {line}")
     if rep.narrowing:
-        print("  repair (narrow): remove " + ", ".join(f"{b} at {n}" for n, b in rep.narrowing))
+        print("  repair (narrow):")
+        for n, b in rep.narrowing:
+            print(f"    remove {b} at {n}")
     return 0 if rep.tolerance_degree is None else 3
 
 

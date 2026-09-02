@@ -238,6 +238,9 @@ class SeverityAnalyzer:
                             return True, wit, pnr
                     return False, (), None
                 self.choice_nodes.add(node)
+                # when RECORDING, visit every branch even after a hazard was
+                # found, so that each branch gets its verdict
+                first = None
                 for label, br in body["branches"].items():
                     residual = list(br) + rest
                     bst = _mk_state(cur.true_preds, cur.arith, cur.versions(),
@@ -257,8 +260,10 @@ class SeverityAnalyzer:
                         self._record(node, label, bst, intended, residual, recenv,
                                      found if not intended else False, wit, pnr)
                     if found:
-                        return True, wit, pnr
-                return False, (), None
+                        if not record:
+                            return True, wit, pnr
+                        first = first or (True, wit, pnr)
+                return first or (False, (), None)
         return False, (), None
 
     def _intended(self, body: dict, label: str, residual: list,

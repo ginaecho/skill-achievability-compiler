@@ -143,7 +143,7 @@ All axiom-free; `make` in this directory runs every `Print Assumptions` harness.
 | Budgets distribute over participants (per-role allowances summing to ≤ k) | `budget_distributes`, `total_eq_sum_percost` |
 
 Scope: head-move semantics of the finite fragment, matching the base
-`DirectTyping.v`.
+`DirectTyping.v`. `Mu.v` lifts the bridge to recursive sessions.
 
 ## `Regular.v` — regular protocols (8 results)
 
@@ -152,4 +152,23 @@ Scope: head-move semantics of the finite fragment, matching the base
 | Budgeted reachability ⟺ reachability in the product Node × World × {0..k} | `product_correspondence` |
 | Budget is a monotone counter; a path with d misselection edges has d ≤ b (loop re-entry bounded) | `budget_never_increases`, `dev_edges_bounded`, `dev_edges_exact` |
 | Reachability witnessed by a path no longer than the reachable-state count (pigeonhole) | `reach_bounded_path` |
-| Executable decision procedure, sound and complete | `decide_sound`, `decide_complete`, `decide_reachb_correct` |
+| Executable decision procedure, sound and complete (node list need only be successor-closed) | `decide_sound`, `decide_complete`, `decide_reachb_correct` |
+
+## `Mu.v` — μ-types: the two developments connected (10 results)
+
+| Result | Coq |
+|---|---|
+| Unfolding is substitution; the substitution lemma behind finiteness | `subst_comp`, `unfold_close` |
+| The unfolding closure `cands` is finite and closed under every step; every reachable state is in it | `cands_closed`, `reach_in_cands` |
+| One typed session step simulates a protocol path of the same cost; the bridge for recursive sessions | `sim_step`, `bridge_mu` |
+| The finite fragment embeds; T-Choice-Safe = non-reachability in the product; the finite bridge recovered | `reach_embed`, `TC_regular`, `bridge_finite_via_mu` |
+| Decision procedure for μ-types, sound and complete | `decide_mu_correct` |
+
+## `Repairs.v` — the four repairs (13 results)
+
+| Result | Coq |
+|---|---|
+| Guard: sound, exact; a misselected guarded branch is stuck | `repair_guard_sound`, `repair_guard_exact`, `guard_absorbs_misselection` |
+| Reorder: sound under commutation + harmlessness; validations commute; exact forms; the PNR theorem | `repair_reorder_sound`, `validation_commutes`, `reorder_original_exact`, `reorder_reordered_exact`, `repair_reorder_pnr` |
+| Compensate: sound (TC_seq); Futile → Benign | `repair_compensate_sound`, `repair_compensate_restores_goal` |
+| Worked instance: purchase-before-verify is not 1-tolerant; verify/purchase commute; reordered is k-tolerant | `Gbad2_not_1_tolerant`, `commutes_verify_purchase`, `Greordered_is_k_tolerant` |

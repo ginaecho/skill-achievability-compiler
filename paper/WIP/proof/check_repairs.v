@@ -1,0 +1,14 @@
+Require Import Repairs.
+Print Assumptions repair_guard_sound.
+Print Assumptions repair_guard_exact.
+Print Assumptions guard_absorbs_misselection.
+Print Assumptions repair_reorder_sound.
+Print Assumptions validation_commutes.
+Print Assumptions reorder_original_exact.
+Print Assumptions reorder_reordered_exact.
+Print Assumptions repair_reorder_pnr.
+Print Assumptions repair_compensate_sound.
+Print Assumptions repair_compensate_restores_goal.
+Print Assumptions commutes_verify_purchase.
+Print Assumptions Gbad2_not_1_tolerant.
+Print Assumptions Greordered_is_k_tolerant.

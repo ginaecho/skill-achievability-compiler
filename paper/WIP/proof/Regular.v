@@ -353,13 +353,16 @@ Section Decide.
 Variable Node W : Type.
 Hypothesis Node_dec : forall x y : Node, {x = y} + {x <> y}.
 Hypothesis W_dec : forall x y : W, {x = y} + {x <> y}.
-Variable nodes : list Node.  Hypothesis nodes_complete : forall n, In n nodes.
+Variable nodes : list Node.   (* need not be exhaustive: closed under successors, below *)
 Variable worlds : list W.    Hypothesis worlds_complete : forall w, In w worlds.
 Variable succ0 succ1 : Node -> W -> list (Node * W).
 Variable hazb : W -> bool.
 Definition step0 n w n' w' := In (n', w') (succ0 n w).
 Definition step1 n w n' w' := In (n', w') (succ1 n w).
 Definition Haz (w : W) : Prop := hazb w = true.
+(* the node list is closed under both kinds of successor *)
+Hypothesis nodes_closed : forall n w n' w',
+  In n nodes -> (step0 n w n' w' \/ step1 n w n' w') -> In n' nodes.
 
 Definition PS' := (Node * W * nat)%type.
 Definition ps_dec : forall x y : PS', {x = y} + {x <> y}.
@@ -399,10 +402,10 @@ Qed.
 Definition all_ps (k : nat) : list PS' :=
   concat (map (fun n => concat (map (fun w => map (fun b => (n, w, b)) (upto k)) worlds)) nodes).
 
-Lemma all_ps_complete : forall k n w b, b <= k -> In (n, w, b) (all_ps k).
+Lemma all_ps_complete : forall k n w b, In n nodes -> b <= k -> In (n, w, b) (all_ps k).
 Proof.
-  intros k n w b Hb. unfold all_ps. apply in_concat.
-  eexists. split. { apply in_map. apply nodes_complete. }
+  intros k n w b Hn Hb. unfold all_ps. apply in_concat.
+  eexists. split. { apply in_map. exact Hn. }
   apply in_concat. eexists. split. { apply in_map. apply worlds_complete. }
   apply in_map. apply upto_complete. exact Hb.
 Qed.
@@ -428,10 +431,18 @@ Proof.
   - eapply PR_step; [ | exact IH ]. apply psucc_iff. exact He.
 Qed.
 
-Theorem decide_reachb_correct :
-  forall k n w, decide_reachb k n w = true <-> reachb Node W step0 step1 Haz k n w.
+Lemma preach_nodes : forall s s',
+  preach Node W step0 step1 s s' -> In (fst (fst s)) nodes -> In (fst (fst s')) nodes.
 Proof.
-  intros k n w. unfold decide_reachb. split.
+  intros s s' H. induction H as [ s | s s' s'' Hs Hp IH ]; intro Hn; [ exact Hn | ].
+  apply IH. inversion Hs; subst; simpl in *; eapply nodes_closed; eauto.
+Qed.
+
+Theorem decide_reachb_correct :
+  forall k n w, In n nodes ->
+    (decide_reachb k n w = true <-> reachb Node W step0 step1 Haz k n w).
+Proof.
+  intros k n w Hn. unfold decide_reachb. split.
   - intro Hd.
     destruct (decide_sound PS' psucc (all_ps k) phazb (n, w, k) Hd) as [s' [Hr Hb]].
     apply product_correspondence. exists s'. split.
@@ -441,7 +452,8 @@ Proof.
     apply (decide_complete PS' ps_dec psucc (all_ps k) phazb (n, w, k) s').
     + intros z Hz. apply reach_to_preach in Hz.
       pose proof (budget_never_increases Node W step0 step1 _ _ Hz) as Hb.
-      destruct z as [[n' w'] b']. simpl in Hb. apply all_ps_complete. exact Hb.
+      pose proof (preach_nodes _ _ Hz Hn) as Hz'.
+      destruct z as [[n' w'] b']. simpl in Hb, Hz'. apply all_ps_complete; assumption.
     + apply preach_to_reach. exact Hp.
     + destruct s' as [[n' w'] b']. simpl. unfold phaz, Haz in Hh. exact Hh.
 Qed.
