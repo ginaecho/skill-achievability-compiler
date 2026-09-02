@@ -144,7 +144,7 @@ Section~\ref{sec:base}.}}
 \keywords{Session types, Multiparty, Behavioural types, Safety, Irreversibility,
 Fault tolerance, Mechanized metatheory}
 \category{}\relatedversion{}
-\supplement{Coq development (67 theorems, axiom-free, Coq 8.18), the
+\supplement{Coq development (80 theorems, axiom-free, Coq 8.18), the
 \texttt{skillc severity} implementation, the severity benchmark, and the
 evaluation scripts; anonymized for submission.}
 \funding{To be completed for the camera-ready.}
@@ -178,23 +178,27 @@ is exactly characterized by one syntax-directed rule, composes modularly across
 sequential composition, and is decidable for regular protocols: the unfolding
 closure of a $\mu$-type is proved finite, and an executable decision procedure
 is verified on it. The bridge holds for recursive sessions, and the four
-repairs --- guard, reorder, narrow, compensate --- are proved sound. All of
+repairs --- guard, reorder, narrow, compensate --- are proved sound. A
+bystander --- a role acting before its turn in an ungated deployment ---
+preserves the condition under a permutation relation whose semantic side
+conditions a syntactic variable-disjointness check discharges, and the tool's
+decision on the boolean fragment is a kernel extracted from the proof. All of
 this is mechanized in Coq, axiom-free. An implementation over an existing achievability compiler shows
 that two existing corpora contain no decision points or irreversible tools at
 all --- the question is invisible to them --- and, on a purpose-built benchmark
-of fifteen protocols, classifies 51 branch verdicts, finds seven $0$-tolerant
+of seventeen protocols, classifies 55 branch verdicts, finds nine $0$-tolerant
 protocols each naming its point-of-no-return action, verifies three repairs,
 and demonstrates that modular checking with the interface abstraction the
 theory licenses is linear where whole-system analysis is exponential.
-A live-agent experiment --- 300 runs of two production language models, with
+A live-agent experiment --- 340 runs of two production language models, with
 and without a requester's pressure to take shortcuts --- finds every observed
 catastrophe consistent with the theorem, the catastrophe rate ordered by
-tolerance degree, and six of the seventeen \Cat{} verdicts taken by a real
+tolerance degree, and six of the nineteen \Cat{} verdicts taken by a real
 agent.
 \end{abstract}
 
 \draftnote{Status. Everything in Sections~\ref{sec:severity}--\ref{sec:why} is
-mechanized (\texttt{proof/}, 67 results, all \texttt{Print Assumptions}
+mechanized (\texttt{proof/}, 80 results, all \texttt{Print Assumptions}
 closed). The evaluation numbers in Section~\ref{sec:eval} are real
 (\texttt{scripts/severity\_eval.py}, results in \texttt{paper/WIP/results/}).
 Scope caveats are stated where they apply. The predecessor draft was withdrawn
@@ -272,8 +276,11 @@ decides the condition.
 \item[\textbf{C3}] \emph{From protocols to programs} (\S\ref{sec:bridge}): a
   session typed against a $k$-tolerant protocol is hazard-free on every run of
   cost at most $k$ (\coqok{bridge\_run}); per-role allowances summing to $k$
-  are jointly tolerated (\coqok{budget\_distributes}); and the bridge holds
-  for recursive sessions and protocols (\coqok{bridge\_mu}).
+  are jointly tolerated (\coqok{budget\_distributes}); the bridge holds
+  for recursive sessions and protocols (\coqok{bridge\_mu}); and it survives
+  bystander interleavings under semantic independence conditions that a
+  syntactic STRIPS check discharges (\coqok{bridge\_interleaved},
+  \coqok{strips\_swap\_act}).
 \item[\textbf{C4}] \emph{Regular protocols} (\S\ref{sec:regular}): $\mu$-types
   with unfolding as substitution; the unfolding closure is finite and
   step-closed (\coqok{cands\_closed}); the finite fragment embeds, so the
@@ -288,7 +295,9 @@ decides the condition.
   implementation, a severity benchmark and a live-agent experiment show that
   the interface abstraction is what makes modular checking pay, that existing
   corpora cannot even pose the question, and that the \Cat{} verdicts name
-  branches real agents take.
+  branches real agents take; on the boolean fragment the tool's verdict is
+  cross-checked against a kernel extracted from the verified decision
+  procedure (\coqok{kernel\_first\_spec}).
 \end{itemize}
 A design expectation was refuted by the mechanization and a benchmark
 finding refines it: tolerance is anti-monotone in the capability context for
@@ -606,8 +615,48 @@ Theorem~\ref{thm:bridge} through Theorem~\ref{thm:embed}
 (\coqok{bridge\_finite\_via\_mu}).
 \end{theorem}
 
-Scope: the head-move semantics, the move the base subject-reduction
-mechanization prescribes; bystander interleavings are joint future work.
+\subparagraph*{Bystanders.} The head-move semantics is the gate's: an
+out-of-turn attempt is refused. An ungated deployment lets a \emph{bystander}
+--- a role the head does not involve --- fire its next capability early. Since
+the protocol is a schedule of world effects, that is not automatically
+harmless: it is exactly what the reorder repair exploits. We give the
+permutation relation and the conditions under which it is (Coq:
+\texttt{Interleave.v}). A \emph{swap} moves a bystander action $a@r$ one node
+earlier: past another role's action $b$, past a choice between two other
+roles (when every branch begins with $a@r$), or past a goal marker; and under
+any context. Its side conditions are semantic: $a$ is \emph{hazard-neutral}
+(never changes whether the world is a hazard), $a$ and $b$ \emph{commute}
+(one order re-serializes as the other with the same end world) and preserve
+each other's enabledness, and $a$ \emph{preserves} the guards it passes.
+
+\begin{theorem}[Bystanders]\label{thm:bystander}
+Safe swaps preserve the condition at every budget (\coqok{swap\_safe}) and
+preserve typing --- subject reduction under permutation
+(\coqok{swap\_ctypes}). Hence a typed session of a $k$-tolerant protocol is
+hazard-free on every \emph{interleaved} run of cost at most $k$, where before
+each step the protocol may be permuted by any sequence of safe swaps
+(\coqok{bridge\_interleaved}).
+\end{theorem}
+
+\begin{theorem}[Variable disjointness suffices]\label{thm:strips}
+For STRIPS capabilities stated extensionally --- a precondition supported on
+a variable set, add and delete lists --- if the effects of each action are
+disjoint from the other's footprint (its support and effects), the actions
+commute and preserve each other's enabledness
+(\coqok{strips\_commute}, \coqok{strips\_enables}); an action whose effects
+are disjoint from the support of a predicate preserves it
+(\coqok{strips\_preserves}, \coqok{strips\_neutral}). Together these
+discharge every side condition of an action swap (\coqok{strips\_swap\_act}).
+\end{theorem}
+
+Theorem~\ref{thm:strips} is what the tool checks: for every capability action
+and every earlier node of another role it could pass, it compares footprints
+--- taking the goal's and every precondition's atoms as the support of the
+derived hazard and of the rational guards --- and reports either that the
+head order is exact or the pairs the gate must serialize. What remains
+outside the theorem is the interleaving of two \emph{communications} between
+disjoint role pairs and asynchronous buffering, the classical permutation
+lemma; that is joint future work with the base mechanization.
 
 \section{Regular Protocols}\label{sec:regular}
 
@@ -740,8 +789,28 @@ branch of every choice, at every abstract world and budget up to
 $k_{\max}=4$, with the default guards and hazard of
 \S\ref{sec:mis}--\S\ref{sec:severity} and explicit overrides where declared.
 It reports per-branch severity, $\kstar$, the first hazard witness, the
-point-of-no-return action, and the narrowing repair. Nine tests check the
+point-of-no-return action, the narrowing repair, and the bystander pairs the gate must serialize. Eleven tests check the
 tool's verdicts on the paper's instances against the Coq development's.
+
+\subparagraph*{Verified kernel.} The tool's search is the graph form of
+Theorem~\ref{thm:cands}, with widening at loop heads over the arithmetic
+state; it is not extracted from the proof. To close that gap on the fragment
+where the proof applies we built a kernel (Coq: \texttt{Kernel.v}) that
+instantiates \texttt{decide\_mu} on bit-vector worlds with STRIPS actions,
+guards as world sets, and the derived hazard as a bit that an irreversible
+action sets whenever the goal is no longer reachable from its continuation.
+The decision --- the least budget at which a hazard is reachable --- is proved
+correct (\coqok{kernel\_first\_spec}); goal reachability, used to derive
+rational guards and hazard bits, is proved correct
+(\coqok{goal\_reachable\_correct}); the decision procedure itself was
+replaced by a deduplicating, early-exiting variant proved sound and complete
+(\coqok{decide'\_sound}, \coqok{decide'\_complete}). The elaboration from
+the tool's protocol tree into the kernel's input is the trusted front end: a
+hundred lines of executable Coq and a hundred of Python. The kernel is
+extracted to OCaml and run by \texttt{skillc severity --verified}. On the
+sixteen benchmark protocols in its fragment --- propositional effects, no
+environment choice --- it agrees with the analyzer's tolerance degree on every
+one, in under 50\,ms each.
 
 \subparagraph*{Finding 1: existing corpora cannot pose the question.}
 We ran the analysis on the compiler's achievability corpus (15 packs), its
@@ -757,21 +826,27 @@ also means the question this paper asks has been invisible to the corpora the
 field evaluates on.
 
 \subparagraph*{Finding 2: the severity benchmark.}
-We therefore built fifteen protocols with genuine decision points and
+We therefore built seventeen protocols with genuine decision points and
 irreversible tools, each with a provenance note stating the expected verdict
 \emph{before} running the tool: booking (the running example and its two
 repairs), database migration, an email campaign and its guard repair,
 deployment with and without rollback, file cleanup, order fulfilment with an
 environment-controlled bank, a retry loop with a destructive give-up, a
-guarded shipping choice, an insurance claim in two worlds, and a staged
-commit. Results (Table~\ref{tab:bench}): 51 branch verdicts (a branch at an
-abstract world) in 0.26\,s total; 27 \Ben{}, 7 \Fut{}, 17 \Cat{}; $\kstar$ distribution $7\times 0$,
+guarded shipping choice, an insurance claim in two worlds, a staged
+commit, and two release protocols with a bystander role --- one whose
+bystander is variable-disjoint, one whose bystander establishes a later
+precondition. Results (Table~\ref{tab:bench}): 55 branch verdicts (a branch at an
+abstract world) in 0.33\,s total; 29 \Ben{}, 7 \Fut{}, 19 \Cat{}; $\kstar$ distribution $9\times 0$,
 $2\times 1$, $6\times{\ge}5$; point-of-no-return actions
 \texttt{purchase, send, deploy, delete, ship, purge, refund, drop\_old,
-commit} --- every one an externally visible effect. Fourteen of fifteen
-verdicts matched the pre-stated expectation; the fifteenth exposed an
+commit} --- every one an externally visible effect. Sixteen of seventeen
+verdicts matched the pre-stated expectation; the exception exposed an
 authoring error in our benchmark (a goal disjunct that failed to exclude
-\texttt{shipped}), corrected and recorded.
+\texttt{shipped}), corrected and recorded. The bystander check
+(Theorem~\ref{thm:strips}) reports the audit release exact --- five
+independent pairs --- and the cache release with two pairs to serialize, both
+on the atom the bystander establishes; every other benchmark protocol has a
+single acting role, so the question does not arise there.
 
 \begin{table}[t]
 \centering\small
@@ -795,10 +870,12 @@ shipping\_detour (explicit guards) & 1 & 0 & --- & $\ge$5 & 2 & 0 & 0\\
 claim\_eligible & 1 & 0 & refund & $\ge$5 & 1 & 1 & 0\\
 claim\_ineligible (same protocol) & 1 & 0 & refund & 0 & 0 & 0 & 1\\
 staged\_commit & 3 & 0 & commit & 1 & 3 & 4 & 7\\
+release\_with\_audit (bystander, exact) & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
+release\_with\_cache (bystander, serialize) & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
 \bottomrule
 \end{tabular}}
 \caption{The severity benchmark ($k_{\max}=4$; $\ge$5 means no hazard within
-four misselections). Verdict counts are per branch and abstract world. Total analysis time 0.26\,s.}
+four misselections). Verdict counts are per branch and abstract world. Total analysis time 0.33\,s.}
 \label{tab:bench}
 \end{table}
 
@@ -872,16 +949,16 @@ effects, preconditions, loops, the environment's choices (sampled uniformly),
 the hazard --- is the analyzer's own semantics. Two conditions: \emph{plain},
 the task as stated, and \emph{pressured}, the task plus a requester's note
 claiming the preparatory and checking steps were already done and asking for
-the fastest route. Five runs per protocol, model and condition: 300 runs, 360
-agent decisions, total cost \$1.41 (\texttt{scripts/live\_agents.py}; every
+the fastest route. Five runs per protocol, model and condition: 340 runs, 400
+agent decisions, total cost \$1.59 (\texttt{scripts/live\_agents.py}; every
 run and every reply is in \texttt{results/}).
 
 Three checks of the theory hold exactly. Every catastrophe had more than
 $\kstar$ misselections and none occurred on a protocol tolerant at every
 tested budget --- the harness and the tool share semantics, so this checks the
 harness against Theorem~\ref{thm:bridge}. The catastrophe rate is ordered as
-the classes predict: 0 of 120 runs on $\kstar\ge5$ protocols, 7 of 180 on
-$\kstar\in\{0,1\}$ protocols. And the verdicts are not vacuous: 6 of the 17
+the classes predict: 0 of 120 runs on $\kstar\ge5$ protocols, 7 of 220 on
+$\kstar\in\{0,1\}$ protocols. And the verdicts are not vacuous: 6 of the 19
 \Cat{} verdicts were taken by a live agent (17 times), against 1 of the 7
 \Fut{} ones (once); the one \Ben{} misselection --- the express detour,
 intended only when urgent --- was taken in all ten pressured runs and
@@ -891,11 +968,12 @@ Theorems~\ref{thm:narrow}--\ref{thm:reorder} say: the two catastrophes of
 forms with the same model and prompt.
 
 Two observations qualify this. Misselection was rare and concentrated: in
-the plain condition neither model misselected once in 150 runs; under
+the plain condition neither model misselected once in 170 runs; under
 pressure the smaller model skipped the preparation stages of
 \texttt{staged\_commit} and then committed in 5 of 5 runs (three
 misselections each, on a $\kstar=1$ protocol) and took the booking fast path
-in 2 of 5, while the larger model misselected only on the benign detour. The
+in 2 of 5, while the larger model misselected only on the benign detour; the
+two bystander protocols drew no misselection in 40 runs. The
 risk the verdicts name is real, but in this sample it was exposed by one model
 under one kind of pressure; the experiment establishes non-vacuity and
 ordering, not rates. Second, an earlier form of the prompt that hid what the
@@ -1059,7 +1137,7 @@ the difference drawn in \S\ref{sec:typing}. Bounded-model-checking of
 fault-tolerant algorithms~\cite{stoilkovska-tacas19} is the verification-side
 analogue of Theorem~\ref{thm:decide}.
 
-\subparagraph*{Agents.} Runtime enforcement and provenance gating of tool
+\subparagraph*{Agents.} Formalisms for agents acting on irreversible external state --- execution-fidelity invariants for ledger transactions~\cite{yin-fidelity}, capability-containment proofs for skill manifests~\cite{metere-skills} --- guarantee exactly-once effects or capability subsets; neither asks which wrong choice is affordable. Runtime enforcement and provenance gating of tool
 calls~\cite{agentspec,camel,fides,progent}, effect-typed agent
 languages~\cite{etas}, network-enforced session types~\cite{nest-ecoop26}, and
 LTL trace monitoring~\cite{trac-facct26,agentltl} act on runs or in the host
@@ -1068,15 +1146,19 @@ language; we classify branches before any run exists.
 \section{Limitations and Conclusion}\label{sec:conclusion}
 
 \subparagraph*{Scope.} The bridge and the regular-protocol development are
-mechanized for the head-move semantics, the move the base subject-reduction
-mechanization prescribes; bystander interleavings, and with them a
-permutation lemma, remain future work, and a reviewer comparing scope against
-the mechanised subject-reduction development of~\cite{tirore-ecoop25} will be
-right to. Typing of recursive sessions is coinductive, so a non-contractive
-protocol ($\mu X.X$) is typable against anything --- harmlessly, since it only
-loops silently; contractiveness is assumed as usual. The tool's loop handling
-(named recursion, widening at loop heads) is the graph form of
-Theorem~\ref{thm:cands}, not a verified extraction of it. The hazard is a
+mechanized for the head-move semantics, which is the gate's; for ungated
+deployments Theorem~\ref{thm:bystander} covers bystander \emph{actions} that
+move earlier under semantic independence, discharged syntactically. The
+interleaving of two communications between disjoint role pairs, and
+asynchronous buffering, remain future work with the base mechanization, and a
+reviewer comparing scope against the mechanised subject-reduction development
+of~\cite{tirore-ecoop25} will be right to. Typing of recursive sessions is
+coinductive, so a non-contractive protocol ($\mu X.X$) is typable against
+anything --- harmlessly, since it only loops silently; contractiveness is
+assumed as usual. On the boolean fragment the tool's verdict is cross-checked
+against a kernel extracted from the proof; the elaboration into the kernel's
+input, environment choices, and the arithmetic fragment with widening remain
+trusted. The hazard is a
 declared or derived input; the discipline says what follows from it. \Ben{}
 inherits the checker's over-approximation; \Cat{} is a proof. The benchmark is
 ours, with expected verdicts stated in advance but authored by us. The
@@ -1135,6 +1217,8 @@ structurally unreachable.}
 \bibitem{ramadge-wonham} P.~J.~Ramadge, W.~M.~Wonham. Supervisory control of a class of discrete event processes. \emph{SIAM J.\ Control Optim.} 25(1), 1987.
 \bibitem{bloem-tacas15} R.~Bloem, B.~K\"onighofer, R.~K\"onighofer, C.~Wang. Shield synthesis: runtime enforcement for reactive systems. \emph{TACAS}, 2015.
 \bibitem{alshiekh-aaai18} M.~Alshiekh, R.~Bloem, R.~Ehlers, B.~K\"onighofer, S.~Niekum, U.~Topcu. Safe reinforcement learning via shielding. \emph{AAAI}, 2018.
+\bibitem{yin-fidelity} Z.~Yin. Safety invariants for agents orchestrating irreversible state transitions. arXiv:2608.00783, 2026.
+\bibitem{metere-skills} A.~Metere. Methods for formal verification of agent skills: three layers toward a mechanically checkable capability-containment proof. arXiv:2605.23951, 2026.
 \bibitem{basu-bultan} S.~Basu, T.~Bultan. Automated choreography repair. \emph{FASE}, 2016.
 \bibitem{lanese-wwv13} I.~Lanese, F.~Montesi, G.~Zavattaro. Amending choreographies. \emph{WWV}, 2013.
 \bibitem{trac-facct26} P.~A.~Alamdari, T.~Q.~Klassen, S.~A.~McIlraith. Formal methods meet LLMs: auditing, monitoring, and intervention for compliance of advanced AI systems. \emph{FAccT}, 2026.

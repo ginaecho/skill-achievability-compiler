@@ -250,6 +250,132 @@ Qed.
 Variable hb : A -> bool.
 Definition decide (x : A) : bool := existsb hb (iter (length all) [x]).
 
+(* ---- the EXECUTABLE variant: deduplicated frontier, early exit ---- *)
+(* `all` must be closed under successors; the start must be in it. *)
+Fixpoint add_new (S : list A) (l : list A) : list A :=
+  match l with
+  | [] => S
+  | x :: t => add_new (if in_dec A_dec x S then S else x :: S) t
+  end.
+Definition expand' (S : list A) : list A := add_new S (concat (map succ S)).
+Fixpoint iter' (n : nat) (S : list A) : list A :=
+  match n with
+  | 0 => S
+  | S k => let S' := expand' S in if Nat.eqb (length S') (length S) then S else iter' k S'
+  end.
+Definition decide' (x : A) : bool := existsb hb (iter' (length all) [x]).
+
+Lemma add_new_in : forall l S x, In x (add_new S l) <-> In x S \/ In x l.
+Proof.
+  induction l as [ | y t IH ]; intros S x; simpl.
+  - tauto.
+  - rewrite IH. destruct (in_dec A_dec y S) as [Hy | Hy]; simpl.
+    + split; [ tauto | ]. intros [H | [H | H]]; subst; tauto.
+    + tauto.
+Qed.
+
+Lemma add_new_nodup : forall l S, NoDup S -> NoDup (add_new S l).
+Proof.
+  induction l as [ | y t IH ]; intros S Hnd; simpl; [ exact Hnd | ].
+  apply IH. destruct (in_dec A_dec y S); [ exact Hnd | constructor; assumption ].
+Qed.
+
+Lemma expand'_in : forall S x, In x (expand' S) <-> In x S \/ (exists y, In y S /\ edge y x).
+Proof.
+  intros S x. unfold expand'. rewrite add_new_in. split.
+  - intros [H | H]; [ left; exact H | right ]. apply in_concat in H. destruct H as [l [Hl Hx]].
+    apply in_map_iff in Hl. destruct Hl as [y [Hly Hy]]. subst l. exists y. split; assumption.
+  - intros [H | [y [Hy He]]]; [ left; exact H | right ]. apply in_concat. exists (succ y).
+    split; [ apply in_map; exact Hy | exact He ].
+Qed.
+
+Lemma expand'_mono : forall S x, In x S -> In x (expand' S).
+Proof. intros. apply expand'_in. left. assumption. Qed.
+
+Lemma iter'_mono : forall n S x, In x S -> In x (iter' n S).
+Proof.
+  induction n as [ | n IH ]; intros S x Hx; simpl; [ exact Hx | ].
+  destruct (Nat.eqb (length (expand' S)) (length S)); [ exact Hx | ]. apply IH. apply expand'_mono. exact Hx.
+Qed.
+
+Lemma iter'_sound_P :
+  forall (P : A -> Prop) n S,
+    (forall x y, P x -> edge x y -> P y) ->
+    (forall x, In x S -> P x) ->
+    forall y, In y (iter' n S) -> P y.
+Proof.
+  intros P n. induction n as [ | n IH ]; intros S Hcl HS y Hy; simpl in Hy.
+  - apply HS. exact Hy.
+  - destruct (Nat.eqb (length (expand' S)) (length S)); [ apply HS; exact Hy | ].
+    apply (IH (expand' S) Hcl); [ | exact Hy ].
+    intros z Hz. apply expand'_in in Hz. destruct Hz as [Hz | [w [Hw He]]]; [ apply HS; exact Hz | ].
+    eapply Hcl; [ apply HS; exact Hw | exact He ].
+Qed.
+
+Hypothesis all_closed : forall x y, In x all -> edge x y -> In y all.
+
+Lemma expand'_incl_all : forall S, incl S all -> incl (expand' S) all.
+Proof.
+  intros S Hi x Hx. apply expand'_in in Hx. destruct Hx as [Hx | [y [Hy He]]]; [ apply Hi; exact Hx | ].
+  eapply all_closed; [ apply Hi; exact Hy | exact He ].
+Qed.
+
+(* with enough fuel the result is closed under edges *)
+Lemma iter'_closed : forall n S,
+  NoDup S -> incl S all -> length all < n + length S ->
+  forall x y, In x (iter' n S) -> edge x y -> In y (iter' n S).
+Proof.
+  induction n as [ | n IH ]; intros S Hnd Hi Hfuel x y Hx He; simpl in *.
+  - exfalso. pose proof (NoDup_incl_length Hnd Hi). lia.
+  - destruct (Nat.eqb (length (expand' S)) (length S)) eqn:Hlen.
+    + apply Nat.eqb_eq in Hlen.
+      assert (Hnd' : NoDup (expand' S)) by (apply add_new_nodup; exact Hnd).
+      assert (Hback : incl (expand' S) S).
+      { apply NoDup_length_incl; [ exact Hnd | lia | intros z Hz; apply expand'_mono; exact Hz ]. }
+      apply (Hback y). apply (proj2 (expand'_in S y)). right. exists x. split; assumption.
+    + apply Nat.eqb_neq in Hlen.
+      assert (Hle : length S <= length (expand' S)).
+      { apply NoDup_incl_length; [ exact Hnd | intros z Hz; apply expand'_mono; exact Hz ]. }
+      apply (IH (expand' S) (add_new_nodup _ _ Hnd) (expand'_incl_all _ Hi) ltac:(lia) x y); [ exact Hx | exact He ].
+Qed.
+
+Lemma reach_in_iter' : forall n S x y,
+  NoDup S -> incl S all -> length all < n + length S ->
+  In x (iter' n S) -> reach x y -> In y (iter' n S).
+Proof.
+  intros n S x y Hnd Hi Hfuel Hx Hr. revert Hx. induction Hr as [ x | x y z He Hr IH ]; intro Hx.
+  - exact Hx.
+  - apply IH. eapply iter'_closed; [ exact Hnd | exact Hi | exact Hfuel | exact Hx | exact He ].
+Qed.
+
+Lemma reach_snoc : forall x y z, reach x y -> edge y z -> reach x z.
+Proof.
+  intros x y z Hr. induction Hr as [ x | x y w He Hr IH ]; intro He'.
+  - eapply R_step; [ exact He' | apply R_refl ].
+  - eapply R_step; [ exact He | apply IH; exact He' ].
+Qed.
+
+Theorem decide'_sound : forall x, decide' x = true -> exists y, reach x y /\ hb y = true.
+Proof.
+  intros x Hd. unfold decide' in Hd. apply existsb_exists in Hd. destruct Hd as [y [Hy Hb]].
+  exists y. split; [ | exact Hb ].
+  apply (iter'_sound_P (fun z => reach x z) (length all) [x]); [ | | exact Hy ].
+  - intros u v Hu He. eapply reach_snoc; eassumption.
+  - intros z [Hz | []]. subst. apply R_refl.
+Qed.
+
+Theorem decide'_complete : forall x y,
+  In x all -> reach x y -> hb y = true -> decide' x = true.
+Proof.
+  intros x y Hx Hr Hb. unfold decide'. apply existsb_exists. exists y. split; [ | exact Hb ].
+  apply (reach_in_iter' (length all) [x] x y).
+  - constructor; [ intros []; auto | constructor ].
+  - intros z [Hz | []]. subst. exact Hx.
+  - simpl. lia.
+  - apply iter'_mono. left. reflexivity.
+  - exact Hr.
+Qed.
+
 Theorem decide_sound :
   forall x, decide x = true -> exists y, reach x y /\ hb y = true.
 Proof.
@@ -354,7 +480,7 @@ Variable Node W : Type.
 Hypothesis Node_dec : forall x y : Node, {x = y} + {x <> y}.
 Hypothesis W_dec : forall x y : W, {x = y} + {x <> y}.
 Variable nodes : list Node.   (* need not be exhaustive: closed under successors, below *)
-Variable worlds : list W.    Hypothesis worlds_complete : forall w, In w worlds.
+Variable worlds : list W.     (* likewise: closed under successors, below *)
 Variable succ0 succ1 : Node -> W -> list (Node * W).
 Variable hazb : W -> bool.
 Definition step0 n w n' w' := In (n', w') (succ0 n w).
@@ -363,6 +489,8 @@ Definition Haz (w : W) : Prop := hazb w = true.
 (* the node list is closed under both kinds of successor *)
 Hypothesis nodes_closed : forall n w n' w',
   In n nodes -> (step0 n w n' w' \/ step1 n w n' w') -> In n' nodes.
+Hypothesis worlds_closed : forall n w n' w',
+  In w worlds -> (step0 n w n' w' \/ step1 n w n' w') -> In w' worlds.
 
 Definition PS' := (Node * W * nat)%type.
 Definition ps_dec : forall x y : PS', {x = y} + {x <> y}.
@@ -402,12 +530,29 @@ Qed.
 Definition all_ps (k : nat) : list PS' :=
   concat (map (fun n => concat (map (fun w => map (fun b => (n, w, b)) (upto k)) worlds)) nodes).
 
-Lemma all_ps_complete : forall k n w b, In n nodes -> b <= k -> In (n, w, b) (all_ps k).
+Lemma upto_inv : forall k b, In b (upto k) -> b <= k.
 Proof.
-  intros k n w b Hn Hb. unfold all_ps. apply in_concat.
+  induction k; intros b Hb; simpl in Hb.
+  - destruct Hb as [Hb | []]. lia.
+  - destruct Hb as [Hb | Hb]; [ lia | ]. apply IHk in Hb. lia.
+Qed.
+
+Lemma all_ps_complete : forall k n w b, In n nodes -> In w worlds -> b <= k -> In (n, w, b) (all_ps k).
+Proof.
+  intros k n w b Hn Hw Hb. unfold all_ps. apply in_concat.
   eexists. split. { apply in_map. exact Hn. }
-  apply in_concat. eexists. split. { apply in_map. apply worlds_complete. }
+  apply in_concat. eexists. split. { apply in_map. exact Hw. }
   apply in_map. apply upto_complete. exact Hb.
+Qed.
+
+Lemma all_ps_inv : forall k n w b, In (n, w, b) (all_ps k) -> In n nodes /\ In w worlds /\ b <= k.
+Proof.
+  intros k n w b H. unfold all_ps in H. apply in_concat in H. destruct H as [l [Hl H]].
+  apply in_map_iff in Hl. destruct Hl as [n0 [Hl Hn0]]. subst l.
+  apply in_concat in H. destruct H as [l [Hl H]].
+  apply in_map_iff in Hl. destruct Hl as [w0 [Hl Hw0]]. subst l.
+  apply in_map_iff in H. destruct H as [b0 [Heq Hb0]]. inversion Heq; subst.
+  repeat split; [ exact Hn0 | exact Hw0 | apply upto_inv; exact Hb0 ].
 Qed.
 
 Definition phazb (s : PS') : bool := match s with (_, w, _) => hazb w end.
@@ -438,11 +583,32 @@ Proof.
   apply IH. inversion Hs; subst; simpl in *; eapply nodes_closed; eauto.
 Qed.
 
+Lemma preach_worlds : forall s s',
+  preach Node W step0 step1 s s' -> In (snd (fst s)) worlds -> In (snd (fst s')) worlds.
+Proof.
+  intros s s' H. induction H as [ s | s s' s'' Hs Hp IH ]; intro Hw; [ exact Hw | ].
+  apply IH. inversion Hs; subst; simpl in *; eapply worlds_closed; eauto.
+Qed.
+
+Lemma all_ps_closed : forall k s s', In s (all_ps k) -> edge PS' psucc s s' -> In s' (all_ps k).
+Proof.
+  intros k [[n w] b] [[n' w'] b'] Hin He.
+  apply all_ps_inv in Hin. destruct Hin as [Hn [Hw Hb]].
+  unfold edge in He. apply psucc_iff in He.
+  inversion He; subst.
+  - apply all_ps_complete;
+      [ eapply nodes_closed; [ exact Hn | left; eassumption ]
+      | eapply worlds_closed; [ exact Hw | left; eassumption ] | exact Hb ].
+  - apply all_ps_complete;
+      [ eapply nodes_closed; [ exact Hn | right; eassumption ]
+      | eapply worlds_closed; [ exact Hw | right; eassumption ] | lia ].
+Qed.
+
 Theorem decide_reachb_correct :
-  forall k n w, In n nodes ->
+  forall k n w, In n nodes -> In w worlds ->
     (decide_reachb k n w = true <-> reachb Node W step0 step1 Haz k n w).
 Proof.
-  intros k n w Hn. unfold decide_reachb. split.
+  intros k n w Hn Hw. unfold decide_reachb. split.
   - intro Hd.
     destruct (decide_sound PS' psucc (all_ps k) phazb (n, w, k) Hd) as [s' [Hr Hb]].
     apply product_correspondence. exists s'. split.
@@ -453,7 +619,30 @@ Proof.
     + intros z Hz. apply reach_to_preach in Hz.
       pose proof (budget_never_increases Node W step0 step1 _ _ Hz) as Hb.
       pose proof (preach_nodes _ _ Hz Hn) as Hz'.
-      destruct z as [[n' w'] b']. simpl in Hb, Hz'. apply all_ps_complete; assumption.
+      pose proof (preach_worlds _ _ Hz Hw) as Hw'.
+      destruct z as [[n' w'] b']. simpl in Hb, Hz', Hw'. apply all_ps_complete; assumption.
+    + apply preach_to_reach. exact Hp.
+    + destruct s' as [[n' w'] b']. simpl. unfold phaz, Haz in Hh. exact Hh.
+Qed.
+
+(* the executable form: the same answer, computed with a deduplicated
+   frontier and early exit at the fixpoint *)
+Definition decide_reachb_fast (k : nat) (n : Node) (w : W) : bool :=
+  decide' PS' ps_dec psucc (all_ps k) phazb (n, w, k).
+
+Theorem decide_reachb_fast_correct :
+  forall k n w, In n nodes -> In w worlds ->
+    (decide_reachb_fast k n w = true <-> reachb Node W step0 step1 Haz k n w).
+Proof.
+  intros k n w Hn Hw. unfold decide_reachb_fast. split.
+  - intro Hd.
+    destruct (decide'_sound PS' ps_dec psucc (all_ps k) phazb (n, w, k) Hd) as [s' [Hr Hb]].
+    apply product_correspondence. exists s'. split.
+    + apply reach_to_preach. exact Hr.
+    + destruct s' as [[n' w'] b']. simpl in Hb. unfold phaz, Haz. exact Hb.
+  - intro Hr. apply product_correspondence in Hr. destruct Hr as [s' [Hp Hh]].
+    apply (decide'_complete PS' ps_dec psucc (all_ps k) phazb (all_ps_closed k) (n, w, k) s').
+    + apply all_ps_complete; [ exact Hn | exact Hw | lia ].
     + apply preach_to_reach. exact Hp.
     + destruct s' as [[n' w'] b']. simpl. unfold phaz, Haz in Hh. exact Hh.
 Qed.

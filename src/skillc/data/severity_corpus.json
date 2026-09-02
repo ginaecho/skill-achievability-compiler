@@ -1374,5 +1374,198 @@
     "uncommitted"
    ]
   }
+ },
+ {
+  "id": "release_with_audit",
+  "note": "Two roles. The auditor's log action follows ops' deploy in the written order but is a BYSTANDER: it may fire early in an ungated deployment. Its footprint is disjoint from deploy's and from the goal/precondition support, so the head order is exact (Interleave.v, strips_*). Severity: deploy_now skips the canary and deploy is irreversible: expect k*=0, PNR=deploy; bystander pairs independent.",
+  "pack": {
+   "name": "release_with_audit",
+   "roles": [
+    "ops",
+    "auditor"
+   ],
+   "init_true": [
+    "old_live"
+   ],
+   "capabilities": {
+    "canary": {
+     "owner": "ops",
+     "add": [
+      "canary_ok"
+     ]
+    },
+    "deploy": {
+     "owner": "ops",
+     "add": [
+      "deployed"
+     ],
+     "del": [
+      "old_live"
+     ]
+    },
+    "smoke_test": {
+     "owner": "ops",
+     "pre": "deployed",
+     "add": [
+      "tested"
+     ]
+    },
+    "log": {
+     "owner": "auditor",
+     "add": [
+      "logged"
+     ]
+    }
+   },
+   "goal": {
+    "and": [
+     "deployed",
+     "canary_ok",
+     "tested"
+    ]
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "ops",
+      "branches": {
+       "canary_first": [
+        {
+         "act": {
+          "cap": "canary",
+          "by": "ops"
+         }
+        },
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ],
+       "deploy_now": [
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "log",
+      "by": "auditor"
+     }
+    },
+    {
+     "act": {
+      "cap": "smoke_test",
+      "by": "ops"
+     }
+    }
+   ]
+  }
+ },
+ {
+  "id": "release_with_cache",
+  "note": "Same shape, but the bystander's action establishes a precondition of a later ops tool (warm_cache adds cache_warm, which serve requires): its effects meet the reachability support, so the head order is NOT known to be exact and the gate must serialize the pair. Severity as before: expect k*=0, PNR=deploy; one bystander conflict.",
+  "pack": {
+   "name": "release_with_cache",
+   "roles": [
+    "ops",
+    "cache"
+   ],
+   "init_true": [
+    "old_live"
+   ],
+   "capabilities": {
+    "canary": {
+     "owner": "ops",
+     "add": [
+      "canary_ok"
+     ]
+    },
+    "deploy": {
+     "owner": "ops",
+     "add": [
+      "deployed"
+     ],
+     "del": [
+      "old_live"
+     ]
+    },
+    "warm_cache": {
+     "owner": "cache",
+     "add": [
+      "cache_warm"
+     ]
+    },
+    "serve": {
+     "owner": "ops",
+     "pre": {
+      "and": [
+       "deployed",
+       "cache_warm"
+      ]
+     },
+     "add": [
+      "serving"
+     ]
+    }
+   },
+   "goal": {
+    "and": [
+     "deployed",
+     "canary_ok",
+     "serving"
+    ]
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "ops",
+      "branches": {
+       "canary_first": [
+        {
+         "act": {
+          "cap": "canary",
+          "by": "ops"
+         }
+        },
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ],
+       "deploy_now": [
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "warm_cache",
+      "by": "cache"
+     }
+    },
+    {
+     "act": {
+      "cap": "serve",
+      "by": "ops"
+     }
+    }
+   ]
+  }
  }
 ]

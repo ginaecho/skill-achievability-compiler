@@ -107,6 +107,7 @@ class SeverityReport:
     branches: int = 0
     irreversible_caps: dict = field(default_factory=dict)
     narrowing: list = field(default_factory=list)   # branches to remove
+    bystander: dict = field(default_factory=dict)    # Interleave.v check
 
     def counts(self) -> dict[str, int]:
         c = {BENIGN: 0, FUTILE: 0, CATASTROPHIC: 0}
@@ -126,6 +127,7 @@ class SeverityReport:
             "pnr_action": self.pnr_action,
             "hazard_witness": list(self.hazard_witness),
             "narrowing": self.narrowing,
+            "bystander": self.bystander,
             "configs_explored": self.configs_explored,
             "goal_queries": self.goal_queries,
             "elapsed_s": round(self.elapsed_s, 4),
@@ -389,6 +391,7 @@ class SeverityAnalyzer:
             irreversible_caps=self.perm)
         rep.narrowing = sorted({(v.node, v.branch) for v in self.verdicts
                                 if v.severity == CATASTROPHIC})
+        rep.bystander = bystander_conflicts(self.p, self.perm, _atoms_of_formula(self.p.goal))
         return rep
 
 
@@ -400,3 +403,145 @@ def analyze(pack: dict | Pack, kmax: int = 4,
         irreversible = irreversible or pack.get("irreversible")
         p = Pack.load({k: v for k, v in pack.items() if k != "irreversible"})
     return SeverityAnalyzer(p, kmax=kmax, irreversible=irreversible).run()
+
+# ---------------------------------------------------------------------------
+# Bystander interleavings (Interleave.v).  The head-move semantics is exact for
+# an ungated deployment when every capability action that a bystander could
+# fire EARLY is variable-disjoint (STRIPS footprint) from the nodes it would
+# pass: `strips_commute`, `strips_enables`, `strips_neutral`,
+# `strips_preserves` discharge the semantic side conditions of the swap
+# relation.  This function performs that syntactic check and lists the pairs
+# the gate must serialize.
+# ---------------------------------------------------------------------------
+def _atoms_of_formula(f) -> set:
+    if f is None:
+        return set()
+    if isinstance(f, str):
+        return {f}
+    if isinstance(f, dict):
+        out = set()
+        for k, v in f.items():
+            if k in ("and", "or"):
+                for x in v:
+                    out |= _atoms_of_formula(x)
+            elif k == "not":
+                out |= _atoms_of_formula(v)
+            else:                       # arithmetic comparison: its variables
+                out |= _atoms_of_formula(v) if isinstance(v, (dict, str, list)) else set()
+        return out
+    if isinstance(f, list):
+        out = set()
+        for x in f:
+            out |= _atoms_of_formula(x)
+        return out
+    return set()
+
+
+def bystander_conflicts(p: Pack, perm: frozenset, goal_atoms: set) -> dict:
+    caps = p.capabilities
+    pre_atoms_all = set()
+    for c in caps.values():
+        pre_atoms_all |= _atoms_of_formula(getattr(c, "pre", None))
+    # support of the derived hazard / rational guards: goal atoms and every
+    # precondition atom (goal reachability can depend on nothing else)
+    reach_support = set(goal_atoms) | pre_atoms_all
+
+    def eff(name):
+        c = caps.get(name)
+        if c is None:
+            return set()
+        return set(c.add or []) | set(c.dele or [])
+
+    def fp(name):
+        c = caps.get(name)
+        if c is None:
+            return set()
+        f = eff(name) | _atoms_of_formula(getattr(c, "pre", None))
+        if name in perm:
+            f |= reach_support        # its hazard bit depends on goal reachability
+        return f
+
+    def owner(name):
+        c = caps.get(name)
+        return getattr(c, "owner", None) if c is not None else None
+
+    pairs, conflicts = 0, []
+
+    def node_roles(node):
+        if "act" in node:
+            return {owner(node["act"]["cap"])}
+        if "msg" in node:
+            return {node["msg"].get("from"), node["msg"].get("to")}
+        if "choice" in node:
+            b = node["choice"]
+            return {b.get("by"), b.get("to")} - {None}
+        return set()
+
+    def passes(a, r, node) -> str | None:
+        """None if a@r may move before `node`; else the reason it may not."""
+        nonlocal pairs
+        if r in node_roles(node):
+            return "own-role"
+        if "msg" in node:
+            return None
+        pairs += 1
+        if a in perm:
+            return f"{a} is irreversible (not hazard-neutral)"
+        if "act" in node:
+            b = node["act"]["cap"]
+            shared = (eff(a) & fp(b)) | (eff(b) & fp(a))
+            return f"shares {sorted(shared)} with {b}" if shared else None
+        if "choice" in node:
+            body = node["choice"]
+            guards = body.get("guards") or {}
+            for l, br in body["branches"].items():
+                g = guards.get(l)
+                sup = _atoms_of_formula(g) if g is not None else reach_support
+                shared = eff(a) & sup
+                if shared:
+                    return f"changes guard support {sorted(shared)} of {l}"
+                for inner in reversed(list(br)):
+                    why = passes(a, r, inner)
+                    if why is not None:
+                        return f"branch {l}: {why}"
+            return None
+        return "loop boundary"
+
+    def walk(steps, prefix):
+        for i, s in enumerate(steps):
+            if "act" in s:
+                a = s["act"]["cap"]; r = owner(a)
+                for node in reversed(prefix):
+                    why = passes(a, r, node)
+                    if why == "own-role":
+                        break
+                    if why is not None:
+                        conflicts.append({"action": f"{a}@{r}", "blocked_at": _node_name(node), "reason": why})
+                        break
+                prefix = prefix + [s]
+            elif "choice" in s:
+                for l, br in s["choice"]["branches"].items():
+                    walk(list(br), [])
+                prefix = prefix + [s]
+            elif "rec" in s:
+                walk(list(s["rec"]["body"]), [])
+                prefix = []
+            elif "msg" in s:
+                prefix = prefix + [s]
+            else:
+                prefix = []
+
+    walk(list(p.protocol), [])
+    return {"pairs": pairs, "conflicts": conflicts,
+            "exact": not conflicts}
+
+
+def _node_name(node) -> str:
+    if "act" in node:
+        return "act/" + node["act"]["cap"]
+    if "choice" in node:
+        return "choice@" + str(node["choice"].get("by"))
+    if "msg" in node:
+        return "msg/" + str(node["msg"].get("label"))
+    return "?"
+

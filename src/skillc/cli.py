@@ -343,6 +343,13 @@ def cmd_severity(args) -> int:
         print("  repair (narrow):")
         for n, b in rep.narrowing:
             print(f"    remove {b} at {n}")
+    by = rep.bystander or {}
+    if by.get("exact"):
+        print(f"  bystander interleavings: exact ({by.get('pairs', 0)} independent pairs)")
+    elif by:
+        print(f"  bystander interleavings: serialize {len(by['conflicts'])} of {by['pairs']} pairs")
+        for c in by["conflicts"]:
+            print(f"    {c['action']} before {c['blocked_at']}: {c['reason']}")
     return 0 if rep.tolerance_degree is None else 3
 
 
@@ -440,6 +447,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--kmax", type=int, default=4)
     sp.add_argument("--profile", default="claude-ai")
     sp.add_argument("--json", action="store_true")
+    sp.add_argument("--verified", action="store_true",
+                    help="cross-check k* with the Coq-verified kernel (boolean fragment)")
     sp.set_defaults(fn=cmd_severity)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")

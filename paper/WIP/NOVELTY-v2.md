@@ -178,3 +178,33 @@ padding.**
 Deliberately not claimed: that branch predicates are new (Bocchi 2010), or that
 bounded-fault reasoning or dead-end detection is new (Aineto 2023; Steinmetz &
 Hoffmann; Daum et al.).
+
+
+---
+
+# Third pass (after the μ-unfolding, repairs, bystander and kernel work)
+
+New claims since the second pass, each checked against the literature:
+
+| Claim | Nearest prior work | Verdict |
+|---|---|---|
+| Finiteness of the μ-unfolding closure, mechanized (`cands_closed`) | Standard for regular trees (Tirore et al. ECOOP 2025, Zooid, Castro-Perez et al.); ours is a direct substitution-based proof | supporting lemma, **not a contribution** — say so |
+| Coinductive conformance typing of recursive sessions + cost-preserving simulation (`bridge_mu`) | subject reduction for MPST (Honda et al. JACM 2016; mechanised by Tirore et al.) | the *cost* (misselection budget) preserved by simulation is new; the typing is routine |
+| Bystander swaps with **semantic** side conditions (commute / neutral / preserves / enables), discharged by STRIPS variable disjointness | swap/permutation of independent interactions (Honda–Yoshida–Carbone; Deniélou–Yoshida); commuting actions in planning (Chapman 1987; partial-order reduction) | the combination — a type-preservation-under-permutation theorem whose side conditions are *world-effect* independence, because the property is order-sensitive — is new in MPST; the ingredients are old |
+| Verified kernel extracted from `decide_mu` and cross-checked against the tool | verified model checkers (Esparza et al. ITP 2013), CompCert-style trusted front ends | standard architecture; a credibility point, not a novelty claim |
+| Live-agent non-vacuity of Catastrophic verdicts | TRAC (FAccT 2026) evaluates monitors on traces; AgentSpec/Progent evaluate enforcement | the *experiment design* (predicted severity vs. observed catastrophe, repairs with the same agent) has no precedent we found; the sample is small |
+
+Nearest 2026 agent-side papers, re-checked: Yin, *Safety invariants for
+agents orchestrating irreversible state transitions* (arXiv:2608.00783,
+exactly-once execution fidelity, ledgers); Metere, *Methods for formal
+verification of agent skills* (arXiv:2605.23951, capability containment);
+Sun et al., *Agentic model checking* (arXiv:2605.21434, agents propose,
+BMC verifies, for code). None asks which wrong choice is affordable, none
+carries a budget through a bridge to sessions, none mechanizes.
+
+**What the paper's novelty rests on, unchanged:** the question (severity of a
+wrong choice, not its possibility), the budgeted semantics with its exact
+syntax-directed characterization, and the bridge from protocol to session
+that carries the budget. What the third pass added is *credibility*
+(mechanized scope now covers recursion, repairs, bystanders; a verified
+kernel; live agents), not a new headline claim.

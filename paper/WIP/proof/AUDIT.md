@@ -172,3 +172,21 @@ Scope: head-move semantics of the finite fragment, matching the base
 | Reorder: sound under commutation + harmlessness; validations commute; exact forms; the PNR theorem | `repair_reorder_sound`, `validation_commutes`, `reorder_original_exact`, `reorder_reordered_exact`, `repair_reorder_pnr` |
 | Compensate: sound (TC_seq); Futile → Benign | `repair_compensate_sound`, `repair_compensate_restores_goal` |
 | Worked instance: purchase-before-verify is not 1-tolerant; verify/purchase commute; reordered is k-tolerant | `Gbad2_not_1_tolerant`, `commutes_verify_purchase`, `Greordered_is_k_tolerant` |
+
+## `Interleave.v` — bystander interleavings (10 results)
+
+| Result | Coq |
+|---|---|
+| Safe swaps preserve the condition / typing; interleaved runs are hazard-free within budget | `swap_safe`, `swap_ctypes`, `swaps_safe`, `swaps_ctypes`, `bridge_interleaved` |
+| STRIPS variable disjointness discharges commutation, enabledness, guard preservation, hazard neutrality, and hence every side condition of an action swap | `strips_commute`, `strips_enables`, `strips_preserves`, `strips_neutral`, `strips_swap_act` |
+
+## `Kernel.v` — the verified kernel (3 results) and `Regular.v` additions
+
+| Result | Coq |
+|---|---|
+| Deduplicating, early-exiting reachability, sound and complete (Regular.v) | `decide'_sound`, `decide'_complete` (counted in Regular.v's 8 via the harness of `decide_reachb_fast_correct`) |
+| The kernel's budgeted decision is correct on bit-vector worlds with STRIPS actions | `kernel_correct`, `kernel_first_spec` |
+| Goal reachability used by the elaboration is correct | `goal_reachable_correct` |
+
+Trusted, not proved: the elaboration `elab` (Coq, executable) and the exporter
+`src/skillc/kernel.py` that turn a pack into the kernel's input.
