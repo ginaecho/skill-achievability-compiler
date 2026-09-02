@@ -29,7 +29,9 @@ four TikZ figures, and the conventional structure.
 | `../../docs/LIVE_AGENTS.md` | live-agent tables |
 | `../../scripts/live_agents.py` | the live-agent experiment (`claude -p`, no tools) |
 | `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 45 real skills + 4 specification pairs, two runtimes, artifacts verified |
-| `../../benchmarks/spec-cases/` | the four authored achievable/not-achievable pairs with mock tools |
+| `../../benchmarks/spec-cases/` | nine authored achievable/not-achievable pairs with mock tools; eight of the nine refutations need reachability, not a capability set-difference |
+| `../../scripts/grep_baseline.py`, `results/grep_baseline.json` | the regular-expression baseline (25/34 against the checker's 34/34) |
+| `../../scripts/llm_judge_baseline.py` | the LLM-judge baseline (scripted; the model calls did not complete in this environment) |
 | `../../real-skills-ext/PROVENANCE.json`, `../../scripts/fetch_skills_ext.py` | the 28 third-party skills (re-fetchable; files not committed) |
 | `../../docs/SEVERITY_RESULTS.md` | evaluation tables |
 | `../../src/skillc/severity.py` | the implementation (`skillc severity <pack.json|SKILL.md>`) |
@@ -71,7 +73,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**93 results, every one axiom-free** (`Print Assumptions` harnesses).
+**97 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 ## Evaluation headline (`python3 scripts/severity_eval.py`)

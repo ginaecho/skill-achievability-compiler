@@ -12,3 +12,7 @@ Print Assumptions repair_compensate_restores_goal.
 Print Assumptions commutes_verify_purchase.
 Print Assumptions Gbad2_not_1_tolerant.
 Print Assumptions Greordered_is_k_tolerant.
+Print Assumptions validates_ab_enabled.
+Print Assumptions reach_halted.
+Print Assumptions safeT_halted.
+Print Assumptions guard_abort_is_futile.
