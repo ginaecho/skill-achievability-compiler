@@ -112,6 +112,12 @@ four TikZ figures, and the conventional structure.
 **168 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
+`proof/STATEMENTS.md` lists the Coq statement of all 126 results the paper
+cites, so a reader can check that each one says what the paper says it says
+without opening the sources. `python3 scripts/check_paper_citations.py` checks
+that every citation resolves and is covered by a harness (a test runs it);
+`python3 scripts/dump_statements.py` regenerates STATEMENTS.md.
+
 ## Evaluation headline (`python3 scripts/severity_eval.py`)
 
 - Existing corpora (15 + 6 achievability packs, 17 real skills): **no
