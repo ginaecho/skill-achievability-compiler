@@ -157,3 +157,21 @@ def test_real_skills_flip_between_shell_and_no_shell_runtimes():
             assert b.reason == "MISSING_CAPABILITY"
             flips += 1
     assert flips >= 5                               # the code-fence rule makes the shell visible
+
+
+def test_escalation_is_free_on_sound_refutations():
+    """A refutation on the weak reading is sound whatever the document means,
+    so it must never buy an LLM; a weak certification may."""
+    from skillc.profiles import load_profile
+    from skillc.frontend.markdown import compile_file
+    from skillc.checker import check
+    from skillc.autollm import needs_llm
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    f = root / "benchmarks" / "spec-cases" / "ledger-verify" / "B" / "SKILL.md"
+    text = f.read_text()
+    for prof in ("claude-code", "no-shell"):
+        res = compile_file(f, load_profile(prof))
+        v = check(res.pack)
+        assert not v.achievable
+        assert not needs_llm(text, res, v).needed

@@ -353,6 +353,33 @@ def cmd_severity(args) -> int:
     return 0 if rep.tolerance_degree is None else 3
 
 
+def cmd_autocheck(args) -> int:
+    import json as _json
+    from .autollm import auto_check
+    out = auto_check(args.path, args.profile, args.llm_model, force_llm=args.force_llm)
+    if args.json:
+        o = dict(out)
+        if o.get("llm") and "pack" in o["llm"]:
+            o["llm"] = {k: v for k, v in o["llm"].items() if k != "pack"}
+        print(_json.dumps(o, indent=1))
+        return 0
+    d = out["deterministic"]
+    print(f"{out['path']}: deterministic {'ACHIEVABLE' if d['achievable'] else 'IMPOSSIBLE [' + str(d['reason']) + ']'} ({d['ms']} ms)")
+    e = out["escalation"]
+    if e["needed"]:
+        print("  LLM compaction needed: " + "; ".join(e["reasons"]))
+    else:
+        print("  LLM compaction not needed (deterministic pack carries the document's meaning)")
+    if out["llm"]:
+        l = out["llm"]
+        if "error" in l:
+            print(f"  LLM compaction failed: {l['error']}")
+        else:
+            print(f"  LLM ({l['model']}): {'ACHIEVABLE' if l['achievable'] else 'IMPOSSIBLE [' + str(l['reason']) + ']'}  "
+                  f"tokens={l['tokens']} (in {l['usage'].get('input_tokens')}, out {l['usage'].get('output_tokens')}, cache {l['usage'].get('cache_read_input_tokens', 0) + l['usage'].get('cache_creation_input_tokens', 0)}) {l['seconds']}s")
+    return 0
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -450,6 +477,14 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--verified", action="store_true",
                     help="cross-check k* with the Coq-verified kernel (boolean fragment)")
     sp.set_defaults(fn=cmd_severity)
+
+    sp = sub.add_parser("autocheck", help="deterministic check; escalate to LLM compaction only when the document carries meaning the deterministic reader cannot; report what it cost")
+    sp.add_argument("path", help="SKILL.md")
+    sp.add_argument("--profile", default="claude-ai")
+    sp.add_argument("--llm-model", default="haiku")
+    sp.add_argument("--force-llm", action="store_true")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(fn=cmd_autocheck)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)

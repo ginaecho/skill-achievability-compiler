@@ -23,7 +23,11 @@ from ..pack import validate_pack
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-PROVIDERS = ("anthropic", "azure-openai")
+PROVIDERS = ("anthropic", "azure-openai", "claude-cli")
+
+# usage of the most recent provider call (input/output/cache tokens), so a
+# caller can bill the compaction it just paid for
+LAST_USAGE: dict = {}
 
 SCHEMA_DOC = """
 Pack schema (JSON):
@@ -164,6 +168,8 @@ def compact(nl: str, model: str | None = None, timeout: int = 600,
 
     if selected == "anthropic":
         text = _compact_anthropic(system, user, model or DEFAULT_MODEL, timeout)
+    elif selected == "claude-cli":
+        text = _compact_claude_cli(system, user, model or "sonnet", timeout)
     else:
         text = _compact_azure_openai(system, user, model, timeout)
     pack = _extract_json_object(text)
@@ -191,6 +197,30 @@ def _compact_anthropic(system: str, user: str, model: str,
         out = json.load(r)
     return "".join(b.get("text", "") for b in out.get("content", [])
                    if b.get("type") == "text").strip()
+
+
+def _compact_claude_cli(system: str, user: str, model: str, timeout: int) -> str:
+    """Compaction through the Claude Code CLI in print mode (no tools, no
+    session).  Records the measured token usage in LAST_USAGE."""
+    global LAST_USAGE
+    exe = shutil.which("claude")
+    if not exe:
+        raise RuntimeError("the claude CLI is not on PATH; the claude-cli provider is opt-in")
+    cmd = [exe, "-p", "--tools", "", "--no-session-persistence", "--system-prompt", system,
+           "--model", model, "--output-format", "json", user]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    data = json.loads(r.stdout)
+    if data.get("is_error"):
+        raise RuntimeError(f"claude-cli compaction failed: {data.get('result')}")
+    usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+             "cache_creation_input_tokens": 0, "cost_usd": data.get("total_cost_usd", 0.0)}
+    for u in (data.get("modelUsage") or {}).values():
+        usage["input_tokens"] += u.get("inputTokens", 0)
+        usage["output_tokens"] += u.get("outputTokens", 0)
+        usage["cache_read_input_tokens"] += u.get("cacheReadInputTokens", 0)
+        usage["cache_creation_input_tokens"] += u.get("cacheCreationInputTokens", 0)
+    LAST_USAGE = usage
+    return (data.get("result") or "").strip()
 
 
 def _compact_azure_openai(system: str, user: str, model: str | None,
