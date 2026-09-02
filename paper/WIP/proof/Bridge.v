@@ -118,6 +118,65 @@ Lemma supd_same : forall s r P, supd s r P r = P.
 Proof. intros. unfold supd. destruct (Nat.eq_dec r r); congruence. Qed.
 
 (* ================================================================= *)
+(*  PROGRESS UNDER MISSELECTION.  A session-types reviewer's first      *)
+(*  question about a fault model is what it does to communication       *)
+(*  safety.  The answer here is: nothing.  A typed session that has     *)
+(*  not finished can always take a step, and -- the point -- it can     *)
+(*  take one for EVERY label the sender may pick, wrong ones included,  *)
+(*  because T-Comm makes the receiver offer at least the protocol's     *)
+(*  labels.  A wrong choice is never a communication mismatch, an       *)
+(*  unexpected label or a deadlock; its only consequence is the world   *)
+(*  it leaves behind -- which is exactly what severity measures.        *)
+(*  Guard decidability is a hypothesis, as in severity_exhaustive.      *)
+(* ================================================================= *)
+Fixpoint finished (G : Gt) : Prop :=
+  match G with
+  | GEnd => True
+  | GGoal _ G0 => finished G0
+  | _ => False
+  end.
+
+Theorem progress :
+  (forall (psi : World -> Prop) (W : World), psi W \/ ~ psi W) ->
+  forall G s W, ctypes G s W -> ~ finished G ->
+    exists G' s' W' r c, hstep G s W G' s' W' r c.
+Proof.
+  intros Hdec G s W Ht. induction Ht as [ s W Hend
+                                        | phi G s W Hphi Ht IH
+                                        | a p G s W P Hsp Hex Hall IH
+                                        | p q brs s W sendb recvb Hpq Hsp Hsq Hne Hl1 Hl2 Hl3 Hcont IH ];
+    intro Hnf.
+  - exfalso. apply Hnf. exact I.
+  - destruct (IH Hnf) as [G' [s' [W' [r [c Hst]]]]].
+    exists G', s', W', r, c. apply H_Goal. exact Hst.
+  - destruct Hex as [W' HE].
+    exists G, (supd s p P), W', p, 0. eapply H_Act; eassumption.
+  - destruct brs as [ | [[l psi] Gl] tl ]; [ exfalso; apply Hne; reflexivity | ].
+    assert (Hin : In (l, psi, Gl) ((l, psi, Gl) :: tl)) by (left; reflexivity).
+    destruct (Hl1 _ _ _ Hin) as [P HP]. destruct (Hl3 _ _ _ Hin) as [Q HQ].
+    destruct (Hdec psi W) as [Hg | Hg].
+    + exists Gl, (supd (supd s p P) q Q), W, p, 0. eapply H_Comm_ok; eassumption.
+    + exists Gl, (supd (supd s p P) q Q), W, p, 1. eapply H_Comm_dev; eassumption.
+Qed.
+
+(* Every label the sender may pick -- intended or not -- is a step the
+   receiver accepts.  This is the precise sense in which misselection is
+   not a communication error. *)
+Theorem every_label_steps :
+  (forall (psi : World -> Prop) (W : World), psi W \/ ~ psi W) ->
+  forall p q brs s W, ctypes (GComm p q brs) s W ->
+    forall l psi Gl, In (l, psi, Gl) brs ->
+      exists s' c, hstep (GComm p q brs) s W Gl s' W p c.
+Proof.
+  intros Hdec p q brs s W Ht l psi Gl Hin.
+  inversion Ht as [ | | | p0 q0 brs0 s0 W0 sendb recvb Hpq Hsp Hsq Hne Hl1 Hl2 Hl3 Hcont ]; subst.
+  destruct (Hl1 _ _ _ Hin) as [P HP]. destruct (Hl3 _ _ _ Hin) as [Q HQ].
+  destruct (Hdec psi W) as [Hg | Hg].
+  - exists (supd (supd s p P) q Q), 0. eapply H_Comm_ok; eassumption.
+  - exists (supd (supd s p P) q Q), 1. eapply H_Comm_dev; eassumption.
+Qed.
+
+(* ================================================================= *)
 (*  THE BRIDGE, one step: typing and k-tolerance are both preserved   *)
 (*  by every instrumented head step whose cost fits the budget, and   *)
 (*  the budget is debited by exactly that cost.                       *)
