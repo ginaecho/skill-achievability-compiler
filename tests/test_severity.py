@@ -246,3 +246,31 @@ def test_tolerance_degree_is_a_threshold_on_every_benchmark():
                 f"but k* = {k} says it should be {b > k}")
         checked += 1
     assert checked > 0, "no benchmark protocol had a finite tolerance degree"
+
+
+def test_projecting_the_interface_does_not_change_the_verdict():
+    """The tool-side counterpart of Severity.v's interface_projection: exit
+    worlds may be projected onto the cone of influence of the remaining
+    segments without changing what the modular check concludes.  This is the
+    abstraction Table 2's projected column depends on, so a disagreement here
+    would invalidate that column rather than merely slow it down."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+    from severity_eval import compose, modular
+
+    K = 2
+    checked = 0
+    for seg_id in ("deploy_with_rollback", "deploy_no_rollback", "migration_backup"):
+        base = BENCH[seg_id]["pack"]
+        for n in (1, 2, 3):
+            _, segs = compose([base] * n)
+            concrete = modular(segs, K, project=False)
+            projected = modular(segs, K, project=True)
+            assert concrete["hazard"] == projected["hazard"], (
+                f"{seg_id} n={n}: projection changed the hazard verdict "
+                f"({concrete['hazard']} -> {projected['hazard']})")
+            # and it is a coarsening, never an invention
+            assert projected["final_interface"] <= concrete["final_interface"], (
+                f"{seg_id} n={n}: projected interface is larger than concrete")
+            checked += 1
+    assert checked == 9
