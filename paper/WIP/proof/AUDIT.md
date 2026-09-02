@@ -134,6 +134,25 @@ All axiom-free; `make` in this directory runs every `Print Assumptions` harness.
 | Modular sequential composition, interface form | `TC_seq`, `TC_seq_interface`, `ends_budget_le` |
 | Worked instance | `Gbad_is_0_tolerant`, `Gbad_not_1_tolerant`, `Ggood_is_k_tolerant`, `Ggood_by_narrowing` |
 
+### Added to `Severity.v`: the trichotomy is ordered (9 further results)
+
+| Result | Coq |
+|---|---|
+| Budgeted reachability is monotone in the budget | `reach_mono_budget` |
+| Catastrophic upward closed, Futile downward closed, Benign never regresses to Futile | `catastrophic_upward`, `futile_downward`, `benign_no_regress` |
+| Raising the budget: Benign → Benign or Catastrophic; lowering it: Benign → Benign or Futile | `benign_step_up`, `benign_step_down` |
+| **Severity rank is monotone in the budget along Futile < Benign < Catastrophic**, so the classes are three consecutive intervals | `severity_monotone_in_budget` |
+| k* is a genuine threshold, and below it every residual is Benign or Futile | `tolerance_degree_is_a_threshold`, `severity_classes_are_separated` |
+
+Decidability of the two reachability questions is a hypothesis, as in
+`severity_exhaustive`; no classical axiom is used.
+
+### Added to `Mu.v`: budgeted reachability is operational (2 further results)
+
+| Result | Coq |
+|---|---|
+| A hazard is reachable within budget b iff some run with at most b misselections ends in a hazard state | `reach_msteps`, `reach_mu_iff_run` |
+
 ## `Bridge.v` — from protocols to PROGRAMS (4 results)
 
 | Result | Coq |
