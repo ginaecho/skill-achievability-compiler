@@ -56,6 +56,14 @@ four TikZ figures, and the conventional structure.
   `k*` is a genuine threshold; and `Catastrophic` means an affordable **run**
   reaches harm (`reach_mu_iff_run`), not merely that a predicate holds.
   Default hazard: an irreversible tool fires after the goal is lost.
+  `Benign` is a **possibility**, not a guarantee: `Robust` is the universal
+  reading (every affordable misselection and every environment answer still
+  arrives at the goal), it implies `Benign` (`robust_benign`), and the
+  implication is strict (`benign_is_not_robust`). The tool reports `Benign`.
+- **k\* is principal**: the tolerated budgets are exactly those `<= k*`
+  (`principal_characterises`), `k*` is unique (`principal_unique`) and exists
+  whenever tolerance is finite (`principal_exists`), which is what licenses
+  computing it by a scan.
 - **k-misselection tolerance**: no run with ≤ k misselections reaches a hazard.
   Possibilistic — no probabilities. The tolerance degree `k*` is the headline.
 - **T-Choice-Safe**: exact syntax-directed characterization.
@@ -66,15 +74,38 @@ four TikZ figures, and the conventional structure.
   sessions and protocols (`bridge_mu`).
 - **Regular protocols**: the μ-unfolding closure is finite (`cands_closed`),
   the finite fragment embeds (`TC_regular`), `decide_mu` is sound and complete.
+  The recursive layer has its **own judgment**, `safeR` --- T-Choice-Safe read
+  coinductively --- exactly non-reachability (`TR_exact`), a conservative
+  extension of the finite one (`TC_is_TR`), decided by `decide_mu`
+  (`decide_mu_judgment`) and consumed by the bridge (`bridge_mu_safeR`).
+  **Guardedness** is mechanized and is needed in exactly one place: progress.
+  `μX.X` is typable (conformance is coinductive), unfinished and permanently
+  stuck (`contractiveness_is_necessary`); `progress_mu` holds under `gd`;
+  the decision procedure needs no guardedness at all.
 - **Repairs**: narrow, guard, reorder, compensate --- all proved sound;
-  guard and reorder characterized exactly.
+  guard and reorder characterized exactly, in an **aborting** model where the
+  validation always fires and a failed check diverts to an *inert* world
+  (everything enabled, nothing changes). `Abort.v` builds a runtime with such
+  worlds and provably no halted one, and exhibits a session that conforms to
+  the repaired protocol. The condition is a **congruence** for one-hole
+  contexts (`safeT_congruence`), so all four repairs apply at nested positions,
+  which is where the tool applies them.
 - **Bystanders**: every permutation of independent nodes (actions under
   semantic independence, communications between disjoint role pairs
   unconditionally) preserves the condition and typing; variable disjointness
   of STRIPS footprints discharges the action conditions, which is what the
   tool checks.
 - **Verified kernel**: on the boolean fragment the tool's k* is cross-checked
-  against a decision procedure extracted from the proof (16/16 agree).
+  against a decision procedure extracted from the proof (16/16 agree). The
+  kernel's goal notion is the stronger one --- it requires the protocol to run
+  to completion (`goal_reach_implies_reach_mu`, `goal_reach_strictly_stronger`)
+  --- so the cross-check is evidence about `k*` and the hazard, not about the
+  severity labels.
+- **Cone of influence**: worlds agreeing on the variables the remaining
+  protocol reads are interchangeable at every budget (`safeT_cone`), so a
+  modular interface needs one representative per class
+  (`interface_projection`). This is what makes the projected column of the
+  modularity experiment sound.
 
 ## Verified results — `make` in `proof/`
 
