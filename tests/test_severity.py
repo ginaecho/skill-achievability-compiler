@@ -128,7 +128,10 @@ def test_spec_cases_are_certified_and_refuted_as_authored():
     from skillc.checker import check
     root = Path(__file__).resolve().parents[1] / "benchmarks" / "spec-cases"
     expected = {"order-in-budget": "GOAL_UNSAT", "publish-with-approval": "BLOCKED_GUARD",
-                "onboard-badge": "GOAL_UNSAT", "ledger-verify": "MISSING_CAPABILITY"}
+                "onboard-badge": "GOAL_UNSAT", "ledger-verify": "MISSING_CAPABILITY",
+                "quota-send": "GOAL_UNSAT", "migrate-with-quota": "GOAL_UNSAT",
+                "sign-then-ship": "GOAL_UNSAT", "two-person-release": "BLOCKED_GUARD",
+                "index-then-search": "BLOCKED_GUARD"}
     prof = load_profile("claude-code")
     for case, reason in expected.items():
         a = check(compile_file(root / case / "A" / "SKILL.md", prof).pack)
@@ -198,3 +201,18 @@ def test_analyzer_agrees_with_the_verified_kernel_on_random_protocols():
         if "skipped" in k:
             continue
         assert k["tolerance_degree"] == analyze(pack, kmax=2).tolerance_degree, pack
+
+
+def test_grep_baseline_is_weaker_than_the_checker():
+    """Most of the corpus evaluation is a capability set-difference a regular
+    expression can find; the specification cases are the ones that are not."""
+    import importlib.util, json
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("grepb", root / "scripts" / "grep_baseline.py")
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    res = json.load(open(root / "paper" / "WIP" / "results" / "grep_baseline.json"))
+    assert res["checker_correct"] == res["n"]
+    assert res["grep_correct"] < res["checker_correct"]
+    # every case the grep misses is a refutation that needs reachability
+    assert all(not r["truth"] for r in res["grep_wrong"])

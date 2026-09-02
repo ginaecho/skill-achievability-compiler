@@ -17,11 +17,86 @@ Section Repairs.
 Variable E : Ctx.
 Variable Haz : World -> Prop.
 
+(* Guard decidability, as elsewhere in the development; no classical axiom. *)
+Hypothesis classic_psi : forall (psi : World -> Prop) (W : World), psi W \/ ~ psi W.
+
 (* A VALIDATION is a capability whose only effect is to test psi: it
    fires exactly when psi holds and leaves the world unchanged.  In the
    pack language it is a tool with precondition psi and no effects. *)
 Definition validates (a : CapN) (psi : World -> Prop) : Prop :=
   forall W W', E a W W' <-> (psi W /\ W' = W).
+
+(* ----------------------------------------------------------------- *)
+(*  A DEFECT IN THE MODEL ABOVE, AND ITS REPAIR.                       *)
+(*                                                                     *)
+(*  `validates` makes the capability UNFIRABLE when psi fails.  That is *)
+(*  fatal to the bridge: the conformance judgment's action rule asks    *)
+(*  for a successor (CT_Act's `exists W', E a W W'`), so in exactly the *)
+(*  worlds the guard repair addresses, NO SESSION CONFORMS -- the       *)
+(*  guarantee would hold vacuously.  This is the shape of defect that   *)
+(*  killed this discipline's predecessor draft, so we model a           *)
+(*  validation the way a real gate behaves instead: it always fires,    *)
+(*  and when its predicate fails it diverts to an ABORT world, where    *)
+(*  nothing further is enabled.  The branch is then not stuck but       *)
+(*  FUTILE -- the run is wasted, nothing is harmed -- and the session   *)
+(*  still conforms.                                                     *)
+(* ----------------------------------------------------------------- *)
+Definition halted (W : World) : Prop := forall a W', ~ E a W W'.
+
+Definition validates_ab (a : CapN) (psi : World -> Prop) (ab : World -> World) : Prop :=
+  forall W W', E a W W' <-> ((psi W /\ W' = W) \/ (~ psi W /\ W' = ab W)).
+
+(* the point of the change: the capability is ALWAYS enabled, so CT_Act is
+   satisfiable and the repaired protocol has conforming sessions *)
+Lemma validates_ab_enabled : forall a psi ab W,
+  validates_ab a psi ab -> exists W', E a W W'.
+Proof.
+  intros a psi ab W Hv.
+  destruct (classic_psi psi W) as [Hp | Hp].
+  - exists W. apply Hv. left. split; [ exact Hp | reflexivity ].
+  - exists (ab W). apply Hv. right. split; [ exact Hp | reflexivity ].
+Qed.
+
+(* nothing at all is reachable from a halted world that is not already there *)
+Lemma reach_halted : forall (P : World -> Prop) b G W,
+  reach_haz E P b G W -> halted W -> ~ P W -> False.
+Proof.
+  intros P b G W Hr.
+  induction Hr as [ b G W1 Hpw | b a p G W1 W' HE Hr IH | b phi G W1 Hr IH
+                  | b p q brs l psi Gl W1 Hin Hpsi Hr IH
+                  | b p q brs l psi Gl W1 Hin Hpsi Hr IH ]; intros Hh Hp.
+  - exact (Hp Hpw).
+  - exact (Hh a W' HE).
+  - exact (IH Hh Hp).
+  - exact (IH Hh Hp).
+  - exact (IH Hh Hp).
+Qed.
+
+Corollary not_reach_halted : forall (P : World -> Prop) b G W,
+  halted W -> ~ P W -> ~ reach_haz E P b G W.
+Proof. intros P b G W Hh Hp Hr. eapply reach_halted; eassumption. Qed.
+
+(* so every protocol is safe from a halted, hazard-free world ... *)
+Theorem safeT_halted : forall b G W,
+  halted W -> ~ Haz W -> safeT E Haz b G W.
+Proof.
+  intros b G W Hh Hnh. apply (TC_complete E Haz (Gt_size G)); [ apply le_n | ].
+  apply not_reach_halted; assumption.
+Qed.
+
+(* ... and a misselected guarded branch is FUTILE, not stuck: the run is
+   wasted and nothing is harmed. *)
+Theorem guard_abort_is_futile : forall (Phi : World -> Prop) a psi ab p Gl W b,
+  validates_ab a psi ab -> ~ psi W -> ~ Haz W ->
+  halted (ab W) -> ~ Haz (ab W) -> ~ Phi (ab W) ->
+  safeT E Haz b (GAct a p Gl) W /\ Futile E Haz Phi b Gl (ab W).
+Proof.
+  intros Phi a psi ab p Gl W b Hv Hnp HnhW Hh Hnh Hnphi. split.
+  - apply ST_Act; [ exact HnhW | ].
+    intros W' HE. apply Hv in HE. destruct HE as [[Hp _] | [_ ->]]; [ contradiction | ].
+    apply safeT_halted; assumption.
+  - split; apply not_reach_halted; assumption.
+Qed.
 
 (* ----------------------------------------------------------------- *)
 (*  GUARD.  A misselected branch that begins with a validation of its  *)

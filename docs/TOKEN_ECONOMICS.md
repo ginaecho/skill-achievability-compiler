@@ -1,6 +1,6 @@
 # Tokens with the checker and without it
 
-162 real skills. The deterministic check spends **no model tokens**; median 10.0 ms per skill, 1813 ms for the corpus.
+162 real skills. The deterministic check spends **no model tokens**; median 11.9 ms per skill, 2134 ms for the corpus.
 
 ## When is an LLM needed?
 
@@ -20,62 +20,62 @@ The escalation detector (`skillc autocheck`) fires on **130 of 162** skills (80.
 
 | | value |
 |---|---|
-| measured agent runs (usefulness experiment) | 114 |
-| median tokens per run | 72001 |
-| median USD per run | 0.0489 |
-| median turns per run | 5 |
-| tokens spent on runs the checker refuted and that failed | 5098701 |
-| USD on those runs | 4.259 |
+| measured agent runs (usefulness experiment) | 134 |
+| median tokens per run | 80331 |
+| median USD per run | 0.0548 |
+| median turns per run | 6 |
+| tokens spent on runs the checker refuted and that failed | 15841106 |
+| USD on those runs | 14.296 |
 
 ## The comparison
 
 Two regimes, and they are not close.
 
-**Where the check is free** (32 of 162 skills, including all 108 refutations in the file-only runtime): the check costs **0 model tokens** and 10.0 ms. Each refutation replaces an agent run whose measured median is 72001 tokens ($0.0489). In the usefulness experiment the runs the checker refuted and that then failed cost 5098701 tokens ($4.259) --- the checker would have spent none of it.
+**Where the check is free** (32 of 162 skills, including all 108 refutations in the file-only runtime): the check costs **0 model tokens** and 11.9 ms. Each refutation replaces an agent run whose measured median is 80331 tokens ($0.0548). In the usefulness experiment the runs the checker refuted and that then failed cost 15841106 tokens ($14.296) --- the checker would have spent none of it.
 
-**Where the check needs an LLM** (130 skills in the home runtime, where the deterministic pack can only certify weakly): one compaction costs a median 22440 tokens, i.e. **31.2%** of one measured agent run (0.31 runs). It is paid once per skill version and amortizes over every run of that skill; against the per-skill runtime estimate the corpus share is 56.076% (median 68.465%).
+**Where the check needs an LLM** (130 skills in the home runtime, where the deterministic pack can only certify weakly): one compaction costs a median 22440 tokens, i.e. **27.9%** of one measured agent run (0.28 runs). It is paid once per skill version and amortizes over every run of that skill; against the per-skill runtime estimate the corpus share is 44.5% (median 54.463%).
 
 ## Per skill
 
 | skill | home | no-shell | escalate | compaction tokens | est. run tokens | check share |
 |---|---|---|---|---|---|---|
-| `real-skills/skills/claude-api/SKILL.md` | ok | MISSING_CAPABILITY | yes | 69182 | 133485 | 51.828% |
-| `real-skills/skills/skill-creator/SKILL.md` | ok | MISSING_CAPABILITY | yes | 36948 | 64155 | 57.592% |
-| `real-skills-ext/obra__superpowers/writing-skills/SKILL.md` | ok | MISSING_CAPABILITY | yes | 33558 (est) | 55305 | 60.678% |
-| `real-skills/skills/xlsx/SKILL.md` | ok | MISSING_CAPABILITY | yes | 32028 | 31990 | 100.119% |
-| `real-skills-ext/microsoft__skills/ui-widget-developer/SKILL.md` | ok | MISSING_CAPABILITY | yes | 31661 (est) | 51110 | 61.947% |
-| `real-skills-ext/alirezarezvani__claude-skills/terraform-patterns/SKILL.md` | ok | MISSING_CAPABILITY | yes | 30781 (est) | 49160 | 62.614% |
-| `real-skills-ext/wondelai__skills/monetizing-innovation/SKILL.md` | ok | ok | yes | 30391 (est) | 48300 | 62.921% |
-| `real-skills/skills/pptx/SKILL.md` | ok | MISSING_CAPABILITY | yes | 30220 (est) | 47920 | 63.063% |
-| `real-skills-ext/wondelai__skills/high-output-management/SKILL.md` | ok | ok | yes | 30155 (est) | 47775 | 63.119% |
-| `real-skills-ext/wondelai__skills/hundred-million-offers/SKILL.md` | ok | ok | yes | 29791 (est) | 46970 | 63.426% |
-| `real-skills/skills/algorithmic-art/SKILL.md` | ok | ok | yes | 29677 (est) | 46720 | 63.521% |
-| `real-skills/skills/doc-coauthoring/SKILL.md` | ok | ok | yes | 29182 | 41560 | 70.217% |
-| `real-skills-ext/microsoft__skills/kql/SKILL.md` | ok | ok | yes | 29155 (est) | 45565 | 63.986% |
-| `real-skills-ext/wondelai__skills/contagious/SKILL.md` | ok | ok | yes | 28423 (est) | 43945 | 64.679% |
-| `real-skills-ext/microsoft__skills/cloud-solution-architect/SKILL.md` | ok | ok | yes | 28314 (est) | 43705 | 64.784% |
-| `real-skills-ext/Security-Phoenix-demo__security-skills-claude-code/opengrep-rule-generator/SKILL.md` | ok | MISSING_CAPABILITY | yes | 28270 (est) | 43610 | 64.825% |
-| `real-skills-ext/wondelai__skills/cro-methodology/SKILL.md` | ok | ok | yes | 28092 (est) | 43215 | 65.005% |
-| `real-skills-ext/wondelai__skills/lean-startup/SKILL.md` | ok | ok | yes | 28031 (est) | 43080 | 65.067% |
-| `real-skills-ext/wondelai__skills/lean-analytics/SKILL.md` | ok | ok | yes | 28015 (est) | 43040 | 65.091% |
-| `real-skills-ext/wondelai__skills/mom-test/SKILL.md` | ok | ok | yes | 27942 (est) | 42880 | 65.163% |
-| `real-skills-ext/wondelai__skills/jobs-to-be-done/SKILL.md` | ok | ok | yes | 27749 (est) | 42455 | 65.361% |
-| `real-skills-ext/K-Dense-AI__claude-scientific-skills/diffdock/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27660 (est) | 42255 | 65.46% |
-| `real-skills-ext/wondelai__skills/clean-architecture/SKILL.md` | ok | ok | yes | 27637 (est) | 42205 | 65.483% |
-| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/10-cloud-security/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27627 (est) | 42185 | 65.49% |
-| `real-skills-ext/K-Dense-AI__claude-scientific-skills/biopython/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27506 (est) | 41915 | 65.623% |
-| `real-skills-ext/wondelai__skills/inspired-product/SKILL.md` | ok | ok | yes | 27372 (est) | 41620 | 65.766% |
-| `real-skills-ext/wondelai__skills/domain-driven-design/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27092 (est) | 41000 | 66.078% |
-| `real-skills-ext/K-Dense-AI__claude-scientific-skills/deeptools/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27051 (est) | 40910 | 66.123% |
-| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/14-red-team-ops/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27024 (est) | 40850 | 66.154% |
-| `real-skills-ext/wondelai__skills/design-sprint/SKILL.md` | ok | ok | yes | 27017 (est) | 40835 | 66.161% |
-| `real-skills-ext/Jeffallan__claude-skills/flutter-expert/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26973 | 28140 | 95.853% |
-| `real-skills-ext/alirezarezvani__claude-skills/helm-chart-builder/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26877 (est) | 40525 | 66.322% |
-| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/07-incident-response/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26783 (est) | 40315 | 66.434% |
-| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/09-web-security/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26693 (est) | 40120 | 66.533% |
-| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/05-malware-analysis/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26664 (est) | 40055 | 66.568% |
-| `real-skills-ext/K-Dense-AI__claude-scientific-skills/bulk-rnaseq/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26596 (est) | 39905 | 66.648% |
-| `real-skills-ext/K-Dense-AI__claude-scientific-skills/cobrapy/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26550 (est) | 39800 | 66.709% |
-| `real-skills-ext/K-Dense-AI__claude-scientific-skills/astropy/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26545 (est) | 39790 | 66.713% |
-| `real-skills-ext/wondelai__skills/crossing-the-chasm/SKILL.md` | ok | ok | yes | 26543 (est) | 39785 | 66.716% |
-| `real-skills-ext/K-Dense-AI__claude-scientific-skills/generate-image/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26525 (est) | 39745 | 66.738% |
+| `real-skills/skills/claude-api/SKILL.md` | ok | MISSING_CAPABILITY | yes | 69182 | 162282 | 42.631% |
+| `real-skills/skills/skill-creator/SKILL.md` | ok | MISSING_CAPABILITY | yes | 36948 | 79086 | 46.719% |
+| `real-skills-ext/obra__superpowers/writing-skills/SKILL.md` | ok | MISSING_CAPABILITY | yes | 33558 (est) | 68466 | 49.014% |
+| `real-skills/skills/xlsx/SKILL.md` | ok | MISSING_CAPABILITY | yes | 32028 | 40488 | 79.105% |
+| `real-skills-ext/microsoft__skills/ui-widget-developer/SKILL.md` | ok | MISSING_CAPABILITY | yes | 31661 (est) | 63432 | 49.913% |
+| `real-skills-ext/alirezarezvani__claude-skills/terraform-patterns/SKILL.md` | ok | MISSING_CAPABILITY | yes | 30781 (est) | 61092 | 50.385% |
+| `real-skills-ext/wondelai__skills/monetizing-innovation/SKILL.md` | ok | ok | yes | 30391 (est) | 60060 | 50.601% |
+| `real-skills/skills/pptx/SKILL.md` | ok | MISSING_CAPABILITY | yes | 30220 (est) | 59604 | 50.701% |
+| `real-skills-ext/wondelai__skills/high-output-management/SKILL.md` | ok | ok | yes | 30155 (est) | 59430 | 50.74% |
+| `real-skills-ext/wondelai__skills/hundred-million-offers/SKILL.md` | ok | ok | yes | 29791 (est) | 58464 | 50.956% |
+| `real-skills/skills/algorithmic-art/SKILL.md` | ok | ok | yes | 29677 (est) | 58164 | 51.023% |
+| `real-skills/skills/doc-coauthoring/SKILL.md` | ok | ok | yes | 29182 | 51972 | 56.149% |
+| `real-skills-ext/microsoft__skills/kql/SKILL.md` | ok | ok | yes | 29155 (est) | 56778 | 51.349% |
+| `real-skills-ext/wondelai__skills/contagious/SKILL.md` | ok | ok | yes | 28423 (est) | 54834 | 51.835% |
+| `real-skills-ext/microsoft__skills/cloud-solution-architect/SKILL.md` | ok | ok | yes | 28314 (est) | 54546 | 51.908% |
+| `real-skills-ext/Security-Phoenix-demo__security-skills-claude-code/opengrep-rule-generator/SKILL.md` | ok | MISSING_CAPABILITY | yes | 28270 (est) | 54432 | 51.936% |
+| `real-skills-ext/wondelai__skills/cro-methodology/SKILL.md` | ok | ok | yes | 28092 (est) | 53958 | 52.063% |
+| `real-skills-ext/wondelai__skills/lean-startup/SKILL.md` | ok | ok | yes | 28031 (est) | 53796 | 52.106% |
+| `real-skills-ext/wondelai__skills/lean-analytics/SKILL.md` | ok | ok | yes | 28015 (est) | 53748 | 52.123% |
+| `real-skills-ext/wondelai__skills/mom-test/SKILL.md` | ok | ok | yes | 27942 (est) | 53556 | 52.173% |
+| `real-skills-ext/wondelai__skills/jobs-to-be-done/SKILL.md` | ok | ok | yes | 27749 (est) | 53046 | 52.311% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/diffdock/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27660 (est) | 52806 | 52.38% |
+| `real-skills-ext/wondelai__skills/clean-architecture/SKILL.md` | ok | ok | yes | 27637 (est) | 52746 | 52.396% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/10-cloud-security/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27627 (est) | 52722 | 52.401% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/biopython/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27506 (est) | 52398 | 52.494% |
+| `real-skills-ext/wondelai__skills/inspired-product/SKILL.md` | ok | ok | yes | 27372 (est) | 52044 | 52.594% |
+| `real-skills-ext/wondelai__skills/domain-driven-design/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27092 (est) | 51300 | 52.811% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/deeptools/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27051 (est) | 51192 | 52.842% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/14-red-team-ops/SKILL.md` | ok | MISSING_CAPABILITY | yes | 27024 (est) | 51120 | 52.864% |
+| `real-skills-ext/wondelai__skills/design-sprint/SKILL.md` | ok | ok | yes | 27017 (est) | 51102 | 52.869% |
+| `real-skills-ext/Jeffallan__claude-skills/flutter-expert/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26973 | 35868 | 75.201% |
+| `real-skills-ext/alirezarezvani__claude-skills/helm-chart-builder/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26877 (est) | 50730 | 52.98% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/07-incident-response/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26783 (est) | 50478 | 53.059% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/09-web-security/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26693 (est) | 50244 | 53.127% |
+| `real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/05-malware-analysis/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26664 (est) | 50166 | 53.152% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/bulk-rnaseq/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26596 (est) | 49986 | 53.207% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/cobrapy/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26550 (est) | 49860 | 53.249% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/astropy/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26545 (est) | 49848 | 53.252% |
+| `real-skills-ext/wondelai__skills/crossing-the-chasm/SKILL.md` | ok | ok | yes | 26543 (est) | 49842 | 53.254% |
+| `real-skills-ext/K-Dense-AI__claude-scientific-skills/generate-image/SKILL.md` | ok | MISSING_CAPABILITY | yes | 26525 (est) | 49794 | 53.269% |

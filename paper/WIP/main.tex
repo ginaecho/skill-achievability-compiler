@@ -105,6 +105,7 @@
 \newcommand{\draftnote}[1]{\par\smallskip\noindent\fcolorbox{amber}{boxbg}{\parbox{0.96\linewidth}{\small\textsf{\textcolor{amber}{WIP:}} #1}}\par\smallskip}
 
 \newtheorem{prediction}[theorem]{Prediction}
+\newtheorem{assumption}[theorem]{Assumption}
 
 % LIPIcs already provides: theorem, lemma, corollary, proposition, claim,
 % definition, example, remark (bold-triangle style), and proof.
@@ -131,7 +132,7 @@
 
 \title{Affordable Mistakes: Severity-Aware Multiparty Session Types for
 Participants that Choose Wrongly\thanks{\textcolor{badred}{WORKING DRAFT --- not
-for submission.} Base rules follow \texttt{paper/tas.tex}, authoritative for
+for submission.}
 Section~\ref{sec:base}.}}
 \titlerunning{Affordable Mistakes}
 \author{Anonymous Author}{Anonymous Affiliation, Anonymous City, Anonymous Country}{anon@anon.org}{}{}
@@ -206,6 +207,16 @@ where the situation demanded branch $A$ --- not by violating the protocol
 the ordinary condition of a language-model agent occupying a role, and it is
 why such agents are employed: their latitude.
 
+Nothing here is specific to language models. The hypothesis MPST rests on ---
+the participant \emph{is} its type --- fails for every participant that was
+instructed rather than compiled: an operator following a runbook at a migration
+console, a third-party service behind an adapter whose behaviour is a contract
+rather than a checked artifact, a learned controller. Each occupies a role and
+may, at a branch the protocol offers, take the one the situation forbids.
+Language-model agents are the case that makes the question urgent and the case
+our evaluation can drive at scale, but the discipline asks only that the
+participant choose, not how.
+
 The tempting response is to make the type system prevent it. That is doubly
 wrong: impossible, because the judgement is the participant's, not the
 protocol's; and undesirable, because a participant that may never choose
@@ -256,6 +267,8 @@ theorem that couples the two (Section~\ref{sec:bridge}), not the rule that
 decides the condition.
 
 \subparagraph*{Contributions.}
+Throughout, \coqok{name} marks a result proved in the accompanying Coq
+development and names its identifier there.
 \begin{itemize}
 \item[\textbf{C1}] \emph{A budget a typed participant spends, carried to
   programs} (\S\ref{sec:mis}, \S\ref{sec:bridge}). A session typed against a
@@ -387,17 +400,19 @@ delivery, so those change no state. The deviation this paper analyses is
 \section{The Base Discipline}\label{sec:base}
 
 We build on a goal-marked, capability-guarded synchronous multiparty
-discipline; \texttt{tas.tex} is authoritative and this section fixes
-notation. Predicates $p\in\Pred$, numeric variables $x\in\Var$, roles
-$\mathsf p,\mathsf q$, capabilities $a\in\CapS$, labels $\ell\in\Lab$. The
-state logic is quantifier-free linear integer arithmetic with uninterpreted
-booleans; a world $W=\langle B,N\rangle$ valuates it. A capability context maps
-each possessed tool to a guarded STRIPS effect
-$\Gamma(a)=\langle\pre_a,\eff_a\rangle$,
-$\eff_a=\langle\Add_a,\Del_a,\Asg_a,\Nd_a\rangle$. Firing is
-\textsc{World-Act}: $\langle W\rangle\,a\,\langle W'\rangle$ iff
-$W\vDash\pre_a$ and $W'\in\apply(\eff_a,W)$. Global types are coinductive
-regular trees
+discipline, stated here in the detail this paper uses. Predicates
+$p\in\Pred$, numeric variables $x\in\Var$, roles $\mathsf p,\mathsf q$,
+capabilities $a\in\CapS$, labels $\ell\in\Lab$. The state logic is
+quantifier-free linear integer arithmetic with uninterpreted booleans; a world
+$W=\langle B,N\rangle$ valuates it, and the checker's decidable fragment
+abstracts predicates concretely and numerics symbolically, widening at loop
+heads so the reachable world set is finite. A capability context maps each
+possessed tool to a guarded STRIPS effect
+$\Gamma(a)=\langle\pre_a,\eff_a\rangle$, where $\eff_a$ adds and deletes
+predicates and assigns numerics. Firing is \textsc{World-Act}:
+$\langle W\rangle\,a\,\langle W'\rangle$ iff $W\vDash\pre_a$ and
+$W'\in\apply(\eff_a,W)$. We write $\varphi$ for the goal and $\Haz$ for the
+hazard, both predicates over worlds. Global types are coinductive regular trees
 \[
 G \;\coind\; \mathsf{p}{\to}\mathsf{q}:\{\ell_i.\,G_i\}_{i\in I}
   \ \mid\ a@\mathsf{p}.\,G \ \mid\ \checkmark\varphi.\,G \ \mid\ \End
@@ -408,11 +423,13 @@ are typed \emph{directly} against $G$ by the coinductive judgment
 $G\vdash(\MM;W)$ --- no local types, projection, or separate
 subtyping~\cite{jongmans-ecoop23,castro-popl26} --- whose \textsc{T-Comm}
 requires the sender to offer exactly the protocol's labels, the receiver at
-least them, and every branch to check against the same residual. Achievability
-is existential may-reachability of a goal-satisfying configuration. The base
-metatheory (subject reduction, session fidelity, refutation soundness) is
-mechanized for the finite fragment. This paper adds one annotation to choice,
-one counter to the semantics, and one well-formedness condition.
+least them, and every branch to check against the same residual. A \emph{pack}
+$\langle\Gamma,G,\varphi,\Haz\rangle$ is the checked object: a capability
+context, a global type, a goal and a hazard. Achievability is existential
+may-reachability of a goal-satisfying configuration; the base metatheory
+(subject reduction, session fidelity, refutation soundness) is mechanized for
+the finite fragment. This paper adds one annotation to choice, one counter to
+the semantics, and one well-formedness condition.
 
 \section{Misselection and the Budget}\label{sec:mis}
 
@@ -482,6 +499,14 @@ For a residual $(G,W)$ at budget $b$: \Cat{} if $(G,W)\reachh{b}$; otherwise
 The trichotomy is not an arbitrary carve-up of two predicates. Both
 reachability questions are monotone in the budget
 (\coqok{reach\_mono\_budget}), and that makes the classes \emph{ordered}.
+
+\begin{assumption}[Decidable questions]\label{ass:dec}
+Where a result needs to know whether a guard holds, or whether a hazard or the
+goal is reachable at a given budget, that question is assumed decidable. The
+widened finite-range fragment of \S\ref{sec:base} supplies it, and in Coq the
+disjunction is a hypothesis of the affected lemmas, never an axiom: the
+development uses no classical principle.
+\end{assumption}
 
 \begin{theorem}[The trichotomy is ordered]\label{thm:ordered}
 Rank $\Fut<\Ben<\Cat$. The rank of a residual is monotone non-decreasing in
@@ -624,8 +649,7 @@ sender may pick, wrong ones included (\coqok{every\_label\_steps}), because
 \textsc{T-Comm} makes the receiver offer at least the protocol's labels. A
 misselection is therefore never a communication mismatch, an unexpected label
 or a deadlock. Its only consequence is the world it leaves behind --- which is
-exactly what \S\ref{sec:severity} measures. (Guard decidability is a
-hypothesis, as in Theorem~\ref{thm:partition}.)
+exactly what \S\ref{sec:severity} measures. (Assumption~\ref{ass:dec}.)
 \end{theorem}
 
 This is what separates the fault model from the crash-stop
@@ -840,7 +864,7 @@ branch of every choice, at every abstract world and budget up to
 $k_{\max}=4$, with the default guards and hazard of
 \S\ref{sec:mis}--\S\ref{sec:severity} and explicit overrides where declared.
 It reports per-branch severity, $\kstar$, the first hazard witness, the
-point-of-no-return action, the narrowing repair, and the bystander pairs the gate must serialize. Eleven tests check the
+point-of-no-return action, the narrowing repair, and the bystander pairs the gate must serialize. Fifteen tests check the
 tool's verdicts on the paper's instances against the Coq development's.
 
 \subparagraph*{Verified kernel.} The tool's search is the graph form of
@@ -1080,11 +1104,11 @@ produced}, and a misextraction produces a different pack. The whole census
 takes 1.8\,s and no model tokens.
 
 For eight skills with a task the sandbox can genuinely carry out (the rest
-need a package, a GPU, a credential or a service it lacks) and for four
+need a package, a GPU, a credential or a service it lacks) and for nine
 authored specification pairs whose B~variant makes a
-claim the tools cannot honour --- a bound the only tool cannot meet, a guard
-nothing establishes, a goal condition with no establisher, an undeclared tool
-(\texttt{benchmarks/spec-cases}) --- we ran the same two production models
+claim the tools cannot honour --- three bounds the only tool cannot meet,
+three guards nothing satisfies, two goal conditions with no establisher, one
+undeclared tool (\texttt{benchmarks/spec-cases}) --- we ran the same two production models
 as in Finding~4 in an empty directory with the skill and a concrete task, the
 tools restricted to the runtime, and \emph{verified the artifact}: a
 workbook's live formula, a merged PDF's page count, the order a mock tool
@@ -1151,6 +1175,23 @@ checker's total time over all 34 configurations is 260\,ms.}
 \label{tab:use}
 \end{table}
 
+\subparagraph*{How much of this a regular expression already explains.} The
+honest objection to the corpus half of this experiment is that most of the
+checker's refutations are a capability set-difference: the document contains a
+shell-looking fence and the runtime has no shell. We implemented exactly that
+baseline (\texttt{scripts/grep\_baseline.py}) and scored it on the
+34 configurations whose answer is known independently of the checker ---
+the eighteen specification variants, fixed by construction, and the runtime
+configurations the live runs settled by producing or failing to produce a
+verified artifact at realistic input size. The grep gets 25;
+the checker gets 34, in 0.2\,ms. Every case
+the grep misses is a refutation that needs reachability: a bound the tools
+cannot meet, a goal condition nothing establishes, a guard nothing satisfies.
+That is the honest division of credit. Most of the corpus census is a
+set-difference anyone could compute; the specification cases are what the
+analysis is for, and they are ours, which is the standing limitation of this
+half of the evaluation.
+
 \subparagraph*{The corpus is an untrusted input.} A skill document is not
 data: it is a set of instructions an agent will follow with real tools, so a
 corpus fetched from a dozen third-party repositories is an attack surface for
@@ -1199,14 +1240,14 @@ model: a median 22440 tokens and
 \$0.088 per compaction, fitted as
 $17939+0.595\times$ characters
 for the rest. Against the measured median agent run of
-72001 tokens
-(\$0.049), one compaction is
-31.2\% of a single run --- paid once per
+80331 tokens
+(\$0.055), one compaction is
+27.9\% of a single run --- paid once per
 skill version, amortized over every run of it --- and zero for the
 32 skills that need no model. On the other side of the ledger,
 the runs this experiment's refuted configurations spent before failing came to
-5.1\,M tokens and
-\$4.259. The check is cheap in the cases that matter
+15.8\,M tokens and
+\$14.296. The check is cheap in the cases that matter
 because the cases that matter are refutations, and refutations are the free
 half.
 
@@ -1229,6 +1270,30 @@ $\psi$ and no effects.
 Removing branches from a choice node preserves the condition at the same
 budget (\coqok{repair\_narrow\_sound}).
 \end{theorem}
+
+How a validation is modelled decides whether the repair means anything. The
+obvious model --- a capability that fires only when its predicate holds ---
+makes the repaired protocol \emph{uninhabited} in exactly the worlds the repair
+addresses: the conformance judgment's action rule asks for a successor, and
+there is none, so the bridge would hold vacuously there. That is the shape of
+defect that killed this discipline's predecessor (\S\ref{sec:whatchanged}), so
+we model a validation as a real gate instead: it always fires, and when its
+predicate fails it diverts to an \emph{abort} world in which nothing further is
+enabled.
+
+\begin{theorem}[A guarded branch is futile, not stuck]\label{thm:guardabort}
+A validation of $\psi$ with abort world $\mathit{ab}$ is enabled in every world
+(\coqok{validates\_ab\_enabled}), so the repaired protocol still has conforming
+sessions. Nothing is reachable from an abort world that is not already there
+(\coqok{reach\_halted}), so every protocol is safe from one
+(\coqok{safeT\_halted}); hence a misselected guarded branch is \Fut{} --- the
+run is wasted, nothing is harmed --- rather than stuck
+(\coqok{guard\_abort\_is\_futile}).
+\end{theorem}
+
+The blocking model is retained below because the exact characterization is
+easier to read on it; every claim made with it also holds of the aborting
+model, whose misselected branch is \Fut{} where the blocking one is empty.
 
 \begin{theorem}[Guard]\label{thm:guard}
 Let $a$ validate $\psi$. A choice with the branch $\ell[\psi].\,a.\,G_\ell$ added
@@ -1254,8 +1319,9 @@ reordered protocol is typable at every budget (\coqok{repair\_reorder\_pnr}).
 \begin{theorem}[Compensate]\label{thm:compensate}
 Appending a recovery path $R$ to a residual $G_\ell$ is $k$-safe iff $R$ is
 safe at every interface point of $G_\ell$ (\coqok{repair\_compensate\_sound},
-an instance of Theorem~\ref{thm:seq}), and it turns a \Fut{} residual \Ben{}
-as soon as $R$ reaches the goal from one interface point
+an instance of Theorem~\ref{thm:seq}; the converse is not claimed), and it
+turns a \Fut{} residual \Ben{} as soon as $R$ reaches the goal from one
+interface point
 (\coqok{repair\_compensate\_restores\_goal}).
 \end{theorem}
 

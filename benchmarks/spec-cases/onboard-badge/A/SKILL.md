@@ -1,6 +1,6 @@
 ---
 name: onboard-badge
-description: Onboard a new employee: account and building badge.
+description: "Onboard a new employee: account and building badge."
 ---
 # Onboard
 
