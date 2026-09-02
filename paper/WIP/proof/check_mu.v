@@ -25,3 +25,4 @@ Print Assumptions TR_exact.
 Print Assumptions bridge_mu_safeR.
 Print Assumptions TC_is_TR.
 Print Assumptions decide_mu_judgment.
+Print Assumptions closed_unfold.

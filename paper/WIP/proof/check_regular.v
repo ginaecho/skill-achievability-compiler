@@ -7,3 +7,5 @@ Print Assumptions reach_bounded_path.
 Print Assumptions decide_sound.
 Print Assumptions decide_complete.
 Print Assumptions decide_reachb_correct.
+Print Assumptions decide'_sound.
+Print Assumptions decide'_complete.
