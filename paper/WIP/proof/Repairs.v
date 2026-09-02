@@ -490,6 +490,23 @@ Proof.
   - intro Hp. apply Hint. exact Hp.
 Qed.
 
+(* What the world-dependent repairs cost off the root.  repair_guard_anywhere
+   needs its two hypotheses at every world the context can reach, and those
+   two together are not free: a validation that validates EVERYWHERE, into an
+   abort world that is idle, forces the abort map to be idempotent on its own
+   image.  So a context-wide guard repair is a repair with a single sink, not
+   a fresh abort world per failure.  We state the constraint rather than
+   hiding it in a hypothesis. *)
+Lemma global_abort_is_idempotent : forall a psi ab W,
+  (forall W', validates_ab a psi ab W') ->
+  idle (ab W) -> ~ psi (ab W) -> ab (ab W) = ab W.
+Proof.
+  intros a psi ab W Hv Hi Hnp.
+  assert (HE : E a (ab W) (ab (ab W)))
+    by (apply Hv; right; split; [ exact Hnp | reflexivity ]).
+  apply Hi with (a := a). exact HE.
+Qed.
+
 Corollary repair_reorder_anywhere : forall C b p q irr chk G W,
   commutes irr chk -> harmless chk ->
   safeT E Haz b (plug C (GAct irr p (GAct chk q G))) W ->

@@ -9,3 +9,6 @@ Print Assumptions strips_enables.
 Print Assumptions strips_preserves.
 Print Assumptions strips_neutral.
 Print Assumptions strips_swap_act.
+Print Assumptions strips_haz_cone.
+Print Assumptions strips_cap_cone.
+Print Assumptions strips_safeT_cone.
