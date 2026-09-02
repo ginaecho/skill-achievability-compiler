@@ -91,6 +91,12 @@ four TikZ figures, and the conventional structure.
   refuted, where the skill's procedure is the only route, 0 verified out of 46
   with 7 fabrications; the five "computed by hand" skills reverse at realistic
   input size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
+- Differential testing: the analyzer and the Coq-extracted kernel agree on the
+  tolerance degree for 499 of 499 random protocols in the shared fragment
+  (`scripts/differential_test.py`).
+- False refutations: of 13 skills refuted in their home runtime, 6 are genuine
+  and 7 are front-end misextractions, audited one by one in
+  `benchmarks/home_refutation_audit.json` (4.3% of the corpus).
 - Corpus security: 162 documents scanned statically, no malicious skill and no
   injection payload aimed at an agent; 9 benign flags reviewed in
   `docs/CORPUS_SECURITY.md`; a test fails on any unreviewed hit.

@@ -206,3 +206,10 @@ def test_no_invocations_warns_and_is_trivially_achievable():
     res = compile_markdown("# pure prose skill\nBe kind.", CLAUDE_AI)
     assert res.warnings
     assert check(res.pack).achievable
+
+
+def test_invocation_lines_are_file_lines_not_body_lines():
+    md = "---\nname: x\ndescription: d\n---\n\nFirst line.\nNow use `ask_user_input_v0` here.\n"
+    res = compile_markdown(md, CLAUDE_AI)
+    assert [i.line for i in res.invocations] == [7]
+    assert md.splitlines()[6].startswith("Now use")

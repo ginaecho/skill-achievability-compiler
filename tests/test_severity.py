@@ -175,3 +175,26 @@ def test_escalation_is_free_on_sound_refutations():
         v = check(res.pack)
         assert not v.achievable
         assert not needs_llm(text, res, v).needed
+
+
+def test_analyzer_agrees_with_the_verified_kernel_on_random_protocols():
+    """A miniature of scripts/differential_test.py: the hand-written analyzer
+    and the Coq-extracted kernel share no code, so a disagreement on a random
+    protocol is a defect in one of them."""
+    import importlib.util, pytest
+    from pathlib import Path
+    from skillc.kernel import run_kernel, kernel_available
+    from skillc.severity import analyze
+    if not kernel_available():
+        pytest.skip("kernel binary not built (make binary in paper/WIP/proof)")
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("difftest", root / "scripts" / "differential_test.py")
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    import random
+    rng = random.Random(99)
+    for i in range(12):
+        pack = mod.gen_pack(rng, i)
+        k = run_kernel(pack, kmax=2)
+        if "skipped" in k:
+            continue
+        assert k["tolerance_degree"] == analyze(pack, kmax=2).tolerance_degree, pack

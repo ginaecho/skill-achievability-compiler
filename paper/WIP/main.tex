@@ -790,7 +790,7 @@ the cone of influence, projecting exit worlds onto the atoms the remaining
 segments read, sound because dropped atoms cannot affect them. With that
 abstraction the modular check is linear where whole-system analysis is
 exponential (Section~\ref{sec:eval}, Table~\ref{tab:mod}). This is the axis on
-which MPST is currently being argued~\cite{synthetic-pacmpl26}; the community
+which MPST is currently being argued~\cite{castro-popl26}; the community
 has accepted parameterising typing by a model-checked
 property~\cite{barwell-concur22,barwell-ecoop23}, and the theorem plus the
 projection is our concrete instance of that move.
@@ -826,6 +826,20 @@ extracted to OCaml and run by \texttt{skillc severity --verified}. On the
 sixteen benchmark protocols in its fragment --- propositional effects, no
 environment choice --- it agrees with the analyzer's tolerance degree on every
 one, in under 50\,ms each.
+
+Sixteen hand-picked protocols are a weak test of that agreement, so we also
+compare the two on random ones (\texttt{scripts/differential\_test.py}). The
+generator samples packs inside the shared fragment and is otherwise
+unconstrained: nested choices, explicit and rational guards, named recursion,
+irreversible tools, unreachable goals. The analyzer and the extracted kernel
+share no code, so a disagreement is a defect in one of them.
+On 499 random protocols across two seeds the two agree on the
+tolerance degree 499 times and disagree 0.
+
+This is the strongest evidence we can offer that the tool computes the
+quantity its own mechanized theory defines, and it is a test the discipline
+makes possible: without a decision procedure proved correct there is nothing
+to differ from.
 
 \subparagraph*{Finding 1: existing corpora cannot pose the question.}
 We ran the analysis on the compiler's achievability corpus (15 packs), its
@@ -945,7 +959,10 @@ constant. The deployment segment gives the same shape at smaller scale
 \label{tab:mod}
 \end{table}
 
-This is the honest form of the modularity claim. Theorem~\ref{thm:seq} does
+Composing protocols through an interface rather than their internals is the
+subject of a line of work in MPST itself~\cite{gheri-oopsla23,barbanera-jlamp21};
+what the budget adds is that the interface carries a \emph{quantity} --- how
+much tolerance is left --- not only a state. This is the honest form of the modularity claim. Theorem~\ref{thm:seq} does
 not make checking cheap; it makes it \emph{decomposable}, and the interface
 form is what lets a coarse, declared invariant stand in for the concrete
 exits. Inferring good interfaces beyond the cone of influence is the open
@@ -1013,8 +1030,17 @@ invocation of the shell (a front-end rule added for this experiment), so a
 skill built on scripts is certified in the first runtime and refuted with
 \textsc{MissingCapability} in the second. Over the 162 skills, 149 are certified in
 their home runtime and 108 refuted in the file-only one,
-95 flipping between them; 13 are refuted even at
-home because they invoke a capability no runtime provides. The whole census
+95 flipping between them; 13 are refuted even at home. We audited every one of those by
+hand (\texttt{benchmarks/home\_refutation\_audit.json}): six are genuine ---
+the document tells the agent to \emph{call} a tool no runtime in our set
+provides, in every case a tool from an \textsc{mcp} server --- and seven are
+\emph{misextractions}, where the deterministic reader took a code identifier
+for a tool: a dataframe method, two settings keys, a Rust crate, an
+\textsc{html} meta-tag name, a naming convention, the name of a
+command-line program that in fact acts through the shell. That is a false
+refutation on 4.3\% of the corpus, and it is the achievability half's real
+precision figure: refutations are sound \emph{for the pack the front end
+produced}, and a misextraction produces a different pack. The whole census
 takes 1.8\,s and no model tokens.
 
 For eight skills with a task the sandbox can genuinely carry out (the rest
@@ -1118,8 +1144,11 @@ locates the real surface for an agent that browses.
 model at all.} The deterministic front end spends no model tokens; the
 question is when it is enough. The reading it falls back to --- one act per
 invoked tool --- \emph{under}-approximates the document, so a refutation on
-it (the skill names a tool the runtime lacks) is sound whatever the document
-means, while a certification on it says only that the named tools exist. That
+it (the skill names a tool the runtime lacks) is sound for that pack whatever
+the document means, while a certification on it says only that the named tools
+exist. The soundness is relative to extraction: the 4.3\% false-refutation
+rate above is exactly the residue, and it bounds what this rule can be worth.
+That
 asymmetry is a decision procedure for spending money: escalate to LLM
 compaction exactly when the pack is weak, the verdict is a certification, and
 the document visibly carries meaning the reader did not capture --- completion
@@ -1271,7 +1300,7 @@ budget. We report this because the negative result produced the positive one.
 \section{Related Work}\label{sec:related}
 
 \subparagraph*{MPST with a fault model.} Crash-stop
-failures~\cite{barwell-concur22,barwell-ecoop23,peters-forte22}, affine and
+failures~\cite{barwell-concur22,barwell-ecoop23,peters-forte22,viering-oopsla21,lebrun-esop23,hou-ecoop24}, affine and
 exceptional sessions~\cite{fowler-popl19,lagaillardie-ecoop22}, and
 protocol-induced recovery~\cite{neykova-cc17} model participants that stop;
 misselection is a participant that continues, wrongly, and none classify the
@@ -1279,6 +1308,24 @@ consequence or track a goal. Asserted and refined global
 types~\cite{bocchi-concur10,zhou-oopsla20,gheri-ecoop22,vassor-ecoop24} supply
 our syntax; monitoring~\cite{bocchi-forte13} and blame~\cite{jia-popl16} treat
 guard violation as an alarm rather than an object of analysis.
+
+\subparagraph*{Budgeted deviation, elsewhere.} A budget on how many times an
+assumption may be violated is not ours. Reactive synthesis has
+$(k,b)$-resilience --- tolerate at most $k$ environment-assumption violations,
+decided on a product with a decrementing counter~\cite{ehlers-hscc14} --- and
+$k$-robustness for specifications~\cite{bloem-acta14}. Robustification computes
+the largest deviation set a design survives~\cite{zhang-fse20,meiragoes-cav23},
+which is our $\kstar$ in set currency, and planning has possibilistic
+$K$-resilience~\cite{aineto-ecai23}. Closest in fault model,
+\emph{trembling-hand} \textsc{ltl}$_f$ planning~\cite{yu-ijcai24} assumes an
+agent whose action-selection mechanism is imprecise. We take the mechanism from
+this literature and claim nothing about it. What is new is the carrier and what
+the budget buys: the deviation is a \emph{typed participant's own branch
+selection against an asserted guard}, the budget is spent inside a session
+type, and Theorem~\ref{thm:bridge} carries it through subject reduction to
+programs, where it distributes over roles (Theorem~\ref{thm:distribute}). None
+of the works above types a program; none carries a quantity a participant
+spends across a reduction relation.
 
 \subparagraph*{Bounded faults and dead ends.} Fault-tolerant
 planning~\cite{domshlak-icaps13,aineto-ecai23} bounds action failures against
@@ -1347,7 +1394,7 @@ structurally unreachable.}
 \bibitem{vassor-ecoop24} M.~Vassor, N.~Yoshida. Refinements for multiparty message-passing protocols: specification-agnostic theory and implementation. \emph{ECOOP}, 2024.
 \bibitem{zhou-oopsla20} F.~Zhou, F.~Ferreira, R.~Hu, R.~Neykova, N.~Yoshida. Statically verified refinements for multiparty protocols. \emph{OOPSLA}, 2020.
 \bibitem{jia-popl16} L.~Jia, H.~Gommerstadt, F.~Pfenning. Monitors and blame assignment for higher-order session types. \emph{POPL}, 2016.
-\bibitem{barwell-concur22} A.~D.~Barwell, P.~Hou, N.~Yoshida, F.~Zhou. Generalised multiparty session types with crash-stop failures. \emph{CONCUR}, 2022; \emph{LMCS}, 2025.
+\bibitem{barwell-concur22} A.~D.~Barwell, A.~Scalas, N.~Yoshida, F.~Zhou. Generalised multiparty session types with crash-stop failures. \emph{CONCUR}, 2022; \emph{LMCS}, 2025.
 \bibitem{barwell-ecoop23} A.~D.~Barwell, P.~Hou, N.~Yoshida, F.~Zhou. Designing asynchronous multiparty protocols with crash-stop failures. \emph{ECOOP}, 2023 (Distinguished Paper).
 \bibitem{peters-forte22} K.~Peters, U.~Nestmann, C.~Wagner. Fault-tolerant multiparty session types. \emph{FORTE}, 2022.
 \bibitem{fowler-popl19} S.~Fowler, S.~Lindley, J.~G.~Morris, S.~Decova. Exceptional asynchronous session types. \emph{POPL}, 2019.
@@ -1356,8 +1403,7 @@ structurally unreachable.}
 \bibitem{lange-yoshida-cav19} J.~Lange, N.~Yoshida. Verifying asynchronous interactions via communicating session automata. \emph{CAV}, 2019.
 \bibitem{clarkson-schneider} M.~R.~Clarkson, F.~B.~Schneider. Hyperproperties. \emph{J.\ Computer Security} 18(6), 2010.
 \bibitem{jongmans-ecoop23} S.-S.~Jongmans, F.~Ferreira. Synthetic behavioural typing: sound, regular multiparty sessions via implicit local types. \emph{ECOOP}, 2023.
-\bibitem{castro-popl26} D.~Castro-Perez, F.~Ferreira, S.-S.~Jongmans. \emph{POPL}, 2026. \textsf{[title to verify]}
-\bibitem{synthetic-pacmpl26} A synthetic reconstruction of multiparty session types. \emph{PACMPL}, 2026. \textsf{[authors to verify]}
+\bibitem{castro-popl26} D.~Castro-Perez, F.~Ferreira, S.-S.~Jongmans. A synthetic reconstruction of multiparty session types. \emph{PACMPL} 10(POPL):50, 2026.
 \bibitem{tirore-ecoop25} D.~Tirore, J.~Bengtson, M.~Carbone. Multiparty asynchronous session types: a mechanised proof of subject reduction. \emph{ECOOP}, 2025.
 \bibitem{nest-ecoop26} Larsen, Scalas, Amir, Jacobs, Wagemaker, Foster. NEST: network enforced session types. \emph{ECOOP}, 2026.
 \bibitem{naik-palsberg} M.~Naik, J.~Palsberg. A type system equivalent to a model checker. \emph{ESOP} 2005; \emph{TOPLAS} 30(5), 2008.
@@ -1382,6 +1428,16 @@ structurally unreachable.}
 \bibitem{alshiekh-aaai18} M.~Alshiekh, R.~Bloem, R.~Ehlers, B.~K\"onighofer, S.~Niekum, U.~Topcu. Safe reinforcement learning via shielding. \emph{AAAI}, 2018.
 \bibitem{yin-fidelity} Z.~Yin. Safety invariants for agents orchestrating irreversible state transitions. arXiv:2608.00783, 2026.
 \bibitem{metere-skills} A.~Metere. Methods for formal verification of agent skills: three layers toward a mechanically checkable capability-containment proof. arXiv:2605.23951, 2026.
+\bibitem{ehlers-hscc14} R.~Ehlers, U.~Topcu. Resilience to intermittent assumption violations in reactive synthesis. \emph{HSCC}, 2014.
+\bibitem{bloem-acta14} R.~Bloem, K.~Chatterjee, K.~Greimel, T.~A.~Henzinger, B.~Jobstmann. Synthesizing robust systems. \emph{FMCAD} 2009; \emph{Acta Informatica} 51, 2014.
+\bibitem{zhang-fse20} C.~Zhang, D.~Garlan, E.~Kang. A behavioral notion of robustness for software systems. \emph{FSE}, 2020.
+\bibitem{meiragoes-cav23} R.~Meira-G\'oes, I.~Dardik, E.~Kang, S.~Lafortune, S.~Tripakis. Safe environmental envelopes of discrete systems. \emph{CAV}, 2023.
+\bibitem{yu-ijcai24} P.~Yu, S.~Zhu, G.~De~Giacomo, M.~Kwiatkowska, M.~Y.~Vardi. The trembling-hand problem for LTLf planning. \emph{IJCAI}, 2024.
+\bibitem{viering-oopsla21} M.~Viering, R.~Hu, P.~Eugster, L.~Ziarek. A multiparty session typing discipline for fault-tolerant event-driven distributed programming. \emph{PACMPL} 5(OOPSLA), 2021.
+\bibitem{lebrun-esop23} M.~A.~Le~Brun, O.~Dardha. MAGpi: multiparty asynchronous global protocols with imprecision. \emph{ESOP}, 2023. \textsf{[title to verify]}
+\bibitem{hou-ecoop24} P.~Hou, N.~Lagaillardie, N.~Yoshida. Fearless asynchronous communications with timed multiparty session protocols. \emph{ECOOP}, 2024.
+\bibitem{gheri-oopsla23} L.~Gheri, N.~Yoshida. Hybrid multiparty session types: compositionality for protocol specifications. \emph{PACMPL} 7(OOPSLA), 2023.
+\bibitem{barbanera-jlamp21} F.~Barbanera, I.~Lanese, E.~Tuosto. Composing communicating systems, synchronously. \emph{JLAMP}, 2021.
 \bibitem{basu-bultan} S.~Basu, T.~Bultan. Automated choreography repair. \emph{FASE}, 2016.
 \bibitem{lanese-wwv13} I.~Lanese, F.~Montesi, G.~Zavattaro. Amending choreographies. \emph{WWV}, 2013.
 \bibitem{trac-facct26} P.~A.~Alamdari, T.~Q.~Klassen, S.~A.~McIlraith. Formal methods meet LLMs: auditing, monitoring, and intervention for compliance of advanced AI systems. \emph{FAccT}, 2026.
