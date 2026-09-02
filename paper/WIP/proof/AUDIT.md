@@ -113,3 +113,43 @@ words, WF-Loop should be split into WF-Loop-Taint and WF-Loop-Grade.
 game-theoretic/probabilistic and out of scope for this development; they are
 paper-proof targets. Note that thm:graded depends on thm:isr and thm:noninterf,
 so it inherits Findings 1 and 2 until those are repaired.
+
+
+---
+
+# Developments added after the audit (the reframed design)
+
+All axiom-free; `make` in this directory runs every `Print Assumptions` harness.
+
+## `Severity.v` — the severity discipline, finite fragment (18 results)
+
+| Result | Coq |
+|---|---|
+| T-Choice-Safe sound / complete / exact | `TC_sound`, `TC_complete`, `TC_exact` |
+| Severity is a partition | `severity_disjoint`, `severity_exhaustive` |
+| Catastrophe ⟺ untypability | `catastrophe_implies_untypable`, `untypable_implies_catastrophe` |
+| Budget downward-closed | `tolerance_downward_closed` |
+| Reachability monotone in Γ ⇒ tolerance anti-monotone | `reach_monotone_in_ctx`, `tolerance_antitone_in_ctx` |
+| Narrowing repair sound | `repair_narrow_sound` |
+| Modular sequential composition, interface form | `TC_seq`, `TC_seq_interface`, `ends_budget_le` |
+| Worked instance | `Gbad_is_0_tolerant`, `Gbad_not_1_tolerant`, `Ggood_is_k_tolerant`, `Ggood_by_narrowing` |
+
+## `Bridge.v` — from protocols to PROGRAMS (4 results)
+
+| Result | Coq |
+|---|---|
+| One instrumented head step preserves typing and debits the budget exactly | `bridge_step` |
+| A typed session of a k-tolerant protocol is hazard-free on every run of cost ≤ k | `bridge_run` |
+| Budgets distribute over participants (per-role allowances summing to ≤ k) | `budget_distributes`, `total_eq_sum_percost` |
+
+Scope: head-move semantics of the finite fragment, matching the base
+`DirectTyping.v`.
+
+## `Regular.v` — regular protocols (8 results)
+
+| Result | Coq |
+|---|---|
+| Budgeted reachability ⟺ reachability in the product Node × World × {0..k} | `product_correspondence` |
+| Budget is a monotone counter; a path with d misselection edges has d ≤ b (loop re-entry bounded) | `budget_never_increases`, `dev_edges_bounded`, `dev_edges_exact` |
+| Reachability witnessed by a path no longer than the reachable-state count (pigeonhole) | `reach_bounded_path` |
+| Executable decision procedure, sound and complete | `decide_sound`, `decide_complete`, `decide_reachb_correct` |
