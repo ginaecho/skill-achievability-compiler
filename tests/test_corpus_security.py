@@ -114,4 +114,4 @@ def test_every_corpus_file_matches_its_recorded_hash():
             assert hashlib.sha256(blob).hexdigest() == entry["sha256"], entry["path"]
             assert len(blob) == entry["bytes"], entry["path"]
             total += 1
-    assert total >= 17, f"only {total} corpus files checked"
+    assert total == 162, f"{total} corpus files checked, expected all 162"

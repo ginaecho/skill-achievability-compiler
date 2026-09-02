@@ -11,7 +11,7 @@ all: results check
 # --- results that spend no model tokens ------------------------------------
 results:
 	$(PY) scripts/severity_eval.py
-	$(PY) scripts/differential_test.py -n 150 --seed 20260902 --kmax 2 --quiet
+	$(PY) scripts/differential_test.py -n 150 --seed 20260902 --kmax 2 --quiet --reset
 	$(PY) scripts/differential_test.py -n 350 --seed 4242 --kmax 2 --quiet
 	$(PY) scripts/grep_baseline.py
 	$(PY) scripts/scan_skills.py --json --out paper/WIP/results/security_scan.json

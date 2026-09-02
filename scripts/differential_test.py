@@ -93,6 +93,10 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=20260902)
     ap.add_argument("--kmax", type=int, default=3)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--reset", action="store_true",
+                    help="start a fresh campaign: do not accumulate onto the "
+                         "previous differential.json (the cumulative counter "
+                         "otherwise mixes campaigns and is easy to misread)")
     args = ap.parse_args()
     if not kernel_available():
         print("kernel binary not built: run `make binary` in paper/WIP/proof", file=sys.stderr)
@@ -119,7 +123,9 @@ def main() -> int:
     res = {"generated": args.n, "compared": agree + disagree, "agree": agree, "disagree": disagree,
            "outside_fragment": skipped, "kmax": args.kmax, "seed": args.seed,
            "seconds": round(time.time() - t0, 1), "failures": fails[:20]}
-    prev = json.load(open(OUT / "differential.json")) if (OUT / "differential.json").exists() else {}
+    prev = ({} if args.reset else
+            (json.load(open(OUT / "differential.json"))
+             if (OUT / "differential.json").exists() else {}))
     pc = prev.get("cumulative", {})
     res["cumulative"] = {
         "compared": res["compared"] + pc.get("compared", prev.get("compared", 0)),

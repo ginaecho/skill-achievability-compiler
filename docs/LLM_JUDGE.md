@@ -1,5 +1,13 @@
 # Baseline: why not just ask a language model?
 
+**Status: not run.** Both judge rows below are `scored: 0` -- the model calls
+failed with authentication errors and were never retried, so this baseline
+produced no data and the paper does not cite it. The artifact is kept because
+the harness and the ground-truth table are real and re-runnable
+(`python3 scripts/llm_judge_baseline.py`); the comparison the file was built
+for is future work, and the paper's only baseline is the token-free one in
+`scripts/grep_baseline.py`.
+
 24 configurations whose answer is known independently of the checker: 8 by construction (the authored specification pairs) and 16 by observation (settled by verified agent runs at realistic input size).
 
 | decider | scored | correct | accuracy | says achievable, is not | says impossible, is not | tokens | cost |
