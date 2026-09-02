@@ -303,6 +303,39 @@ def cmd_eval(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_severity(args) -> int:
+    """Severity of every wrong choice, and the tolerance degree k*."""
+    import json as _json
+    from .severity import analyze
+    from .pack import Pack
+    path = args.pack
+    if path.endswith(".md"):
+        from .profiles import load_profile
+        from .frontend.markdown import compile_file
+        pack = compile_file(path, load_profile(args.profile)).pack
+    else:
+        pack = _json.load(open(path))
+    rep = analyze(pack, kmax=args.kmax)
+    d = rep.to_dict()
+    if args.json:
+        print(_json.dumps(d, indent=1))
+        return 0
+    ks = f">={args.kmax + 1}" if rep.tolerance_degree is None else str(rep.tolerance_degree)
+    print(f"{rep.pack}: tolerance degree k* = {ks}   "
+          f"(choice nodes {rep.choice_nodes}, branches {rep.branches}, "
+          f"irreversible {sorted(rep.irreversible_caps) or 'none'})")
+    for v in rep.verdicts:
+        tag = "intended" if v.intended else "misselection"
+        extra = f"  PNR={v.pnr_action}" if v.pnr_action else ""
+        print(f"  {v.node:40s} {v.branch:22s} {v.severity:13s} ({tag}){extra}")
+    if rep.pnr_action:
+        print(f"  first catastrophe within budget {(rep.tolerance_degree or 0) + 1}: "
+              f"{' > '.join('/'.join(map(str, x)) for x in rep.hazard_witness)}")
+    if rep.narrowing:
+        print("  repair (narrow): remove " + ", ".join(f"{b} at {n}" for n, b in rep.narrowing))
+    return 0 if rep.tolerance_degree is None else 3
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -391,6 +424,13 @@ def main(argv: list[str] | None = None) -> int:
 
     sp = sub.add_parser("eval", help="run the corpus evaluation")
     sp.set_defaults(fn=cmd_eval)
+
+    sp = sub.add_parser("severity", help="severity of every wrong choice and the tolerance degree k*")
+    sp.add_argument("pack", help="pack JSON or SKILL.md")
+    sp.add_argument("--kmax", type=int, default=4)
+    sp.add_argument("--profile", default="claude-ai")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(fn=cmd_severity)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)

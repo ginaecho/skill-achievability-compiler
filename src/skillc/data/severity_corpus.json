@@ -1,0 +1,1378 @@
+[
+ {
+  "id": "booking_fastpath",
+  "note": "Paper's running example. fast skips verification; purchase spends funds irreversibly. Expect k*=0, PNR=purchase.",
+  "pack": {
+   "name": "booking_fastpath",
+   "roles": [
+    "p",
+    "q"
+   ],
+   "capabilities": {
+    "verify": {
+     "owner": "q",
+     "add": [
+      "verified"
+     ]
+    },
+    "purchase": {
+     "owner": "q",
+     "add": [
+      "booked"
+     ],
+     "del": [
+      "funds"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "p",
+      "branches": {
+       "safe": [
+        {
+         "msg": {
+          "from": "p",
+          "to": "q",
+          "label": "safe"
+         }
+        },
+        {
+         "act": {
+          "cap": "verify",
+          "by": "q"
+         }
+        },
+        {
+         "act": {
+          "cap": "purchase",
+          "by": "q"
+         }
+        }
+       ],
+       "fast": [
+        {
+         "msg": {
+          "from": "p",
+          "to": "q",
+          "label": "fast"
+         }
+        },
+        {
+         "act": {
+          "cap": "purchase",
+          "by": "q"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "booked",
+     "verified"
+    ]
+   },
+   "init_true": [
+    "funds"
+   ]
+  }
+ },
+ {
+  "id": "booking_reordered",
+  "note": "Repair 4 (reorder): validation moved before the choice, so no branch can purchase unverified. Expect tolerant at every k.",
+  "pack": {
+   "name": "booking_reordered",
+   "roles": [
+    "p",
+    "q"
+   ],
+   "capabilities": {
+    "verify": {
+     "owner": "q",
+     "add": [
+      "verified"
+     ]
+    },
+    "purchase": {
+     "owner": "q",
+     "add": [
+      "booked"
+     ],
+     "del": [
+      "funds"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "act": {
+      "cap": "verify",
+      "by": "q"
+     }
+    },
+    {
+     "choice": {
+      "by": "p",
+      "branches": {
+       "safe": [
+        {
+         "msg": {
+          "from": "p",
+          "to": "q",
+          "label": "safe"
+         }
+        },
+        {
+         "act": {
+          "cap": "purchase",
+          "by": "q"
+         }
+        }
+       ],
+       "fast": [
+        {
+         "msg": {
+          "from": "p",
+          "to": "q",
+          "label": "fast"
+         }
+        },
+        {
+         "act": {
+          "cap": "purchase",
+          "by": "q"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "booked",
+     "verified"
+    ]
+   },
+   "init_true": [
+    "funds"
+   ]
+  }
+ },
+ {
+  "id": "booking_narrowed",
+  "note": "Repair 3 (narrow): the fast branch removed. Expect tolerant at every k.",
+  "pack": {
+   "name": "booking_narrowed",
+   "roles": [
+    "p",
+    "q"
+   ],
+   "capabilities": {
+    "verify": {
+     "owner": "q",
+     "add": [
+      "verified"
+     ]
+    },
+    "purchase": {
+     "owner": "q",
+     "add": [
+      "booked"
+     ],
+     "del": [
+      "funds"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "p",
+      "branches": {
+       "safe": [
+        {
+         "msg": {
+          "from": "p",
+          "to": "q",
+          "label": "safe"
+         }
+        },
+        {
+         "act": {
+          "cap": "verify",
+          "by": "q"
+         }
+        },
+        {
+         "act": {
+          "cap": "purchase",
+          "by": "q"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "booked",
+     "verified"
+    ]
+   },
+   "init_true": [
+    "funds"
+   ]
+  }
+ },
+ {
+  "id": "migration_backup",
+  "note": "Database migration. Skipping the backup loses the goal; dropping the old table afterwards is irreversible. Catastrophe needs BOTH wrong choices: expect k*=1, PNR=drop_old.",
+  "pack": {
+   "name": "migration_backup",
+   "roles": [
+    "ops"
+   ],
+   "capabilities": {
+    "backup": {
+     "owner": "ops",
+     "add": [
+      "backup_exists"
+     ]
+    },
+    "migrate": {
+     "owner": "ops",
+     "add": [
+      "migrated"
+     ]
+    },
+    "drop_old": {
+     "owner": "ops",
+     "del": [
+      "old_data"
+     ],
+     "add": [
+      "cleaned"
+     ]
+    },
+    "verify_migration": {
+     "owner": "ops",
+     "pre": "migrated",
+     "add": [
+      "verified"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "ops",
+      "branches": {
+       "backup": [
+        {
+         "act": {
+          "cap": "backup",
+          "by": "ops"
+         }
+        }
+       ],
+       "skip_backup": []
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "migrate",
+      "by": "ops"
+     }
+    },
+    {
+     "choice": {
+      "by": "ops",
+      "branches": {
+       "drop_old": [
+        {
+         "act": {
+          "cap": "drop_old",
+          "by": "ops"
+         }
+        }
+       ],
+       "keep_old": []
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "verify_migration",
+      "by": "ops"
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "migrated",
+     "backup_exists",
+     "verified"
+    ]
+   },
+   "init_true": [
+    "old_data"
+   ]
+  }
+ },
+ {
+  "id": "email_campaign",
+  "note": "send is declared irreversible (an email cannot be unsent) though it models no delete-list. send_now loses review. Expect k*=0, PNR=send.",
+  "pack": {
+   "name": "email_campaign",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "draft": {
+     "owner": "agent",
+     "add": [
+      "drafted"
+     ]
+    },
+    "review": {
+     "owner": "agent",
+     "pre": "drafted",
+     "add": [
+      "reviewed"
+     ]
+    },
+    "send": {
+     "owner": "agent",
+     "pre": "drafted",
+     "add": [
+      "sent"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "act": {
+      "cap": "draft",
+      "by": "agent"
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "review_then_send": [
+        {
+         "act": {
+          "cap": "review",
+          "by": "agent"
+         }
+        },
+        {
+         "act": {
+          "cap": "send",
+          "by": "agent"
+         }
+        }
+       ],
+       "send_now": [
+        {
+         "act": {
+          "cap": "send",
+          "by": "agent"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "sent",
+     "reviewed"
+    ]
+   },
+   "irreversible": [
+    "send"
+   ]
+  }
+ },
+ {
+  "id": "email_campaign_guarded",
+  "note": "Repair 1 (guard): review inserted before the choice. Expect tolerant at every k.",
+  "pack": {
+   "name": "email_campaign_guarded",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "draft": {
+     "owner": "agent",
+     "add": [
+      "drafted"
+     ]
+    },
+    "review": {
+     "owner": "agent",
+     "pre": "drafted",
+     "add": [
+      "reviewed"
+     ]
+    },
+    "send": {
+     "owner": "agent",
+     "pre": "drafted",
+     "add": [
+      "sent"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "act": {
+      "cap": "draft",
+      "by": "agent"
+     }
+    },
+    {
+     "act": {
+      "cap": "review",
+      "by": "agent"
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "send_later": [
+        {
+         "act": {
+          "cap": "send",
+          "by": "agent"
+         }
+        }
+       ],
+       "send_now": [
+        {
+         "act": {
+          "cap": "send",
+          "by": "agent"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "sent",
+     "reviewed"
+    ]
+   },
+   "irreversible": [
+    "send"
+   ]
+  }
+ },
+ {
+  "id": "deploy_with_rollback",
+  "note": "deploy deletes old_version_live, but rollback re-establishes it, so deploy is NOT a point of no return. deploy_now loses the goal (no canary) but harms nothing. Expect tolerant at every k; the wrong branch is Futile.",
+  "pack": {
+   "name": "deploy_with_rollback",
+   "roles": [
+    "ops"
+   ],
+   "capabilities": {
+    "canary": {
+     "owner": "ops",
+     "add": [
+      "canary_ok"
+     ]
+    },
+    "deploy": {
+     "owner": "ops",
+     "add": [
+      "deployed"
+     ],
+     "del": [
+      "old_version_live"
+     ]
+    },
+    "rollback": {
+     "owner": "ops",
+     "pre": "deployed",
+     "add": [
+      "old_version_live"
+     ],
+     "del": [
+      "deployed"
+     ]
+    },
+    "smoke_test": {
+     "owner": "ops",
+     "pre": "deployed",
+     "add": [
+      "tested"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "ops",
+      "branches": {
+       "canary_first": [
+        {
+         "act": {
+          "cap": "canary",
+          "by": "ops"
+         }
+        },
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ],
+       "deploy_now": [
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "smoke_test",
+      "by": "ops"
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "deployed",
+     "canary_ok",
+     "tested"
+    ]
+   },
+   "init_true": [
+    "old_version_live"
+   ]
+  }
+ },
+ {
+  "id": "deploy_no_rollback",
+  "note": "Same protocol WITHOUT rollback in Gamma: now deploy permanently deletes old_version_live. Expect k*=0, PNR=deploy. Shows the derived hazard depends on Gamma's establishers.",
+  "pack": {
+   "name": "deploy_no_rollback",
+   "roles": [
+    "ops"
+   ],
+   "capabilities": {
+    "canary": {
+     "owner": "ops",
+     "add": [
+      "canary_ok"
+     ]
+    },
+    "deploy": {
+     "owner": "ops",
+     "add": [
+      "deployed"
+     ],
+     "del": [
+      "old_version_live"
+     ]
+    },
+    "smoke_test": {
+     "owner": "ops",
+     "pre": "deployed",
+     "add": [
+      "tested"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "ops",
+      "branches": {
+       "canary_first": [
+        {
+         "act": {
+          "cap": "canary",
+          "by": "ops"
+         }
+        },
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ],
+       "deploy_now": [
+        {
+         "act": {
+          "cap": "deploy",
+          "by": "ops"
+         }
+        }
+       ]
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "smoke_test",
+      "by": "ops"
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "deployed",
+     "canary_ok",
+     "tested"
+    ]
+   },
+   "init_true": [
+    "old_version_live"
+   ]
+  }
+ },
+ {
+  "id": "file_cleanup",
+  "note": "delete_now destroys files before archiving. Expect k*=0, PNR=delete.",
+  "pack": {
+   "name": "file_cleanup",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "archive": {
+     "owner": "agent",
+     "add": [
+      "archived"
+     ]
+    },
+    "delete": {
+     "owner": "agent",
+     "del": [
+      "files_exist"
+     ],
+     "add": [
+      "cleaned"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "archive_then_delete": [
+        {
+         "act": {
+          "cap": "archive",
+          "by": "agent"
+         }
+        },
+        {
+         "act": {
+          "cap": "delete",
+          "by": "agent"
+         }
+        }
+       ],
+       "delete_now": [
+        {
+         "act": {
+          "cap": "delete",
+          "by": "agent"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "archived",
+     "cleaned"
+    ]
+   },
+   "init_true": [
+    "files_exist"
+   ]
+  }
+ },
+ {
+  "id": "order_fulfilment",
+  "note": "The bank's approve/decline is an environment move (external, demonic). ship is irreversible. ship_then_charge ships before knowing the answer: on decline the order is shipped AND refunded -- the second goal disjunct requires not-shipped, so neither holds. Expect k*=0, PNR=ship. charge_then_ship is safe because charge is reversible via refund.",
+  "pack": {
+   "name": "order_fulfilment",
+   "roles": [
+    "agent",
+    "bank"
+   ],
+   "capabilities": {
+    "reserve": {
+     "owner": "agent",
+     "add": [
+      "reserved"
+     ]
+    },
+    "charge": {
+     "owner": "agent",
+     "add": [
+      "charged"
+     ],
+     "del": [
+      "unpaid"
+     ]
+    },
+    "refund": {
+     "owner": "agent",
+     "pre": "charged",
+     "add": [
+      "unpaid"
+     ],
+     "del": [
+      "charged"
+     ]
+    },
+    "ship": {
+     "owner": "agent",
+     "pre": "reserved",
+     "add": [
+      "shipped"
+     ]
+    },
+    "cancel": {
+     "owner": "agent",
+     "add": [
+      "cancelled"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "act": {
+      "cap": "reserve",
+      "by": "agent"
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "charge_then_ship": [
+        {
+         "act": {
+          "cap": "charge",
+          "by": "agent"
+         }
+        },
+        {
+         "choice": {
+          "by": "bank",
+          "branches": {
+           "approved": [
+            {
+             "act": {
+              "cap": "ship",
+              "by": "agent"
+             }
+            }
+           ],
+           "declined": [
+            {
+             "act": {
+              "cap": "refund",
+              "by": "agent"
+             }
+            },
+            {
+             "act": {
+              "cap": "cancel",
+              "by": "agent"
+             }
+            }
+           ]
+          },
+          "external": true
+         }
+        }
+       ],
+       "ship_then_charge": [
+        {
+         "act": {
+          "cap": "ship",
+          "by": "agent"
+         }
+        },
+        {
+         "act": {
+          "cap": "charge",
+          "by": "agent"
+         }
+        },
+        {
+         "choice": {
+          "by": "bank",
+          "branches": {
+           "approved": [],
+           "declined": [
+            {
+             "act": {
+              "cap": "refund",
+              "by": "agent"
+             }
+            },
+            {
+             "act": {
+              "cap": "cancel",
+              "by": "agent"
+             }
+            }
+           ]
+          },
+          "external": true
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "or": [
+     {
+      "and": [
+       "shipped",
+       "charged"
+      ]
+     },
+     {
+      "and": [
+       "cancelled",
+       "unpaid",
+       {
+        "not": "shipped"
+       }
+      ]
+     }
+    ]
+   },
+   "init_true": [
+    "unpaid"
+   ],
+   "irreversible": [
+    "ship"
+   ]
+  }
+ },
+ {
+  "id": "retry_then_purge",
+  "note": "A retry loop (regular protocol). retry keeps the goal reachable; give_up_and_purge destroys records with the goal lost. Expect k*=0, PNR=purge; exercises Regular.v's loop/budget interaction.",
+  "pack": {
+   "name": "retry_then_purge",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "attempt": {
+     "owner": "agent",
+     "add": [
+      "attempted"
+     ]
+    },
+    "record_ok": {
+     "owner": "agent",
+     "pre": "attempted",
+     "add": [
+      "done"
+     ]
+    },
+    "purge": {
+     "owner": "agent",
+     "del": [
+      "records"
+     ],
+     "add": [
+      "purged"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "rec": {
+      "name": "L",
+      "body": [
+       {
+        "act": {
+         "cap": "attempt",
+         "by": "agent"
+        }
+       },
+       {
+        "choice": {
+         "by": "agent",
+         "branches": {
+          "ok": [
+           {
+            "act": {
+             "cap": "record_ok",
+             "by": "agent"
+            }
+           }
+          ],
+          "fail": [
+           {
+            "choice": {
+             "by": "agent",
+             "branches": {
+              "retry": [
+               {
+                "continue": "L"
+               }
+              ],
+              "give_up_and_purge": [
+               {
+                "act": {
+                 "cap": "purge",
+                 "by": "agent"
+                }
+               }
+              ]
+             }
+            }
+           }
+          ]
+         }
+        }
+       }
+      ]
+     }
+    }
+   ],
+   "goal": "done",
+   "init_true": [
+    "records"
+   ]
+  }
+ },
+ {
+  "id": "shipping_detour",
+  "note": "Explicit guards: express is intended only when urgent (false here). Choosing express anyway still delivers: a BENIGN misselection, a detour. Expect tolerant at every k, one Benign misselection.",
+  "pack": {
+   "name": "shipping_detour",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "pack": {
+     "owner": "agent",
+     "add": [
+      "packed"
+     ]
+    },
+    "express": {
+     "owner": "agent",
+     "pre": "packed",
+     "add": [
+      "delivered",
+      "express_used"
+     ]
+    },
+    "standard": {
+     "owner": "agent",
+     "pre": "packed",
+     "add": [
+      "delivered"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "act": {
+      "cap": "pack",
+      "by": "agent"
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "express": [
+        {
+         "act": {
+          "cap": "express",
+          "by": "agent"
+         }
+        }
+       ],
+       "standard": [
+        {
+         "act": {
+          "cap": "standard",
+          "by": "agent"
+         }
+        }
+       ]
+      },
+      "guards": {
+       "express": "urgent",
+       "standard": {
+        "not": "urgent"
+       }
+      }
+     }
+    }
+   ],
+   "goal": "delivered"
+  }
+ },
+ {
+  "id": "claim_eligible",
+  "note": "Insurance claim, claimant eligible: refund is intended; deny loses the goal but is reversible in effect. Expect tolerant at every k, the wrong branch Futile.",
+  "pack": {
+   "name": "claim_eligible",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "assess": {
+     "owner": "agent",
+     "add": [
+      "assessed"
+     ]
+    },
+    "refund": {
+     "owner": "agent",
+     "pre": "assessed",
+     "add": [
+      "refunded"
+     ],
+     "del": [
+      "funds_held"
+     ]
+    },
+    "deny": {
+     "owner": "agent",
+     "pre": "assessed",
+     "add": [
+      "denied"
+     ]
+    },
+    "close": {
+     "owner": "agent",
+     "add": [
+      "closed"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "act": {
+      "cap": "assess",
+      "by": "agent"
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "refund": [
+        {
+         "act": {
+          "cap": "refund",
+          "by": "agent"
+         }
+        }
+       ],
+       "deny": [
+        {
+         "act": {
+          "cap": "deny",
+          "by": "agent"
+         }
+        }
+       ]
+      },
+      "guards": {
+       "refund": "eligible",
+       "deny": {
+        "not": "eligible"
+       }
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "close",
+      "by": "agent"
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "closed",
+     {
+      "or": [
+       {
+        "and": [
+         "eligible",
+         "refunded"
+        ]
+       },
+       {
+        "and": [
+         {
+          "not": "eligible"
+         },
+         "denied"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "init_true": [
+    "funds_held",
+    "eligible"
+   ]
+  }
+ },
+ {
+  "id": "claim_ineligible",
+  "note": "SAME protocol, claimant NOT eligible: deny is intended; refund pays out irreversibly on an ineligible claim. Expect k*=0, PNR=refund. Severity is a property of node AND world.",
+  "pack": {
+   "name": "claim_ineligible",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "assess": {
+     "owner": "agent",
+     "add": [
+      "assessed"
+     ]
+    },
+    "refund": {
+     "owner": "agent",
+     "pre": "assessed",
+     "add": [
+      "refunded"
+     ],
+     "del": [
+      "funds_held"
+     ]
+    },
+    "deny": {
+     "owner": "agent",
+     "pre": "assessed",
+     "add": [
+      "denied"
+     ]
+    },
+    "close": {
+     "owner": "agent",
+     "add": [
+      "closed"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "act": {
+      "cap": "assess",
+      "by": "agent"
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "refund": [
+        {
+         "act": {
+          "cap": "refund",
+          "by": "agent"
+         }
+        }
+       ],
+       "deny": [
+        {
+         "act": {
+          "cap": "deny",
+          "by": "agent"
+         }
+        }
+       ]
+      },
+      "guards": {
+       "refund": "eligible",
+       "deny": {
+        "not": "eligible"
+       }
+      }
+     }
+    },
+    {
+     "act": {
+      "cap": "close",
+      "by": "agent"
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "closed",
+     {
+      "or": [
+       {
+        "and": [
+         "eligible",
+         "refunded"
+        ]
+       },
+       {
+        "and": [
+         {
+          "not": "eligible"
+         },
+         "denied"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   "init_true": [
+    "funds_held"
+   ]
+  }
+ },
+ {
+  "id": "staged_commit",
+  "note": "Two preparation stages then an irreversible commit. Skipping a stage loses the goal; committing afterwards is the catastrophe. Expect k*=1, PNR=commit.",
+  "pack": {
+   "name": "staged_commit",
+   "roles": [
+    "agent"
+   ],
+   "capabilities": {
+    "prep_a": {
+     "owner": "agent",
+     "add": [
+      "a_done"
+     ]
+    },
+    "prep_b": {
+     "owner": "agent",
+     "add": [
+      "b_done"
+     ]
+    },
+    "commit": {
+     "owner": "agent",
+     "add": [
+      "committed"
+     ],
+     "del": [
+      "uncommitted"
+     ]
+    },
+    "abort": {
+     "owner": "agent",
+     "add": [
+      "aborted"
+     ]
+    }
+   },
+   "protocol": [
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "a_ok": [
+        {
+         "act": {
+          "cap": "prep_a",
+          "by": "agent"
+         }
+        }
+       ],
+       "a_skip": []
+      }
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "b_ok": [
+        {
+         "act": {
+          "cap": "prep_b",
+          "by": "agent"
+         }
+        }
+       ],
+       "b_skip": []
+      }
+     }
+    },
+    {
+     "choice": {
+      "by": "agent",
+      "branches": {
+       "commit": [
+        {
+         "act": {
+          "cap": "commit",
+          "by": "agent"
+         }
+        }
+       ],
+       "abort": [
+        {
+         "act": {
+          "cap": "abort",
+          "by": "agent"
+         }
+        }
+       ]
+      }
+     }
+    }
+   ],
+   "goal": {
+    "and": [
+     "a_done",
+     "b_done",
+     "committed"
+    ]
+   },
+   "init_true": [
+    "uncommitted"
+   ]
+  }
+ }
+]
