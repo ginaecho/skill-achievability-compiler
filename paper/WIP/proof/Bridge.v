@@ -1087,13 +1087,16 @@ Definition Gmiss : Gt :=
   GComm 0 1 [ (10, (fun _ : World => True), GEnd) ;
               (11, (fun _ : World => False), GGoal Phi0 GEnd) ].
 
-Lemma Gmiss_safe : safeT E0 Haz0 0 Gmiss W0.
+Lemma Gmiss_safe : forall b, safeT E0 Haz0 b Gmiss W0.
 Proof.
-  apply ST_Comm; [ exact notHaz_W0 | | ].
+  intro b. apply ST_Comm; [ exact notHaz_W0 | | ].
   - intros l psi Gl Hin Hpsi. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
     + apply ST_End. exact notHaz_W0.
     + exfalso. exact Hpsi.
-  - intros l psi Gl Hin Hnpsi c Hb. discriminate Hb.
+  - intros l psi Gl Hin Hnpsi c Hb. destruct Hin as [Heq | [Heq | []]];
+      inversion Heq; subst.
+    + exfalso. apply Hnpsi. exact I.
+    + apply ST_Goal; [ exact notHaz_W0 | apply ST_End; exact notHaz_W0 ].
 Qed.
 
 Theorem Gmiss_uninhabited : forall s, ~ ctypes E0 Gmiss s W0.
