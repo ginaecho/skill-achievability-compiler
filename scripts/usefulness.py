@@ -107,6 +107,7 @@ def run_agent(task: dict, runtime: str, model: str, seed: int, max_turns: int, b
     except Exception:                                            # noqa: BLE001
         ok = False
     usage = data.get("modelUsage") or {}
+    served = sorted(usage)                       # model ids actually served
     toks = sum((u.get("inputTokens", 0) + u.get("outputTokens", 0) + u.get("cacheReadInputTokens", 0)
                 + u.get("cacheCreationInputTokens", 0)) for u in usage.values())
     outcome = ("success" if claim == "done" and ok else "silent_wrong" if claim == "done"
@@ -116,6 +117,7 @@ def run_agent(task: dict, runtime: str, model: str, seed: int, max_turns: int, b
             "runtime": runtime, "model": model, "seed": seed,
             "claim": claim, "verified": ok, "outcome": outcome, "turns": data.get("num_turns", 0),
             "cost_usd": round(data.get("total_cost_usd", 0.0) or 0.0, 5), "tokens": toks,
+            "served_models": served, "max_turns": max_turns, "budget_usd": budget,
             "seconds": round(elapsed, 1), "tail": text[-300:]}
 
 

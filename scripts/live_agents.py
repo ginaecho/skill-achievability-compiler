@@ -127,7 +127,7 @@ def ask(model: str, user: str) -> tuple[str, dict]:
             if d.get("is_error"):
                 raise RuntimeError(d.get("result"))
             return d["result"].strip(), {"cost": d.get("total_cost_usd"),
-                                          "models": list((d.get("modelUsage") or {}).keys())}
+                                          "models": sorted((d.get("modelUsage") or {}).keys())}
         except Exception as e:                       # noqa: BLE001
             err = e
             time.sleep(3 * (attempt + 1))
