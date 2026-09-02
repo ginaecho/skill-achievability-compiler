@@ -275,6 +275,38 @@ Proof.
     unfold edge, gsucc in He. simpl in He. exact He.
 Qed.
 
+(* ---- and the other direction fails too, so the two are incomparable --- *)
+(*  goal_reach spends misselection edges for free, so it can reach the    *)
+(*  goal where budgeted Phi-reachability cannot.  Together with           *)
+(*  goal_reach_strictly_stronger this says the kernel's goal notion is    *)
+(*  neither weaker nor stronger than the theory's: it demands completion  *)
+(*  and it ignores the budget.                                            *)
+Definition act_set0 : Act :=
+  {| a_pre := FTrue; a_add := [0]; a_del := []; a_haz := [] |}.
+
+Definition Gmiss : Gr Gd :=
+  RComm Gd 0 1 [(7, @nil Wd, RAct Gd 0 0 (REnd Gd))].
+
+Theorem goal_reach_ignores_the_budget :
+  goal_reach 1 [act_set0] (FAtom 0) Gmiss [false; false] /\
+  ~ reach_mu Wd Gd satg (Ek 1 [act_set0]) (fun v => satf (FAtom 0) v = true)
+              0 Gmiss [false; false].
+Proof.
+  split.
+  - exists [true; false]. split.
+    + eapply R_step with (RAct Gd 0 0 (REnd Gd), [false; false]).
+      * unfold edge, gsucc. simpl. auto.
+      * eapply R_step with (REnd Gd, [true; false]).
+        -- unfold edge, gsucc. simpl. auto.
+        -- apply R_refl.
+    + reflexivity.
+  - intro Hr.
+    inversion Hr as [ b n w Hh | b n w n' w' Hs Hr' | b n w n' w' Hs Hr' ]; subst.
+    + simpl in Hh. discriminate Hh.
+    + inversion Hs as [ | | p0 q0 brs0 l g Gl w0 Hin Hsat | ]; subst.
+      destruct Hin as [Heq | []]. inversion Heq; subst. exact Hsat.
+Qed.
+
 (* ================================================================= *)
 (*  Elaboration (trusted front end): the tool's protocol tree, with    *)
 (*  explicit or RATIONAL guards, becomes a guarded regular type whose  *)

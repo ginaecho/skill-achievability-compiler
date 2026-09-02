@@ -11,3 +11,8 @@ Print Assumptions Gguarded_inhabited.
 Print Assumptions Gguarded_bridge_nonvacuous.
 Print Assumptions SafePath_safe_anywhere.
 Print Assumptions congruence_is_not_degenerate.
+Print Assumptions E4_validates.
+Print Assumptions E4_no_halted.
+Print Assumptions E4_not_idle.
+Print Assumptions Gguarded_not_1_tolerant_in_E4.
+Print Assumptions reordered_not_tolerant_in_E4.
