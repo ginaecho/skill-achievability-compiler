@@ -23,3 +23,8 @@ Print Assumptions guard_absorbs_misselection_ab.
 Print Assumptions repair_guard_sound_ab.
 Print Assumptions repair_guard_exact_ab.
 Print Assumptions repair_reorder_pnr_ab.
+Print Assumptions safeT_congruence.
+Print Assumptions repair_narrow_anywhere.
+Print Assumptions repair_guard_anywhere.
+Print Assumptions repair_reorder_anywhere.
+Print Assumptions repair_compensate_anywhere.
