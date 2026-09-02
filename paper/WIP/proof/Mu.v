@@ -669,6 +669,31 @@ Proof.
     simpl. eapply msteps_trans; eauto.
 Qed.
 
+(* OPERATIONAL CHARACTERIZATION.  Budgeted reachability is not a private
+   notion of the type system: it says exactly that some RUN of the protocol
+   with at most b misselections ends in a hazard state.  This is what makes
+   the severity classes statements about executions rather than about two
+   predicates. *)
+Lemma reach_msteps : forall b G w,
+  reach_mu b G w -> exists c G' w', c <= b /\ msteps c G w G' w' /\ Haz w'.
+Proof.
+  intros b G w H. unfold reach_mu in H.
+  induction H as [ b G w Hh | b G w G1 w1 Hs H IH | b G w G1 w1 Hs H IH ].
+  - exists 0, G, w. repeat split; [ lia | apply MS_refl | exact Hh ].
+  - destruct IH as [c [G' [w' [Hle [Hm Hh]]]]].
+    exists c, G', w'. repeat split; [ lia | eapply MS_ok; eassumption | exact Hh ].
+  - destruct IH as [c [G' [w' [Hle [Hm Hh]]]]].
+    exists (S c), G', w'. repeat split; [ lia | eapply MS_dev; eassumption | exact Hh ].
+Qed.
+
+Theorem reach_mu_iff_run : forall b G w,
+  reach_mu b G w <-> (exists c G' w', c <= b /\ msteps c G w G' w' /\ Haz w').
+Proof.
+  intros b G w. split; [ apply reach_msteps | ].
+  intros [c [G' [w' [Hle [Hm Hh]]]]].
+  eapply reachb_mono; [ eapply msteps_reach; eassumption | exact Hle ].
+Qed.
+
 (* THE BRIDGE, recursive: a session typed against a protocol on which no
    hazard is reachable within budget b is hazard-free on every run whose
    misselection cost is at most b *)

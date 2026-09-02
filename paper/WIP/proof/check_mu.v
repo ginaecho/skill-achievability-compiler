@@ -9,3 +9,5 @@ Print Assumptions decide_mu_correct.
 Print Assumptions reach_embed.
 Print Assumptions TC_regular.
 Print Assumptions bridge_finite_via_mu.
+Print Assumptions reach_msteps.
+Print Assumptions reach_mu_iff_run.

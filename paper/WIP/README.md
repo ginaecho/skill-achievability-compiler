@@ -49,6 +49,10 @@ four TikZ figures, and the conventional structure.
   none is written: the goal survives the branch (rational choice).
 - **Severity**: `Benign` (goal still reachable), `Futile` (goal lost, nothing
   harmed), `Catastrophic` (hazard reachable). *Failure is not disaster.*
+  The classes are **ordered**: severity is monotone in the budget along
+  Futile < Benign < Catastrophic, so they are three consecutive intervals and
+  `k*` is a genuine threshold; and `Catastrophic` means an affordable **run**
+  reaches harm (`reach_mu_iff_run`), not merely that a predicate holds.
   Default hazard: an irreversible tool fires after the goal is lost.
 - **k-misselection tolerance**: no run with ≤ k misselections reaches a hazard.
   Possibilistic — no probabilities. The tolerance degree `k*` is the headline.
@@ -70,7 +74,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**80 results, every one axiom-free** (`Print Assumptions` harnesses).
+**91 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 ## Evaluation headline (`python3 scripts/severity_eval.py`)

@@ -214,6 +214,28 @@ Qed.
 End Reach.
 
 (* ================================================================= *)
+(*  Reachability is monotone in the budget: a bigger allowance can only  *)
+(*  reach more.  Both severity predicates are instances (P := Haz for    *)
+(*  the hazard, P := Phi for the goal), which is what makes the          *)
+(*  trichotomy ORDERED rather than an arbitrary carve-up.                *)
+(* ================================================================= *)
+Lemma reach_mono_budget :
+  forall (E : Ctx) (P : World -> Prop) b G W,
+    reach_haz E P b G W -> forall b', b <= b' -> reach_haz E P b' G W.
+Proof.
+  intros E P b G W H.
+  induction H as [ b G W Hh | b a p G W W' HE H IH | b phi G W H IH
+                 | b p q brs l psi Gl W Hin Hpsi H IH
+                 | b p q brs l psi Gl W Hin Hpsi H IH ]; intros b' Hle.
+  - apply RH_here. exact Hh.
+  - eapply RH_act; [ exact HE | apply IH; exact Hle ].
+  - apply RH_goal. apply IH. exact Hle.
+  - eapply RH_comm_ok; [ exact Hin | exact Hpsi | apply IH; exact Hle ].
+  - destruct b' as [ | b'' ]; [ lia | ].
+    eapply RH_comm_dev; [ exact Hin | exact Hpsi | apply IH; lia ].
+Qed.
+
+(* ================================================================= *)
 (*  The severity partition.  Given a goal predicate as well, every    *)
 (*  residual configuration falls in exactly one class.               *)
 (* ================================================================= *)
@@ -255,6 +277,124 @@ Theorem severity_exhaustive :
     Catastrophic b G W \/ Futile b G W \/ Benign b G W.
 Proof.
   intros b G W [Hh | Hh] [Hg | Hg]; unfold Catastrophic, Futile, Benign; tauto.
+Qed.
+
+(* ================================================================= *)
+(*  THE TRICHOTOMY IS ORDERED.  Put Futile < Benign < Catastrophic.    *)
+(*  As the budget grows the class of a residual moves UP this chain    *)
+(*  and never down: the goal, once reachable within a budget, stays    *)
+(*  reachable, and a hazard once reachable is absorbing.  So the three *)
+(*  classes are not an arbitrary carve-up of two predicates -- they    *)
+(*  are three INTERVALS of budgets, in this order, and the tolerance   *)
+(*  degree is the boundary of the last one.                            *)
+(* ================================================================= *)
+
+(* Catastrophic is upward closed: a hazard affordable at b is affordable
+   at any larger budget. *)
+Theorem catastrophic_upward :
+  forall b b' G W, b <= b' -> Catastrophic b G W -> Catastrophic b' G W.
+Proof. intros b b' G W Hle H. eapply reach_mono_budget; eassumption. Qed.
+
+(* Futile is downward closed. *)
+Theorem futile_downward :
+  forall b b' G W, b <= b' -> Futile b' G W -> Futile b G W.
+Proof.
+  intros b b' G W Hle [Hh Hg]. split; intro H; [ apply Hh | apply Hg ];
+    eapply reach_mono_budget; eassumption.
+Qed.
+
+(* Benign never degrades to Futile: more budget cannot lose the goal. *)
+Theorem benign_no_regress :
+  forall b b' G W, b <= b' -> Benign b G W -> ~ Futile b' G W.
+Proof.
+  intros b b' G W Hle [_ Hg] [_ Hng]. apply Hng.
+  eapply reach_mono_budget; eassumption.
+Qed.
+
+(* Raising the budget moves a Benign residual to Benign or Catastrophic,
+   and never anywhere else. *)
+(* Decidability of the two reachability questions is a hypothesis, exactly
+   as in severity_exhaustive: the QF-LIA fragment supplies it and the
+   development stays axiom-free. *)
+Theorem benign_step_up :
+  forall b b' G W, b <= b' ->
+    (reach_haz E Haz b' G W \/ ~ reach_haz E Haz b' G W) ->
+    Benign b G W -> Benign b' G W \/ Catastrophic b' G W.
+Proof.
+  intros b b' G W Hle Hdec [Hh Hg].
+  destruct Hdec as [Hc | Hc].
+  - right. exact Hc.
+  - left. split; [ exact Hc | eapply reach_mono_budget; eassumption ].
+Qed.
+
+(* Lowering the budget moves a Benign residual to Benign or Futile. *)
+Theorem benign_step_down :
+  forall b b' G W, b <= b' ->
+    (reach_haz E Phi b G W \/ ~ reach_haz E Phi b G W) ->
+    Benign b' G W -> Benign b G W \/ Futile b G W.
+Proof.
+  intros b b' G W Hle Hdec [Hh Hg].
+  assert (Hnh : ~ reach_haz E Haz b G W).
+  { intro H. apply Hh. eapply reach_mono_budget; eassumption. }
+  destruct Hdec as [Hp | Hp].
+  - left. split; assumption.
+  - right. split; assumption.
+Qed.
+
+(* THE INTERVAL THEOREM.  Rank Futile 0, Benign 1, Catastrophic 2; the
+   rank of a residual is a monotone non-decreasing function of its
+   budget.  Equivalently: the budgets at which a residual is Futile, then
+   Benign, then Catastrophic form three consecutive intervals of N in
+   that order (any of them possibly empty). *)
+Definition sev_rank (b : nat) (G : Gt) (W : World) (r : nat) : Prop :=
+  (r = 0 /\ Futile b G W) \/ (r = 1 /\ Benign b G W) \/ (r = 2 /\ Catastrophic b G W).
+
+Theorem severity_monotone_in_budget :
+  forall b b' G W r r', b <= b' ->
+    sev_rank b G W r -> sev_rank b' G W r' -> r <= r'.
+Proof.
+  intros b b' G W r r' Hle Hr Hr'.
+  destruct Hr as [[-> Hf] | [[-> Hb] | [-> Hc]]].
+  - lia.
+  - destruct Hr' as [[-> Hf'] | [[-> _] | [-> _]]]; [ | lia | lia ].
+    exfalso. eapply benign_no_regress; eassumption.
+  - destruct Hr' as [[-> Hf'] | [[-> Hb'] | [-> _]]]; [ | | lia ].
+    + exfalso. destruct Hf' as [Hnh _]. apply Hnh.
+      eapply reach_mono_budget; eassumption.
+    + exfalso. destruct Hb' as [Hnh _]. apply Hnh.
+      eapply reach_mono_budget; eassumption.
+Qed.
+
+(* The tolerance degree is a genuine THRESHOLD, not merely the first
+   budget the search happened to stop at: below it nothing catastrophic
+   is affordable, above it everything is. *)
+Theorem tolerance_degree_is_a_threshold :
+  forall k G W,
+    ~ Catastrophic k G W -> Catastrophic (S k) G W ->
+    (forall b, b <= k -> ~ Catastrophic b G W) /\
+    (forall b, S k <= b -> Catastrophic b G W).
+Proof.
+  intros k G W Hnk Hk. split.
+  - intros b Hb Hc. apply Hnk. eapply catastrophic_upward; eassumption.
+  - intros b Hb. eapply catastrophic_upward; eassumption.
+Qed.
+
+(* ... and the classes it separates are inhabited by different budgets of
+   the SAME residual, which is what makes the trichotomy informative: a
+   residual can be Futile at 0, Benign at 1 and Catastrophic at 2. *)
+Theorem severity_classes_are_separated :
+  forall k G W,
+    ~ Catastrophic k G W -> Catastrophic (S k) G W ->
+    forall b, b <= k ->
+      (reach_haz E Haz b G W \/ ~ reach_haz E Haz b G W) ->
+      (reach_haz E Phi b G W \/ ~ reach_haz E Phi b G W) ->
+      (Futile b G W \/ Benign b G W).
+Proof.
+  intros k G W Hnk Hk b Hb Hd1 Hd2.
+  destruct (severity_exhaustive b G W Hd1 Hd2) as [Hc | [Hf | Hbn]].
+  - exfalso. apply Hnk. eapply catastrophic_upward; [ exact Hb | exact Hc ].
+  - left. exact Hf.
+  - right. exact Hbn.
 Qed.
 
 (* T-F.  Catastrophe is EXACTLY the failure of the typing judgment.

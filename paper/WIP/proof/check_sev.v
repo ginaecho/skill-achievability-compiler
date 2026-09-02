@@ -20,3 +20,12 @@ Print Assumptions Ggood_by_narrowing.
 Print Assumptions TC_seq.
 Print Assumptions TC_seq_interface.
 Print Assumptions ends_budget_le.
+Print Assumptions reach_mono_budget.
+Print Assumptions catastrophic_upward.
+Print Assumptions futile_downward.
+Print Assumptions benign_no_regress.
+Print Assumptions benign_step_up.
+Print Assumptions benign_step_down.
+Print Assumptions severity_monotone_in_budget.
+Print Assumptions tolerance_degree_is_a_threshold.
+Print Assumptions severity_classes_are_separated.
