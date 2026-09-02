@@ -606,3 +606,54 @@ Proof.
   eapply (markers_are_met E0 Haz0 Ggoal MGood W0 tr Phi0 G' s' W' k);
     [ apply Ggoal_inhabited | apply Ggoal_is_k_tolerant | exact Hr | exact Ht ].
 Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  NARROWING IS ASYMMETRIC, AND THAT IS THE RESULT.                   *)
+(*                                                                     *)
+(*  The condition is closed under removing branches                    *)
+(*  (repair_narrow_sound): a protocol that offers fewer                *)
+(*  choices is no less safe.  Conformance is NOT, because T-Comm asks   *)
+(*  the sender to offer EXACTLY the protocol's label set.  So narrowing *)
+(*  is not a subtyping-style covariance of internal choice here: it is  *)
+(*  a rewrite of the contract, and the session has to be narrowed with  *)
+(*  it.  That is the honest reading of what the gate does -- it refuses *)
+(*  the removed label at run time, and a process that still offers it   *)
+(*  is no longer a description of what can happen.                      *)
+(* ----------------------------------------------------------------- *)
+Lemma ctypes_comm_labels : forall Ec p q brs s W sendb l P,
+  ctypes Ec (GComm p q brs) s W -> s p = POut q sendb -> In (l, P) sendb ->
+  exists psi Gl, In (l, psi, Gl) brs.
+Proof.
+  intros Ec p q brs s W sendb l P Hct Hsp Hin.
+  inversion Hct as [ | | | p0 q0 brs0 s0 W0 sendb0 recvb0
+                       Hpq Hsp0 Hsq Hne Hl1 Hl2 Hl3 Hcont ]; subst.
+  rewrite Hsp in Hsp0. inversion Hsp0; subst sendb0.
+  eapply Hl2. exact Hin.
+Qed.
+
+Theorem narrowing_breaks_conformance : forall W, ~ ctypes E0 Ggood MBad W.
+Proof.
+  intros W Hct.
+  assert (Hsp : MBad 0 = POut 1 [(10, PEnd); (11, PEnd)]) by apply sess2_0.
+  destruct (ctypes_comm_labels E0 0 1 _ MBad W _ 11 PEnd Hct Hsp
+              (or_intror (or_introl eq_refl))) as [psi [Gl Hin]].
+  destruct Hin as [Heq | []]. inversion Heq.
+Qed.
+
+(* the four facts together: narrowing the protocol preserves the
+   condition, breaks conformance, and narrowing the session with it
+   restores conformance *)
+Theorem narrowing_asymmetry : forall W,
+  (forall b, safeT E0 Haz0 b Gbad W -> safeT E0 Haz0 b Ggood W) /\
+  ctypes E0 Gbad MBad W /\
+  ~ ctypes E0 Ggood MBad W /\
+  ctypes E0 Ggood MGood W.
+Proof.
+  intro W. repeat split.
+  - intros b Hs. unfold Ggood, Gbad in *.
+    eapply repair_narrow_sound; [ | exact Hs ].
+    intros x Hx. destruct Hx as [Heq | []]. left. exact Heq.
+  - apply Gbad_inhabited.
+  - apply narrowing_breaks_conformance.
+  - apply Ggood_inhabited.
+Qed.

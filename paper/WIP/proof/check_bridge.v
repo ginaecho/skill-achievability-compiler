@@ -13,3 +13,6 @@ Print Assumptions marker_reached_is_not_futile.
 Print Assumptions Ggoal_is_k_tolerant.
 Print Assumptions Ggoal_inhabited.
 Print Assumptions Ggoal_marker_met.
+Print Assumptions ctypes_comm_labels.
+Print Assumptions narrowing_breaks_conformance.
+Print Assumptions narrowing_asymmetry.
