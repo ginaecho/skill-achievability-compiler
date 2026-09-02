@@ -19,3 +19,9 @@ Print Assumptions ctypes_mu_var.
 Print Assumptions unguarded_var_stuck.
 Print Assumptions unguarded_goal_stuck.
 Print Assumptions contractiveness_is_necessary.
+Print Assumptions TR_sound.
+Print Assumptions TR_complete.
+Print Assumptions TR_exact.
+Print Assumptions bridge_mu_safeR.
+Print Assumptions TC_is_TR.
+Print Assumptions decide_mu_judgment.
