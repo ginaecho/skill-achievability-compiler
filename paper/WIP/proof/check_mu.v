@@ -1,0 +1,11 @@
+Require Import Mu.
+Print Assumptions subst_comp.
+Print Assumptions unfold_close.
+Print Assumptions cands_closed.
+Print Assumptions reach_in_cands.
+Print Assumptions sim_step.
+Print Assumptions bridge_mu.
+Print Assumptions decide_mu_correct.
+Print Assumptions reach_embed.
+Print Assumptions TC_regular.
+Print Assumptions bridge_finite_via_mu.
