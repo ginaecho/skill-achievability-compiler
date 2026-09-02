@@ -68,3 +68,24 @@ def test_corpus_content_is_not_committed():
     tracked = subprocess.run(["git", "ls-files", "real-skills", "real-skills-ext"],
                              cwd=ROOT, capture_output=True, text=True).stdout.split()
     assert all(t.endswith(("PROVENANCE.json", "VERDICTS.md")) for t in tracked), tracked
+
+
+def test_home_refutation_audit_matches_the_checker():
+    """Every skill the front end refutes in its home runtime is audited in
+    benchmarks/home_refutation_audit.json as genuine or a misextraction; the
+    checker must still refute exactly those, so the measured false-refutation
+    rate in the paper stays honest."""
+    import json
+    from skillc.profiles import load_profile
+    from skillc.frontend.markdown import compile_file
+    from skillc.checker import check
+    audit = json.load(open(ROOT / "benchmarks" / "home_refutation_audit.json"))
+    files = corpus_files()
+    if not files:
+        pytest.skip("corpus not fetched")
+    prof = load_profile(audit["profile"])
+    refuted = {str(f.relative_to(ROOT)) for f in files
+               if not check(compile_file(f, prof).pack).achievable}
+    audited = {f"real-skills-ext/{e['skill']}/SKILL.md" for e in audit["entries"]}
+    assert refuted == audited, {"newly refuted": sorted(refuted - audited),
+                                "no longer refuted": sorted(audited - refuted)}

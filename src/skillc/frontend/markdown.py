@@ -109,6 +109,13 @@ class CompileResult:
     notes: list[str] = field(default_factory=list)   # semantic readings
 
 
+def frontmatter_lines(text: str) -> int:
+    """Number of source lines the frontmatter occupies, so provenance line
+    numbers reported against the body can be mapped back to the file."""
+    m = FRONTMATTER_RE.match(text)
+    return text.count("\n", 0, m.end()) if m else 0
+
+
 def parse_frontmatter(text: str) -> tuple[dict, str]:
     """Split YAML frontmatter from the body.  Tolerates malformed YAML."""
     m = FRONTMATTER_RE.match(text)
@@ -208,6 +215,7 @@ def compile_markdown(text: str, profile: Profile,
                      name: Optional[str] = None) -> CompileResult:
     """Compact a SKILL.md / agent markdown into an achievability pack."""
     meta, body = parse_frontmatter(text)
+    offset = frontmatter_lines(text)          # body line 1 is file line offset+1
     skill_name = str(name or meta.get("name") or "skill")
     fences: list[Fence] = []
     prose, embedded = _strip_fences(body, fences)
@@ -240,6 +248,8 @@ def compile_markdown(text: str, profile: Profile,
         if f.executable:
             invocations.append(Invocation(f"```{f.lang or 'code'} block", SHELL_CAP, "shell", f.line))
     invocations.sort(key=lambda i: i.line)
+    if offset:                                # report line numbers in the FILE
+        invocations = [Invocation(i.raw, i.tool, i.kind, i.line + offset) for i in invocations]
 
     # --- semantic compaction ----------------------------------------------
     # If the document states what "finished" means and lists workflow steps,
