@@ -1,6 +1,6 @@
 # Mechanized metatheory for the WIP paper.  Coq 8.18, stdlib only.
 COQC ?= coqc
-all: audit core bridge regular mu repairs interleave kernel
+all: audit core bridge regular mu repairs abort interleave kernel
 audit: DeviationLayer.vo
 	$(COQC) check_dev.v
 	$(COQC) check_co.v
@@ -14,6 +14,8 @@ mu: Mu.vo
 	$(COQC) check_mu.v
 repairs: Repairs.vo
 	$(COQC) check_repairs.v
+abort: Abort.vo
+	$(COQC) check_abort.v
 interleave: Interleave.vo
 	$(COQC) check_interleave.v
 kernel: Kernel.vo
@@ -35,10 +37,12 @@ Mu.vo: Mu.v Severity.vo Regular.vo
 	$(COQC) Mu.v
 Repairs.vo: Repairs.v Severity.vo
 	$(COQC) Repairs.v
+Abort.vo: Abort.v Severity.vo Bridge.vo Repairs.vo
+	$(COQC) Abort.v
 Interleave.vo: Interleave.v Severity.vo Bridge.vo
 	$(COQC) Interleave.v
 Kernel.vo: Kernel.v Severity.vo Regular.vo Mu.vo
 	$(COQC) Kernel.v
 clean:
 	rm -f *.vo *.vok *.vos *.glob .*.aux .lia.cache kernel/*.cm* kernel/*.o
-.PHONY: all audit core bridge regular mu repairs interleave kernel binary clean
+.PHONY: all audit core bridge regular mu repairs abort interleave kernel binary clean
