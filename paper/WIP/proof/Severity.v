@@ -335,10 +335,24 @@ Proof. intros W1 W2 H x Hx. symmetry. apply H. exact Hx. Qed.
 
 (* the hazard reads only the cone *)
 Hypothesis haz_cone : forall W1 W2, agree W1 W2 -> (Haz W1 <-> Haz W2).
-(* the capabilities act only on the cone: agreeing worlds have agreeing
-   successors, which is a bisimulation up to V *)
-Hypothesis cap_cone : forall a W1 W2 W1',
-  agree W1 W2 -> E a W1 W1' -> exists W2', E a W2 W2' /\ agree W1' W2'.
+
+(* The capability condition is NOT a blanket hypothesis over the whole
+   capability context.  It is required only of the tools the protocol at
+   hand actually invokes, because those are the only ones its runs can
+   use -- and that matters: a modular interface is checked against a
+   residual, not against the whole system, so quantifying over all of
+   Gamma would be a hypothesis the construction that uses it refutes. *)
+Definition cap_in_cone (a : CapN) : Prop :=
+  forall W1 W2 W1', agree W1 W2 -> E a W1 W1' ->
+    exists W2', E a W2 W2' /\ agree W1' W2'.
+
+Fixpoint uses (U : CapN -> Prop) (G : Gt) : Prop :=
+  match G with
+  | GEnd => True
+  | GAct a _ G0 => U a /\ uses U G0
+  | GGoal _ G0 => uses U G0
+  | GComm _ _ brs => fold_right (fun b acc => uses U (snd b) /\ acc) True brs
+  end.
 
 (* and so do the guards of the protocol at hand *)
 Fixpoint guards_in_cone (G : Gt) : Prop :=
@@ -365,49 +379,64 @@ Proof.
   - eapply IH; eauto.
 Qed.
 
-Theorem reach_cone : forall b G W1 W2,
-  guards_in_cone G -> agree W1 W2 ->
+Lemma uses_br : forall U (brs : list (Lab * (World -> Prop) * Gt)) l psi Gl,
+  fold_right (fun b acc => uses U (snd b) /\ acc) True brs ->
+  In (l, psi, Gl) brs -> uses U Gl.
+Proof.
+  induction brs as [ | b tl IH ]; simpl; intros l psi Gl Hf Hin; [ contradiction | ].
+  destruct Hf as [Hb Htl]. destruct Hin as [Heq | Hin].
+  - subst b. simpl in Hb. exact Hb.
+  - eapply IH; eauto.
+Qed.
+
+Theorem reach_cone : forall (U : CapN -> Prop) b G W1 W2,
+  (forall a, U a -> cap_in_cone a) ->
+  guards_in_cone G -> uses U G -> agree W1 W2 ->
   reach_haz E Haz b G W1 -> reach_haz E Haz b G W2.
 Proof.
-  intros b G W1 W2 Hg Hag Hr. revert W2 Hg Hag.
+  intros U b G W1 W2 HU Hg Hu Hag Hr. revert W2 Hg Hu Hag.
   induction Hr as [ b G W Hh | b a p G W W' HE Hr IH | b phi G W Hr IH
                   | b p q brs l psi Gl W Hin Hpsi Hr IH
                   | b p q brs l psi Gl W Hin Hpsi Hr IH ];
-    intros W2 Hg Hag.
+    intros W2 Hg Hu Hag.
   - apply RH_here. apply (haz_cone W W2 Hag). exact Hh.
-  - simpl in Hg. destruct (cap_cone a W W2 W' Hag HE) as [W2' [HE2 Hag']].
+  - simpl in Hg, Hu. destruct Hu as [Hua Hu0].
+    destruct (HU a Hua W W2 W' Hag HE) as [W2' [HE2 Hag']].
     eapply RH_act; [ exact HE2 | apply IH; assumption ].
-  - simpl in Hg. apply RH_goal. apply IH; assumption.
-  - simpl in Hg. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
+  - simpl in Hg, Hu. apply RH_goal. apply IH; assumption.
+  - simpl in Hg, Hu. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
     eapply RH_comm_ok; [ exact Hin | apply (Hpc W W2 Hag); exact Hpsi | ].
-    apply IH; assumption.
-  - simpl in Hg. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
-    eapply RH_comm_dev; [ exact Hin | | apply IH; assumption ].
-    intro Hp2. apply Hpsi. apply (Hpc W W2 Hag). exact Hp2.
+    apply IH; try assumption. eapply uses_br; eauto.
+  - simpl in Hg, Hu. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
+    eapply RH_comm_dev; [ exact Hin | | apply IH; try assumption ].
+    + intro Hp2. apply Hpsi. apply (Hpc W W2 Hag). exact Hp2.
+    + eapply uses_br; eauto.
 Qed.
 
 (* worlds that agree on the cone are interchangeable for the condition *)
-Theorem safeT_cone : forall b G W1 W2,
-  guards_in_cone G -> agree W1 W2 ->
+Theorem safeT_cone : forall (U : CapN -> Prop) b G W1 W2,
+  (forall a, U a -> cap_in_cone a) ->
+  guards_in_cone G -> uses U G -> agree W1 W2 ->
   (safeT E Haz b G W1 <-> safeT E Haz b G W2).
 Proof.
-  intros b G W1 W2 Hg Hag. split; intro Hs;
+  intros U b G W1 W2 HU Hg Hu Hag. split; intro Hs;
     apply (TC_complete E Haz (Gt_size G)); try apply le_n;
     intro Hr; apply (TC_sound E Haz b G _ Hs).
-  - eapply reach_cone; [ exact Hg | apply agree_sym; exact Hag | exact Hr ].
-  - eapply reach_cone; [ exact Hg | exact Hag | exact Hr ].
+  - eapply reach_cone; try eassumption. apply agree_sym; exact Hag.
+  - eapply reach_cone; eassumption.
 Qed.
 
 (* THE INTERFACE CONSEQUENCE: an interface need only contain one
    representative of each cone-class, not one world per concrete exit *)
-Corollary interface_projection : forall b G (I : list World) W,
-  guards_in_cone G ->
+Corollary interface_projection : forall (U : CapN -> Prop) b G (I : list World) W,
+  (forall a, U a -> cap_in_cone a) ->
+  guards_in_cone G -> uses U G ->
   (exists W0, In W0 I /\ agree W0 W) ->
   (forall W0, In W0 I -> safeT E Haz b G W0) ->
   safeT E Haz b G W.
 Proof.
-  intros b G I W Hg [W0 [Hin Hag]] Hall.
-  apply (safeT_cone b G W0 W Hg Hag). apply Hall. exact Hin.
+  intros U b G I W HU Hg Hu [W0 [Hin Hag]] Hall.
+  apply (safeT_cone U b G W0 W HU Hg Hu Hag). apply Hall. exact Hin.
 Qed.
 
 End Cone.
