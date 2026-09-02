@@ -657,3 +657,53 @@ Proof.
   - apply narrowing_breaks_conformance.
   - apply Ggood_inhabited.
 Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  BENIGN IS ANGELIC; ROBUST IS NOT.                                  *)
+(*                                                                     *)
+(*  \Ben{} says the goal is still REACHABLE -- possible over the future *)
+(*  choices of exactly the participant the discipline says you cannot   *)
+(*  rely on.  Robust says it is still GUARANTEED.  Gloss separates      *)
+(*  them: its safe branch reaches the goal, its misselectable branch    *)
+(*  harmlessly does nothing, so one affordable mistake costs the goal   *)
+(*  without costing anything else.                                      *)
+(* ----------------------------------------------------------------- *)
+Definition Gloss : Gt :=
+  GComm 0 1 [ (10, (fun _ : World => True), SafePath) ;
+              (11, (fun _ : World => False), GEnd) ].
+
+Lemma Gloss_safe : safeT E0 Haz0 1 Gloss W0.
+Proof.
+  apply ST_Comm; [ exact notHaz_W0 | | ].
+  - intros l psi Gl Hin Hpsi. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + apply safe_path_typed.
+    + exfalso. exact Hpsi.
+  - intros l psi Gl Hin Hnpsi c Hb. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + exfalso. apply Hnpsi. exact I.
+    + apply ST_End. exact notHaz_W0.
+Qed.
+
+Lemma SafePath_reaches_Phi0 : reach_haz E0 Phi0 1 SafePath W0.
+Proof.
+  eapply RH_act; [ left; split; reflexivity | ].
+  eapply RH_act; [ right; split; reflexivity | ].
+  apply RH_here. unfold Phi0. split.
+  - apply wupd_same.
+  - rewrite wupd_other; [ apply wupd_same | unfold verified, booked; lia ].
+Qed.
+
+Theorem benign_is_not_robust :
+  Benign E0 Haz0 Phi0 1 Gloss W0 /\ ~ Robust E0 Haz0 Phi0 1 Gloss W0.
+Proof.
+  assert (Hnh : ~ reach_haz E0 Haz0 1 Gloss W0) by (apply TC_sound; apply Gloss_safe).
+  assert (HnP : ~ Phi0 W0) by (intros [Hb _]; unfold W0 in Hb; discriminate).
+  split.
+  - split; [ exact Hnh | ].
+    eapply RH_comm_ok; [ left; reflexivity | exact I | apply SafePath_reaches_Phi0 ].
+  - intros [_ Ha]. unfold Assured in Ha.
+    inversion Ha as [ b G W Hp | | | b p q brs W l0 psi0 Gl0 Hin Hpsi Hok Hdev ]; subst.
+    + exact (HnP Hp).
+    + specialize (Hdev 11 (fun _ : World => False) GEnd 0
+                       (or_intror (or_introl eq_refl)) (fun H => H) eq_refl).
+      inversion Hdev as [ b' G' W' Hp | | | ]; subst. exact (HnP Hp).
+Qed.

@@ -29,3 +29,6 @@ Print Assumptions benign_step_down.
 Print Assumptions severity_monotone_in_budget.
 Print Assumptions tolerance_degree_is_a_threshold.
 Print Assumptions severity_classes_are_separated.
+Print Assumptions assured_reach.
+Print Assumptions assured_downward.
+Print Assumptions robust_benign.
