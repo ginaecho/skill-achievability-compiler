@@ -28,3 +28,4 @@ Print Assumptions repair_narrow_anywhere.
 Print Assumptions repair_guard_anywhere.
 Print Assumptions repair_reorder_anywhere.
 Print Assumptions repair_compensate_anywhere.
+Print Assumptions global_abort_is_idempotent.

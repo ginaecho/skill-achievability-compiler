@@ -598,6 +598,58 @@ Proof.
     intro He. apply (Hdis x He Hx).
 Qed.
 
+(* ----------------------------------------------------------------- *)
+(*  The same syntactic check discharges the CONE OF INFLUENCE.          *)
+(*                                                                     *)
+(*  safeT_cone asks that the hazard, the capabilities and the guards    *)
+(*  read only a set V of variables.  For STRIPS capabilities that is a  *)
+(*  containment on the tool's own footprints, and it is weaker than     *)
+(*  one might expect: only what a precondition READS has to be inside   *)
+(*  the cone.  What an action WRITES outside the cone is irrelevant,    *)
+(*  because worlds are only ever compared on V.                         *)
+(* ----------------------------------------------------------------- *)
+Theorem strips_haz_cone : forall (V : Var -> Prop) (Haz : World -> Prop) hvars,
+  supported Haz hvars -> (forall x, In x hvars -> V x) ->
+  forall W1 W2, agree V W1 W2 -> (Haz W1 <-> Haz W2).
+Proof.
+  intros V Haz hvars Hsup Hsub W1 W2 Hag. split; intro H.
+  - eapply Hsup; [ | exact H ]. intros x Hx. apply Hag. apply Hsub. exact Hx.
+  - eapply Hsup; [ | exact H ]. intros x Hx. symmetry. apply Hag. apply Hsub. exact Hx.
+Qed.
+
+Theorem strips_cap_cone : forall (V : Var -> Prop),
+  (forall a x, In x (c_vars (tbl a)) -> V x) ->
+  forall a W1 W2 W1', agree V W1 W2 -> Es a W1 W1' ->
+    exists W2', Es a W2 W2' /\ agree V W1' W2'.
+Proof.
+  intros V Hsub a W1 W2 W1' Hag HE.
+  assert (Hpre2 : c_pre (tbl a) W2).
+  { eapply pre_supported; [ | exact (proj1 HE) ].
+    intros x Hx. apply Hag. apply Hsub with (a := a). exact Hx. }
+  exists (apply_cap a W2). split; [ apply apply_cap_E; exact Hpre2 | ].
+  intros x Hx. unfold apply_cap.
+  destruct (in_dec Nat.eq_dec x (c_add (tbl a))) as [Hadd | Hnadd].
+  - destruct HE as [_ [Hа _]]. apply Hа. exact Hadd.
+  - destruct (in_dec Nat.eq_dec x (c_del (tbl a))) as [Hdel | Hndel].
+    + destruct HE as [_ [_ [Hd _]]]. apply Hd. exact Hdel.
+    + rewrite (proj2 (proj2 (proj2 HE)) x Hnadd Hndel). apply Hag. exact Hx.
+Qed.
+
+(* so the cone-of-influence theorem applies to the tool's own capability
+   model, with the containment checked syntactically *)
+Corollary strips_safeT_cone : forall (V : Var -> Prop) (Haz : World -> Prop) hvars,
+  supported Haz hvars ->
+  (forall x, In x hvars -> V x) ->
+  (forall a x, In x (c_vars (tbl a)) -> V x) ->
+  forall b G W1 W2, guards_in_cone V G -> agree V W1 W2 ->
+    (safeT Es Haz b G W1 <-> safeT Es Haz b G W2).
+Proof.
+  intros V Haz hvars Hsup Hhv Hcv b G W1 W2 Hg Hag.
+  apply (safeT_cone Es Haz V
+           (strips_haz_cone V Haz hvars Hsup Hhv)
+           (strips_cap_cone V Hcv) b G W1 W2 Hg Hag).
+Qed.
+
 Theorem strips_neutral : forall (Haz : World -> Prop) hvars a,
   supported Haz hvars -> disjoint (effects a) hvars -> neutral Es Haz a.
 Proof. intros Haz hvars a Hsup Hdis. apply (strips_preserves a Haz hvars Hsup Hdis). Qed.
