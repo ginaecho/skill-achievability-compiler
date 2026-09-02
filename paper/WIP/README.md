@@ -112,7 +112,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**173 results, every one axiom-free** (`Print Assumptions` harnesses).
+**179 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 `proof/STATEMENTS.md` lists the Coq statement of all 126 results the paper

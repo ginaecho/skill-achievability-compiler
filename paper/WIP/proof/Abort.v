@@ -296,3 +296,97 @@ Proof.
     + intros x Hx. destruct Hx as [Heq | []]. left. exact Heq.
     + apply plug_Cverify_wide.
 Qed.
+
+(* ================================================================= *)
+(*  WHAT THE GUARD AND REORDER REPAIRS ACTUALLY REQUIRE.               *)
+(*                                                                     *)
+(*  inert is a strong condition and it is doing all the work: it       *)
+(*  says EVERY capability is the identity in the abort world, for      *)
+(*  ever.  That is not a runtime that answers with errors; it is a     *)
+(*  session that is over.  E4 below is the weaker reading -- the       *)
+(*  validation is live at every world, the abort flag                  *)
+(*  records the failure, and every other tool keeps working -- and     *)
+(*  there the guard repair does not hold.  So the repairs are not      *)
+(*  about a gate that reports a failure; they are about a gate that    *)
+(*  stops the session, and a deployment that only errors the call      *)
+(*  does not get the theorem.                                          *)
+(* ================================================================= *)
+Definition E4 : Ctx := fun a W W' =>
+  (a = 1 /\ W' = wupd W verified 1) \/
+  (a = 2 /\ W' = wupd W booked 1) \/
+  (a = 3 /\ W verified = 1 /\ W' = W) \/
+  (a = 3 /\ W verified <> 1 /\ W' = wupd W aborted 1).
+
+(* the validation is a real validation, at EVERY world -- which is more
+   than E2 gives, so E4 is not a weaker runtime, only a differently
+   shaped one *)
+Theorem E4_validates : forall W, validates_ab E4 3 psi2 ab2 W.
+Proof.
+  intros W W'. unfold psi2, ab2. split.
+  - intro HE.
+    destruct HE as [[Hc _] | [[Hc _] | [[_ [Hv Heq]] | [_ [Hv Heq]]]]];
+      try discriminate Hc.
+    + left. split; assumption.
+    + right. split; assumption.
+  - intros [[Hv ->] | [Hv ->]].
+    + right. right. left. repeat split; assumption.
+    + right. right. right. repeat split; assumption.
+Qed.
+
+Theorem E4_no_halted : forall W, ~ halted E4 W.
+Proof.
+  intros W Hh. apply (Hh 1 (wupd W verified 1)). left. split; reflexivity.
+Qed.
+
+(* and it has no inert world where it matters: purchase still fires *)
+Theorem E4_not_idle : forall W, W booked = 0 -> ~ idle E4 W.
+Proof.
+  intros W Hb Hi.
+  assert (HE : E4 2 W (wupd W booked 1)) by (right; left; split; reflexivity).
+  apply Hi in HE.
+  assert (H1 : wupd W booked 1 booked = W booked) by (rewrite HE; reflexivity).
+  rewrite wupd_same in H1. rewrite Hb in H1. discriminate.
+Qed.
+
+(* THE NON-EXAMPLE.  Same protocol, same validation, same repair; the
+   only difference is that the runtime keeps working after the failed
+   check, and the guard no longer absorbs the misselection. *)
+Theorem Gguarded_not_1_tolerant_in_E4 : ~ safeT E4 Haz0 1 Gguarded W2.
+Proof.
+  intro Hs. inversion Hs as [ | | | b0 p0 q0 brs0 W' Hnh Hok Hdev ]; subst.
+  specialize (Hdev 11 psi2 (GAct 3 1 FastPath)
+                   (or_intror (or_introl eq_refl)) W2_unverified 0 eq_refl).
+  inversion Hdev as [ | | b1 a1 p1 G1 W1 Hnh1 Hall | ]; subst.
+  assert (HE3 : E4 3 W2 (wupd W2 aborted 1))
+    by (right; right; right; split; [ reflexivity | split; [ discriminate | reflexivity ] ]).
+  specialize (Hall _ HE3).
+  inversion Hall as [ | | b2 a2 p2 G2 W3 Hnh2 Hall2 | ]; subst.
+  assert (HE2 : E4 2 (wupd W2 aborted 1) (wupd (wupd W2 aborted 1) booked 1))
+    by (right; left; split; reflexivity).
+  specialize (Hall2 _ HE2).
+  inversion Hall2 as [ b3 W4 Hnh3 | | | ]; subst.
+  apply Hnh3. unfold Haz0. split.
+  - apply wupd_same.
+  - rewrite wupd_other; [ | unfold verified, booked; lia ].
+    rewrite wupd_other; [ reflexivity | unfold verified, aborted; lia ].
+Qed.
+
+(* the reorder repair fails there for the same reason *)
+Theorem reordered_not_tolerant_in_E4 : forall k,
+  ~ safeT E4 Haz0 k (GAct 3 1 (GAct 2 1 GEnd)) W2.
+Proof.
+  intros k Hs.
+  inversion Hs as [ | | b1 a1 p1 G1 W1 Hnh1 Hall | ]; subst.
+  assert (HE3 : E4 3 W2 (wupd W2 aborted 1))
+    by (right; right; right; split; [ reflexivity | split; [ discriminate | reflexivity ] ]).
+  specialize (Hall _ HE3).
+  inversion Hall as [ | | b2 a2 p2 G2 W3 Hnh2 Hall2 | ]; subst.
+  assert (HE2 : E4 2 (wupd W2 aborted 1) (wupd (wupd W2 aborted 1) booked 1))
+    by (right; left; split; reflexivity).
+  specialize (Hall2 _ HE2).
+  inversion Hall2 as [ b3 W4 Hnh3 | | | ]; subst.
+  apply Hnh3. unfold Haz0. split.
+  - apply wupd_same.
+  - rewrite wupd_other; [ | unfold verified, booked; lia ].
+    rewrite wupd_other; [ reflexivity | unfold verified, aborted; lia ].
+Qed.

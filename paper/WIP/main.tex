@@ -133,9 +133,7 @@
 \newcommand{\kstar}{k^{*}}
 
 \title{Affordable Mistakes: Severity-Aware Multiparty Session Types for
-Participants that Choose Wrongly\thanks{\textcolor{badred}{WORKING DRAFT --- not
-for submission.}
-Section~\ref{sec:base}.}}
+Participants that Choose Wrongly}
 \titlerunning{Affordable Mistakes}
 \author{Anonymous Author}{Anonymous Affiliation, Anonymous City, Anonymous Country}{anon@anon.org}{}{}
 \author{Anonymous Author}{Anonymous Affiliation, Anonymous City, Anonymous Country}{anon@anon.org}{}{}
@@ -147,12 +145,10 @@ Section~\ref{sec:base}.}}
 \keywords{Session types, Multiparty, Behavioural types, Safety, Irreversibility,
 Fault tolerance, Mechanized metatheory}
 \category{}\relatedversion{}
-\supplement{Coq development (173 theorems, axiom-free, Coq 8.18), the
+\supplement{Coq development (179 theorems, axiom-free, Coq 8.18), the
 \texttt{skillc severity} implementation, the severity benchmark, and the
 evaluation scripts; anonymized for submission.}
-\funding{To be completed for the camera-ready.}
-\acknowledgements{To be completed for the camera-ready.}
-\EventEditors{}\EventNoEds{0}\EventLongTitle{}\EventShortTitle{WIP draft}
+\EventEditors{}\EventNoEds{0}\EventLongTitle{}\EventShortTitle{}
 \EventAcronym{ECOOP}\EventYear{}\EventDate{}\EventLocation{}\EventLogo{}
 \SeriesVolume{0}\ArticleNo{0}
 
@@ -191,13 +187,6 @@ coincide with the runs that ended in wasted tokens or a fabricated result --- at
 sizes no refuted run produced a correct artifact.
 \end{abstract}
 
-\draftnote{Status. Everything in Sections~\ref{sec:severity}--\ref{sec:why} is
-mechanized (\texttt{proof/}, 173 results --- 159 for the present theory and 14
-for the audit of \S\ref{sec:whatchanged} --- all \texttt{Print Assumptions}
-closed). The evaluation numbers in Section~\ref{sec:eval} are real
-(\texttt{scripts/severity\_eval.py}, results in \texttt{paper/WIP/results/}).
-Scope caveats are stated where they apply. The predecessor draft was withdrawn
-after its own mechanized audit found it vacuous (Section~\ref{sec:whatchanged}).}
 
 \section{Introduction}\label{sec:intro}
 
@@ -1098,15 +1087,22 @@ correct (\coqok{kernel\_first\_spec}); goal reachability, used to derive
 rational guards and hazard bits, is proved correct
 (\coqok{goal\_reachable\_correct}); the decision procedure itself was
 replaced by a deduplicating, early-exiting variant proved sound and complete
-(\coqok{decide'\_sound}, \coqok{decide'\_complete}). The kernel's goal
-notion is not the theory's and we do not pretend otherwise: it requires the
-protocol to run to completion and spends no budget, where $\Phi$-reachability
-fires at any $\Phi$-world within budget. One direction is proved, with the
-budget read off the witness path (\coqok{goal\_reach\_implies\_reach\_mu});
-the converse fails, witnessed by a protocol whose goal already holds and
-which cannot finish (\coqok{goal\_reach\_strictly\_stronger}). The kernel's
-notion is therefore the stronger one, so a \Ben{} verdict computed with it
-errs towards \Fut{} and never the other way. The elaboration from
+(\coqok{decide'\_sound}, \coqok{decide'\_complete}).
+
+The kernel's goal notion is not the theory's, and the two are
+\emph{incomparable} rather than one being safely stronger. It requires the
+protocol to run to completion, where $\Phi$-reachability fires at any
+$\Phi$-world (\coqok{goal\_reach\_strictly\_stronger}), and it spends no
+budget, where $\Phi$-reachability is budgeted
+(\coqok{goal\_reach\_ignores\_the\_budget}); only the first direction has an
+implication, and it reads the budget off the witness path
+(\coqok{goal\_reach\_implies\_reach\_mu}). This matters beyond the severity
+labels: the elaboration derives the \emph{rational default guard} and the
+\emph{derived hazard bit} from the same notion, so it is a front-end convention
+the theory does not fix, and $\kstar$ is computed against it. Both the analyzer
+and the kernel implement that convention, independently; what the agreement
+below establishes is that they agree, not that the convention is the paper's
+$\Phi$-reachability. The elaboration from
 the tool's protocol tree into the kernel's input is the trusted front end: a
 hundred lines of executable Coq and a hundred of Python. The kernel is
 extracted to OCaml and run by \texttt{skillc severity --verified}. On the
@@ -1128,12 +1124,14 @@ reachable hazard at all, so most agreements are agreements that nothing is
 there; the discriminating cases are the third that carry a finite tolerance
 degree.
 
-This is the strongest evidence we can offer that the tool computes the
-tolerance degree its own mechanized theory defines, and it is a test the
-discipline makes possible: without a decision procedure proved correct there
-is nothing to differ from. It is evidence about $\kstar$ and about the hazard,
-not about the severity labels, whose goal component the kernel computes with
-the stronger notion above.
+This is the strongest evidence we can offer that two independent
+implementations --- a hand-written symbolic analyzer and an extraction of the
+mechanized decision procedure, sharing no code --- compute the same tolerance
+degree, and it is a test the discipline makes possible: without a decision
+procedure proved correct there is nothing to differ from. What it does not
+establish is that the goal convention both of them use (above) is the
+$\Phi$-reachability of \S\ref{sec:severity}; that gap is a front-end one and we
+leave it open.
 
 \subparagraph*{Finding 1: existing corpora cannot pose the question.}
 We ran the analysis on the compiler's achievability corpus (15 packs), its
@@ -1554,9 +1552,22 @@ the branch a guard protects begins with an action, so the action rule fails
 there too --- and no capability model in this paper has a halted world, since
 every capability of every model is enabled everywhere
 (\coqok{E2\_no\_halted}). An abort world is not a world where nothing is
-enabled. It is a world where everything is enabled and nothing changes: the
-runtime keeps answering tool calls and the answers are errors. We call such a
-world \emph{idle}, and \emph{inert} if it is also hazard-free.
+enabled. It is a world where everything is enabled and nothing changes. We call
+such a world \emph{idle}, and \emph{inert} if it is also hazard-free.
+
+That condition is strong and we say plainly what it buys. \emph{Idle} is not
+``the runtime answers and the answers are errors'': it is ``the session is
+over''. $E_4$ (\texttt{Abort.v}) is the weaker reading --- the validation is a
+validation at \emph{every} world, the abort flag records the failure, and every
+other tool keeps working (\coqok{E4\_validates}, \coqok{E4\_no\_halted},
+\coqok{E4\_not\_idle}) --- and there the same repair on the same protocol
+fails: the guarded branch is not $1$-tolerant
+(\coqok{Gguarded\_not\_1\_tolerant\_in\_E4}) and the reordered protocol is
+tolerant at no budget (\coqok{reordered\_not\_tolerant\_in\_E4}). So the
+repairs are not about a gate that reports a failure. They are about a gate that
+\emph{stops the session}, and a deployment that only errors the call does not
+get the theorem. Both repairs discharge the misselected branch by the same
+step, so this is one condition, not two.
 
 \begin{theorem}[A guarded branch is futile, not stuck]\label{thm:guardabort}
 A validation of $\psi$ with abort map $\mathit{ab}$ is enabled in every world
