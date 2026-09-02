@@ -248,17 +248,7 @@ Bounded fault tolerance is classical in
 planning~\cite{aineto-ecai23,domshlak-icaps13} and in MPST with crash-stop
 failures~\cite{barwell-concur22,barwell-ecoop23}. A syntax-directed system
 equivalent to a model checker is a known template~\cite{naik-palsberg,kobayashi-ong}.
-We claim none of these. We claim one thing:
-
-\begin{quote}\itshape
-A well-formedness condition on global types --- \ktol{} --- whose fault model
-is the participant's own selection at a branch, whose analytic payload is a
-classification of each wrong selection by outcome against a world, and which
-delivers the standard MPST guarantee: a session typed against a $k$-tolerant
-protocol is hazard-free within budget $k$, with budgets distributing over
-participants. The condition is exactly characterized, modular, decidable for
-regular protocols, and mechanized end to end.
-\end{quote}
+We claim none of these. What we claim is C1--C5 below, and nothing wider.
 
 We are careful with the word \emph{type system}. The condition is on global
 types, as well-assertedness~\cite{bocchi-concur10} and deadlock-freedom
@@ -318,12 +308,13 @@ re-establishes a lost atom can \emph{remove} a point of no return
 \begin{figure}[t]
 \centering
 \resizebox{\textwidth}{!}{\input{fig/fig-idea}}
-\caption{The idea. At a guarded choice in world $W$, the branch whose guard
-holds is \emph{intended}; taking another is a \emph{misselection}. Its
-severity is a property of the residual: \Ben{} if the goal is still reachable,
-\Fut{} if the goal is lost but no hazard is reachable, \Cat{} if a hazard is
-reachable --- typically by crossing a \emph{point of no return}, an
-irreversible capability after which the goal cannot be recovered.}
+\caption{The idea, on the running example of \S\ref{sec:overview}. At a guarded
+choice in world $W$ the branch whose guard holds is intended; taking another is
+a misselection. Its severity is a property of the residual, and the three fates
+drawn are the only three: the goal still reachable (\Ben), the goal lost with
+no hazard reachable (\Fut), or a hazard reachable (\Cat) --- here by crossing a
+point of no return, an irreversible capability after which the goal cannot be
+recovered. In $G_{\mathsf{bad}}$ the misselected branch takes the third.}
 \label{fig:idea}
 \end{figure}
 
@@ -592,6 +583,25 @@ residual fails the condition. \coqok{TC\_sound}, \coqok{TC\_complete},
 \coqok{TC\_exact}
 \end{theorem}
 
+\subparagraph*{The rule on the running example.} Take $G_{\mathsf{bad}}$ at
+$b=1$ in $W_0=\{\id{funds}\}$. \textsc{T-Choice-Safe} checks the intended
+branch $\id{safe}$ at budget $1$ and the misselectable branch $\id{fast}$ at
+budget $0$. The safe branch verifies then purchases and no intermediate world
+is a hazard, so it holds. The fast branch must satisfy
+$\vdash_0 \id{purchase}@\mathsf q.\End,\ W_0$: by \textsc{T-Act} that needs
+$\vdash_0 \End, W'$ for every $W'$ with
+$\langle W_0\rangle\,\id{purchase}\,\langle W'\rangle$, and every such $W'$
+has $\id{booked}$ without $\id{verified}$ --- the hazard. The premise fails, so
+$\nvdash_1 G_{\mathsf{bad}}, W_0$, and by Theorem~\ref{thm:exact} a hazard is
+reachable within one misselection. At $b=0$ the misselectable branch carries no
+obligation at all and the derivation goes through: $G_{\mathsf{bad}}$ is
+$0$-tolerant and not $1$-tolerant, which is what the tool reports and what
+\coqok{Gbad\_is\_0\_tolerant} and \coqok{Gbad\_not\_1\_tolerant} prove.
+Two protocols carry the paper: $G_{\mathsf{bad}}$ is the smallest that exhibits
+the question, and \texttt{migration\_backup}, whose output \S\ref{sec:overview}
+shows, is the smallest that exhibits \emph{cascading} --- one wrong choice is
+affordable, two are not.
+
 The rule is not deep and we do not claim it is: it is the reachability relation
 with the negation pushed through, and the proof is short. What matters is what
 exactness buys, and it is three things used later. A refutation is never an
@@ -722,16 +732,26 @@ the protocol is a schedule of world effects, that is not automatically
 harmless: it is exactly what the reorder repair exploits. We give the
 permutation relation and the conditions under which it is (Coq:
 \texttt{Interleave.v}). A \emph{swap} exchanges two adjacent independent
-nodes, in either direction and under any context: a bystander action $a@r$
-and another role's action $b$; $a@r$ and a choice between two other roles
-(when every branch begins with $a@r$); $a@r$ and a goal marker; and two
-communications $p{\to}q$ and $r{\to}s$ between disjoint role pairs, each
-branch of the first continuing with the second. Communications change no
-world, so their permutation needs no side condition; an action's does: $a$ is
-\emph{hazard-neutral} (never changes whether the world is a hazard), $a$ and
-$b$ \emph{commute} (one order re-serializes as the other with the same end
-world) and preserve each other's enabledness, and $a$ \emph{preserves} the
-guards and goal markers it passes.
+nodes, in either direction and under any context:
+\[\small
+\begin{array}{r@{\;}c@{\;}l@{\qquad}l}
+b@\mathsf q.\,a@\mathsf r.\,G &\rightleftarrows& a@\mathsf r.\,b@\mathsf q.\,G
+  & \mathsf q\neq\mathsf r,\ a,b\ \text{independent}\\
+\mathsf p{\to}\mathsf q\{\ell_i[\psi_i].\,a@\mathsf r.\,G_i\}
+  &\rightleftarrows& a@\mathsf r.\,\mathsf p{\to}\mathsf q\{\ell_i[\psi_i].\,G_i\}
+  & \mathsf r\notin\{\mathsf p,\mathsf q\},\ a\ \text{preserves each}\ \psi_i\\
+\checkmark\varphi.\,a@\mathsf r.\,G &\rightleftarrows& a@\mathsf r.\,\checkmark\varphi.\,G
+  & a\ \text{preserves}\ \varphi\\
+\mathsf p{\to}\mathsf q\{\ell.\,\mathsf r{\to}\mathsf s\{m.\,K\}\}
+  &\rightleftarrows& \mathsf r{\to}\mathsf s\{m.\,\mathsf p{\to}\mathsf q\{\ell.\,K\}\}
+  & \{\mathsf p,\mathsf q\}\cap\{\mathsf r,\mathsf s\}=\emptyset\ \text{(no condition)}
+\end{array}
+\]
+Communications change no world, so their permutation is unconditional. An
+action's is not: $a$ must be \emph{hazard-neutral} (never change whether the
+world is a hazard), $a$ and $b$ must \emph{commute} (one order re-serializes as
+the other with the same end world) and preserve each other's enabledness, and
+$a$ must preserve the guards and goal markers it passes.
 
 \begin{theorem}[Bystanders]\label{thm:bystander}
 Safe swaps preserve the condition at every budget (\coqok{swap\_safe}) and
@@ -851,16 +871,6 @@ procedure in disguise. The objection is old and Naik and
 Palsberg~\cite{naik-palsberg} gave the standard reply. We rest instead on a
 theorem and an experiment.
 
-\begin{figure}[t]
-\centering
-\resizebox{\textwidth}{!}{\input{fig/fig-compose}}
-\caption{Modularity. A whole-system check of $G_1;G_2$ explores the product
-of both protocols with the world and the budget and re-explores it when either
-changes. \textsc{TC-Seq} types $G_2$ only at the interface $G_1$ exposes; the
-interface form lets that interface be a declared invariant coarser than the
-concrete exit set.}
-\label{fig:compose}
-\end{figure}
 
 \begin{theorem}[Modular composition]\label{thm:seq}
 If $\safeT{k} G_1,W$ and $\safeT{b'} G_2,W'$ for every $(b',W')$ at which
@@ -1395,26 +1405,8 @@ agents, of which TRAC~\cite{trac-facct26} is the most developed: constraints
 in linear temporal logic, offline auditing, online monitoring, predictive
 monitors that sample continuations, intervening monitors that preempt a
 predicted violation. We share the question and differ on every mechanism
-(Figure~\ref{fig:trac}, Table~\ref{tab:trac}).
+(Figure~\ref{fig:trac}).
 
-\begin{table}[t]
-\centering\small
-\begin{tabular}{@{}lll@{}}
-\toprule
-& TRAC~\cite{trac-facct26} & this paper\\
-\midrule
-when & run time & compile time, before any run\\
-scope & one agent's trace & multiparty protocol\\
-specification & LTL over propositions & protocol $+$ world $+$ goal $+$ hazard\\
-abstraction & language-model labelers & structured boundary, no LLM\\
-prediction & sampling continuations & exact reachability\\
-output & violation, witness, intervention & severity per branch, $\kstar$, repair\\
-guarantee & empirical violation-rate reduction & Theorems~\ref{thm:exact}--\ref{thm:seq}\\
-\bottomrule
-\end{tabular}
-\caption{Axes on which the two approaches differ.}
-\label{tab:trac}
-\end{table}
 
 Two differences are deep. \emph{Prediction versus projection:} TRAC must
 estimate whether a violation is coming by sampling a black box; here the
@@ -1426,21 +1418,6 @@ with distance and constraint count; ours in a deterministic checker. The
 approaches compose. Choreographies with first-class agent choice mapped to
 games~\cite{pact} own the quantitative version of this framing; we are
 qualitative and static.
-
-\section{What Changed, and Why}\label{sec:whatchanged}
-
-An earlier version typed \emph{compliance} rather than \emph{severity}:
-per-role trust modes, taint propagation, staleness grades. We mechanized its
-metatheory and it did not survive: a closure premise recursing at the same
-node terminated at bottom where only a quarantine rule with a partial residual
-applied, so nothing containing a capability was typable
-(\coqok{act\_vacuous\_with\_partial\_qres}, coinductively too); its taint
-update ignored what a capability read
-(\coqok{taint\_laundering\_refutes\_noninterference}); its loop condition
-accepted cycles that never reset a grade (\coqok{goal\_only\_cycle\_hits\_cap}).
-The audit is retained in the artifact. The present design has no closure
-premise, no taint, and no grades; deviation lives in the semantics as a
-budget. We report this because the negative result produced the positive one.
 
 \section{Related Work}\label{sec:related}
 
@@ -1495,6 +1472,16 @@ LTL trace monitoring~\cite{trac-facct26,agentltl} act on runs or in the host
 language; we classify branches before any run exists.
 
 \section{Limitations and Conclusion}\label{sec:conclusion}
+
+\subparagraph*{A design that did not survive.}\label{sec:whatchanged} An earlier version of this
+discipline typed per-role compliance --- trust modes, taint propagation,
+staleness grades --- rather than severity. Its mechanized audit found the
+typing rules vacuous on any protocol containing a capability, its taint update
+blind to what a capability reads, and its loop condition satisfied by cycles
+that never reset a grade; the audit is retained in the artifact. The present
+design has no such premise: deviation lives in the operational semantics as a
+budget. We mention it because it is why this paper checks its own theorems for
+vacuity (Theorem~\ref{thm:inhabited}, Theorem~\ref{thm:guardabort}).
 
 \subparagraph*{Scope.} The bridge and the regular-protocol development are
 mechanized for the head-move semantics, which is the gate's; for ungated
