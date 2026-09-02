@@ -38,7 +38,7 @@ four TikZ figures, and the conventional structure.
 | `../../real-skills-ext/PROVENANCE.json`, `../../scripts/fetch_skills_ext.py` | the 28 third-party skills (re-fetchable; files not committed) |
 | `../../docs/SEVERITY_RESULTS.md` | evaluation tables |
 | `../../src/skillc/severity.py` | the implementation (`skillc severity <pack.json|SKILL.md>`) |
-| `../../src/skillc/data/severity_corpus.json` | the 15-protocol severity benchmark with pre-stated expected verdicts |
+| `../../src/skillc/data/severity_corpus.json` | the 17-protocol severity benchmark with pre-stated expected verdicts |
 | `../../scripts/severity_eval.py` | the evaluation, including the modularity experiment |
 | `../../tests/test_severity.py` | tool verdicts checked against the Coq instances |
 | `NOVELTY.md`, `NOVELTY-v2.md` | prior-art audits (withdrawn draft; current design) |
@@ -122,7 +122,8 @@ four TikZ figures, and the conventional structure.
   send, deploy, delete, ship, purge, refund, drop_old, commit. 14/15 matched
   pre-stated expectations; the 15th was a benchmark authoring error, fixed.
 - Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
-  violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1; 6 of 19
+  violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1 (one-sided Fisher
+  p = 0.046, not conventionally significant); 6 of 19
   Catastrophic verdicts taken by a real agent; repairs remove the catastrophes.
 - Corpus census (162 skills, 13 repositories, no model tokens, 1.8 s):
   149 certified at home, 108 refuted in a file-only runtime, 95 flip.
