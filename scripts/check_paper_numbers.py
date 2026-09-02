@@ -22,10 +22,23 @@ MANIFEST = RESULTS / "CLAIMS.json"
 
 
 def load(name: str):
-    path = RESULTS / name
+    path = (RESULTS / name).resolve()
     if name.endswith(".jsonl"):
         return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     return json.loads(path.read_text())
+
+
+def _choices(steps: list) -> list:
+    """Every choice node in a protocol, nested ones included."""
+    out = []
+    for s in steps:
+        if "choice" in s:
+            out.append(s["choice"])
+            for br in s["choice"]["branches"].values():
+                out += _choices(br)
+        elif "rec" in s:
+            out += _choices(s["rec"]["body"])
+    return out
 
 
 def median(xs: list[float]) -> float:
@@ -38,7 +51,7 @@ def median(xs: list[float]) -> float:
 
 def main() -> int:
     claims = json.loads(MANIFEST.read_text())["claims"]
-    env = {"load": load, "median": median, "sum": sum, "len": len, "min": min,
+    env = {"load": load, "median": median, "_choices": _choices, "sum": sum, "len": len, "min": min,
            "max": max, "round": round, "abs": abs, "sorted": sorted, "set": set,
            "__builtins__": {"set": set, "sum": sum, "len": len, "min": min,
                             "max": max, "round": round, "abs": abs,

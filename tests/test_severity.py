@@ -274,3 +274,34 @@ def test_projecting_the_interface_does_not_change_the_verdict():
                 f"{seg_id} n={n}: projected interface is larger than concrete")
             checked += 1
     assert checked == 9
+
+
+def test_multi_role_benchmark_choices_name_a_recipient():
+    """A choice is a communication in the theory: `p -> q : {...}` with
+    `p != q`.  A choice that names no recipient elaborates to a
+    self-communication, and conformance rejects those outright (Bridge.v's
+    CT_Comm requires p <> q), so the bridge, progress and budget-distribution
+    results would say nothing about such a protocol.  Every choice in a
+    benchmark protocol that HAS a second role must therefore name one."""
+    def choices(steps):
+        out = []
+        for s in steps:
+            if "choice" in s:
+                out.append(s["choice"])
+                for br in s["choice"]["branches"].values():
+                    out += choices(br)
+            elif "rec" in s:
+                out += choices(s["rec"]["body"])
+        return out
+
+    checked = 0
+    for entry in BENCH.values():
+        pack = entry["pack"]
+        if len(pack["roles"]) < 2:
+            continue                       # a lone agent has nobody to tell
+        for c in choices(pack["protocol"]):
+            assert c.get("to"), f"{entry['id']}: choice by {c['by']} names no recipient"
+            assert c["to"] != c["by"], f"{entry['id']}: choice by {c['by']} is to itself"
+            assert c["to"] in pack["roles"], f"{entry['id']}: unknown recipient {c['to']}"
+            checked += 1
+    assert checked == 8, f"{checked} multi-role choices checked, expected 8"

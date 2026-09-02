@@ -629,7 +629,7 @@ Proof.
   exists (apply_cap a W2). split; [ apply apply_cap_E; exact Hpre2 | ].
   intros x Hx. unfold apply_cap.
   destruct (in_dec Nat.eq_dec x (c_add (tbl a))) as [Hadd | Hnadd].
-  - destruct HE as [_ [Hа _]]. apply Hа. exact Hadd.
+  - destruct HE as [_ [Hset _]]. apply Hset. exact Hadd.
   - destruct (in_dec Nat.eq_dec x (c_del (tbl a))) as [Hdel | Hndel].
     + destruct HE as [_ [_ [Hd _]]]. apply Hd. exact Hdel.
     + rewrite (proj2 (proj2 (proj2 HE)) x Hnadd Hndel). apply Hag. exact Hx.
