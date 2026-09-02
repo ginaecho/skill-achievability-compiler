@@ -531,6 +531,67 @@ Inductive mstep1 : Gr -> Wd -> Gr -> Wd -> Prop :=
 Definition reach_mu (b : nat) (G : Gr) (w : Wd) : Prop :=
   reachb Gr Wd mstep0 mstep1 Haz b G w.
 
+(* ================================================================= *)
+(*  THE CONDITION, FOR RECURSIVE PROTOCOLS.                            *)
+(*                                                                     *)
+(*  The finite fragment has a syntactic judgment (safeT) that the       *)
+(*  bridge consumes.  The recursive layer had only the semantic side,   *)
+(*  ~reach_mu, which made bridge_mu a statement about a different       *)
+(*  object than T-Choice-Safe.  safeR is the same judgment one layer    *)
+(*  up: T-Choice-Safe read coinductively, because a recursive protocol  *)
+(*  has no finite derivation while a reached hazard still has a finite  *)
+(*  path.                                                              *)
+(* ================================================================= *)
+CoInductive safeR : nat -> Gr -> Wd -> Prop :=
+| SR_step : forall b G w,
+    ~ Haz w ->
+    (forall G' w', mstep0 G w G' w' -> safeR b G' w') ->
+    (forall c G' w', b = S c -> mstep1 G w G' w' -> safeR c G' w') ->
+    safeR b G w.
+
+Lemma safeR_not_haz : forall b G w, safeR b G w -> ~ Haz w.
+Proof. intros b G w H. destruct H as [b0 G0 w0 Hnh _ _]. exact Hnh. Qed.
+
+Lemma safeR_ok : forall b G w G' w',
+  safeR b G w -> mstep0 G w G' w' -> safeR b G' w'.
+Proof.
+  intros b G w G' w' H Hst.
+  inversion H as [b0 G0 w0 _ Hok _]; subst. apply Hok. exact Hst.
+Qed.
+
+Lemma safeR_dev : forall c G w G' w',
+  safeR (S c) G w -> mstep1 G w G' w' -> safeR c G' w'.
+Proof.
+  intros c G w G' w' H Hst.
+  inversion H as [b0 G0 w0 _ _ Hdev]; subst.
+  eapply Hdev; [ reflexivity | exact Hst ].
+Qed.
+
+(* SOUNDNESS: the judgment refutes budgeted hazard reachability *)
+Theorem TR_sound : forall b G w, safeR b G w -> ~ reach_mu b G w.
+Proof.
+  intros b G w Hs Hr. unfold reach_mu in Hr. revert Hs.
+  induction Hr as [ b n w Hh | b n w n' w' Hst Hr IH | b n w n' w' Hst Hr IH ];
+    intro Hs.
+  - exact (safeR_not_haz _ _ _ Hs Hh).
+  - exact (IH (safeR_ok _ _ _ _ _ Hs Hst)).
+  - exact (IH (safeR_dev _ _ _ _ _ Hs Hst)).
+Qed.
+
+(* COMPLETENESS: and it is exactly that.  No bound on the protocol is
+   needed -- the corecursive call is guarded by SR_step. *)
+Theorem TR_complete : forall b G w, ~ reach_mu b G w -> safeR b G w.
+Proof.
+  cofix CH. intros b G w Hnr. apply SR_step.
+  - intro Hh. apply Hnr. apply RB_here. exact Hh.
+  - intros G' w' Hst. apply CH. intro Hr. apply Hnr. eapply RB_ok; eassumption.
+  - intros c G' w' Hb Hst. apply CH. intro Hr. apply Hnr. subst b.
+    eapply RB_dev; eassumption.
+Qed.
+
+Theorem TR_exact : forall b G w, safeR b G w <-> ~ reach_mu b G w.
+Proof. intros b G w. split; [ apply TR_sound | apply TR_complete ]. Qed.
+
 (* ---- invariant: a state is a closed subterm-with-context whose
         candidates are all in L ---- *)
 Inductive good (L : list Gr) : list Gr -> Prop :=
@@ -996,6 +1057,18 @@ Proof.
   apply Hnr. eapply reachb_mono; [ eapply msteps_reach; eauto | exact Hle ].
 Qed.
 
+(* the bridge stated over the JUDGMENT rather than over its semantics, so
+   that the recursive layer's four claims are about one object: a session
+   conforming to a protocol that satisfies the condition at budget b is
+   hazard-free on every run of total cost at most b *)
+Theorem bridge_mu_safeR : forall b G s w tr G' s' w',
+  ctypes G s w -> safeR b G w ->
+  hrun G s w tr G' s' w' -> total tr <= b -> ~ Haz w'.
+Proof.
+  intros b G s w tr G' s' w' Ht Hs Hr Hle.
+  eapply bridge_mu; [ exact Ht | apply TR_sound; exact Hs | exact Hr | exact Hle ].
+Qed.
+
 (* ================================================================= *)
 (*  DECIDABILITY for mu-types.                                        *)
 (* ================================================================= *)
@@ -1116,6 +1189,21 @@ Proof.
   - intro w0. unfold Regular.Haz. symmetry. apply haz_spec.
 Qed.
 
+(* and what the extracted procedure decides IS the judgment, not merely
+   its semantics: decide_mu returns false exactly on the protocols that
+   satisfy the condition *)
+Theorem decide_mu_judgment : forall k G0 w,
+  closed_at 0 G0 -> In w worlds -> (decide_mu k G0 w = false <-> safeR k G0 w).
+Proof.
+  intros k G0 w Hc Hw.
+  rewrite (TR_exact k G0 w). rewrite <- (decide_mu_correct k G0 w Hc Hw).
+  destruct (decide_mu k G0 w); split; intro H.
+  - discriminate.
+  - exfalso. apply H. reflexivity.
+  - intro Hc'. discriminate.
+  - reflexivity.
+Qed.
+
 End MuDecide.
 End MuTypes.
 
@@ -1178,6 +1266,17 @@ Theorem TC_regular : forall b G W,
   safeT E Haz b G W <-> ~ reach_mu World GdW satW E Haz b (emb G) W.
 Proof.
   intros b G W. rewrite <- reach_embed. apply TC_exact.
+Qed.
+
+(* the same statement between the two JUDGMENTS: T-Choice-Safe on a finite
+   protocol and its coinductive reading on the embedding are the same
+   condition, so safeR is a conservative extension of safeT and not a
+   second, unrelated discipline *)
+Theorem TC_is_TR : forall b G W,
+  safeT E Haz b G W <-> safeR World GdW satW E Haz b (emb G) W.
+Proof.
+  intros b G W. rewrite (TC_regular b G W).
+  symmetry. apply TR_exact.
 Qed.
 
 (* the finite-fragment bridge, recovered through the recursive one *)
