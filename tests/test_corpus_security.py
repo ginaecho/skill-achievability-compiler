@@ -89,3 +89,29 @@ def test_home_refutation_audit_matches_the_checker():
     audited = {f"real-skills-ext/{e['skill']}/SKILL.md" for e in audit["entries"]}
     assert refuted == audited, {"newly refuted": sorted(refuted - audited),
                                 "no longer refuted": sorted(audited - refuted)}
+
+
+def test_every_corpus_file_matches_its_recorded_hash():
+    """Provenance is only provenance if it is checkable.  Both corpora record
+    a sha256 and a byte count per file; a refresh that changes a document
+    without updating its record fails here rather than silently changing what
+    the evaluation was run on."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    total = 0
+    for rel in ("real-skills/PROVENANCE.json", "real-skills-ext/PROVENANCE.json"):
+        path = root / rel
+        if not path.exists():
+            continue
+        for entry in json.loads(path.read_text()):
+            f = root / entry["path"]
+            if not f.exists():          # corpus files are not all committed
+                continue
+            blob = f.read_bytes()
+            assert hashlib.sha256(blob).hexdigest() == entry["sha256"], entry["path"]
+            assert len(blob) == entry["bytes"], entry["path"]
+            total += 1
+    assert total >= 17, f"only {total} corpus files checked"

@@ -21,6 +21,7 @@ Print Assumptions benign_is_not_robust.
 Print Assumptions hrun_split.
 Print Assumptions bridge_every_configuration.
 Print Assumptions MBad_takes_the_wrong_branch.
+Print Assumptions bridge_prefix.
 Print Assumptions SafePath_assures_Phi0.
 Print Assumptions Ggood_is_robust.
 Print Assumptions cone_is_not_degenerate.
