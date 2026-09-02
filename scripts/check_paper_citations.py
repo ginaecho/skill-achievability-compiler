@@ -17,6 +17,9 @@ PROOF = ROOT / "paper" / "WIP" / "proof"
 
 DEFINER = ("Theorem|Lemma|Corollary|Definition|Fixpoint|Inductive|CoInductive|"
            "Record|Proposition|Remark|Example|Instance")
+# a citation may also name a constructor of an inductive, which is written
+# `| Name :` inside the declaration rather than at the head of a sentence
+CONSTRUCTOR = r"^\s*\|\s*{name}\s*:"
 
 
 def cited_names(tex: str) -> list[str]:
@@ -33,8 +36,11 @@ def main() -> int:
     checked = set(re.findall(r"Print Assumptions\s+([A-Za-z0-9_']+)\s*\.", checks))
 
     names = cited_names(tex)
-    undefined = [n for n in names
-                 if not re.search(rf"^\s*({DEFINER})\s+{re.escape(n)}\b", src, re.M)]
+    def defined(n: str) -> bool:
+        return bool(re.search(rf"^\s*({DEFINER})\s+{re.escape(n)}\b", src, re.M)
+                    or re.search(CONSTRUCTOR.format(name=re.escape(n)), src, re.M))
+
+    undefined = [n for n in names if not defined(n)]
     unchecked = [n for n in names if n not in checked]
 
     print(f"{len(names)} Coq results cited by the paper")

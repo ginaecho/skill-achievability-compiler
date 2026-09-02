@@ -22,6 +22,7 @@ OUT = PROOF / "STATEMENTS.md"
 
 DEF = (r"(Theorem|Lemma|Corollary|Definition|Fixpoint|Inductive|CoInductive|"
        r"Record|Proposition)")
+CONSTRUCTOR = r"^\s*\|\s*{name}\s*:"      # a constructor of an inductive
 ORDER = ["Severity", "Bridge", "Regular", "Mu", "Repairs", "Abort",
          "Interleave", "Kernel", "DeviationLayer"]
 
@@ -43,7 +44,8 @@ def locate(names: list[str]) -> dict[str, list[str]]:
         for n in names:
             if n in seen:
                 continue
-            if re.search(rf"^\s*{DEF}\s+{re.escape(n)}\b", src, re.M):
+            if (re.search(rf"^\s*{DEF}\s+{re.escape(n)}\b", src, re.M)
+                    or re.search(CONSTRUCTOR.format(name=re.escape(n)), src, re.M)):
                 by_file.setdefault(p.stem, []).append(n)
                 seen.add(n)
     missing = [n for n in names if n not in seen]
