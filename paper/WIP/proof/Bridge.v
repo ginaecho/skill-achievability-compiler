@@ -13,7 +13,7 @@
 (*  Coq 8.18, stdlib only, axiom-free (check_bridge.v).                *)
 (* ================================================================= *)
 
-Require Import List Arith Lia.
+Require Import List Arith Lia Bool.
 Import ListNotations.
 Require Import Severity.
 
@@ -364,3 +364,128 @@ Proof.
 Qed.
 
 End BridgeDev.
+
+(* ================================================================= *)
+(*  NON-VACUITY.  Every guarantee above has the form: if a session     *)
+(*  conforms, then something holds.  That is worth nothing unless      *)
+(*  conforming sessions exist, and the predecessor of this discipline  *)
+(*  was withdrawn for exactly that reason.  So we exhibit them, for    *)
+(*  the running example and for its repairs, and check that the        *)
+(*  bridge's hypothesis is satisfiable where the paper uses it.        *)
+(*                                                                     *)
+(*  Roles: planner 0, worker 1.  The planner offers the labels; the    *)
+(*  worker accepts them and runs the tools.                            *)
+(* ================================================================= *)
+Definition sess2 (P0 P1 : Proc) : Sess :=
+  fun r => if Nat.eq_dec r 0 then P0 else if Nat.eq_dec r 1 then P1 else PEnd.
+
+Lemma sess2_0 : forall P0 P1, sess2 P0 P1 0 = P0.
+Proof. intros. unfold sess2. destruct (Nat.eq_dec 0 0); congruence. Qed.
+Lemma sess2_1 : forall P0 P1, sess2 P0 P1 1 = P1.
+Proof. intros. unfold sess2. simpl. reflexivity. Qed.
+Lemma sess2_other : forall P0 P1 r, r <> 0 -> r <> 1 -> sess2 P0 P1 r = PEnd.
+Proof.
+  intros. unfold sess2. destruct (Nat.eq_dec r 0); [ contradiction | ].
+  destruct (Nat.eq_dec r 1); [ contradiction | reflexivity ].
+Qed.
+
+Lemma supd_neq : forall s r P x, x <> r -> supd s r P x = s x.
+Proof. intros. unfold supd. destruct (Nat.eq_dec x r); congruence. Qed.
+
+(* the worker's process for the safe path: verify then purchase *)
+Definition WSafe : Proc := PAct 1 (PAct 2 PEnd).
+Definition WFast : Proc := PAct 2 PEnd.
+
+(* Ggood offers only the safe label; Gbad also offers the fast one *)
+Definition MGood : Sess := sess2 (POut 1 [(10, PEnd)]) (PIn 0 [(10, WSafe)]).
+Definition MBad  : Sess := sess2 (POut 1 [(10, PEnd); (11, PEnd)])
+                                 (PIn 0 [(10, WSafe); (11, WFast)]).
+
+Lemma E0_verify_enabled : forall W, exists W', E0 1 W W'.
+Proof. intro W. exists (wupd W verified 1). left. split; reflexivity. Qed.
+Lemma E0_purchase_enabled : forall W, exists W', E0 2 W W'.
+Proof. intro W. exists (wupd W booked 1). right. split; reflexivity. Qed.
+
+Lemma ctypes_WSafe : forall s W,
+  s 1 = WSafe -> (forall W', ctypes E0 GEnd (supd (supd s 1 (PAct 2 PEnd)) 1 PEnd) W') ->
+  ctypes E0 SafePath s W.
+Proof.
+  intros s W Hs Hend. apply CT_Act with (PAct 2 PEnd); [ exact Hs | apply E0_verify_enabled | ].
+  intros W' _. apply CT_Act with PEnd; [ apply supd_same | apply E0_purchase_enabled | ].
+  intros W'' _. apply Hend.
+Qed.
+
+(* the canonical two-role session conforms to the narrowed protocol, so
+   Ggood_is_k_tolerant is a statement about a real session *)
+Theorem Ggood_inhabited : forall W, ctypes E0 Ggood MGood W.
+Proof.
+  intro W. apply CT_Comm with [(10, PEnd)] [(10, WSafe)].
+  - discriminate.
+  - apply sess2_0.
+  - apply sess2_1.
+  - discriminate.
+  - intros l psi Gl Hin. destruct Hin as [Heq | []]. inversion Heq; subst.
+    exists PEnd. left. reflexivity.
+  - intros l P Hin. destruct Hin as [Heq | []]. inversion Heq; subst.
+    exists (fun _ : World => True), SafePath. left. reflexivity.
+  - intros l psi Gl Hin. destruct Hin as [Heq | []]. inversion Heq; subst.
+    exists WSafe. left. reflexivity.
+  - intros l psi Gl P Q Hin HP HQ.
+    destruct Hin as [Heq | []]. inversion Heq; subst.
+    destruct HP as [HP | []]. inversion HP; subst.
+    destruct HQ as [HQ | []]. inversion HQ; subst.
+    apply ctypes_WSafe.
+    + unfold supd, MGood, sess2, WSafe; repeat destruct (Nat.eq_dec _ _); congruence.
+    + intro W'. apply CT_End. intro r.
+      unfold supd, MGood, sess2, WSafe; repeat destruct (Nat.eq_dec _ _); congruence.
+Qed.
+
+(* The same for the protocol the paper analyses: Gbad offers both labels,
+   and a session conforms that is ready for either -- including the wrong
+   one.  So Gbad_not_1_tolerant is a statement about a session that exists
+   and can actually take the misselected branch. *)
+Theorem Gbad_inhabited : forall W, ctypes E0 Gbad MBad W.
+Proof.
+  intro W. apply CT_Comm with [(10, PEnd); (11, PEnd)] [(10, WSafe); (11, WFast)].
+  - discriminate.
+  - apply sess2_0.
+  - apply sess2_1.
+  - discriminate.
+  - intros l psi Gl Hin. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + exists PEnd. left. reflexivity.
+    + exists PEnd. right. left. reflexivity.
+  - intros l P Hin. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + exists (fun _ : World => True), SafePath. left. reflexivity.
+    + exists (fun _ : World => False), FastPath. right. left. reflexivity.
+  - intros l psi Gl Hin. destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + exists WSafe. left. reflexivity.
+    + exists WFast. right. left. reflexivity.
+  - intros l psi Gl P Q Hin HP HQ.
+    destruct Hin as [Heq | [Heq | []]]; inversion Heq; subst.
+    + destruct HP as [HP | [HP | []]]; inversion HP; subst;
+        destruct HQ as [HQ | [HQ | []]]; inversion HQ; subst.
+      apply ctypes_WSafe.
+      * unfold supd, MBad, sess2, WFast, WSafe; repeat destruct (Nat.eq_dec _ _); try congruence.
+      * intro W'. apply CT_End. intro r.
+        unfold supd, MBad, sess2, WFast, WSafe; repeat destruct (Nat.eq_dec _ _); try congruence.
+    + destruct HP as [HP | [HP | []]]; inversion HP; subst;
+        destruct HQ as [HQ | [HQ | []]]; inversion HQ; subst.
+      apply CT_Act with PEnd.
+      * unfold supd, MBad, sess2, WFast, WSafe; repeat destruct (Nat.eq_dec _ _); congruence.
+      * apply E0_purchase_enabled.
+      * intros W' _. apply CT_End. intro r.
+        unfold supd, MBad, sess2, WFast, WSafe; repeat destruct (Nat.eq_dec _ _); congruence.
+Qed.
+
+(* Consequence: the bridge is not vacuous on the paper's instance.  A real
+   session, conforming to a 0-tolerant protocol, is hazard-free on every
+   run that contains no misselection -- and Gbad_not_1_tolerant says the
+   budget cannot be raised. *)
+Corollary Gbad_bridge_nonvacuous : forall W tr G' s' W',
+  safeT E0 Haz0 0 Gbad W ->
+  hrun E0 Gbad MBad W tr G' s' W' -> total tr <= 0 -> ~ Haz0 W'.
+Proof.
+  intros W tr G' s' W' Hs Hr Ht.
+  destruct (bridge_run E0 Haz0 Gbad MBad W tr G' s' W' 0 (Gbad_inhabited W) Hs Hr Ht) as [H _].
+  exact H.
+Qed.

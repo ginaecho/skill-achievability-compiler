@@ -59,6 +59,8 @@ four TikZ figures, and the conventional structure.
 - **k-misselection tolerance**: no run with ≤ k misselections reaches a hazard.
   Possibilistic — no probabilities. The tolerance degree `k*` is the headline.
 - **T-Choice-Safe**: exact syntax-directed characterization.
+- **Non-vacuity**: explicit conforming sessions are exhibited for the worked
+  instances, so the bridge is not a guarantee about an empty class.
 - **Bridge**: a session typed against a k-tolerant protocol is hazard-free
   within budget k; budgets distribute over participants; holds for recursive
   sessions and protocols (`bridge_mu`).
@@ -76,7 +78,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**97 results, every one axiom-free** (`Print Assumptions` harnesses).
+**100 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 ## Evaluation headline (`python3 scripts/severity_eval.py`)

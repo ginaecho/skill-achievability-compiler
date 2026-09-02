@@ -5,3 +5,6 @@ Print Assumptions budget_distributes.
 Print Assumptions total_eq_sum_percost.
 Print Assumptions progress.
 Print Assumptions every_label_steps.
+Print Assumptions Ggood_inhabited.
+Print Assumptions Gbad_inhabited.
+Print Assumptions Gbad_bridge_nonvacuous.
