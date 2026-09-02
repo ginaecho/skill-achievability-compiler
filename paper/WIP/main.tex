@@ -144,7 +144,7 @@ Section~\ref{sec:base}.}}
 \keywords{Session types, Multiparty, Behavioural types, Safety, Irreversibility,
 Fault tolerance, Mechanized metatheory}
 \category{}\relatedversion{}
-\supplement{Coq development (91 theorems, axiom-free, Coq 8.18), the
+\supplement{Coq development (93 theorems, axiom-free, Coq 8.18), the
 \texttt{skillc severity} implementation, the severity benchmark, and the
 evaluation scripts; anonymized for submission.}
 \funding{To be completed for the camera-ready.}
@@ -157,64 +157,38 @@ evaluation scripts; anonymized for submission.}
 \maketitle
 
 \begin{abstract}
-Multiparty session types guarantee that well-typed participants interact
-correctly, on the hypothesis that each participant \emph{is} its type. A
-participant that was instructed rather than compiled --- a language-model
-agent --- breaks the hypothesis in one specific way: at a branch where it
-should select $A$ it may select $B$. Forbidding this is impossible, and would
-be useless if it were possible. We change what the discipline is for. It does
-not prevent wrong choices; it prevents \emph{catastrophic} ones and reports the
-rest as risk. The fault model is the participant's own selection at a branch,
-defined through the guards that asserted global types already carry. The
-consequence of a wrong selection is classified by \emph{outcome} against a
-STRIPS-style world: goal still reachable, goal lost but nothing harmed, or a
-hazard reachable through a \emph{point of no return}. Cascading is a budget
-$k$ of misselections, with no probabilities anywhere. The contribution is a
-\emph{well-formedness condition} on global types, \ktol{}, with the standard
-MPST payoff: a session typed against a $k$-tolerant protocol by the base
-discipline's direct-conformance judgment is hazard-free on every run with at
-most $k$ misselections, and budgets distribute over participants. The guarantee is carried to programs: a session typed against a
-$k$-tolerant protocol is hazard-free on every run of cost at most $k$, the
-budget distributes over participants, and the result survives recursion and
-every permutation of independent nodes. Budgeted deviation is not new ---
-reactive synthesis and robustification have owned it for a decade --- but
-carrying a quantity a participant spends across a reduction relation into
-typed programs is. The condition
-is exactly characterized by one syntax-directed rule, the severity classes are
-three consecutive intervals of budgets rather than an arbitrary carve-up, it
-composes modularly across sequential composition, and it is decidable for
-regular protocols: the unfolding
-closure of a $\mu$-type is proved finite, and an executable decision procedure
-is verified on it. The bridge holds for recursive sessions, and the four
-repairs --- guard, reorder, narrow, compensate --- are proved sound. A
-bystander --- a role acting before its turn in an ungated deployment ---
-preserves the condition under a permutation relation whose semantic side
-conditions a syntactic variable-disjointness check discharges, and the tool's
-decision on the boolean fragment is a kernel extracted from the proof. All of
-this is mechanized in Coq, axiom-free. An implementation over an existing achievability compiler shows
-that two existing corpora contain no decision points or irreversible tools at
-all --- the question is invisible to them --- and, on a purpose-built benchmark
-of seventeen protocols, classifies 55 branch verdicts, finds nine $0$-tolerant
-protocols each naming its point-of-no-return action, verifies three repairs,
-and demonstrates that modular checking with the interface abstraction the
-theory licenses is linear where whole-system analysis is exponential.
-A live-agent experiment --- 340 runs of two production language models, with
-and without a requester's pressure to take shortcuts --- finds every observed
-catastrophe consistent with the theorem, the catastrophe rate ordered by
-tolerance degree, and six of the nineteen \Cat{} verdicts taken by a real
-agent. On 162 real skills from thirteen public repositories and four
-authored specification pairs, run by the same agents in a shell and a
-file-only runtime with every artifact verified by recomputation, the
-checker's refusals coincide with the runs that ended in wasted tokens, honest
-failure or a fabricated result: at realistic input sizes no refuted run
-produced a correct artifact, at 5.1\,M tokens spent to produce none.
-The check itself costs no model tokens on the refutations and
-31.2\% of one agent run where the
-document needs semantic compaction.
+Multiparty session types guarantee that well-typed participants interact correctly, on the
+hypothesis that each participant \emph{is} its type. A participant that was instructed rather
+than compiled --- a language-model agent --- breaks that hypothesis in one specific way: at a
+branch where it should select $A$ it may select $B$. Forbidding this is impossible, and would
+be useless if it were possible. We change what the discipline is for: it does not prevent wrong
+choices, it prevents catastrophic ones and reports the rest as risk.
+
+The fault model is the participant's own selection at a branch, defined through the guards that
+asserted global types already carry. Cascading is a budget $k$ of wrong selections, with no
+probabilities anywhere. Budgeted deviation is itself old --- reactive synthesis and
+robustification have owned it for a decade. What is new is carrying a quantity a participant
+\emph{spends} across a reduction relation and into typed programs: a session typed against a
+$k$-tolerant protocol by the base discipline's conformance judgment is hazard-free on every run
+of cost at most $k$, budgets distribute over participants, and the guarantee survives recursion
+and every permutation of independent nodes. One syntax-directed rule characterizes the condition
+exactly; each wrong selection is classified \Ben, \Fut{} or \Cat{} by outcome against a
+STRIPS-style world, and these are three consecutive intervals of budgets, not an arbitrary
+carve-up. The condition composes against an interface rather than a protocol's internals, and is
+decidable for regular protocols. Everything is mechanized in Coq, axiom-free, and the tool's
+decision on the boolean fragment is a kernel extracted from that proof.
+
+The evaluation asks whether any of this matters to a real agent. On a benchmark of seventeen
+protocols the analysis names the point-of-no-return action of every $0$-tolerant one; $340$ runs
+of two production models find every observed catastrophe consistent with the theorem and the
+catastrophe rate ordered by tolerance degree; and on $162$ skills from thirteen public
+repositories, run in two runtimes with every artifact verified by recomputation, the refusals
+coincide with the runs that ended in wasted tokens or a fabricated result --- at realistic input
+sizes no refuted run produced a correct artifact.
 \end{abstract}
 
 \draftnote{Status. Everything in Sections~\ref{sec:severity}--\ref{sec:why} is
-mechanized (\texttt{proof/}, 91 results, all \texttt{Print Assumptions}
+mechanized (\texttt{proof/}, 93 results, all \texttt{Print Assumptions}
 closed). The evaluation numbers in Section~\ref{sec:eval} are real
 (\texttt{scripts/severity\_eval.py}, results in \texttt{paper/WIP/results/}).
 Scope caveats are stated where they apply. The predecessor draft was withdrawn
@@ -590,11 +564,16 @@ residual fails the condition. \coqok{TC\_sound}, \coqok{TC\_complete},
 \coqok{TC\_exact}
 \end{theorem}
 
-We do not present this as deep --- the rules are the reachability relation
-with the negation pushed through, and the proof is short. Its value is that a
-failure is never an artifact of conservative rules, which preserves the
-refutation asymmetry the discipline is built on, and that the condition is
-syntax-directed, which is what \S\ref{sec:why} exploits. Two monotonicity
+The rule is not deep and we do not claim it is: it is the reachability relation
+with the negation pushed through, and the proof is short. What matters is what
+exactness buys, and it is three things used later. A refutation is never an
+artifact of conservative rules, so the refutation asymmetry the discipline is
+built on survives. The condition is syntax-directed, which is what makes
+composition against an interface possible (\S\ref{sec:why}) instead of
+whole-system analysis. And because it is a judgment on $(G,W)$ rather than a
+decision procedure over a graph, it is the interface through which
+Theorem~\ref{thm:bridge} couples the budget to typed programs: a decision
+procedure alone does not compose with a typing derivation. Two monotonicity
 facts complete the picture: tolerance is downward closed in $k$
 (\coqok{tolerance\_downward\_closed}), and reachability is monotone in
 $\Gamma$, so for a \emph{fixed} hazard granting a tool can only lower
@@ -634,6 +613,25 @@ exactly $c$ (\coqok{bridge\_step}); consequently, along every run of total
 cost at most $k$, no configuration is a hazard state
 (\coqok{bridge\_run}).
 \end{theorem}
+
+What a fault model does to communication safety is the first thing a session
+type system must answer. Here the answer is: nothing.
+
+\begin{theorem}[Progress under misselection]\label{thm:progress}
+A typed session that has not finished can always take a head step
+(\coqok{progress}), and at a choice it can take one for \emph{every} label the
+sender may pick, wrong ones included (\coqok{every\_label\_steps}), because
+\textsc{T-Comm} makes the receiver offer at least the protocol's labels. A
+misselection is therefore never a communication mismatch, an unexpected label
+or a deadlock. Its only consequence is the world it leaves behind --- which is
+exactly what \S\ref{sec:severity} measures. (Guard decidability is a
+hypothesis, as in Theorem~\ref{thm:partition}.)
+\end{theorem}
+
+This is what separates the fault model from the crash-stop
+line~\cite{barwell-concur22,barwell-ecoop23}: there a failure removes a
+participant and the metatheory must reconstruct progress; here progress is
+untouched, and the whole question is which world the session ends in.
 
 \begin{theorem}[Budgets distribute over participants]\label{thm:distribute}
 Give each role $r$ an allowance $k_r$. If the allowances of the roles that act

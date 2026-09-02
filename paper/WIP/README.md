@@ -74,7 +74,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**91 results, every one axiom-free** (`Print Assumptions` harnesses).
+**93 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 ## Evaluation headline (`python3 scripts/severity_eval.py`)

@@ -153,7 +153,12 @@ Decidability of the two reachability questions is a hypothesis, as in
 |---|---|
 | A hazard is reachable within budget b iff some run with at most b misselections ends in a hazard state | `reach_msteps`, `reach_mu_iff_run` |
 
-## `Bridge.v` — from protocols to PROGRAMS (4 results)
+## `Bridge.v` — from protocols to PROGRAMS (6 results)
+
+| Result | Coq |
+|---|---|
+| A typed session that has not finished can always step; every label the sender may pick, wrong ones included, is a step the receiver accepts | `progress`, `every_label_steps` |
+
 
 | Result | Coq |
 |---|---|
