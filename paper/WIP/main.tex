@@ -1492,61 +1492,41 @@ the grep takes 0.2\,ms over the 34 configurations and the checker 228\,ms.
 \subparagraph*{The corpus is an untrusted input.} A skill document is not
 data: it is a set of instructions an agent will follow with real tools, so a
 corpus fetched from a dozen third-party repositories is an attack surface for
-the experiment itself. Before running anything we scanned all
-162 documents statically for six families of evidence ---
-harness impersonation and instruction override, credential exfiltration,
-destructive commands, fetch-and-execute, obfuscation (base64, zero-width and
-bidi characters), and edits to the agent's own configuration or hooks, the
-last being the one that would change what every later skill may do
-(\texttt{scripts/scan\_skills.py}, \texttt{docs/CORPUS\_SECURITY.md}).
-No malicious skill and no injection payload aimed at an agent was found: zero
-hits for fake harness turns, hidden instructions in comments, and invisible or
-bidirectional characters. Nine files raised a flag and all nine are benign in
-context --- a security skill quoting injection payloads it teaches you to
-test, Dockerfile examples containing \texttt{rm -rf /var/lib/apt/lists/*} ---
-with two exceptions worth stating: one skill installs a vendor CLI by piping
-a download into a shell, and one appends an API key to a shell profile.
-Neither is among the sixteen skills our agents executed. A regression test
-fails the suite if a corpus refresh introduces an unreviewed hit. Two limits
-of our containment are worth repeating for anyone reproducing this: a
-temporary working directory is not a jail, and the runs are unattended by
-design. Notably, the one impersonation attempt we did encounter arrived in a
-\emph{web search result} during collection, not in a skill file --- which
+the experiment itself. We scanned all 162 documents statically, before running
+anything, for six families of evidence --- harness impersonation and
+instruction override, credential exfiltration, destructive commands,
+fetch-and-execute, obfuscation, and edits to the agent's own configuration
+(\texttt{scripts/scan\_skills.py}, \texttt{docs/CORPUS\_SECURITY.md}). No
+malicious skill and no injection payload aimed at an agent was found: zero hits
+for fake harness turns, hidden instructions in comments and invisible
+characters. Nine files raised a flag and all nine are benign in context, with
+two worth stating --- one skill installs a vendor CLI by piping a download into
+a shell, one appends an API key to a shell profile --- and neither is among the
+sixteen we executed. A regression test fails the suite if a corpus refresh
+introduces an unreviewed hit. Two limits are worth repeating for anyone
+reproducing this: a temporary working directory is not a jail, and the runs are
+unattended by design. The one impersonation attempt we did encounter arrived in
+a \emph{web search result} during collection, not in a skill file, which
 locates the real surface for an agent that browses.
 
 \subparagraph*{Finding 6: what the check costs in tokens, and when it needs a
 model at all.} The deterministic front end spends no model tokens; the
 question is when it is enough. The reading it falls back to --- one act per
-invoked tool --- \emph{under}-approximates the document, so a refutation on
-it (the skill names a tool the runtime lacks) is sound for that pack whatever
-the document means, while a certification on it says only that the named tools
-exist. The soundness is relative to extraction: the 4.3\% false-refutation
-rate above is exactly the residue, and it bounds what this rule can be worth.
-That
-asymmetry is a decision procedure for spending money: escalate to LLM
-compaction exactly when the pack is weak, the verdict is a certification, and
-the document visibly carries meaning the reader did not capture --- completion
-language, conditional phrases, irreversible verbs. \texttt{skillc autocheck}
-implements it. Over the 162 skills it escalates on 130
-(80.2\%) in the home runtime, where almost everything is
-weakly certified, and on only 49 in the file-only one,
-where 108 skills are refuted for free.
-
-We measured the escalation on 20 skills with the small
-model: a median 22440 tokens and
-\$0.088 per compaction, fitted as
-$17939+0.595\times$ characters
-for the rest. Against the measured median agent run of
-80331 tokens
-(\$0.055), one compaction is
-27.9\% of a single run --- paid once per
-skill version, amortized over every run of it --- and zero for the
-32 skills that need no model. On the other side of the ledger,
-the runs this experiment's refuted configurations spent before failing came to
-15.8\,M tokens and
-\$14.296. The check is cheap in the cases that matter
-because the cases that matter are refutations, and refutations are the free
-half.
+invoked tool --- \emph{under}-approximates the document, so a refutation on it
+is sound for that pack whatever the document means, while a certification says
+only that the named tools exist; the 4.3\% false-refutation rate above is
+exactly the residue. That asymmetry is a decision procedure for spending money:
+escalate to \textsc{llm} compaction exactly when the pack is weak, the verdict
+is a certification, and the document visibly carries meaning the reader did not
+capture. \texttt{skillc autocheck} implements it, escalating on 130 of the 162
+skills in the home runtime, where almost everything is weakly certified, and on
+49 in the file-only one, where 108 are refuted for free. Measured on
+20 skills, one compaction costs a median 22\,440 tokens and \$0.088 --- 27.9\%
+of the measured median agent run, paid once per skill version and amortized
+over every run of it, and zero for the 32 skills that need no model. The runs
+this experiment's refuted configurations spent before failing came to
+15.8\,M tokens and \$14.296. The check is cheap in the cases that matter
+because those cases are refutations, and refutations are the free half.
 
 \section{Repairs}\label{sec:repair}
 
@@ -1678,7 +1658,9 @@ blocking model could not meet --- and so the bridge applies to it: every run
 of that session is hazard-free at every budget
 (\coqok{Gguarded\_bridge\_nonvacuous}).
 
-\section{Relation to Runtime Compliance Monitoring}\label{sec:trac}
+\section{Related Work}\label{sec:related}
+
+\subparagraph*{Runtime compliance monitoring.}
 
 \begin{figure}[t]
 \centering
@@ -1711,8 +1693,6 @@ with distance and constraint count; ours in a deterministic checker. The
 approaches compose. Choreographies with first-class agent choice mapped to
 games~\cite{pact} own the quantitative version of this framing; we are
 qualitative and static.
-
-\section{Related Work}\label{sec:related}
 
 \subparagraph*{MPST with a fault model.} Crash-stop
 failures~\cite{barwell-concur22,barwell-ecoop23,peters-forte22,viering-oopsla21,lebrun-esop23,hou-ecoop24}, affine and
