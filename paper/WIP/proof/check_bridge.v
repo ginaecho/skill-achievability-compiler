@@ -24,3 +24,8 @@ Print Assumptions MBad_takes_the_wrong_branch.
 Print Assumptions SafePath_assures_Phi0.
 Print Assumptions Ggood_is_robust.
 Print Assumptions cone_is_not_degenerate.
+Print Assumptions ctypes_ext.
+Print Assumptions canon_other.
+Print Assumptions label_determines.
+Print Assumptions canon_conforms.
+Print Assumptions two_role_bridge_nonvacuous.

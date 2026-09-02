@@ -607,6 +607,200 @@ Proof.
     [ apply Ggoal_inhabited | apply Ggoal_is_k_tolerant | exact Hr | exact Ht ].
 Qed.
 
+
+(* ================================================================= *)
+(*  INHABITATION, IN GENERAL.                                          *)
+(*                                                                     *)
+(*  The witnesses above are individual protocols, which answers the     *)
+(*  vacuity question only for them.  For two-role protocols there is a  *)
+(*  construction: read the global type as a pair of processes, one per  *)
+(*  role, and it conforms -- over any runtime whose capabilities are    *)
+(*  enabled everywhere, which is the shape of every capability model    *)
+(*  in this paper.  Bystanders are what makes the general case a        *)
+(*  projection problem (a role uninvolved in a choice needs the same    *)
+(*  continuation in every branch); with two roles there are none.       *)
+(*  Goal markers are excluded, and that exclusion is exactly            *)
+(*  markers_are_met: a marker is an assertion about the world, so no    *)
+(*  construction uniform in the world can discharge it.                 *)
+(* ================================================================= *)
+Fixpoint canon (r : Role) (G : Gt) : Proc :=
+  match G with
+  | GEnd => PEnd
+  | GGoal _ G0 => canon r G0
+  | GAct a p G0 => if Nat.eq_dec r p then PAct a (canon r G0) else canon r G0
+  | GComm p q brs =>
+      if Nat.eq_dec r p
+      then POut q (map (fun b => (fst (fst b), canon r (snd b))) brs)
+      else if Nat.eq_dec r q
+           then PIn p (map (fun b => (fst (fst b), canon r (snd b))) brs)
+           else PEnd
+  end.
+
+Definition sess_of (G : Gt) : Sess := fun r => canon r G.
+
+Definition labels (brs : list (Lab * (World -> Prop) * Gt)) : list Lab :=
+  map (fun b => fst (fst b)) brs.
+
+Fixpoint two_role (G : Gt) : Prop :=
+  match G with
+  | GEnd => True
+  | GGoal _ _ => False
+  | GAct _ p G0 => (p = 0 \/ p = 1) /\ two_role G0
+  | GComm p q brs =>
+      p = 0 /\ q = 1 /\ brs <> nil /\ NoDup (labels brs) /\
+      fold_right (fun b acc => two_role (snd b) /\ acc) True brs
+  end.
+
+Lemma two_role_br : forall (brs : list (Lab * (World -> Prop) * Gt)) l psi Gl,
+  fold_right (fun b acc => two_role (snd b) /\ acc) True brs ->
+  In (l, psi, Gl) brs -> two_role Gl.
+Proof.
+  induction brs as [ | b tl IH ]; simpl; intros l psi Gl Hf Hin; [ contradiction | ].
+  destruct Hf as [Hb Htl]. destruct Hin as [Heq | Hin].
+  - subst b. simpl in Hb. exact Hb.
+  - eapply IH; eauto.
+Qed.
+
+(* distinct labels: a label names one branch *)
+Lemma label_determines : forall (brs : list (Lab * (World -> Prop) * Gt)) l psi Gl psi' Gl',
+  NoDup (labels brs) -> In (l, psi, Gl) brs -> In (l, psi', Gl') brs ->
+  psi = psi' /\ Gl = Gl'.
+Proof.
+  induction brs as [ | [[l0 psi0] G0] tl IH ]; simpl; intros l psi Gl psi' Gl' Hnd H1 H2.
+  - contradiction.
+  - unfold labels in Hnd. simpl in Hnd. inversion Hnd as [ | x xs Hni Hnd' ]; subst.
+    destruct H1 as [E1 | H1]; destruct H2 as [E2 | H2].
+    + inversion E1; inversion E2; subst. split; reflexivity.
+    + inversion E1; subst. exfalso. apply Hni. unfold labels.
+      apply in_map_iff. exists (l, psi', Gl'). split; [ reflexivity | exact H2 ].
+    + inversion E2; subst. exfalso. apply Hni. unfold labels.
+      apply in_map_iff. exists (l, psi, Gl). split; [ reflexivity | exact H1 ].
+    + eapply IH; eauto.
+Qed.
+
+(* every role beyond the two is idle throughout *)
+Lemma canon_other : forall n G r,
+  Gt_size G <= n -> two_role G -> r <> 0 -> r <> 1 -> canon r G = PEnd.
+Proof.
+  induction n as [ | n IH ]; intros G r Hle Htr H0 H1.
+  - destruct G; simpl in Hle; lia.
+  - destruct G as [ | p q brs | a p G0 | phi G0 ]; simpl.
+    + reflexivity.
+    + simpl in Htr. destruct Htr as [-> [-> _]].
+      destruct (Nat.eq_dec r 0); [ contradiction | ].
+      destruct (Nat.eq_dec r 1); [ contradiction | reflexivity ].
+    + simpl in Htr. destruct Htr as [Hp Hg].
+      destruct (Nat.eq_dec r p) as [-> | Hrp]; [ destruct Hp; contradiction | ].
+      apply (IH G0 r); [ simpl in Hle; lia | exact Hg | exact H0 | exact H1 ].
+    + simpl in Htr. contradiction.
+Qed.
+
+(* conformance only ever reads the session at particular roles *)
+Lemma ctypes_ext : forall Ec G s s' W,
+  (forall r, s r = s' r) -> ctypes Ec G s W -> ctypes Ec G s' W.
+Proof.
+  intros Ec G s s' W Hs Ht. revert s' Hs.
+  induction Ht as
+    [ s0 W0 Hend
+    | phi G0 s0 W0 Hphi Ht IHt
+    | a p G0 s0 W0 P Hsp Hex Hall IHall
+    | p q brs s0 W0 sendb recvb Hpq Hsp Hsq Hne Hl1 Hl2 Hl3 Hcont IHcont ];
+    intros s' Hs.
+  - apply CT_End. intro r. rewrite <- Hs. apply Hend.
+  - apply CT_Goal; [ exact Hphi | ]. apply IHt. exact Hs.
+  - apply CT_Act with P; [ rewrite <- Hs; exact Hsp | exact Hex | ].
+    intros W' HE. apply (IHall W' HE).
+    intro r. unfold supd. destruct (Nat.eq_dec r p); [ reflexivity | apply Hs ].
+  - apply CT_Comm with sendb recvb; try assumption;
+      [ rewrite <- Hs; exact Hsp | rewrite <- Hs; exact Hsq | ].
+    intros l psi Gl P Q Hin HP HQ. apply (IHcont l psi Gl P Q Hin HP HQ).
+    intro r. unfold supd. destruct (Nat.eq_dec r q); [ reflexivity | ].
+    destruct (Nat.eq_dec r p); [ reflexivity | apply Hs ].
+Qed.
+
+Lemma in_canon_br : forall (brs : list (Lab * (World -> Prop) * Gt)) r l psi Gl,
+  In (l, psi, Gl) brs ->
+  In (l, canon r Gl) (map (fun b => (fst (fst b), canon r (snd b))) brs).
+Proof.
+  intros brs r l psi Gl Hin. apply in_map_iff. exists (l, psi, Gl).
+  split; [ reflexivity | exact Hin ].
+Qed.
+
+Lemma in_canon_br_inv : forall (brs : list (Lab * (World -> Prop) * Gt)) r l P,
+  In (l, P) (map (fun b => (fst (fst b), canon r (snd b))) brs) ->
+  exists psi Gl, In (l, psi, Gl) brs /\ P = canon r Gl.
+Proof.
+  intros brs r l P Hin. apply in_map_iff in Hin.
+  destruct Hin as [[[l0 psi0] Gl0] [Heq Hin0]]. simpl in Heq. inversion Heq; subst.
+  exists psi0, Gl0. split; [ exact Hin0 | reflexivity ].
+Qed.
+
+(* THE CONSTRUCTION CONFORMS.  Its only hypothesis on the runtime is the
+   one every capability model in this paper satisfies: a tool call always
+   has an answer. *)
+Theorem canon_conforms : forall Ec,
+  (forall a W, exists W', Ec a W W') ->
+  forall n G W, Gt_size G <= n -> two_role G -> ctypes Ec G (sess_of G) W.
+Proof.
+  intros Ec Htotal n. induction n as [ | n IH ]; intros G W Hle Htr.
+  - destruct G; simpl in Hle; lia.
+  - destruct G as [ | p q brs | a p G0 | phi G0 ].
+    + apply CT_End. intro r. reflexivity.
+    + simpl in Htr. destruct Htr as [-> [-> [Hne [Hnd Hbrs]]]].
+      apply CT_Comm with (map (fun b => (fst (fst b), canon 0 (snd b))) brs)
+                         (map (fun b => (fst (fst b), canon 1 (snd b))) brs).
+      * discriminate.
+      * unfold sess_of. reflexivity.
+      * unfold sess_of. reflexivity.
+      * exact Hne.
+      * intros l psi Gl Hin. exists (canon 0 Gl). eapply in_canon_br; eauto.
+      * intros l P Hin. destruct (in_canon_br_inv brs 0 l P Hin) as [psi [Gl [Hin0 _]]].
+        exists psi, Gl. exact Hin0.
+      * intros l psi Gl Hin. exists (canon 1 Gl). eapply in_canon_br; eauto.
+      * intros l psi Gl P Q Hin HP HQ.
+        destruct (in_canon_br_inv brs 0 l P HP) as [psi0 [Gl0 [Hin0 ->]]].
+        destruct (in_canon_br_inv brs 1 l Q HQ) as [psi1 [Gl1 [Hin1 ->]]].
+        destruct (label_determines brs l psi Gl psi0 Gl0 Hnd Hin Hin0) as [_ EG0].
+        destruct (label_determines brs l psi Gl psi1 Gl1 Hnd Hin Hin1) as [_ EG1].
+        subst Gl0 Gl1.
+        assert (HGl : two_role Gl) by (eapply two_role_br; eauto).
+        assert (Hsz : Gt_size Gl <= n)
+          by (pose proof (in_brs_size brs l psi Gl Hin); simpl in Hle; lia).
+        eapply ctypes_ext with (s := sess_of Gl); [ | apply IH; assumption ].
+        intro r. unfold supd, sess_of.
+        destruct (Nat.eq_dec r 1) as [-> | Hr1]; [ reflexivity | ].
+        destruct (Nat.eq_dec r 0) as [-> | Hr0]; [ reflexivity | ].
+        simpl. destruct (Nat.eq_dec r 0); [ contradiction | ].
+        destruct (Nat.eq_dec r 1); [ contradiction | ].
+        apply (canon_other (Gt_size Gl) Gl r (le_n _) HGl Hr0 Hr1).
+    + simpl in Htr. destruct Htr as [Hp Hg].
+      apply CT_Act with (canon p G0).
+      * unfold sess_of. simpl. destruct (Nat.eq_dec p p); congruence.
+      * apply Htotal.
+      * intros W' HE. eapply ctypes_ext with (s := sess_of G0);
+          [ | apply IH; [ simpl in Hle; lia | exact Hg ] ].
+        intro r. unfold supd, sess_of. destruct (Nat.eq_dec r p) as [-> | Hrp].
+        -- reflexivity.
+        -- simpl. destruct (Nat.eq_dec r p); [ contradiction | reflexivity ].
+    + simpl in Htr. contradiction.
+Qed.
+
+(* Consequence: on such a runtime the bridge is never a statement about an
+   empty class.  Every two-role protocol that satisfies the condition has a
+   session that conforms to it, and that session is hazard-free within
+   budget. *)
+Corollary two_role_bridge_nonvacuous : forall Ec Hz G W b tr G' s' W',
+  (forall a W0, exists W1, Ec a W0 W1) ->
+  two_role G ->
+  safeT Ec Hz b G W ->
+  hrun Ec G (sess_of G) W tr G' s' W' -> total tr <= b -> ~ Hz W'.
+Proof.
+  intros Ec Hz G W b tr G' s' W' Htotal Htr Hs Hr Hle.
+  destruct (bridge_run Ec Hz G (sess_of G) W tr G' s' W' b
+              (canon_conforms Ec Htotal (Gt_size G) G W (le_n _) Htr) Hs Hr Hle) as [H _].
+  exact H.
+Qed.
+
 (* ----------------------------------------------------------------- *)
 (*  NARROWING IS ASYMMETRIC, AND THAT IS THE RESULT.                   *)
 (*                                                                     *)
