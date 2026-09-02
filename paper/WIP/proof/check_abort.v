@@ -9,3 +9,5 @@ Print Assumptions SafePath_E2_safe.
 Print Assumptions Gguarded_is_k_tolerant.
 Print Assumptions Gguarded_inhabited.
 Print Assumptions Gguarded_bridge_nonvacuous.
+Print Assumptions SafePath_safe_anywhere.
+Print Assumptions congruence_is_not_degenerate.

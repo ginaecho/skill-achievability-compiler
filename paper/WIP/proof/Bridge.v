@@ -766,3 +766,92 @@ Proof.
            (Gbad_inhabited W) 11 (fun _ : World => False) FastPath).
   right. left. reflexivity.
 Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  NON-VACUITY OF THIS ROUND'S ADDITIONS.                             *)
+(*                                                                     *)
+(*  Robust and the cone-of-influence theorem both carry hypotheses      *)
+(*  that could be satisfiable nowhere, which would make robust_benign   *)
+(*  and interface_projection true and empty.  They are not.             *)
+(* ----------------------------------------------------------------- *)
+
+(* Robust is inhabited: the narrowed booking protocol assures its goal at
+   every budget, because it offers no branch a misselection can take *)
+Lemma SafePath_assures_Phi0 : forall b, assuredP E0 Phi0 b SafePath W0.
+Proof.
+  intro b. apply AS_act; [ apply E0_verify_enabled | ]. intros W1 H1.
+  destruct H1 as [[_ ->] | [Hc _]]; [ | discriminate Hc ].
+  apply AS_act; [ apply E0_purchase_enabled | ]. intros W2 H2.
+  destruct H2 as [[Hc _] | [_ ->]]; [ discriminate Hc | ].
+  apply AS_here. unfold Phi0. split.
+  - apply wupd_same.
+  - rewrite wupd_other; [ apply wupd_same | unfold verified, booked; lia ].
+Qed.
+
+Theorem Ggood_is_robust : forall b, Robust E0 Haz0 Phi0 b Ggood W0.
+Proof.
+  intro b. split.
+  - apply TC_sound. apply Ggood_is_k_tolerant.
+  - unfold Assured, Ggood.
+    apply AS_comm with (l0 := 10) (psi0 := fun _ : World => True)
+                       (Gl0 := SafePath); [ left; reflexivity | exact I | | ].
+    + intros l psi Gl Hin _. destruct Hin as [Heq | []]. inversion Heq; subst.
+      apply SafePath_assures_Phi0.
+    + intros l psi Gl c Hin Hnp _. destruct Hin as [Heq | []]. inversion Heq; subst.
+      exfalso. apply Hnp. exact I.
+Qed.
+
+(* The cone of influence is inhabited by a NON-degenerate instance: the
+   booking runtime reads only two of the world's variables, so worlds
+   differing anywhere else are interchangeable for it. *)
+Definition V0 : Var -> Prop := fun x => x = verified \/ x = booked.
+
+Lemma V0_haz_cone : forall W1 W2, agree V0 W1 W2 -> (Haz0 W1 <-> Haz0 W2).
+Proof.
+  intros W1 W2 Hag. unfold Haz0.
+  rewrite (Hag booked (or_intror eq_refl)). rewrite (Hag verified (or_introl eq_refl)).
+  reflexivity.
+Qed.
+
+Lemma V0_cap_cone : forall a W1 W2 W1',
+  agree V0 W1 W2 -> E0 a W1 W1' -> exists W2', E0 a W2 W2' /\ agree V0 W1' W2'.
+Proof.
+  intros a W1 W2 W1' Hag HE.
+  destruct HE as [[-> ->] | [-> ->]].
+  - exists (wupd W2 verified 1). split; [ left; split; reflexivity | ].
+    intros x Hx. destruct (Nat.eq_dec x verified) as [-> | Hxv].
+    + rewrite !wupd_same. reflexivity.
+    + rewrite !wupd_other by exact Hxv. apply Hag. exact Hx.
+  - exists (wupd W2 booked 1). split; [ right; split; reflexivity | ].
+    intros x Hx. destruct (Nat.eq_dec x booked) as [-> | Hxb].
+    + rewrite !wupd_same. reflexivity.
+    + rewrite !wupd_other by exact Hxb. apply Hag. exact Hx.
+Qed.
+
+Lemma V0_guards_Ggood : guards_in_cone V0 Ggood.
+Proof.
+  unfold Ggood. simpl. repeat split; try exact I; intros W1 W2 _; reflexivity.
+Qed.
+
+(* two genuinely different worlds that the theorem identifies *)
+Definition W0' : World := wupd W0 2 5.
+
+Lemma W0_W0'_differ : W0 <> W0'.
+Proof.
+  intro Heq. assert (H : W0 2 = 5) by (rewrite Heq; apply wupd_same).
+  unfold W0 in H. discriminate.
+Qed.
+
+Lemma W0_W0'_agree : agree V0 W0 W0'.
+Proof.
+  intros x Hx. unfold W0'. symmetry. apply wupd_other.
+  destruct Hx as [-> | ->]; unfold verified, booked; lia.
+Qed.
+
+Theorem cone_is_not_degenerate : forall b,
+  W0 <> W0' /\ (safeT E0 Haz0 b Ggood W0 <-> safeT E0 Haz0 b Ggood W0').
+Proof.
+  intro b. split; [ exact W0_W0'_differ | ].
+  apply (safeT_cone E0 Haz0 V0 V0_haz_cone V0_cap_cone b Ggood W0 W0'
+           V0_guards_Ggood W0_W0'_agree).
+Qed.
