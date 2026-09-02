@@ -187,7 +187,8 @@ Ggoal_marker_met
 Ggood_inhabited
      : forall W : Severity.World, ctypes Severity.E0 Severity.Ggood MGood W
 Gmiss_safe
-     : Severity.safeT Severity.E0 Severity.Haz0 0 Gmiss Severity.W0
+     : forall b : nat,
+       Severity.safeT Severity.E0 Severity.Haz0 b Gmiss Severity.W0
 Gmiss_uninhabited
      : forall s : Sess, ~ ctypes Severity.E0 Gmiss s Severity.W0
 MBad_takes_the_wrong_branch
