@@ -67,8 +67,11 @@ four TikZ figures, and the conventional structure.
 - **k-misselection tolerance**: no run with ≤ k misselections reaches a hazard.
   Possibilistic — no probabilities. The tolerance degree `k*` is the headline.
 - **T-Choice-Safe**: exact syntax-directed characterization.
-- **Non-vacuity**: explicit conforming sessions are exhibited for the worked
-  instances, so the bridge is not a guarantee about an empty class.
+- **Non-vacuity**: every two-role protocol is inhabited, over any runtime in
+  which a tool call always has an answer --- `canon` reads the global type as
+  a pair of processes and `canon_conforms` proves it conforms in every world,
+  so the bridge is never a guarantee about an empty class. Explicit sessions
+  are also exhibited for the worked instances and for the repairs.
 - **Bridge**: a session typed against a k-tolerant protocol is hazard-free
   within budget k; budgets distribute over participants; holds for recursive
   sessions and protocols (`bridge_mu`).
@@ -109,7 +112,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**168 results, every one axiom-free** (`Print Assumptions` harnesses).
+**173 results, every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 `proof/STATEMENTS.md` lists the Coq statement of all 126 results the paper
