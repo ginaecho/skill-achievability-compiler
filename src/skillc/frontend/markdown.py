@@ -71,6 +71,22 @@ _NEGATION_BEFORE_VERB_RE = NEGATION_RE
 SHELL_CAP = "bash"
 PACK_FENCE_TAG = "skillc-pack"
 
+# A fenced code block that the document expects the agent to EXECUTE requires
+# the shell capability.  Shell-language fences always do; general-purpose
+# language fences do when the prose just before them says so ("run",
+# "execute", "usage", ...).  A fence shown purely as an example does not.
+SHELL_LANGS = {"bash", "sh", "shell", "zsh", "console", "powershell", "ps1", "cmd", "bat", "fish"}
+CODE_LANGS = {"python", "py", "python3", "javascript", "js", "typescript", "ts", "node",
+              "ruby", "rb", "perl", "r", "julia", "go", "rust"}
+EXEC_HINT_RE = re.compile(r"\b(run|runs|running|execute|executing|usage|invoke|command|script|install)\b", re.I)
+
+
+@dataclass
+class Fence:
+    lang: str
+    line: int
+    executable: bool
+
 
 @dataclass
 class Invocation:
@@ -117,9 +133,11 @@ def _tool_list(value) -> list[str]:
     return []
 
 
-def _strip_fences(body: str) -> tuple[str, Optional[dict]]:
+def _strip_fences(body: str, fences: Optional[list] = None) -> tuple[str, Optional[dict]]:
     """Blank out fenced code blocks (preserving line numbers) and pull out an
-    embedded ``skillc-pack`` JSON block if present."""
+    embedded ``skillc-pack`` JSON block if present.  If ``fences`` is given,
+    append a Fence record per block, saying whether the document expects it
+    to be executed."""
     embedded: Optional[dict] = None
 
     def repl(m: re.Match) -> str:
@@ -130,6 +148,15 @@ def _strip_fences(body: str) -> tuple[str, Optional[dict]]:
                 embedded = json.loads(m.group(3))
             except json.JSONDecodeError as e:
                 raise PackError(f"embedded skillc-pack block is not valid JSON: {e}")
+        if fences is not None:
+            lang = info.split()[0] if info.split() else ""
+            line = body.count("\n", 0, m.start()) + 1
+            before = "\n".join(body[:m.start()].splitlines()[-3:])
+            content = m.group(3)
+            executable = (lang in SHELL_LANGS or
+                          (lang in CODE_LANGS and bool(EXEC_HINT_RE.search(before))) or
+                          content.lstrip().startswith("#!"))
+            fences.append(Fence(lang, line, executable))
         return "\n" * m.group(0).count("\n")
 
     return FENCE_RE.sub(repl, body), embedded
@@ -182,7 +209,8 @@ def compile_markdown(text: str, profile: Profile,
     """Compact a SKILL.md / agent markdown into an achievability pack."""
     meta, body = parse_frontmatter(text)
     skill_name = str(name or meta.get("name") or "skill")
-    prose, embedded = _strip_fences(body)
+    fences: list[Fence] = []
+    prose, embedded = _strip_fences(body, fences)
 
     if embedded is not None:
         validate_pack(embedded)
@@ -207,6 +235,11 @@ def compile_markdown(text: str, profile: Profile,
 
     # --- invoked actions --------------------------------------------------
     invocations = extract(prose, set(declared))
+    # executable code fences act through the shell
+    for f in fences:
+        if f.executable:
+            invocations.append(Invocation(f"```{f.lang or 'code'} block", SHELL_CAP, "shell", f.line))
+    invocations.sort(key=lambda i: i.line)
 
     # --- semantic compaction ----------------------------------------------
     # If the document states what "finished" means and lists workflow steps,

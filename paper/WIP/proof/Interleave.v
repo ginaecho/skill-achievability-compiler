@@ -42,7 +42,18 @@ Definition enables (a b : CapN) : Prop :=
 Definition guard_br (a : CapN) (r : Role) (br : Lab * (World -> Prop) * Gt) :=
   (fst (fst br), snd (fst br), GAct a r (snd br)).
 
-(* ---- one swap: a bystander action moves one node earlier ---- *)
+(* two communications between disjoint role pairs: p->q over ls, then r->s
+   over ms, with continuation K l m; and the other order *)
+Definition inner_brs (K : Lab -> Lab -> Gt) (l : Lab) (ms : list (Lab * (World -> Prop))) :=
+  map (fun mp => (fst mp, snd mp, K l (fst mp))) ms.
+Definition orig_cc (r s : Role) (K : Lab -> Lab -> Gt) ms (ls : list (Lab * (World -> Prop))) :=
+  map (fun lp => (fst lp, snd lp, GComm r s (inner_brs K (fst lp) ms))) ls.
+Definition inner_brs' (K : Lab -> Lab -> Gt) (m : Lab) (ls : list (Lab * (World -> Prop))) :=
+  map (fun lp => (fst lp, snd lp, K (fst lp) m)) ls.
+Definition new_cc (p q : Role) (K : Lab -> Lab -> Gt) ls (ms : list (Lab * (World -> Prop))) :=
+  map (fun mp => (fst mp, snd mp, GComm p q (inner_brs' K (fst mp) ls))) ms.
+
+(* ---- one swap: independent nodes exchange places (either direction) ---- *)
 Inductive swap1 : Gt -> Gt -> Prop :=
 | SW_act : forall a r b q G,
     r <> q -> neutral a -> commute_ab a b -> enables a b -> enables b a ->
@@ -54,6 +65,16 @@ Inductive swap1 : Gt -> Gt -> Prop :=
 | SW_goal : forall a r phi G,
     preserves a phi ->
     swap1 (GGoal phi (GAct a r G)) (GAct a r (GGoal phi G))
+| SW_comm_rev : forall a r p q brs,
+    r <> p -> r <> q -> neutral a ->
+    (forall l psi Gl, In (l, psi, Gl) brs -> preserves a psi) ->
+    swap1 (GAct a r (GComm p q brs)) (GComm p q (map (guard_br a r) brs))
+| SW_goal_rev : forall a r phi G,
+    preserves a phi ->
+    swap1 (GAct a r (GGoal phi G)) (GGoal phi (GAct a r G))
+| SW_comm_comm : forall p q r s ls ms K,
+    p <> r -> p <> s -> q <> r -> q <> s ->
+    swap1 (GComm p q (orig_cc r s K ms ls)) (GComm r s (new_cc p q K ls ms))
 | SW_under_act : forall a p G G',
     swap1 G G' -> swap1 (GAct a p G) (GAct a p G')
 | SW_under_goal : forall phi G G',
@@ -76,6 +97,47 @@ Proof.
   destruct Hin as [[[l0 psi0] Gl0] [Heq Hin0]]. simpl in Heq. inversion Heq; subst.
   exists Gl0. split; [ exact Hin0 | reflexivity ].
 Qed.
+
+Lemma in_inner : forall K l ms m phi X,
+  In (m, phi, X) (inner_brs K l ms) -> In (m, phi) ms /\ X = K l m.
+Proof.
+  intros K l ms m phi X H. apply in_map_iff in H. destruct H as [[m0 phi0] [Heq Hin]].
+  simpl in Heq. inversion Heq; subst. split; [ exact Hin | reflexivity ].
+Qed.
+Lemma in_inner_intro : forall K l ms m phi,
+  In (m, phi) ms -> In (m, phi, K l m) (inner_brs K l ms).
+Proof. intros. apply in_map_iff. exists (m, phi). split; [ reflexivity | assumption ]. Qed.
+Lemma in_inner' : forall K m ls l psi X,
+  In (l, psi, X) (inner_brs' K m ls) -> In (l, psi) ls /\ X = K l m.
+Proof.
+  intros K m ls l psi X H. apply in_map_iff in H. destruct H as [[l0 psi0] [Heq Hin]].
+  simpl in Heq. inversion Heq; subst. split; [ exact Hin | reflexivity ].
+Qed.
+Lemma in_inner'_intro : forall K m ls l psi,
+  In (l, psi) ls -> In (l, psi, K l m) (inner_brs' K m ls).
+Proof. intros. apply in_map_iff. exists (l, psi). split; [ reflexivity | assumption ]. Qed.
+Lemma in_orig : forall r s K ms ls l psi X,
+  In (l, psi, X) (orig_cc r s K ms ls) -> In (l, psi) ls /\ X = GComm r s (inner_brs K l ms).
+Proof.
+  intros r s K ms ls l psi X H. apply in_map_iff in H. destruct H as [[l0 psi0] [Heq Hin]].
+  simpl in Heq. inversion Heq; subst. split; [ exact Hin | reflexivity ].
+Qed.
+Lemma in_orig_intro : forall r s K ms ls l psi,
+  In (l, psi) ls -> In (l, psi, GComm r s (inner_brs K l ms)) (orig_cc r s K ms ls).
+Proof. intros. apply in_map_iff. exists (l, psi). split; [ reflexivity | assumption ]. Qed.
+Lemma in_new : forall p q K ls ms m phi Y,
+  In (m, phi, Y) (new_cc p q K ls ms) -> In (m, phi) ms /\ Y = GComm p q (inner_brs' K m ls).
+Proof.
+  intros p q K ls ms m phi Y H. apply in_map_iff in H. destruct H as [[m0 phi0] [Heq Hin]].
+  simpl in Heq. inversion Heq; subst. split; [ exact Hin | reflexivity ].
+Qed.
+Lemma in_new_intro : forall p q K ls ms m phi,
+  In (m, phi) ms -> In (m, phi, GComm p q (inner_brs' K m ls)) (new_cc p q K ls ms).
+Proof. intros. apply in_map_iff. exists (m, phi). split; [ reflexivity | assumption ]. Qed.
+Lemma map_nonnil : forall (A B : Type) (f : A -> B) l, l <> nil -> map f l <> nil.
+Proof. intros A B f [ | x t ] H; [ contradiction | discriminate ]. Qed.
+Lemma map_nonnil_inv : forall (A B : Type) (f : A -> B) l, map f l <> nil -> l <> nil.
+Proof. intros A B f [ | x t ] H; [ exfalso; apply H; reflexivity | discriminate ]. Qed.
 
 Lemma in_mid : forall (A : Type) (x y : A) l1 l2,
   In x (l1 ++ y :: l2) -> In x l1 \/ x = y \/ In x l2.
@@ -100,6 +162,9 @@ Proof.
   induction Hsw as [ a r b q G Hrq Hneu Hcom Hen1 Hen2
                    | a r p q brs Hrp Hrq Hneu Hpres
                    | a r phi G Hpres
+                   | a r p q brs Hrp Hrq Hneu Hpres
+                   | a r phi G Hpres
+                   | p q r s ls ms K Hpr Hps Hqr Hqs
                    | a p G G' Hsw IH
                    | phi G G' Hsw IH
                    | p q brs1 brs2 l psi Gl Gl' Hsw IH ]; intros b0 W Hs.
@@ -131,6 +196,45 @@ Proof.
     apply ST_Act; [ exact Hnh | ]. intros W' Ha. apply ST_Goal.
     + eapply safeT_not_haz. apply Hall. exact Ha.
     + apply Hall. exact Ha.
+  - (* SW_comm_rev *)
+    inversion Hs as [ | | b1 a1 p1 G1 W1 Hnh Hall | ]; subst.
+    apply ST_Comm; [ exact Hnh | | ].
+    + intros l psi X Hin Hpsi. apply in_guard_br_inv in Hin. destruct Hin as [Gl [Hin HX]]. subst X.
+      apply ST_Act; [ exact Hnh | ]. intros W' Ha.
+      specialize (Hall W' Ha). inversion Hall as [ | | | b2 p2 q2 brs2 W2 Hnh' Hok Hdev ]; subst.
+      apply (Hok l psi Gl Hin). apply (proj1 (Hpres l psi Gl Hin W W' Ha)). exact Hpsi.
+    + intros l psi X Hin Hnpsi c Hb. apply in_guard_br_inv in Hin. destruct Hin as [Gl [Hin HX]]. subst X.
+      apply ST_Act; [ exact Hnh | ]. intros W' Ha.
+      specialize (Hall W' Ha). inversion Hall as [ | | | b2 p2 q2 brs2 W2 Hnh' Hok Hdev ]; subst.
+      apply (Hdev l psi Gl Hin); [ | first [ exact Hb | reflexivity ] ].
+      intro HW'. apply Hnpsi. apply (proj2 (Hpres l psi Gl Hin W W' Ha)). exact HW'.
+  - (* SW_goal_rev *)
+    inversion Hs as [ | | b1 a1 p1 G1 W1 Hnh Hall | ]; subst.
+    apply ST_Goal; [ exact Hnh | ]. apply ST_Act; [ exact Hnh | ]. intros W' Ha.
+    specialize (Hall W' Ha). inversion Hall as [ | b2 phi2 G2 W2 Hnh' Hs' | | ]; subst. exact Hs'.
+  - (* SW_comm_comm *)
+    inversion Hs as [ | | | b1 p1 q1 brs1 W1 Hnh Hok Hdev ]; subst.
+    apply ST_Comm; [ exact Hnh | | ].
+    + intros m phi Y Hin Hphi. apply in_new in Hin. destruct Hin as [Hm HY]. subst Y.
+      apply ST_Comm; [ exact Hnh | | ].
+      * intros l psi X Hin Hpsi. apply in_inner' in Hin. destruct Hin as [Hl HX]. subst X.
+        specialize (Hok _ _ _ (in_orig_intro r s K ms ls l psi Hl) Hpsi).
+        inversion Hok as [ | | | b2 p2 q2 brs2 W2 Hnh' Hok' Hdev' ]; subst.
+        apply (Hok' m phi (K l m) (in_inner_intro K l ms m phi Hm) Hphi).
+      * intros l psi X Hin Hnpsi c Hb. apply in_inner' in Hin. destruct Hin as [Hl HX]. subst X.
+        specialize (Hdev _ _ _ (in_orig_intro r s K ms ls l psi Hl) Hnpsi c Hb).
+        inversion Hdev as [ | | | b2 p2 q2 brs2 W2 Hnh' Hok' Hdev' ]; subst.
+        apply (Hok' m phi (K l m) (in_inner_intro K l ms m phi Hm) Hphi).
+    + intros m phi Y Hin Hnphi c Hb. apply in_new in Hin. destruct Hin as [Hm HY]. subst Y.
+      apply ST_Comm; [ exact Hnh | | ].
+      * intros l psi X Hin Hpsi. apply in_inner' in Hin. destruct Hin as [Hl HX]. subst X.
+        specialize (Hok _ _ _ (in_orig_intro r s K ms ls l psi Hl) Hpsi).
+        inversion Hok as [ | | | b2 p2 q2 brs2 W2 Hnh' Hok' Hdev' ]; subst.
+        apply (Hdev' m phi (K l m) (in_inner_intro K l ms m phi Hm) Hnphi c); first [ exact Hb | reflexivity ].
+      * intros l psi X Hin Hnpsi c' Hc. apply in_inner' in Hin. destruct Hin as [Hl HX]. subst X.
+        specialize (Hdev _ _ _ (in_orig_intro r s K ms ls l psi Hl) Hnpsi c Hb).
+        inversion Hdev as [ | | | b2 p2 q2 brs2 W2 Hnh' Hok' Hdev' ]; subst.
+        apply (Hdev' m phi (K l m) (in_inner_intro K l ms m phi Hm) Hnphi c'); first [ exact Hc | reflexivity ].
   - inversion Hs as [ | | b1 a1 p1 G1 W1 Hnh Hall | ]; subst.
     apply ST_Act; [ exact Hnh | ]. intros W' Ha. apply IH. apply Hall. exact Ha.
   - inversion Hs as [ | b1 phi1 G1 W1 Hnh Hs' | | ]; subst.
@@ -179,6 +283,9 @@ Proof.
   induction Hsw as [ a r b q G Hrq Hneu Hcom Hen1 Hen2
                    | a r p q brs Hrp Hrq Hneu Hpres
                    | a r phi G Hpres
+                   | a r p q brs Hrp Hrq Hneu Hpres
+                   | a r phi G Hpres
+                   | p q r t ls ms K Hpr Hpt Hqr Hqt
                    | a p G G' Hsw IH
                    | phi G G' Hsw IH
                    | p q brs1 brs2 l psi Gl Gl' Hsw IH ]; intros s W Ht.
@@ -229,6 +336,92 @@ Proof.
     inversion Ht' as [ | | a1 p1 G1 s1 W1 Q Hsr Hex Hall | ]; subst.
     apply CT_Act with Q; [ exact Hsr | exact Hex | ].
     intros W' Ha. apply CT_Goal; [ apply (proj1 (Hpres W W' Ha)); exact Hphi | apply Hall; exact Ha ].
+  - (* SW_comm_rev *)
+    inversion Ht as [ | | a1 p1 G1 s1 W1 P Hsr Hex Hall | ]; subst.
+    destruct Hex as [W1 Ha1].
+    pose proof (Hall W1 Ha1) as Ht1.
+    inversion Ht1 as [ | | | p2 q2 brs2 s2 W2 sendb recvb Hpq Hsp Hsq Hne Hl1 Hl2 Hl3 Hcont ]; subst.
+    rewrite supd_other in Hsp by (intro Hc; apply Hrp; symmetry; exact Hc).
+    rewrite supd_other in Hsq by (intro Hc; apply Hrq; symmetry; exact Hc).
+    apply CT_Comm with sendb recvb.
+    + exact Hpq.
+    + exact Hsp.
+    + exact Hsq.
+    + apply map_nonnil. exact Hne.
+    + intros l psi X Hin. apply in_guard_br_inv in Hin. destruct Hin as [Gl [Hin _]]. eapply Hl1. exact Hin.
+    + intros l P' HP. destruct (Hl2 l P' HP) as [psi [Gl Hin]]. exists psi, (GAct a r Gl). apply in_guard_br. exact Hin.
+    + intros l psi X Hin. apply in_guard_br_inv in Hin. destruct Hin as [Gl [Hin _]]. eapply Hl3. exact Hin.
+    + intros l psi X P' Q' Hin HP HQ. apply in_guard_br_inv in Hin. destruct Hin as [Gl [Hin HX]]. subst X.
+      apply CT_Act with P.
+      * rewrite supd_other by exact Hrq. rewrite supd_other by exact Hrp. exact Hsr.
+      * exists W1. exact Ha1.
+      * intros W' Ha'. pose proof (Hall W' Ha') as Ht'.
+        inversion Ht' as [ | | | p3 q3 brs3 s3 W3 sendb' recvb' Hpq' Hsp' Hsq' Hne' Hl1' Hl2' Hl3' Hcont' ]; subst.
+        rewrite supd_other in Hsp' by (intro Hc; apply Hrp; symmetry; exact Hc).
+        rewrite supd_other in Hsq' by (intro Hc; apply Hrq; symmetry; exact Hc).
+        rewrite Hsp in Hsp'. inversion Hsp'; subst sendb'.
+        rewrite Hsq in Hsq'. inversion Hsq'; subst recvb'.
+        eapply ctypes_ext; [ apply (Hcont' l psi Gl P' Q' Hin HP HQ) | ].
+        intro x. unfold supd.
+        destruct (Nat.eq_dec x r); destruct (Nat.eq_dec x q); destruct (Nat.eq_dec x p); congruence.
+  - (* SW_goal_rev *)
+    inversion Ht as [ | | a1 p1 G1 s1 W1 P Hsr Hex Hall | ]; subst.
+    destruct Hex as [W1 Ha1].
+    pose proof (Hall W1 Ha1) as Ht1. inversion Ht1 as [ | phi2 G2 s2 W2 Hphi Ht2 | | ]; subst.
+    apply CT_Goal.
+    + apply (proj2 (Hpres W W1 Ha1)). exact Hphi.
+    + apply CT_Act with P; [ exact Hsr | exists W1; exact Ha1 | ].
+      intros W' Ha'. pose proof (Hall W' Ha') as Ht'. inversion Ht' as [ | phi3 G3 s3 W3 Hphi' Ht3 | | ]; subst.
+      exact Ht3.
+  - (* SW_comm_comm *)
+    inversion Ht as [ | | | p1 q1 brs1 s1 W1 sendb recvb Hpq Hsp Hsq Hne Hl1 Hl2 Hl3 Hcont ]; subst.
+    unfold orig_cc in Hne. apply map_nonnil_inv in Hne.
+    destruct ls as [ | [l0 psi0] ls' ]; [ exfalso; apply Hne; reflexivity | ].
+    assert (Hin0 : In (l0, psi0, GComm r t (inner_brs K l0 ms)) (orig_cc r t K ms ((l0, psi0) :: ls')))
+      by (apply in_orig_intro; left; reflexivity).
+    destruct (Hl1 _ _ _ Hin0) as [P0 HP0]. destruct (Hl3 _ _ _ Hin0) as [Q0 HQ0].
+    pose proof (Hcont _ _ _ _ _ Hin0 HP0 HQ0) as Ht0.
+    inversion Ht0 as [ | | | r1 t1 brs2 s2 W2 sendb' recvb' Hrt Hsr Hst Hne' Hm1 Hm2 Hm3 Hcont0 ]; subst.
+    rewrite supd_other in Hsr by (intro Hc; apply Hqr; symmetry; exact Hc).
+    rewrite supd_other in Hsr by (intro Hc; apply Hpr; symmetry; exact Hc).
+    rewrite supd_other in Hst by (intro Hc; apply Hqt; symmetry; exact Hc).
+    rewrite supd_other in Hst by (intro Hc; apply Hpt; symmetry; exact Hc).
+    unfold inner_brs in Hne'. apply map_nonnil_inv in Hne'.
+    apply CT_Comm with sendb' recvb'.
+    + exact Hrt.
+    + exact Hsr.
+    + exact Hst.
+    + apply map_nonnil. exact Hne'.
+    + intros m phi Y Hin. apply in_new in Hin. destruct Hin as [Hm _].
+      eapply Hm1. apply in_inner_intro. exact Hm.
+    + intros m P' HP. destruct (Hm2 m P' HP) as [phi [X Hin]]. apply in_inner in Hin. destruct Hin as [Hm _].
+      exists phi, (GComm p q (inner_brs' K m ((l0, psi0) :: ls'))). apply in_new_intro. exact Hm.
+    + intros m phi Y Hin. apply in_new in Hin. destruct Hin as [Hm _].
+      eapply Hm3. apply in_inner_intro. exact Hm.
+    + intros m phi Y P' Q' Hin HP' HQ'. apply in_new in Hin. destruct Hin as [Hm HY]. subst Y.
+      apply CT_Comm with sendb recvb.
+      * exact Hpq.
+      * rewrite supd_other by exact Hpt. rewrite supd_other by exact Hpr. exact Hsp.
+      * rewrite supd_other by exact Hqt. rewrite supd_other by exact Hqr. exact Hsq.
+      * discriminate.
+      * intros l psi X Hin. apply in_inner' in Hin. destruct Hin as [Hl _].
+        eapply Hl1. apply in_orig_intro. exact Hl.
+      * intros l P HP. destruct (Hl2 l P HP) as [psi [X Hin]]. apply in_orig in Hin. destruct Hin as [Hl _].
+        exists psi, (K l m). apply in_inner'_intro. exact Hl.
+      * intros l psi X Hin. apply in_inner' in Hin. destruct Hin as [Hl _].
+        eapply Hl3. apply in_orig_intro. exact Hl.
+      * intros l psi X P Q Hin HP HQ. apply in_inner' in Hin. destruct Hin as [Hl HX]. subst X.
+        pose proof (Hcont _ _ _ P Q (in_orig_intro r t K ms _ l psi Hl) HP HQ) as Htl.
+        inversion Htl as [ | | | r2 t2 brs3 s3 W3 sendb'' recvb'' Hrt2 Hsr2 Hst2 Hne2 Hm1' Hm2' Hm3' Hcont2 ]; subst.
+        rewrite supd_other in Hsr2 by (intro Hc; apply Hqr; symmetry; exact Hc).
+        rewrite supd_other in Hsr2 by (intro Hc; apply Hpr; symmetry; exact Hc).
+        rewrite supd_other in Hst2 by (intro Hc; apply Hqt; symmetry; exact Hc).
+        rewrite supd_other in Hst2 by (intro Hc; apply Hpt; symmetry; exact Hc).
+        rewrite Hsr in Hsr2. inversion Hsr2; subst sendb''.
+        rewrite Hst in Hst2. inversion Hst2; subst recvb''.
+        eapply ctypes_ext; [ apply (Hcont2 m phi (K l m) P' Q' (in_inner_intro K l ms m phi Hm) HP' HQ') | ].
+        intro x. unfold supd.
+        destruct (Nat.eq_dec x q); destruct (Nat.eq_dec x p); destruct (Nat.eq_dec x t); destruct (Nat.eq_dec x r); congruence.
   - inversion Ht as [ | | a1 p1 G1 s1 W1 P Hsp Hex Hall | ]; subst.
     apply CT_Act with P; [ exact Hsp | exact Hex | ]. intros W' HE. apply IH. apply Hall. exact HE.
   - inversion Ht as [ | phi1 G1 s1 W1 Hphi Ht' | | ]; subst.

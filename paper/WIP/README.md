@@ -28,6 +28,9 @@ four TikZ figures, and the conventional structure.
 | `results/live_agents.json`, `results/live_agents_runs.jsonl` | the live-agent experiment (every run, every reply) |
 | `../../docs/LIVE_AGENTS.md` | live-agent tables |
 | `../../scripts/live_agents.py` | the live-agent experiment (`claude -p`, no tools) |
+| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 45 real skills + 4 specification pairs, two runtimes, artifacts verified |
+| `../../benchmarks/spec-cases/` | the four authored achievable/not-achievable pairs with mock tools |
+| `../../real-skills-ext/PROVENANCE.json`, `../../scripts/fetch_skills_ext.py` | the 28 third-party skills (re-fetchable; files not committed) |
 | `../../docs/SEVERITY_RESULTS.md` | evaluation tables |
 | `../../src/skillc/severity.py` | the implementation (`skillc severity <pack.json|SKILL.md>`) |
 | `../../src/skillc/data/severity_corpus.json` | the 15-protocol severity benchmark with pre-stated expected verdicts |
@@ -54,9 +57,11 @@ four TikZ figures, and the conventional structure.
   the finite fragment embeds (`TC_regular`), `decide_mu` is sound and complete.
 - **Repairs**: narrow, guard, reorder, compensate --- all proved sound;
   guard and reorder characterized exactly.
-- **Bystanders**: a role acting before its turn preserves the condition and
-  typing under semantic independence; variable disjointness of STRIPS
-  footprints discharges it, which is what the tool checks.
+- **Bystanders**: every permutation of independent nodes (actions under
+  semantic independence, communications between disjoint role pairs
+  unconditionally) preserves the condition and typing; variable disjointness
+  of STRIPS footprints discharges the action conditions, which is what the
+  tool checks.
 - **Verified kernel**: on the boolean fragment the tool's k* is cross-checked
   against a decision procedure extracted from the proof (16/16 agree).
 
@@ -77,6 +82,11 @@ four TikZ figures, and the conventional structure.
 - Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
   violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1; 6 of 19
   Catastrophic verdicts taken by a real agent; repairs remove the catastrophes.
+- Usefulness (96 verified agent runs): certified configurations 48/48 verified
+  artifacts, 0 silent wrong; refuted configurations where the procedure is the
+  only route (documents, spec pairs) 0/28 verified, 2 fabrications, 24 honest
+  failures; refuted configurations where the task reduces to hand arithmetic
+  20/20 verified by abandoning the skill's scripts (the verdict's precision limit).
 - Modularity: whole-system complete analysis 35.8 s at n=6 vs 0.13 s modular
   with the cone-of-influence interface (concrete interface: 2.9 s, 256 points).
   Re-check after a change: 172 ms vs 22 ms.
@@ -98,4 +108,5 @@ pdflatex main.tex && pdflatex main.tex     # needs texlive-fonts-extra
 cd proof && make && make binary             # Coq 8.18 + OCaml 4.14
 pip install -e ../.. && python3 ../../scripts/severity_eval.py
 python3 ../../scripts/live_agents.py       # needs the Claude Code CLI
+python3 ../../scripts/fetch_skills_ext.py && python3 ../../scripts/usefulness.py
 ```

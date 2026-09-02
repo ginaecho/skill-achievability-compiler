@@ -119,3 +119,41 @@ def test_verified_kernel_agrees_with_analyzer():
         if "skipped" in kr:
             continue
         assert kr["tolerance_degree"] == analyze(e["pack"], kmax=4).tolerance_degree, e["id"]
+
+
+def test_spec_cases_are_certified_and_refuted_as_authored():
+    from pathlib import Path
+    from skillc.profiles import load_profile
+    from skillc.frontend.markdown import compile_file
+    from skillc.checker import check
+    root = Path(__file__).resolve().parents[1] / "benchmarks" / "spec-cases"
+    expected = {"order-in-budget": "GOAL_UNSAT", "publish-with-approval": "BLOCKED_GUARD",
+                "onboard-badge": "GOAL_UNSAT", "ledger-verify": "MISSING_CAPABILITY"}
+    prof = load_profile("claude-code")
+    for case, reason in expected.items():
+        a = check(compile_file(root / case / "A" / "SKILL.md", prof).pack)
+        b = check(compile_file(root / case / "B" / "SKILL.md", prof).pack)
+        assert a.achievable, case
+        assert not b.achievable and b.reason == reason, (case, b.reason)
+
+
+def test_real_skills_flip_between_shell_and_no_shell_runtimes():
+    import glob, pytest
+    from pathlib import Path
+    from skillc.profiles import load_profile
+    from skillc.frontend.markdown import compile_file
+    from skillc.checker import check
+    root = Path(__file__).resolve().parents[1]
+    files = sorted(glob.glob(str(root / "real-skills" / "**" / "SKILL.md"), recursive=True))
+    if not files:
+        pytest.skip("real-skills corpus not fetched (scripts/fetch_skills.py)")
+    shell = load_profile("claude-ai"); noshell = load_profile("no-shell")   # claude-ai is these skills' home runtime
+    flips = 0
+    for f in files:
+        a = check(compile_file(f, shell).pack)
+        b = check(compile_file(f, noshell).pack)
+        assert a.achievable, f                      # every skill runs in its home runtime
+        if not b.achievable:
+            assert b.reason == "MISSING_CAPABILITY"
+            flips += 1
+    assert flips >= 5                               # the code-fence rule makes the shell visible
