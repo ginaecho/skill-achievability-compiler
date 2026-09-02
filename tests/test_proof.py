@@ -77,3 +77,22 @@ def test_every_coq_result_the_paper_cites_exists_and_is_checked():
         pytest.skip("citation checker not present")
     r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_the_numbers_the_paper_states_match_the_shipped_results():
+    """Two review rounds found stale figures in the evaluation -- right
+    method, old run -- because nothing tied a sentence to the file it came
+    from.  paper/WIP/results/CLAIMS.json ties them, and this fails when they
+    drift.  It covers only what is mechanically derivable from a results
+    file; the manifest says so rather than implying it covers the section."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts" / "check_paper_numbers.py"
+    if not script.exists():
+        import pytest
+        pytest.skip("numbers checker not present")
+    r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
