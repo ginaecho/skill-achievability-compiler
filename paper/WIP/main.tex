@@ -145,7 +145,7 @@ Participants that Choose Wrongly}
 \keywords{Session types, Multiparty, Behavioural types, Safety, Irreversibility,
 Fault tolerance, Mechanized metatheory}
 \category{}\relatedversion{}
-\supplement{Coq development (185 theorems, axiom-free, Coq 8.18), the
+\supplement{Coq development (186 theorems, axiom-free, Coq 8.18), the
 \texttt{skillc severity} implementation, the severity benchmark, and the
 evaluation scripts; anonymized for submission.}
 \EventEditors{}\EventNoEds{0}\EventLongTitle{}\EventShortTitle{}
@@ -509,9 +509,13 @@ reachability questions are monotone in the budget
 \begin{assumption}[Decidable questions]\label{ass:dec}
 Where a result needs to know whether a guard holds, or whether a hazard or the
 goal is reachable at a given budget, that question is assumed decidable. The
-widened finite-range fragment of \S\ref{sec:base} supplies it, and in Coq the
-disjunction is a hypothesis of the affected lemmas, never an axiom: the
-development uses no classical principle.
+widened finite-range fragment of \S\ref{sec:base} supplies it. In Coq the
+disjunction is a hypothesis of the affected lemmas, never an axiom, so the
+development is axiom-free; but we do not oversell that. Where the hypothesis
+is stated over an arbitrary world predicate it is excluded middle for that
+class, discharged by the caller rather than assumed globally, and a reader
+should judge those lemmas as classical in content and constructive only in
+bookkeeping.
 \end{assumption}
 
 \begin{theorem}[The trichotomy is ordered]\label{thm:ordered}
@@ -681,7 +685,8 @@ $\kstar$ is not merely where a scan stopped. If a residual is
 $\kstar$-tolerant and not $(\kstar{+}1)$-tolerant, then the budgets at which
 it is tolerant are exactly those $\le\kstar$ (\coqok{principal\_characterises}),
 such a $\kstar$ is unique (\coqok{principal\_unique}), and one exists whenever
-tolerance is finite and the question is decidable (\coqok{principal\_exists}).
+the residual is $0$-tolerant, some budget is not tolerated, and the question is
+decidable (\coqok{principal\_exists}).
 \end{theorem}
 
 So every derivation of the condition for that residual is a derivation at some
@@ -724,9 +729,10 @@ $r$.
 If $G\vdash(\MM;W)$ and $\safeT{k} G,W$, then every instrumented head step of
 cost $c\le$ the remaining budget preserves typing and debits the budget by
 exactly $c$ (\coqok{bridge\_step}); consequently, along every run of total
-cost at most $k$, no configuration is a hazard state --- runs are prefix-closed
-(\coqok{hrun\_split}), so this is every configuration and not only the last
-(\coqok{bridge\_run}, \coqok{bridge\_every\_configuration}).
+cost at most $k$, no configuration is a hazard state
+(\coqok{bridge\_every\_configuration}) --- runs are prefix-closed
+(\coqok{hrun\_split}), so this really is every configuration and not only the
+last (\coqok{bridge\_prefix}).
 \end{theorem}
 
 Two questions come before any of this, and a discipline that skips them earns
@@ -1022,9 +1028,8 @@ $\kstar$; reachability in a succinctly presented graph is in PSPACE.
 \section{Why a Discipline, and Not a Model Checker}\label{sec:why}
 
 Theorem~\ref{thm:exact} invites the objection that the rules are a decision
-procedure in disguise. The objection is old and Naik and
-Palsberg~\cite{naik-palsberg} gave the standard reply. We rest instead on a
-theorem and an experiment.
+procedure in disguise; Naik and Palsberg~\cite{naik-palsberg} gave the standard
+reply, and we rest instead on a theorem and an experiment.
 
 
 \begin{theorem}[Modular composition]\label{thm:seq}
@@ -1148,17 +1153,14 @@ $\Phi$-reachability of \S\ref{sec:severity}; that gap is a front-end one and we
 leave it open.
 
 \subparagraph*{Finding 1: existing corpora cannot pose the question.}
-We ran the analysis on the compiler's achievability corpus (15 packs), its
-extension (6), and the 17 public skills of the reference collection compiled
-by the deterministic front-end. Of these 38 packs, \emph{none} declares an
-irreversible effect, and the 17 real skills contain \emph{no choice point at
-all}: the front-end produces linear, add-only protocols. Every pack is
-trivially tolerant at every $k$. This is a result about modelling, not about
-the tool: tools' real-world irreversibility (sending, paying, deleting,
-deploying) is not captured by achievability-oriented compaction, so a
-severity analysis needs the declaration \S\ref{sec:severity} introduces. It
-also means the question this paper asks has been invisible to the corpora the
-field evaluates on.
+Over the compiler's achievability corpus (15 packs), its extension (6) and the
+17 public skills of the reference collection, \emph{no} pack declares an
+irreversible effect and the real skills contain \emph{no choice point at all}:
+all 38 are trivially tolerant at every $k$. That is a result about modelling.
+Real-world irreversibility --- sending, paying, deleting, deploying --- is not
+captured by achievability-oriented compaction, so severity needs the
+declaration \S\ref{sec:severity} introduces, and the question this paper asks
+has been invisible to the corpora the field evaluates on.
 
 \subparagraph*{Finding 2: the severity benchmark.}
 We therefore built seventeen protocols with genuine decision points and
@@ -1366,8 +1368,9 @@ that would have been wasted or wrong.} The achievability half of the discipline
 is only useful if its verdicts predict what happens when an agent actually
 runs a skill. We took real skills from public repositories --- the seventeen
 of the vendor's skills repository and 145 more from twelve third-party
-collections, de-duplicated by content hash and each with recorded
-provenance --- and, to make the question sharp, two runtimes: one with a
+collections, de-duplicated by content hash and each recorded with its source,
+fetch date, licence note, \textsc{sha}-256 and byte count, all 162 of which
+verify against the shipped files --- and, to make the question sharp, two runtimes: one with a
 shell and file tools, one with file tools only. A code fence the document expects the agent to execute is an
 invocation of the shell (a front-end rule added for this experiment), so a
 skill built on scripts is certified in the first runtime and refuted with
@@ -1530,10 +1533,12 @@ escalate to \textsc{llm} compaction exactly when the pack is weak, the verdict
 is a certification, and the document visibly carries meaning the reader did not
 capture. \texttt{skillc autocheck} implements it, escalating on 130 of the 162
 skills in the home runtime, where almost everything is weakly certified, and on
-49 in the file-only one, where 108 are refuted for free. Measured on
-20 skills, one compaction costs a median 22\,440 tokens and \$0.088 --- 27.9\%
-of the measured median agent run, paid once per skill version and amortized
-over every run of it, and zero for the 32 skills that need no model. The runs
+49 in the file-only one, where 108 are refuted for free. We attempted the compaction on 24 skills and 20 returned a
+usable pack; the other four produced no verdict and are counted as failures,
+not dropped. Over the 20, one compaction costs a median 22\,440 tokens and
+\$0.088 --- 27.9\% of the measured median agent run, paid once per skill
+version and amortized over every run of it, and zero for the 32 skills that
+need no model. The runs
 this experiment's refuted configurations spent before failing came to
 15.8\,M tokens and \$14.296. The check is cheap in the cases that matter
 because those cases are refutations, and refutations are the free half.
@@ -1677,25 +1682,18 @@ of that session is hazard-free at every budget
 
 \subparagraph*{Runtime compliance monitoring.}
 
-\begin{figure}[t]
-\centering
-\resizebox{\textwidth}{!}{\input{fig/fig-trac}}
-\caption{Two answers to ``will the agent misbehave?''. Left: TRAC observes a
-single agent's trace at run time, abstracts events to propositions with
-language-model labelers, checks an LTL constraint, predicts violations by
-sampling continuations, and intervenes. Right: this paper classifies every
-branch of a multiparty protocol before any run, deterministically and exactly.
-Complementary: TRAC's constraints can supply $\Haz$; its monitor can enforce at
-run time what the condition certified.}
-\label{fig:trac}
-\end{figure}
 
 The closest work by goal is runtime compliance monitoring of language-model
 agents, of which TRAC~\cite{trac-facct26} is the most developed: constraints
 in linear temporal logic, offline auditing, online monitoring, predictive
 monitors that sample continuations, intervening monitors that preempt a
-predicted violation. We share the question and differ on every mechanism
-(Figure~\ref{fig:trac}).
+predicted violation. We share the question and differ on every mechanism: TRAC observes one
+agent's trace at run time, abstracts events with language-model labelers,
+checks an \textsc{ltl} constraint and samples continuations to predict
+violations; we classify every branch of a multiparty protocol before any run,
+deterministically and exactly. The two compose --- TRAC's constraints can
+supply $\Haz$, its monitor can enforce at run time what the condition
+certified.
 
 
 Two differences are deep. \emph{Prediction versus projection:} TRAC must

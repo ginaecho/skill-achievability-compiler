@@ -928,37 +928,51 @@ Proof.
   unfold total in *; simpl. rewrite IH. lia.
 Qed.
 
+(* stated universally, which is what the prose says: EVERY configuration a
+   run passes through within budget is hazard-free, not merely some one *)
 Theorem bridge_every_configuration :
-  forall Ec Hz G s W b tr1 tr2 G' s' W',
+  forall Ec Hz G s W b tr1 G1 s1 W1,
     ctypes Ec G s W ->
     safeT Ec Hz b G W ->
-    hrun Ec G s W (tr1 ++ tr2) G' s' W' ->
-    total (tr1 ++ tr2) <= b ->
-    exists G1 s1 W1,
-      hrun Ec G s W tr1 G1 s1 W1 /\ ~ Hz W1 /\
-      ctypes Ec G1 s1 W1 /\ safeT Ec Hz (b - total tr1) G1 W1.
+    hrun Ec G s W tr1 G1 s1 W1 ->
+    total tr1 <= b ->
+    ~ Hz W1 /\ ctypes Ec G1 s1 W1 /\ safeT Ec Hz (b - total tr1) G1 W1.
 Proof.
-  intros Ec Hz G s W b tr1 tr2 G' s' W' Hct Hsf Hr Ht.
-  destruct (hrun_split Ec G s W tr1 tr2 G' s' W' Hr) as [G1 [s1 [W1 [Ha Hb]]]].
+  intros Ec Hz G s W b tr1 G1 s1 W1 Hct Hsf Hr Ht.
+  apply (bridge_run Ec Hz G s W tr1 G1 s1 W1 b Hct Hsf Hr Ht).
+Qed.
+
+(* and prefix-closure is what makes that cover a whole run: every prefix of
+   a run within budget is itself a run within budget *)
+Corollary bridge_prefix : forall Ec Hz G s W b tr1 tr2 G' s' W',
+  ctypes Ec G s W ->
+  safeT Ec Hz b G W ->
+  hrun Ec G s W (tr1 ++ tr2) G' s' W' ->
+  total (tr1 ++ tr2) <= b ->
+  forall G1 s1 W1, hrun Ec G s W tr1 G1 s1 W1 -> ~ Hz W1.
+Proof.
+  intros Ec Hz G s W b tr1 tr2 G' s' W' Hct Hsf Hr Ht G1 s1 W1 Ha.
   rewrite total_app in Ht.
-  destruct (bridge_run Ec Hz G s W tr1 G1 s1 W1 b Hct Hsf Ha ltac:(lia))
-    as [Hnh [Hct1 Hsf1]].
-  exists G1, s1, W1. repeat split; assumption.
+  apply (bridge_every_configuration Ec Hz G s W b tr1 G1 s1 W1 Hct Hsf Ha ltac:(lia)).
 Qed.
 
 (* and the misselected branch of the running example is a step a real
    session takes, not a hypothetical one *)
-Theorem MBad_takes_the_wrong_branch :
-  (forall (psi : World -> Prop) (W : World), psi W \/ ~ psi W) ->
-  forall W, exists s' c,
-    hstep E0 Gbad MBad W FastPath s' W 0 c.
+(* and the cost is 1, not merely some cost: the label's guard is false, so
+   the step the session takes is a MISSELECTION and is charged as one *)
+Theorem MBad_takes_the_wrong_branch : forall W,
+  exists s', hstep E0 Gbad MBad W FastPath s' W 0 1.
 Proof.
-  intros Hdec W.
-  apply (every_label_steps E0 Hdec 0 1
-           [(10, (fun _ : World => True), SafePath);
-            (11, (fun _ : World => False), FastPath)] MBad W
-           (Gbad_inhabited W) 11 (fun _ : World => False) FastPath).
-  right. left. reflexivity.
+  intro W.
+  exists (supd (supd MBad 0 PEnd) 1 WFast).
+  eapply H_Comm_dev with (sendb := [(10, PEnd); (11, PEnd)])
+                         (recvb := [(10, WSafe); (11, WFast)]).
+  - apply sess2_0.
+  - apply sess2_1.
+  - right. left. reflexivity.
+  - right. left. reflexivity.
+  - right. left. reflexivity.
+  - intro H. exact H.
 Qed.
 
 (* ----------------------------------------------------------------- *)
