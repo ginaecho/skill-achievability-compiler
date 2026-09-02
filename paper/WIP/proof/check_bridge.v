@@ -8,3 +8,8 @@ Print Assumptions every_label_steps.
 Print Assumptions Ggood_inhabited.
 Print Assumptions Gbad_inhabited.
 Print Assumptions Gbad_bridge_nonvacuous.
+Print Assumptions markers_are_met.
+Print Assumptions marker_reached_is_not_futile.
+Print Assumptions Ggoal_is_k_tolerant.
+Print Assumptions Ggoal_inhabited.
+Print Assumptions Ggoal_marker_met.
