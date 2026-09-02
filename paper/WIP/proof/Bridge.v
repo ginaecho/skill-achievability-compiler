@@ -259,6 +259,46 @@ Proof.
     exact Hsf2.
 Qed.
 
+(* =================================================================  *)
+(*  THE GOAL MARKER, PAID OFF.                                        *)
+(*                                                                     *)
+(*  CT_Goal is the only rule that reads a marker: safeT, the protocol  *)
+(*  steps, the reachability relation and the swap relation all treat   *)
+(*  one as transparent.  That asymmetry is the point.  The marker is   *)
+(*  an assertion the protocol makes, conformance is what pays for it,  *)
+(*  and the theorem below is where the payment is collected: a         *)
+(*  conforming run that ARRIVES at a marker has met it.  Without this  *)
+(*  the premise would be a tax with no return.                         *)
+(* ================================================================= *)
+Theorem markers_are_met : forall G s W tr phi G' s' W' b,
+  ctypes G s W ->
+  safeT E Haz b G W ->
+  hrun G s W tr (GGoal phi G') s' W' ->
+  total tr <= b ->
+  phi W'.
+Proof.
+  intros G s W tr phi G' s' W' b Hct Hsf Hr Ht.
+  destruct (bridge_run G s W tr (GGoal phi G') s' W' b Hct Hsf Hr Ht) as [_ [Hct' _]].
+  inversion Hct' as [ | phi0 G0 s0 W0 Hphi _ Heq1 Heq2 | | ]; subst. exact Hphi.
+Qed.
+
+(* and that is what ties the marker to the severity classes, which are
+   stated over a separate goal predicate: a residual whose head marks Phi
+   is not Futile at the world a conforming run reaches it in, because the
+   goal is not merely reachable there, it holds. *)
+Corollary marker_reached_is_not_futile :
+  forall (Phi : World -> Prop) G s W tr G' s' W' b b',
+  ctypes G s W ->
+  safeT E Haz b G W ->
+  hrun G s W tr (GGoal Phi G') s' W' ->
+  total tr <= b ->
+  ~ Futile E Haz Phi b' (GGoal Phi G') W'.
+Proof.
+  intros Phi G s W tr G' s' W' b b' Hct Hsf Hr Ht [_ Hnr].
+  apply Hnr. apply RH_here.
+  eapply markers_are_met; eassumption.
+Qed.
+
 (* ================================================================= *)
 (*  CROSS-PARTICIPANT COMPOSITION: budgets distribute over roles.     *)
 (*                                                                     *)
@@ -488,4 +528,81 @@ Proof.
   intros W tr G' s' W' Hs Hr Ht.
   destruct (bridge_run E0 Haz0 Gbad MBad W tr G' s' W' 0 (Gbad_inhabited W) Hs Hr Ht) as [H _].
   exact H.
+Qed.
+
+(* ----------------------------------------------------------------- *)
+(*  A marked instance, so the premise of CT_Goal is not vacuous        *)
+(*  either.  Ggoal is the narrowed booking protocol with the goal      *)
+(*  marked where the safe path establishes it: booked and verified.    *)
+(* ----------------------------------------------------------------- *)
+Definition Phi0 : World -> Prop := fun W => W booked = 1 /\ W verified = 1.
+
+Definition SafeGoal : Gt := GAct 1 1 (GAct 2 1 (GGoal Phi0 GEnd)).
+
+Definition Ggoal : Gt := GComm 0 1 [(10, (fun _ : World => True), SafeGoal)].
+
+Lemma SafeGoal_safe : forall k W, ~ Haz0 W -> safeT E0 Haz0 k SafeGoal W.
+Proof.
+  intros k W Hnh. apply ST_Act; [ exact Hnh | ]. intros W1 H1.
+  destruct H1 as [[_ ->] | [Hc _]]; [ | discriminate Hc ].
+  assert (Hnh1 : ~ Haz0 (wupd W verified 1)).
+  { intros [_ Hv]. rewrite wupd_same in Hv. discriminate. }
+  apply ST_Act; [ exact Hnh1 | ]. intros W2 H2.
+  destruct H2 as [[Hc _] | [_ ->]]; [ discriminate Hc | ].
+  assert (Hnh2 : ~ Haz0 (wupd (wupd W verified 1) booked 1)).
+  { intros [_ Hv]. rewrite wupd_other in Hv; [ | unfold verified, booked; lia ].
+    rewrite wupd_same in Hv. discriminate. }
+  apply ST_Goal; [ exact Hnh2 | ]. apply ST_End. exact Hnh2.
+Qed.
+
+Theorem Ggoal_is_k_tolerant : forall k, safeT E0 Haz0 k Ggoal W0.
+Proof.
+  intro k. apply ST_Comm; [ exact notHaz_W0 | | ].
+  - intros l psi Gl Hin _. destruct Hin as [Heq | []]. inversion Heq; subst.
+    apply SafeGoal_safe. exact notHaz_W0.
+  - intros l psi Gl Hin _ c _. destruct Hin as [Heq | []]. inversion Heq; subst.
+    apply SafeGoal_safe. exact notHaz_W0.
+Qed.
+
+Theorem Ggoal_inhabited : forall W, ctypes E0 Ggoal MGood W.
+Proof.
+  intro W. apply CT_Comm with [(10, PEnd)] [(10, WSafe)].
+  - discriminate.
+  - apply sess2_0.
+  - apply sess2_1.
+  - discriminate.
+  - intros l psi Gl Hin. destruct Hin as [Heq | []]. inversion Heq; subst.
+    exists PEnd. left. reflexivity.
+  - intros l P Hin. destruct Hin as [Heq | []]. inversion Heq; subst.
+    exists (fun _ : World => True), SafeGoal. left. reflexivity.
+  - intros l psi Gl Hin. destruct Hin as [Heq | []]. inversion Heq; subst.
+    exists WSafe. left. reflexivity.
+  - intros l psi Gl P Q Hin HP HQ.
+    destruct Hin as [Heq | []]. inversion Heq; subst.
+    destruct HP as [HP | []]. inversion HP; subst.
+    destruct HQ as [HQ | []]. inversion HQ; subst.
+    apply CT_Act with (PAct 2 PEnd).
+    + unfold supd, MGood, sess2, WSafe; repeat destruct (Nat.eq_dec _ _); congruence.
+    + apply E0_verify_enabled.
+    + intros W1 H1. destruct H1 as [[_ ->] | [Hc _]]; [ | discriminate Hc ].
+      apply CT_Act with PEnd.
+      * apply supd_same.
+      * apply E0_purchase_enabled.
+      * intros W2 H2. destruct H2 as [[Hc _] | [_ ->]]; [ discriminate Hc | ].
+        apply CT_Goal.
+        -- unfold Phi0. split.
+           ++ apply wupd_same.
+           ++ rewrite wupd_other; [ apply wupd_same | unfold verified, booked; lia ].
+        -- apply CT_End. intro r.
+           unfold supd, MGood, sess2, WSafe; repeat destruct (Nat.eq_dec _ _); congruence.
+Qed.
+
+(* so the marker theorem is about a session that exists: every conforming
+   run of MGood that reaches the marker has actually achieved the goal *)
+Corollary Ggoal_marker_met : forall k tr G' s' W',
+  hrun E0 Ggoal MGood W0 tr (GGoal Phi0 G') s' W' -> total tr <= k -> Phi0 W'.
+Proof.
+  intros k tr G' s' W' Hr Ht.
+  eapply (markers_are_met E0 Haz0 Ggoal MGood W0 tr Phi0 G' s' W' k);
+    [ apply Ggoal_inhabited | apply Ggoal_is_k_tolerant | exact Hr | exact Ht ].
 Qed.
