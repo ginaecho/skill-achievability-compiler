@@ -7,6 +7,11 @@ from. This does: paper/WIP/results/CLAIMS.json lists each checkable
 number as (what it is, how to compute it from results/, the literal the
 paper prints, a tolerance). A drift fails here instead of in review.
 
+A claim's `compute` should read the same field the paper read, not
+re-derive the number a different way: re-deriving once produced a
+one-tenth-of-a-cent disagreement and a "correction" to a figure that was
+right.
+
 Only numbers that are mechanically derivable from a shipped results file
 are listed. Numbers that need a model call, and prose judgements, are
 not -- and are marked as such in the manifest so the gap is visible.
