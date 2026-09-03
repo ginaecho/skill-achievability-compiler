@@ -119,4 +119,12 @@ def test_every_audited_name_is_a_proof_not_a_definition():
             if re.search(rf"^\s*(Definition|Fixpoint|Record|Inductive|CoInductive)\s+"
                          rf"{re.escape(n)}\b", src, re.M)]
     assert not defs, f"these audited names are definitions, not results: {defs}"
+    # constructors are legitimate to audit -- the paper cites two rules by
+    # name -- but they are not theorems, so the paper must not call them that
+    ctors = [n for n in names
+             if re.search(rf"^\s*\|\s*{re.escape(n)}\s*:", src, re.M)]
+    tex = (Path(__file__).resolve().parents[1] / "paper" / "WIP" / "main.tex").read_text()
+    assert f"({len(names) - len(ctors)} theorems and {len(ctors)} constructors" in tex, (
+        f"{len(names)} audited names = {len(names) - len(ctors)} theorems + "
+        f"{len(ctors)} constructors; the paper's supplement line disagrees")
     assert len(names) >= 150

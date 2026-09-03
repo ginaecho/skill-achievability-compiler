@@ -112,7 +112,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**189 results, every one axiom-free** (`Print Assumptions` harnesses).
+**189 audited names (187 theorems and two constructors), every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 `make check` at the repo root verifies both of the paper's mechanical
@@ -133,35 +133,45 @@ that every citation resolves and is covered by a harness (a test runs it);
 - Existing corpora (15 + 6 achievability packs, 17 real skills): **no
   irreversible effects, and the real skills have no choice points** — the
   question is invisible to them.
-- Severity benchmark (17 protocols, 55 branch verdicts, 0.33 s): 29 Benign / 7 Futile /
-  19 Catastrophic; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase,
-  send, deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
+- Severity benchmark (17 protocols, 55 branch verdicts, 0.21 s): 29 Benign / 7
+  Futile / 19 Catastrophic **over all branches** — 28 of the 29 Benign are
+  branches whose guard holds, so restricted to *misselections* the split is
+  1/7/19; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase, send,
+  deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
   pre-stated expectations; the exception was a benchmark authoring error, fixed.
 - Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
-  violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1 (one-sided Fisher
-  p = 0.046, not conventionally significant); 6 of 19
-  Catastrophic verdicts taken by a real agent; repairs remove the catastrophes.
-- Corpus census (162 skills, 13 repositories, no model tokens, 1.8 s):
+  violations; 6 of 19 Catastrophic verdicts taken by a real agent, 17 times;
+  repairs remove the catastrophes. **No rate claim is supported** — 0/120 on
+  the tolerant protocols is arithmetically forced, the low-`k*` counts invert,
+  and 10 of the 11 misselections on tolerant protocols are one Benign branch
+  whose guard the pressure prompt asserts.
+- Corpus census (162 skills, 13 repositories, no model tokens, 2.1 s):
   149 certified at home, 108 refuted in a file-only runtime, 95 flip.
-- Usefulness (134 verified agent runs): certified 64/68 verified artifacts;
-  refuted, where the skill's procedure is the only route, 0 verified out of 46
-  with 7 fabrications; the five "computed by hand" skills reverse at realistic
-  input size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
+- Usefulness (134 agent runs over 16 documents — 8 corpus skills and 8
+  specification cases): certified 64/68 verified artifacts; refuted, where the
+  skill's procedure is the only route, 0 verified out of 46 with 7
+  fabrications; the five "computed by hand" skills reverse at realistic input
+  size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
 - Differential testing: the analyzer and the Coq-extracted kernel agree on the
-  tolerance degree for 499 of 499 random protocols in the shared fragment
-  (`scripts/differential_test.py`).
+  tolerance degree for 500 of 500 random protocols across two seeds, 0
+  disagreements (`scripts/differential_test.py`).
 - False refutations: of 13 skills refuted in their home runtime, 6 are genuine
   and 7 are front-end misextractions, audited one by one in
-  `benchmarks/home_refutation_audit.json` (4.3% of the corpus).
+  `benchmarks/home_refutation_audit.json` (4.3% of the corpus, and 46%
+  precision on the refutations themselves — the number to carry).
 - Corpus security: 162 documents scanned statically, no malicious skill and no
   injection payload aimed at an agent; 9 benign flags reviewed in
   `docs/CORPUS_SECURITY.md`; a test fails on any unreviewed hit.
 - Token economics: escalation to LLM compaction fires on 130/162 skills at
   home and 49/162 in the file-only runtime (108 free refutations);
-  median compaction 22440 tokens = 31.2% of one agent run.
-- Modularity: whole-system complete analysis 35.8 s at n=6 vs 0.13 s modular
-  with the cone-of-influence interface (concrete interface: 2.9 s, 256 points).
-  Re-check after a change: 172 ms vs 22 ms.
+  median compaction 22440 tokens = 27.9% of one agent run (20 of 24
+  attempts returned a pack; the other four are counted as failures).
+- Modularity: the tool's own hazard decision is already linear (22 queries at
+  n=6), so the like-for-like comparison is computing an *interface*: complete
+  whole-system enumeration 566 queries / 22.4 s at n=6 against the projected
+  modular 48 / 0.083 s; the concrete interface is worse than not abstracting
+  (1149 queries, 256 points). The win that survives is re-check: 109 ms
+  growing with n against 13 ms constant.
 
 ## Before submission
 
