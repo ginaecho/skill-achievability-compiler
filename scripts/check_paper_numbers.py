@@ -12,6 +12,10 @@ re-derive the number a different way: re-deriving once produced a
 one-tenth-of-a-cent disagreement and a "correction" to a figure that was
 right.
 
+`make results` regenerates the token-free half; every verdict, count and
+cost in it reproduces exactly, and only the wall-clock timings move, which
+is why those carry `rel_tol` rather than an absolute tolerance.
+
 Only numbers that are mechanically derivable from a shipped results file
 are listed. Numbers that need a model call, and prose judgements, are
 not -- and are marked as such in the manifest so the gap is visible.
@@ -78,6 +82,12 @@ def main() -> int:
     for c in claims:
         got = eval(c["compute"], env, env)   # noqa: S307 - our own manifest
         want, tol = c["paper"], c.get("tol", 0)
+        # Wall-clock figures cannot reproduce on another machine, and a
+        # tolerance tight enough for a verdict would fail every artifact
+        # evaluator.  `rel_tol` accepts proportional drift -- wide enough for a
+        # different CPU, narrow enough to catch a real regression.
+        if "rel_tol" in c:
+            tol = max(tol, abs(want) * c["rel_tol"])
         ok = abs(got - want) <= tol
         if not ok:
             bad.append((c["what"], want, got, tol))
