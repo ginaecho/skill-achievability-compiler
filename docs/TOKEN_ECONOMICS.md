@@ -1,6 +1,6 @@
 # Tokens with the checker and without it
 
-162 real skills. The deterministic check spends **no model tokens**; median 11.9 ms per skill, 2134 ms for the corpus.
+162 real skills. The deterministic check spends **no model tokens**; median 8.8 ms per skill, 1606 ms for the corpus.
 
 ## When is an LLM needed?
 
@@ -31,7 +31,7 @@ The escalation detector (`skillc autocheck`) fires on **130 of 162** skills (80.
 
 Two regimes, and they are not close.
 
-**Where the check is free** (32 of 162 skills, including all 108 refutations in the file-only runtime): the check costs **0 model tokens** and 11.9 ms. Each refutation replaces an agent run whose measured median is 80331 tokens ($0.0548). In the usefulness experiment the runs the checker refuted and that then failed cost 15841106 tokens ($14.296) --- the checker would have spent none of it.
+**Where the check is free** (32 of 162 skills, including all 108 refutations in the file-only runtime): the check costs **0 model tokens** and 8.8 ms. Each refutation replaces an agent run whose measured median is 80331 tokens ($0.0548). In the usefulness experiment the runs the checker refuted and that then failed cost 15841106 tokens ($14.296) --- the checker would have spent none of it.
 
 **Where the check needs an LLM** (130 skills in the home runtime, where the deterministic pack can only certify weakly): one compaction costs a median 22440 tokens, i.e. **27.9%** of one measured agent run (0.28 runs). It is paid once per skill version and amortizes over every run of that skill; against the per-skill runtime estimate the corpus share is 44.5% (median 54.463%).
 
