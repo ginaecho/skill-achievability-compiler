@@ -11,10 +11,13 @@ Only numbers that are mechanically derivable from a shipped results file
 are listed. Numbers that need a model call, and prose judgements, are
 not -- and are marked as such in the manifest so the gap is visible.
 
-A claim may also carry `cite`: a list of {file, text} pairs whose literal
-text must appear in that file. Without it the manifest only checks data
+A claim may also carry `cite`: a list of {file, text} pairs whose text
+must appear in that file. Without it the manifest only checks data
 against data, and a paragraph can drift from the number it quotes -- which
 is exactly how the artifact README came to contradict the paper.
+Matching ignores how the text is wrapped (runs of whitespace compare
+equal), so re-flowing a paragraph does not fail the check; the words and
+figures must still appear, in that order, with nothing between them.
 """
 import json
 import math
@@ -24,6 +27,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "paper" / "WIP" / "results"
 MANIFEST = RESULTS / "CLAIMS.json"
+
+
+def flat(s: str) -> str:
+    """Collapse whitespace, so a cited phrase survives being re-wrapped."""
+    return " ".join(s.split())
 
 
 def load(name: str):
@@ -61,7 +69,7 @@ def main() -> int:
            "__builtins__": {"set": set, "sum": sum, "len": len, "min": min,
                             "max": max, "round": round, "abs": abs,
                             "sorted": sorted, "True": True, "False": False}}
-    bad, missing = [], []
+    bad, missing, gone = [], [], []
     for c in claims:
         got = eval(c["compute"], env, env)   # noqa: S307 - our own manifest
         want, tol = c["paper"], c.get("tol", 0)
@@ -69,10 +77,17 @@ def main() -> int:
         if not ok:
             bad.append((c["what"], want, got, tol))
         for cite in c.get("cite", []):
-            text = (ROOT / cite["file"]).read_text(encoding="utf-8")
-            if cite["text"] not in text:
+            path = ROOT / cite["file"]
+            if not path.is_file():
+                gone.append((c["what"], cite["file"]))
+                continue
+            if flat(cite["text"]) not in flat(path.read_text(encoding="utf-8")):
                 missing.append((c["what"], cite["file"], cite["text"]))
         print(f"{'ok ' if ok else 'BAD'} {c['what']}: paper {want}, data {got}")
+    if gone:
+        print(f"\n{len(gone)} claims cite a file that does not exist:")
+        for what, f in gone:
+            print(f"  {what}: no such file {f}")
     if missing:
         print(f"\n{len(missing)} quoted phrases are no longer in the file that quotes them:")
         for what, f, t in missing:
@@ -81,7 +96,7 @@ def main() -> int:
         print(f"\n{len(bad)} of {len(claims)} numbers disagree with the shipped results:")
         for what, want, got, tol in bad:
             print(f"  {what}: paper says {want}, data says {got} (tolerance {tol})")
-    if bad or missing:
+    if bad or missing or gone:
         return 1
     print(f"\nall {len(claims)} checkable numbers agree with the shipped results")
     return 0
