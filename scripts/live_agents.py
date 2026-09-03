@@ -396,6 +396,7 @@ def report(bench, verdicts, runs, models, conds):
         if k in order:
             v = order[k]
             md.append(f"| {k} | {v['runs']} | {v['misselection_runs']} | {v['catastrophe']} | {v['catastrophe_rate']} |")
+    md += ["", "The zero for `k*>=5` is **forced, not observed**: each of those protocols has a single choice point and tolerates at least four misselections, so no run there can reach a catastrophe, and the scripted chooser reproduces 0/120. This table is data; the paper draws no rate claim from it."]
     md += ["", "## Repairs, same agent", "", "| before | after | model | cond | catastrophes before | after | runs |", "|---|---|---|---|---|---|---|"]
     for pr in pair_rows:
         md.append(f"| {pr['before']} | {pr['after']} | {pr['model']} | {pr['cond']} | {pr['cat_before']} | {pr['cat_after']} | {pr['runs']} |")
