@@ -305,3 +305,30 @@ def test_multi_role_benchmark_choices_name_a_recipient():
             assert c["to"] in pack["roles"], f"{entry['id']}: unknown recipient {c['to']}"
             checked += 1
     assert checked == 8, f"{checked} multi-role choices checked, expected 8"
+
+
+def test_the_papers_verbatim_block_is_the_tools_output():
+    """Section 2 prints a transcript and calls it the tool's output.  It had
+    drifted: the tool had gained a branch line and the bystander summary, and
+    nothing compared the two.  A reviewer running the artifact would have."""
+    import contextlib
+    import io
+    import json as _json
+    import tempfile
+    from pathlib import Path
+    from skillc.cli import main
+
+    tex = Path(__file__).resolve().parents[1] / "paper" / "WIP" / "main.tex"
+    if not tex.exists():
+        import pytest
+        pytest.skip("paper not present")
+
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        _json.dump(BENCH["migration_backup"]["pack"], fh)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        main(["severity", fh.name])
+
+    block = tex.read_text(encoding="utf-8").split("\\begin{verbatim}")[1]
+    block = block.split("\\end{verbatim}")[0]
+    assert buf.getvalue().strip("\n") == block.strip("\n")
