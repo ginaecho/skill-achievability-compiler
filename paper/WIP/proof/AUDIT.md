@@ -1,10 +1,14 @@
-# Mechanized audit of the WIP deviation-layer paper
+# Mechanized audit of the superseded deviation-layer draft
 
 `DeviationLayer.v` (650 lines, Coq 8.18, stdlib only, **axiom-free**) encodes the
-definitions of `paper/WIP/main.tex` as literally as possible and then *tries* to
-prove the theorem statements. It assumes none of them. Where a statement is
-provable it is proved; where it is not, a concrete counterexample is constructed
-and proved.
+definitions of the **superseded** deviation-layer draft --- trust modes, taint
+propagation, staleness grades --- as literally as possible and then *tries* to
+prove its theorem statements. That draft is not the paper in `main.tex`, which
+was reframed around severity precisely because this audit refuted it; the audit
+is kept because Section 13 of the present paper says why it exists.
+
+It assumes none of those statements. Where one is provable it is proved; where
+it is not, a concrete counterexample is constructed and proved.
 
 ```
 coqc DeviationLayer.v && coqc check_dev.v && coqc check_co.v
