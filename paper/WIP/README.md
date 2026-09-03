@@ -148,7 +148,8 @@ that every citation resolves and is covered by a harness (a test runs it);
 - Corpus census (162 skills, 13 repositories, no model tokens, 2.1 s):
   149 certified at home, 108 refuted in a file-only runtime, 95 flip.
 - Usefulness (134 agent runs over 16 documents — 8 corpus skills and 8
-  specification cases): certified 64/68 verified artifacts; refuted, where the
+  specification cases): certified 67/68 verified artifacts (64 also reached the
+  status line, 3 verified without it, 1 was a silent wrong result); refuted, where the
   skill's procedure is the only route, 0 verified out of 46 with 7
   fabrications; the five "computed by hand" skills reverse at realistic input
   size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
