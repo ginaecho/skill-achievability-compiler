@@ -25,7 +25,8 @@ other eight need the checker's reachability reasoning: a bound the tools cannot
 meet, a goal condition nothing establishes, a guard nothing satisfies. The
 grep baseline (`scripts/grep_baseline.py`) scores 25 of 34 configurations and
 is wrong on exactly those eight plus the undeclared-tool case; the checker
-scores 34 of 34 in 0.2 ms.
+scores 34 of 34. The 0.2 ms is the grep's time over the 34 configurations;
+the checker takes 228 ms.
 
 **One case we dropped, and why.** A `restore-verified` pair was designed so
 that B's goal named a condition (`checksummed`) no tool establishes. The
