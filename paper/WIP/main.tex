@@ -1,20 +1,21 @@
 % ============================================================================
-% WIP DRAFT -- Affordable Mistakes -- ECOOP (LIPIcs) shape
-% Status: internal working draft for co-author markup. NOT FOR SUBMISSION.
-% Grep-able marker: DO-NOT-SUBMIT-WHILE-THIS-LINE-EXISTS
+% Affordable Mistakes -- ECOOP (LIPIcs)
 %
 % Relationship to the rest of paper/:
 %   * paper/tas.tex is the AUTHORITATIVE statement of the BASE discipline's
 %     rules.  Section 3 restates notation only; on any divergence tas.tex wins.
 %   * paper/skillachievability.tex is the paper on the base discipline.
-%   * proof/Severity.v mechanizes Sections 5-7 of THIS paper (axiom-free).
+%   * proof/ mechanizes Sections 4-8 and 11; every result the text marks with
+%     \coqok is checked axiom-free by a Print Assumptions harness, and
+%     scripts/check_paper_citations.py fails if one is not.
 %   * proof/DeviationLayer.v + proof/AUDIT.md is the mechanized audit that
 %     refuted the PREDECESSOR draft (modes/taint/grades) and motivated the
-%     present reframing; summarized in Section 9.
+%     present reframing; recounted in Section 13 (\S sec:whatchanged).
 %
-% Class: lipics-v2021 (ECOOP publishes in LIPIcs).  The `anonymous' option is
-% ON for double-blind shape; drop it for the camera-ready.  Bibliography is
-% inline for now; switch to plainurl + .bib before submission.
+% Before submitting: `make check' must pass (it ties every number below to a
+% file in results/ and every \coqok name to a proof).  The `anonymous' class
+% option is ON for double-blind; drop it, and fill in \author and \funding,
+% for the camera-ready.  The bibliography is inline; switch to plainurl + .bib.
 % ============================================================================
 \documentclass[a4paper,UKenglish,cleveref,autoref,thm-restate,anonymous]{lipics-v2021}
 
@@ -24,20 +25,15 @@
 \usepackage{pifont}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,calc}
-\providecommand{\llbracket}{[\![}
-\providecommand{\rrbracket}{]\!]}
 
 \definecolor{steel}{RGB}{46,74,107}
-\definecolor{amber}{RGB}{230,159,0}
 \definecolor{boxbg}{RGB}{243,244,246}
-\definecolor{badred}{RGB}{178,52,52}
 \definecolor{okgreen}{RGB}{0,158,115}
 \definecolor{verm}{RGB}{213,94,0}
 
-% ---------------------------------------------------------------- base macros
-% (identical to tas.tex / skillachievability.tex)
-\newcommand{\reach}{\rightsquigarrow}
-\newcommand{\reachs}{\reach^{*}}
+% -------------------------------------------------------- base macros (subset)
+% Same meanings as in tas.tex / skillachievability.tex; only the ones this
+% paper uses are kept.
 \newcommand{\CapS}{\mathsf{Cap}}
 \newcommand{\Pred}{\mathsf{Pred}}
 \newcommand{\Var}{\mathsf{Var}}
@@ -46,65 +42,13 @@
 \newcommand{\eff}{\mathit{eff}}
 \newcommand{\Add}{\mathit{Add}}
 \newcommand{\Del}{\mathit{Del}}
-\newcommand{\Asg}{\mathit{Asg}}
-\newcommand{\Nd}{\mathit{Nd}}
 \newcommand{\apply}{\mathrm{apply}}
-\newcommand{\seither}{\mathrm{sp}}
-\newcommand{\dom}{\mathrm{dom}}
-\newcommand{\capsG}{\mathsf{caps}}
-\newcommand{\goal}{\mathit{goal}}
-\newcommand{\gphi}{\varphi_{\mathit{goal}}}
-\newcommand{\achbox}{\vDash\Diamond}
 \newcommand{\id}[1]{\texttt{#1}}
 \newcommand{\coind}{\mathrel{::=^{\mathit{coind}}}}
 \newcommand{\MM}{\mathbb{M}}
 \newcommand{\ppar}{\;\|\;}
-\newcommand{\cp}[1]{\mathsf{cap}(#1)}
-\newcommand{\Pair}[2]{(#1;#2)}
-\newcommand{\prt}[1]{\mathsf{prt}(#1)}
-\newcommand{\set}[1]{\{#1\}}
 \newcommand{\End}{\mathsf{End}}
 
-% ------------------------------------------------------------- new macros (WIP)
-\newcommand{\MC}{\mathbb{M}_{\mathsf c}}                 % mode lattice
-\newcommand{\mok}{\mathsf{ok}}                          % aligned
-\newcommand{\mdr}{\mathsf{dr}}                          % drifted
-\newcommand{\down}{\mathord{\downarrow}}                % downgrade
-\newcommand{\up}{\mathord{\uparrow}}                    % attested raise
-\newcommand{\Menv}{M}                                   % mode environment
-\newcommand{\Denv}{d}                                   % grade environment
-\newcommand{\Taint}{T}                                  % taint set
-\newcommand{\Crit}{\mathsf{Crit}}                       % critical atoms
-\newcommand{\Irr}{\mathsf{Irr}}                         % irreversible caps
-\newcommand{\Att}{\mathsf{Att}}                         % attestation caps
-\newcommand{\Rfr}{\mathsf{Rfr}}                         % refresh caps
-\newcommand{\provv}{\mathsf{prov}}                      % provenance
-\newcommand{\pint}{\mathsf{int}}
-\newcommand{\pext}{\mathsf{ext}}
-\newcommand{\writes}[1]{\mathrm{wr}(#1)}                % written atoms/vars
-\newcommand{\supp}[1]{\mathrm{supp}(#1)}                % support of a formula
-\newcommand{\tick}[2]{#1{+}_{#2}1}                      % grade tick
-\newcommand{\Conf}[5]{\langle #1;\,#2;\,#3;\,#4;\,#5\rangle} % extended config
-\newcommand{\dev}[1]{\mathsf{dev}(#1)}                  % deviation label
-\newcommand{\eps}{\varepsilon}
-\newcommand{\Eprof}{\mathcal E}                         % compliance profile
-\newcommand{\val}{\mathrm{val}}
-\newcommand{\Dmax}{D}
-\newcommand{\obl}[1]{\par\smallskip\noindent\textcolor{steel}{\small\textsf{Proof obligation.} #1}}
-
-\newcommand {\IInfer} [5] [] {
-  \inferrule*[%
-    fraction={===},
-    left={\textsc{#2}},%
-    right={$\begin{array}{l} #5 \end{array}$}, %
-    vcenter,%
-    #1
-  ]%
-  {#3}{#4}}
-
-\newcommand{\draftnote}[1]{\par\smallskip\noindent\fcolorbox{amber}{boxbg}{\parbox{0.96\linewidth}{\small\textsf{\textcolor{amber}{WIP:}} #1}}\par\smallskip}
-
-\newtheorem{prediction}[theorem]{Prediction}
 \newtheorem{assumption}[theorem]{Assumption}
 
 % LIPIcs already provides: theorem, lemma, corollary, proposition, claim,
@@ -115,17 +59,14 @@
 
 % ---------------------------------------------------------- extra macros (v2)
 \newcommand{\Haz}{\mathcal H}
-\newcommand{\bud}[1]{{\scriptscriptstyle #1}}
 \newcommand{\safeT}[1]{\vdash_{#1}}
 \newcommand{\safeRr}[1]{\vdash^{\nu}_{#1}}
 \newcommand{\Rob}{\textsf{Robust}}
 \newcommand{\reachh}[1]{\rightsquigarrow^{\Haz}_{#1}}
 \newcommand{\reachg}[1]{\rightsquigarrow^{\varphi}_{#1}}
 \newcommand{\Ben}{\textsf{Benign}}
-\newcommand{\Rec}{\textsf{Recoverable}}
 \newcommand{\Fut}{\textsf{Futile}}
 \newcommand{\Cat}{\textsf{Catastrophic}}
-\newcommand{\sev}{\mathrm{sev}}
 \newcommand{\coqok}[1]{\textcolor{okgreen}{\ding{51}}\,\texttt{\small #1}}
 
 \newcommand{\ktol}{$k$-misselection tolerance}
