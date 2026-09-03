@@ -177,9 +177,11 @@ that every citation resolves and is covered by a harness (a test runs it);
 
 ## Before submission
 
+- Run `make check` from the repository root: it fails if any number the paper
+  states has drifted from `results/`, if a sentence no longer contains the
+  figure it quotes, or if a `\coqok` name is not a proof covered by a harness.
 - Drop `anonymous`; fill authors, ORCIDs, funding, acknowledgements.
-- Inline bibliography → `plainurl` + `.bib`; resolve `[to verify]` entries.
-- Remove the draft banner, `WIP:` boxes, and the `DO-NOT-SUBMIT` marker.
+- Inline bibliography → `plainurl` + `.bib`.
 - Interleaving of communications between disjoint role pairs and asynchronous
   buffering (the classical permutation lemma).
 - Environment choices and the arithmetic fragment in the verified kernel.
@@ -188,6 +190,7 @@ that every citation resolves and is covered by a harness (a test runs it);
 ## Build
 
 ```
+make -C ../.. check                        # numbers and Coq citations
 pdflatex main.tex && pdflatex main.tex     # needs texlive-fonts-extra
 cd proof && make && make binary             # Coq 8.18 + OCaml 4.14
 pip install -e ../.. && python3 ../../scripts/severity_eval.py
