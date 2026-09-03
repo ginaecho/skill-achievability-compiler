@@ -159,10 +159,22 @@ def test_a_cited_phrase_leaving_the_prose_fails_the_numbers_check():
         (tmp / "scripts").mkdir()
         shutil.copy2(script, tmp / "scripts" / script.name)
         shutil.copytree(manifest.parent, tmp / "paper" / "WIP" / "results")
-        # One claim reaches out of results/ into the shipped corpus.
-        data = root / "src" / "skillc" / "data"
-        if data.is_dir():
-            shutil.copytree(data, tmp / "src" / "skillc" / "data")
+        # Some claims reach out of results/ (the shipped corpus, the hand
+        # audit).  Copy whatever the manifest's own load() calls name.
+        import re as _re
+        for c in claims:
+            for name in _re.findall(r"load\(\s*'([^']+)'", c["compute"]):
+                src = (manifest.parent / name).resolve()
+                if not src.is_file():
+                    continue
+                try:
+                    rel = src.relative_to(root)
+                except ValueError:
+                    continue
+                dst = tmp / rel
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                if not dst.exists():
+                    shutil.copy2(src, dst)
         for _, cite in cited:
             dst = tmp / cite["file"]
             dst.parent.mkdir(parents=True, exist_ok=True)
