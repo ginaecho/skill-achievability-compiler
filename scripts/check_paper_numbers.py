@@ -10,6 +10,11 @@ paper prints, a tolerance). A drift fails here instead of in review.
 Only numbers that are mechanically derivable from a shipped results file
 are listed. Numbers that need a model call, and prose judgements, are
 not -- and are marked as such in the manifest so the gap is visible.
+
+A claim may also carry `cite`: a list of {file, text} pairs whose literal
+text must appear in that file. Without it the manifest only checks data
+against data, and a paragraph can drift from the number it quotes -- which
+is exactly how the artifact README came to contradict the paper.
 """
 import json
 import math
@@ -56,18 +61,27 @@ def main() -> int:
            "__builtins__": {"set": set, "sum": sum, "len": len, "min": min,
                             "max": max, "round": round, "abs": abs,
                             "sorted": sorted, "True": True, "False": False}}
-    bad = []
+    bad, missing = [], []
     for c in claims:
         got = eval(c["compute"], env, env)   # noqa: S307 - our own manifest
         want, tol = c["paper"], c.get("tol", 0)
         ok = abs(got - want) <= tol
         if not ok:
             bad.append((c["what"], want, got, tol))
+        for cite in c.get("cite", []):
+            text = (ROOT / cite["file"]).read_text(encoding="utf-8")
+            if cite["text"] not in text:
+                missing.append((c["what"], cite["file"], cite["text"]))
         print(f"{'ok ' if ok else 'BAD'} {c['what']}: paper {want}, data {got}")
+    if missing:
+        print(f"\n{len(missing)} quoted phrases are no longer in the file that quotes them:")
+        for what, f, t in missing:
+            print(f"  {what}: {f} no longer contains {t!r}")
     if bad:
         print(f"\n{len(bad)} of {len(claims)} numbers disagree with the shipped results:")
         for what, want, got, tol in bad:
             print(f"  {what}: paper says {want}, data says {got} (tolerance {tol})")
+    if bad or missing:
         return 1
     print(f"\nall {len(claims)} checkable numbers agree with the shipped results")
     return 0
