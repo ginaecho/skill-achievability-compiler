@@ -181,8 +181,8 @@ that every citation resolves and is covered by a harness (a test runs it);
   states has drifted from `results/`, if a sentence no longer contains the
   figure it quotes, or if a `\coqok` name is not a proof covered by a harness.
 - `make results` regenerates the token-free half (census, differential
-  campaign, grep baseline, security scan, token economics) in about ten
-  minutes and no model tokens. Re-running it here reproduced every verdict,
+  campaign, grep baseline, security scan, token economics) in about eight
+  minutes here and no model tokens. Re-running it reproduced every verdict,
   count and cost in `results/` exactly; only the wall-clock timings moved, by
   up to a quarter, which is why the manifest checks those proportionally and
   everything else exactly. The model-dependent results (live agents,
