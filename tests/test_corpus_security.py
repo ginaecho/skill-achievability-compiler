@@ -115,3 +115,29 @@ def test_every_corpus_file_matches_its_recorded_hash():
             assert len(blob) == entry["bytes"], entry["path"]
             total += 1
     assert total == 162, f"{total} corpus files checked, expected all 162"
+
+
+def test_the_corpus_is_the_size_and_shape_the_paper_says():
+    """"162 skills from thirteen public repositories", "the seventeen of the
+    vendor's skills repository and 145 more from twelve third-party
+    collections".  The manifest cannot express a directory count, so the
+    arithmetic behind those three sentences is checked here."""
+    import json
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    vendor = root / "real-skills" / "PROVENANCE.json"
+    ext = root / "real-skills-ext"
+    if not (vendor.is_file() and ext.is_dir()):
+        import pytest
+        pytest.skip("corpus provenance not present")
+
+    vendor_skills = json.loads(vendor.read_text())
+    repos = sorted(d.name for d in ext.iterdir() if d.is_dir())
+    ext_prov = json.loads((ext / "PROVENANCE.json").read_text())
+
+    assert len(vendor_skills) == 17, len(vendor_skills)
+    assert len(repos) == 12, repos
+    assert len(ext_prov) == 145, len(ext_prov)
+    assert len(vendor_skills) + len(ext_prov) == 162
+    assert 1 + len(repos) == 13
