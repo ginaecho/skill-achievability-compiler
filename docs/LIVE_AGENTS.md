@@ -97,6 +97,8 @@ Catastrophic branches: 19; taken by at least one live agent: **6**.
 | k*=1 | 40 | 5 | 5 | 0.125 |
 | k*>=5 | 120 | 11 | 0 | 0.0 |
 
+The zero for `k*>=5` is **forced, not observed**: each of those protocols has a single choice point and tolerates at least four misselections, so no run there can reach a catastrophe, and the scripted chooser reproduces 0/120. This table is data; the paper draws no rate claim from it.
+
 ## Repairs, same agent
 
 | before | after | model | cond | catastrophes before | after | runs |
