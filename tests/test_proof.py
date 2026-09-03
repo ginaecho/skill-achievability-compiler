@@ -128,3 +128,59 @@ def test_every_audited_name_is_a_proof_not_a_definition():
         f"{len(names)} audited names = {len(names) - len(ctors)} theorems + "
         f"{len(ctors)} constructors; the paper's supplement line disagrees")
     assert len(names) >= 150
+
+
+def test_a_cited_phrase_leaving_the_prose_fails_the_numbers_check():
+    """The manifest's job is to weld a sentence to the number it quotes.  It
+    once did not: it compared data against data, so reverting the artifact
+    README to a superseded figure left the suite green.  `cite` closed that,
+    and this fails if the mechanism ever stops biting -- perturb a quoted
+    phrase in a copy of the tree, and the checker must reject it."""
+    import json
+    import shutil
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    script = root / "scripts" / "check_paper_numbers.py"
+    manifest = root / "paper" / "WIP" / "results" / "CLAIMS.json"
+    if not (script.exists() and manifest.exists()):
+        import pytest
+        pytest.skip("numbers checker not present")
+
+    claims = json.loads(manifest.read_text())["claims"]
+    cited = [(c["what"], cite) for c in claims for cite in c.get("cite", [])]
+    assert cited, "no claim pins its wording; the manifest cannot guard prose"
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        (tmp / "scripts").mkdir()
+        shutil.copy2(script, tmp / "scripts" / script.name)
+        shutil.copytree(manifest.parent, tmp / "paper" / "WIP" / "results")
+        # One claim reaches out of results/ into the shipped corpus.
+        data = root / "src" / "skillc" / "data"
+        if data.is_dir():
+            shutil.copytree(data, tmp / "src" / "skillc" / "data")
+        for _, cite in cited:
+            dst = tmp / cite["file"]
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if not dst.exists():
+                shutil.copy2(root / cite["file"], dst)
+        run = lambda: subprocess.run(                        # noqa: E731
+            [sys.executable, str(tmp / "scripts" / script.name)],
+            capture_output=True, text=True)
+
+        assert run().returncode == 0, "the copied tree does not check out clean"
+
+        what, cite = cited[0]
+        target = tmp / cite["file"]
+        text = target.read_text(encoding="utf-8")
+        assert cite["text"] in " ".join(text.split())
+        # Break the phrase without touching any number the manifest computes.
+        target.write_text(text.replace(cite["text"].split()[0], "@@", 1),
+                          encoding="utf-8")
+        r = run()
+        assert r.returncode == 1, "a cited phrase can leave the prose unnoticed"
+        assert what in r.stdout, r.stdout + r.stderr
