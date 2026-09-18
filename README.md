@@ -30,7 +30,19 @@ accompanying paper and the implementation-only extensions is recorded in
 
 ```bash
 pip install -e ".[dev]"        # installs the `skillc` CLI
+pip install -e ".[mcp]"        # optional: read fact packs from MCP resources
 ```
+
+For an isolated command-line installation directly from the repository:
+
+```bash
+pipx install "git+https://github.com/ginaecho/skill-achievability-compiler.git"
+pipx runpip skillc show z3-solver
+```
+
+`z3-solver>=4.12` is a required project dependency, so `pip` and `pipx`
+install it automatically with `skillc`. The second command is an explicit
+post-install verification, not an additional installation step.
 
 ## Quick start
 
@@ -64,9 +76,100 @@ $ skillc cost --corpus                             # token economics of checking
 $ skillc profiles                                  # claude-ai, claude-code, none
 ```
 
+If an MCP server exposes a fact pack through `resources/read`, check the
+resource directly over the standard stdio transport:
+
+```console
+$ skillc check skillc://packs/book-flight --mcp-command python --mcp-arg server.py
+book-flight: ACHIEVABLE
+```
+
+The resource must contain exactly one text item with a JSON pack, or one
+base64-encoded UTF-8 blob item. `skillc` applies the same deterministic schema
+gate used for local and LLM-generated packs. The command and each argument are
+passed directly without a shell; starting the MCP server still executes that
+command locally, so only use servers you trust. Arguments beginning with `-`
+can be passed as `--mcp-arg=--flag`.
+
 Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (outside
 the decidable fragment) — so `skillc check` can
 gate CI for skill repositories.
+
+## Pre-session agent hook
+
+Agent hosts can check and filter proposed skills before creating a model
+session. The host sends the active runtime capabilities and skill paths through
+a versioned JSON protocol; the hook returns admitted, excluded, and warned
+skills with structured diagnostics.
+
+```powershell
+Get-Content pre-session.json -Raw | skillc hook pre-session --stdio
+```
+
+The recommended policy excludes `IMPOSSIBLE` skills, warns on `UNKNOWN`, and
+allows the session to continue with unrelated skills. End users enable the
+integration once, then start sessions normally; the host performs preflight
+before any skill or prompt reaches the model. See
+[`docs/PRE_SESSION_HOOK.md`](docs/PRE_SESSION_HOOK.md) for the request schema,
+host adoption steps, policy options, and complete user flow.
+
+### Install into existing agents
+
+Install the standalone APM integration, then run its setup command from the
+workspace whose existing agents you want to protect:
+
+```console
+$ apm install
+$ apm run setup          # Windows
+$ apm run setup-unix     # macOS/Linux
+Select agents to protect with the skillc SessionStart preflight:
+  1. SharedRP-Agent (sharedrp-agent.md)
+  2. Another Agent (another.agent.md)
+Enter numbers separated by commas, or 'all': 1
+```
+
+Clean setup has two host prerequisites:
+
+- APM must already be installed so it can download the package and run setup.
+- Windows needs PowerShell; macOS/Linux needs a POSIX shell and `curl` for the
+  one-time uv bootstrap. Setup installs the remaining runtime dependencies.
+
+The uv bootstrap executes Astral's official installer from `astral.sh`. Teams
+that prohibit remote bootstrap scripts should preinstall uv through their
+approved software channel; setup detects and reuses it.
+
+Setup installs `skillc` in an isolated Python tool environment. The required
+`z3-solver` package is installed transitively, so there is no separate solver
+step. If `uv` is missing, setup installs it from the official Astral installer;
+uv then installs a managed Python 3.12 runtime, PyYAML, and Z3. Setup discovers
+`.github/agents/*.md`, prompts for target agents, writes one shared Windows
+adapter and one shared Unix adapter, and adds an agent-scoped `SessionStart`
+hook only to the selected files. It never installs an agent. Finally,
+`skillc doctor` verifies dependency versions, adapters, selected hook metadata,
+and a real preflight for every configured agent.
+
+For repeatable non-interactive setup, run:
+
+```console
+$ skillc integrate --agent SharedRP-Agent
+```
+
+The default online setup requires access to `astral.sh`, Python downloads used
+by uv, `pypi.org`, and `files.pythonhosted.org`. Restricted environments can
+use an internal Python package mirror or a pre-populated wheelhouse:
+
+```powershell
+apm run setup -- -IndexUrl https://packages.example/simple
+apm run setup -- -Wheelhouse C:\approved-wheels -Offline
+```
+
+The wheelhouse must contain compatible distributions for `setuptools>=68`,
+`z3-solver`, and `PyYAML`; `skillc` itself is built from the downloaded APM
+package. Unix setup accepts the equivalent `--index-url`, `--wheelhouse`, and
+`--offline` options. Offline setup also requires the requested Python version
+to be installed already or present in uv's cache; pass `-Python 3.13` on
+Windows or `--python 3.13` on Unix to select another Python 3.10+ runtime.
+Neither path disables TLS verification.
 
 ## Recorded real-skill demo
 

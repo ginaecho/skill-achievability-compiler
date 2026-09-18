@@ -180,6 +180,9 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
 def compile_markdown(text: str, profile: Profile,
                      name: Optional[str] = None) -> CompileResult:
     """Compact a SKILL.md / agent markdown into an achievability pack."""
+    frontmatter = FRONTMATTER_RE.match(text)
+    body_line_offset = (text.count("\n", 0, frontmatter.end())
+                        if frontmatter else 0)
     meta, body = parse_frontmatter(text)
     skill_name = str(name or meta.get("name") or "skill")
     prose, embedded = _strip_fences(body)
@@ -207,6 +210,8 @@ def compile_markdown(text: str, profile: Profile,
 
     # --- invoked actions --------------------------------------------------
     invocations = extract(prose, set(declared))
+    for invocation in invocations:
+        invocation.line += body_line_offset
 
     # --- semantic compaction ----------------------------------------------
     # If the document states what "finished" means and lists workflow steps,

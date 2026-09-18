@@ -9,7 +9,9 @@ from .audit import Finding, audit_bundle, audit_tree
 from .checker import Checker, Verdict, check
 from .evaluate import evaluate, load_corpus
 from .frontend.markdown import CompileResult, compile_file, compile_markdown
+from .hooks import HookRequestError, run_pre_session_hook
 from .pack import Capability, Pack, PackError, validate_pack
+from .preflight import Diagnostic, PreflightResult, preflight_skill
 from .profiles import Profile, builtin_profiles, load_profile
 from .session import ProjectionError, parse_local, project, subtype
 
@@ -22,6 +24,8 @@ __all__ = [
     "CompileResult", "compile_markdown", "compile_file",
     "project", "subtype", "parse_local", "ProjectionError",
     "Finding", "audit_bundle", "audit_tree",
+    "Diagnostic", "PreflightResult", "preflight_skill",
+    "HookRequestError", "run_pre_session_hook",
     "evaluate", "load_corpus",
     "__version__",
 ]
