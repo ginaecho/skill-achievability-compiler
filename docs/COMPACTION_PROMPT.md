@@ -55,7 +55,7 @@ asymmetry; mechanizing the exact Python symbolic transition system remains open.
 {"act":    {"cap": "<cap>", "by": "<role>"}}        // effectful action
 {"msg":    {"from":"<role>","to":"<role>","label":"<l>"}}  // communication
 {"choice": {"by":"<role>","branches":{"<label>":[<step>...], ...}}}
-{"goal":   <formula>}                                // explicit goal marker (optional)
+{"goal":   <formula>}                                // optional; must equal top-level goal
 {"rec":    {"name":"X","body":[<step>...]}}          // tail-recursive control
 {"continue":"X"}                                     // tail position only
 {"spawn":  {"role":"<role>"}}                        // outside static topology

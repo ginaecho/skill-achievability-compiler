@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkillC | Measured impact</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #091322; color: #eef7ff; font-family: "Segoe UI", sans-serif; }
+    main { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; gap: 18px; padding: 20px; }
+    canvas { display: block; width: 100%; max-width: 1600px; min-width: 0; height: auto; margin: auto; border-radius: 12px; }
+    nav { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 16px; }
+    button { background: #172c40; color: #eef7ff; border: 1px solid #54708e; border-radius: 6px; padding: 9px 18px; font: inherit; cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #89e3b5; outline-offset: 3px; }
+    input { width: min(40vw, 480px); accent-color: #89e3b5; }
+    output { color: #afc3d5; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <canvas id="scene" width="1920" height="1080" role="img"
+      aria-label="46 real agent runs. 98.7 percent tokens saved with SkillC checking. Same-scale bars compare 15,841,106 tokens without SkillC checking against 209,195 with SkillC checking. These are the evaluated failure-set runs, not necessarily distinct use cases. SkillC's total combines 54,039 measured and 155,156 estimated tokens."></canvas>
+    <nav aria-label="Animation playback">
+      <button id="play" type="button">Play</button>
+      <button id="replay" type="button">Replay</button>
+      <label for="scrub">Timeline</label>
+      <input id="scrub" type="range" min="0" max="6" step="0.01" value="0">
+      <output id="time" for="scrub">0.00 / 6.00 s</output>
+    </nav>
+  </main>
+  <script>
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+    const duration = 6;
+    const facts = Object.freeze({
+      runs: 46, correctResults: 0, without: 15841106,
+      measured: 54039, estimated: 155156, subsetWithout: 367220
+    });
+    const withSkillC = facts.measured + facts.estimated;
+    const ratio = withSkillC / facts.without;
+    const saved = ((1 - ratio) * 100).toFixed(1);
+    const percent = (ratio * 100).toFixed(2);
+    const leverage = (1 / ratio).toFixed(1);
+    const subsetSaved = ((1 - facts.measured / facts.subsetWithout) * 100).toFixed(2);
+    const number = n => n.toLocaleString("en-US");
+    const clamp = (n, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, n));
+    const ease = n => 1 - (1 - clamp(n)) ** 3;
+    function stateAt(seconds) {
+      if (!Number.isFinite(seconds)) throw new TypeError("Frame time must be finite.");
+      return { t: clamp(seconds, 0, duration), ...facts, withSkillC, ratio, saved, percent, leverage, subsetSaved };
+    }
+    function text(value, x, y, size, color, weight = 500, align = "center") {
+      ctx.font = `${weight} ${size}px "Segoe UI", Arial, sans-serif`;
+      ctx.textAlign = align; ctx.fillStyle = color; ctx.fillText(value, x, y);
+    }
+    function bar(x, y, w, fill) {
+      ctx.beginPath(); ctx.roundRect(x, y, w, 96, 12); ctx.fillStyle = fill; ctx.fill();
+    }
+    function renderFrame(seconds) {
+      const s = stateAt(seconds);
+      const background = ctx.createLinearGradient(0, 0, 1920, 1080);
+      background.addColorStop(0, "#081322"); background.addColorStop(1, "#142c37");
+      ctx.fillStyle = background; ctx.fillRect(0, 0, 1920, 1080);
+      const glow = ctx.createRadialGradient(960, 388, 40, 960, 388, 720);
+      glow.addColorStop(0, "#60d6a916"); glow.addColorStop(1, "#00000000");
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, 1920, 1080);
+      text(`${facts.runs} REAL AGENT RUNS`, 960, 130, 54, "#eef7ff", 650);
+      ctx.save();
+      const reveal = ease(s.t / 0.75);
+      ctx.globalAlpha = 0.25 + 0.75 * reveal;
+      ctx.translate(0, 14 * (1 - reveal));
+      text(`${saved}%`, 960, 370, 230, "#8ce4b7", 800);
+      ctx.restore();
+      text("TOKENS SAVED WITH SkillC", 960, 470, 58, "#eef7ff", 750);
+      text("WITHOUT SkillC CHECK", 160, 610, 48, "#f5ac9c", 650, "left");
+      text(`${number(facts.without)} tokens`, 1760, 610, 68, "#f5ac9c", 750, "right");
+      text("WITH SkillC CHECK", 160, 835, 48, "#8ce4b7", 650, "left");
+      text(`${number(withSkillC)} tokens`, 1760, 835, 68, "#8ce4b7", 750, "right");
+      bar(160, 645, 1600, "#263e4a");
+      bar(160, 870, 1600, "#263e4a");
+      const f = ease((s.t - 0.35) / 0.9);
+      if (f > 0) {
+        bar(160, 645, 1600 * f, "#f5ac9c");
+        bar(160, 870, 1600 * ratio * f, "#8ce4b7");
+      }
+      return s;
+    }
+    const play = document.getElementById("play"), scrub = document.getElementById("scrub"), output = document.getElementById("time");
+    let current = 0, playing = false, started = 0, request;
+    function show(t) {
+      current = clamp(t, 0, duration); renderFrame(current); scrub.value = String(current);
+      output.textContent = `${current.toFixed(2)} / ${duration.toFixed(2)} s`;
+    }
+    function pause() { playing = false; cancelAnimationFrame(request); play.textContent = "Play"; }
+    function tick(now) {
+      show((now - started) / 1000);
+      if (current >= duration) pause(); else request = requestAnimationFrame(tick);
+    }
+    function start() {
+      pause(); if (current >= duration) current = 0;
+      started = performance.now() - current * 1000; playing = true; play.textContent = "Pause";
+      request = requestAnimationFrame(tick);
+    }
+    play.addEventListener("click", () => playing ? pause() : start());
+    document.getElementById("replay").addEventListener("click", () => { show(0); start(); });
+    scrub.addEventListener("input", () => { pause(); show(Number(scrub.value)); });
+    window.animation = { renderFrame, stateAt, duration, width: 1920, height: 1080 };
+    show(0);
+    if (!new URLSearchParams(location.search).has("render") && !matchMedia("(prefers-reduced-motion: reduce)").matches) start();
+  </script>
+</body>
+</html>
