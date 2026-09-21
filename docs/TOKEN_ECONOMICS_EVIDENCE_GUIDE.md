@@ -106,6 +106,15 @@ that five independent users invoked the skill.
 
 ## September five-skill benchmark
 
+> [!WARNING]
+> The historical simulator described in this section ignored preconditions
+> and numeric effects/goals. These outcome and savings figures are not a
+> validated comparison under the corrected semantics. See the
+> [September 21 correction and accuracy report](BENCHMARK_CORRECTION_20260921.md)
+> for regression evidence, a fresh runtime comparison, and the distinction
+> between protocol rejection and goal impossibility. Raw historical token
+> measurements remain preserved.
+
 The September benchmark contains five natural-language skills and five runtime
 trials per skill. Four skills failed in every ungated trial. The web-app testing
 skill reported success in all five trials, so it is excluded from the

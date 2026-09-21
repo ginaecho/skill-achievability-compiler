@@ -28,6 +28,16 @@ def test_minimal_pack_passes_gate():
     (lambda d: d.update(protocol=[{"choice": {"by": "r", "branches": {}}}]),
      "at least one branch"),
     (lambda d: d.update(init_true="oops"), "init_true"),
+    (lambda d: d.update(roles=["agent", "agent"]), "roles must be unique"),
+    (lambda d: d.update(protocol=[{"msg": {
+        "from": "agent", "to": "agent", "label": "loop"}}]), "must differ"),
+    (lambda d: d.update(protocol=[{"goal": "other"}]),
+     "must equal the pack's declared goal"),
+    (lambda d: d.update(skills={"agent": [{"goal": "other"}]}),
+     "must equal the pack's declared goal"),
+    (lambda d: d.update(capabilities={"a": {"assigns": []}}),
+     "assigns must be a dict"),
+    (lambda d: d.update(init_constraints={}), "init_constraints must be a list"),
 ])
 def test_gate_rejects(mutate, exc_fragment):
     d = {k: (dict(v) if isinstance(v, dict) else list(v) if isinstance(v, list) else v)
@@ -43,6 +53,29 @@ def test_undeclared_cap_passes_gate():
     # them as MISSING_CAPABILITY (that is the hallucinated-planning signal).
     d = dict(MINIMAL, protocol=[{"act": {"cap": "ghost_tool", "by": "agent"}}])
     validate_pack(d)
+
+
+def test_gate_rejects_control_after_local_continue():
+    d = dict(MINIMAL, skills={"agent": [
+        {"rec": {"name": "X", "body": [
+            {"continue": "X"}, {"act": {"cap": "a"}}]}}]})
+    with pytest.raises(PackError, match="tail position"):
+        validate_pack(d)
+
+
+def test_gate_rejects_unguarded_local_recursion():
+    d = dict(MINIMAL, skills={"agent": [
+        {"rec": {"name": "X", "body": [{"continue": "X"}]}}]})
+    with pytest.raises(PackError, match="guarded"):
+        validate_pack(d)
+
+
+def test_gate_rejects_goal_only_unguarded_local_recursion():
+    d = dict(MINIMAL, skills={"agent": [
+        {"rec": {"name": "X", "body": [
+            {"goal": "done"}, {"continue": "X"}]}}]})
+    with pytest.raises(PackError, match="guarded"):
+        validate_pack(d)
 
 
 def test_all_reference_compactions_are_well_formed():

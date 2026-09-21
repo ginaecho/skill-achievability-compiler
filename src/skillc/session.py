@@ -103,6 +103,10 @@ def merge(a: tuple, b: tuple) -> tuple:
     undefined."""
     if a == b:
         return a
+    # Coinductively equal regular trees may differ only in recursion-binder
+    # names.  They are the same bystander behaviour and therefore merge.
+    if subtype(a, b) and subtype(b, a):
+        return a
     if a[0] == "branch" and b[0] == "branch" and a[1] == b[1]:
         da, db = dict(a[2]), dict(b[2])
         out = {}
@@ -296,7 +300,11 @@ def _subst(t: tuple, name: str, rep: tuple) -> tuple:
 
 
 def _unfold(t: tuple) -> tuple:
+    seen = set()
     while t[0] == "rec":
+        if t in seen:
+            raise ProjectionError("unguarded recursive local type")
+        seen.add(t)
         t = _subst(t[2], t[1], t)
     return t
 
@@ -313,6 +321,8 @@ def _sub(s: tuple, t: tuple, seen: set) -> bool:
     seen = seen | {(s, t)}
     if s == END and t == END:
         return True
+    if s[0] == t[0] == "var":
+        return s[1] == t[1]
     if s[0] == t[0] == "act":
         return s[1] == t[1] and _sub(s[2], t[2], seen)
     if s[0] == t[0] == "send" or s[0] == t[0] == "recv":

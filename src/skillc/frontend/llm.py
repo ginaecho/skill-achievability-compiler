@@ -48,7 +48,7 @@ Pack schema (JSON):
 <step>    = {"act": {"cap": "<cap>", "by": "<role>"}}
           | {"msg": {"from": "<role>", "to": "<role>", "label": "<l>"}}
           | {"choice": {"by": "<role>", "branches": {"<label>": [<step>...], ...}}}
-          | {"goal": <formula>}
+          | {"goal": <formula>}   // checkpoint assertion HERE, not a declaration
           | {"rec": {"name": "X", "body": [<step>...]}}   // tail-recursive loop
           | {"continue": "X"}                             // last step of its block
           | {"spawn": {"role": "<role>"}}   // runtime participant spawning
@@ -76,7 +76,12 @@ SYSTEM = (
     "(add/del/assigns/nondet) from what the prose claims. Use nondet for "
     "\"books a fare under 500\"-style post-conditions.\n"
     "3. Encode the goal as a formula capturing every conjunct the user asked "
-    "for, including refinements like \"under $500\".\n"
+    "for, including refinements like \"under $500\". The top-level goal is "
+    "checked at termination automatically. A protocol {'goal': ...} step is "
+    "an assertion that the goal ALREADY holds at that point, not a declaration "
+    "of future intent. Omit protocol goal markers unless the prose explicitly "
+    "requires such a checkpoint; never put one before actions that establish "
+    "the goal. Any marker must equal the top-level goal exactly.\n"
     "4. Encode the plan as the protocol; use 'choice' for branching and 'msg' "
     "for inter-role messages. If a role must act inside a branch, include the "
     "informing msg only if the prose provides one.\n"

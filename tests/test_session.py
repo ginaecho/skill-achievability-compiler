@@ -103,6 +103,11 @@ class TestMerge:
         with pytest.raises(ProjectionError):
             merge(("act", "a", END), END)
 
+    def test_merge_alpha_equivalent_recursive_behaviours(self):
+        left = ("rec", "X", ("act", "step", ("var", "X")))
+        right = ("rec", "Y", ("act", "step", ("var", "Y")))
+        assert merge(left, right) == left
+
 
 class TestSubtyping:
     def test_reflexive(self):
@@ -134,6 +139,14 @@ class TestSubtyping:
         t1 = ("rec", "X", ("act", "step", ("var", "X")))
         t2 = ("rec", "Y", ("act", "other", ("var", "Y")))
         assert not subtype(t1, t2)
+
+    def test_same_free_recursion_variable_is_reflexive(self):
+        assert subtype(("var", "X"), ("var", "X"))
+
+    def test_unguarded_recursive_type_fails_closed(self):
+        with pytest.raises(ProjectionError, match="unguarded"):
+            subtype(("rec", "X", ("var", "X")),
+                    ("rec", "Y", ("var", "Y")))
 
 
 def test_parse_local_select_and_branch():

@@ -89,13 +89,13 @@ def validate_formula(f: Any, path: str = "formula") -> None:
         return
     if isinstance(f, str):
         return
-    if isinstance(f, dict):
+    if isinstance(f, dict) and len(f) == 1:
         if "and" in f or "or" in f:
-            seq = f.get("and", []) + f.get("or", [])
+            op, seq = next(iter(f.items()))
             if not isinstance(seq, list):
-                raise FormulaError(f"{path}: and/or need a list")
+                raise FormulaError(f"{path}: {op} needs a list")
             for i, x in enumerate(seq):
-                validate_formula(x, f"{path}.{i}")
+                validate_formula(x, f"{path}.{op}[{i}]")
             return
         if "not" in f:
             validate_formula(f["not"], f"{path}.not")

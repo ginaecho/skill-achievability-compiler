@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from skillc.cli import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -65,6 +67,62 @@ def test_check_unknown_exit_3(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "UNKNOWN" in out
     assert "not a refutation" in out
+
+
+def test_goal_only_abstains_on_tool_usage_only_extraction(tmp_path, capsys):
+    source = tmp_path / "SKILL.md"
+    source.write_text("Create the requested report.", encoding="utf-8")
+    assert main(["check", str(source), "--goal-only", "--json"]) == 3
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "INCOMPLETE_COMPACTION"
+    assert result["compaction_goal_source"] == "tool_usage_only"
+
+
+def test_goal_only_contract_prevents_silent_goal_weakening(tmp_path, capsys):
+    source = tmp_path / "SKILL.md"
+    source.write_text("Create the requested report.", encoding="utf-8")
+    contract = tmp_path / "contract.json"
+    contract.write_text(json.dumps({"goal": "report_delivered", "capabilities": {}}))
+    assert main(["check", str(source), "--contract", str(contract),
+                 "--goal-only", "--json"]) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["refutation_scope"] == "capability_context"
+    assert result["compaction_goal_source"] == "contract"
+
+
+@pytest.mark.parametrize("source_kind", ["json", "llm"])
+def test_contract_binds_json_and_llm_paths(tmp_path, capsys, monkeypatch, source_kind):
+    from skillc.frontend import llm
+
+    extracted = {"name": "weak", "capabilities": {}, "protocol": [], "goal": True}
+    source = tmp_path / ("pack.json" if source_kind == "json" else "SKILL.md")
+    source.write_text(json.dumps(extracted) if source_kind == "json" else "Publish report.")
+    contract = tmp_path / "contract.json"
+    contract.write_text(json.dumps({"goal": "published", "capabilities": {}}))
+    monkeypatch.setattr(llm, "compact", lambda *args, **kwargs: extracted)
+    args = ["check", str(source), "--contract", str(contract), "--goal-only", "--json"]
+    if source_kind == "llm":
+        args.append("--llm")
+    assert main(args) == 1
+    result = json.loads(capsys.readouterr().out)
+    assert result["refutation_scope"] == "capability_context"
+
+
+def test_goal_only_and_adversarial_are_mutually_exclusive():
+    with pytest.raises(SystemExit) as error:
+        main(["check", "unused.json", "--goal-only", "--adversarial"])
+    assert error.value.code == 2
+
+
+def test_goal_only_scan_reports_protocol_abstention(tmp_path, capsys):
+    pack = {"name": "cleanup", "capabilities": {"finish": {"add": ["done"]}},
+            "protocol": [{"act": {"cap": "cleanup", "by": "agent"}}], "goal": "done"}
+    (tmp_path / "pack.json").write_text(json.dumps(pack))
+    assert main(["scan", str(tmp_path), "--glob", "*.json",
+                 "--goal-only", "--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert rows[0]["verdict"] == "UNKNOWN"
+    assert rows[0]["refutation_scope"] == "none"
 
 
 def test_check_json_is_self_describing(tmp_path, capsys):

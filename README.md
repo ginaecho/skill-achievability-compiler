@@ -64,9 +64,49 @@ $ skillc cost --corpus                             # token economics of checking
 $ skillc profiles                                  # claude-ai, claude-code, none
 ```
 
-Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (outside
-the decidable fragment) — so `skillc check` can
+Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (an
+abstention, including outside the decidable fragment) — so `skillc check` can
 gate CI for skill repositories.
+
+### Avoid rejecting a goal because one extracted plan is invalid
+
+The default check judges the **declared protocol**, not every alternative plan.
+Use the opt-in `--goal-only` policy when rejecting a task must mean its goal is
+unreachable across the available capability context:
+
+```powershell
+skillc check SKILL.md --contract task-contract.json --goal-only --json
+skillc check pack.json --goal-only --json
+```
+
+A contract contains required `goal` and `capabilities`, plus optional `roles`,
+`init_true` and `init_constraints`. It is a separate trusted input supplied by
+an environment adapter or reviewed by a person, **not** automatically inferred
+truth. Binding replaces extracted grants, effects, goal and initial conditions,
+preserves all granted alternatives, and leaves the extracted protocol intact.
+It also rebinds existing goal markers without moving them. It does not discover
+MCP servers, repair action names, or guarantee real tool effects.
+
+Goal-only checking refutes only when a protocol-independent, conservative
+capability/guard closure proves the goal cannot hold. Other protocol rejections
+become `UNKNOWN/PROTOCOL_ONLY`; missing semantic goals in deterministic
+tool-usage extraction become `UNKNOWN/INCOMPLETE_COMPACTION`. `UNKNOWN` is
+neither rejection nor permission to execute. JSON reports `decision_scope` and
+`refutation_scope`. The Python equivalent is `check(pack, scope="goal")`.
+This policy can improve rejection precision by abstaining; it is not a
+complete alternative-plan search and cannot be combined with `--adversarial`.
+
+For LLM compilation, `--contract` currently binds **after** extraction.
+It does not supply adapter names to the model automatically. Include the
+task/environment descriptions in the source input when those names matter;
+`--profile` is the deterministic frontend's grant mechanism, whereas the
+LLM frontend uses `--llm-runtime` / `--runtime-ability`.
+
+The [compaction precision assessment](docs/COMPACTION_PRECISION_ASSESSMENT_20260921.md)
+compares both frontends on 32 contract-informed scenarios from eight real
+skill sources across six categories, including false rejections, recall,
+abstention coverage and a fresh goal-marker prompt follow-up. These are
+source-derived abstract scenarios, not executions against real backends.
 
 ## Recorded real-skill demo
 

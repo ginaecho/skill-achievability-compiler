@@ -91,6 +91,7 @@ class CompileResult:
     embedded: bool = False           # pack came from a ```skillc-pack block
     warnings: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)   # semantic readings
+    goal_source: str = "tool_usage_only"
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -187,7 +188,8 @@ def compile_markdown(text: str, profile: Profile,
     if embedded is not None:
         validate_pack(embedded)
         return CompileResult(pack=embedded, name=skill_name,
-                             profile=profile.name, embedded=True)
+                             profile=profile.name, embedded=True,
+                             goal_source="embedded")
 
     # --- capability context Γ -------------------------------------------
     declared: dict[str, str] = {}
@@ -218,11 +220,13 @@ def compile_markdown(text: str, profile: Profile,
         validate_pack(sem.pack)
         return CompileResult(pack=sem.pack, name=skill_name,
                              profile=profile.name, declared=declared,
-                             invocations=invocations, notes=sem.notes)
+                             invocations=invocations, notes=sem.notes,
+                             goal_source="semantic")
 
     if not invocations:
-        warnings.append("no tool invocations extracted; goal is trivially "
-                        "achievable (the skill demands no tool actions)")
+        warnings.append("no tool invocations extracted; the fallback goal is "
+                        "trivially achievable, but the skill's actual goal "
+                        "and tool requirements have not been established")
 
     # --- pack --------------------------------------------------------------
     def pred(tool: str) -> str:

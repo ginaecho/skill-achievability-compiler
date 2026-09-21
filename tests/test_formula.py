@@ -20,6 +20,8 @@ class TestValidateFormula:
     @pytest.mark.parametrize("f", [
         None, 42, [],
         {"xor": ["a", "b"]},
+        {"and": ["a"], "or": ["b"]},
+        {"not": "a", "extra": True},
         {"cmp": ["a", "<>", "b"]},
         {"cmp": ["a", "<"]},
         {"not": None},

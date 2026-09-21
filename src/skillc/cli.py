@@ -9,8 +9,7 @@
   skillc profiles                                        list capability profiles
 
 Exit codes: 0 achievable / all pass, 1 impossible / soundness violation,
-2 usage or input error, 3 unknown (an abstention: outside the decidable
-fragment, never a refutation).
+2 usage or input error, 3 unknown (an abstention, never a refutation).
 """
 from __future__ import annotations
 
@@ -21,30 +20,53 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import __version__
-from .checker import check
+from .checker import Verdict, check
 from .evaluate import evaluate, format_report, load_corpus
 from .frontend.markdown import CompileResult, compile_file
-from .pack import Pack, PackError
+from .pack import Pack, PackError, pack_digest
 from .profiles import builtin_profiles, load_profile
 
 
 def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
     """Return (pack, compile_result_or_None) for a .json pack or markdown."""
+    res = None
     if path.suffix == ".json":
-        return json.loads(path.read_text(encoding="utf-8")), None
-    profile = load_profile(args.profile)
-    if getattr(args, "tool", None):
-        profile = profile.with_tools(args.tool)
-    if getattr(args, "llm", False):
-        from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact
-        abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
-        abilities.extend(args.runtime_ability or [])
-        pack = compact(path.read_text(encoding="utf-8"), model=args.model,
-                       provider=args.llm_provider,
-                       runtime_abilities=abilities or None)
-        return pack, None
-    res = compile_file(path, profile)
-    return res.pack, res
+        pack = json.loads(path.read_text(encoding="utf-8"))
+    else:
+        profile = load_profile(args.profile)
+        if getattr(args, "tool", None):
+            profile = profile.with_tools(args.tool)
+        if getattr(args, "llm", False):
+            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact
+            abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
+            abilities.extend(args.runtime_ability or [])
+            pack = compact(path.read_text(encoding="utf-8"), model=args.model,
+                           provider=args.llm_provider,
+                           runtime_abilities=abilities or None)
+        else:
+            res = compile_file(path, profile)
+            pack = res.pack
+    if getattr(args, "contract", None):
+        from .frontend.contract import bind_contract
+        contract = json.loads(Path(args.contract).read_text(encoding="utf-8"))
+        pack = bind_contract(pack, contract)
+        if res is not None:
+            res.pack = pack
+            res.goal_source = "contract"
+    return pack, res
+
+
+def _check_loaded(pack, res, args):
+    scope = "goal" if getattr(args, "goal_only", False) else "protocol"
+    if scope == "goal" and res is not None and res.goal_source == "tool_usage_only":
+        return Verdict(
+            False, "INCOMPLETE_COMPACTION",
+            "deterministic extraction captured tool usage, not the task goal; "
+            "supply a reviewed --contract, an embedded pack, or semantic compaction",
+            unknown=True, decision_scope=scope, pack_digest=pack_digest(pack))
+    return check(pack,
+                 semantics="adversarial" if getattr(args, "adversarial", False) else "may",
+                 scope=scope)
 
 
 def cmd_compile(args) -> int:
@@ -82,10 +104,12 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
 
 def cmd_check(args) -> int:
     pack, res = _load_result(Path(args.file), args)
-    v = check(pack, semantics="adversarial" if args.adversarial else "may")
+    v = _check_loaded(pack, res, args)
     if args.json:
         out = v.to_dict()
         out["pack_name"] = pack.get("name", "?")
+        if res is not None:
+            out["compaction_goal_source"] = res.goal_source
         print(json.dumps(out, indent=2))
     else:
         print(f"{pack.get('name', '?')}: {v.label}"
@@ -93,8 +117,7 @@ def cmd_check(args) -> int:
         if v.detail and not v.achievable:
             print(f"  {v.detail}")
         if v.unknown:
-            print("  UNKNOWN is not a refutation: the pack falls outside the "
-                  "decidable fragment, so no claim is made either way.")
+            print("  UNKNOWN is an abstention, not a refutation or permission to run.")
         if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
             lines = {i.tool: i.line for i in reversed(res.invocations)}
             for capname in v.frontier:
@@ -120,12 +143,14 @@ def cmd_scan(args) -> int:
     for f in files:
         rel = f.relative_to(root)
         try:
-            pack, _ = _load_result(f, args)
-            v = check(pack)
+            pack, res = _load_result(f, args)
+            v = _check_loaded(pack, res, args)
             rows.append({"skill": rel.as_posix(), "verdict": v.label,
                          "reason": v.reason if not v.achievable else "",
                          "frontier": list(v.frontier),
-                         "unknown": v.unknown, "refuted": v.refuted})
+                         "unknown": v.unknown, "refuted": v.refuted,
+                         "decision_scope": v.decision_scope,
+                         "refutation_scope": v.refutation_scope})
         except (PackError, ValueError) as e:
             rows.append({"skill": rel.as_posix(), "verdict": "ERROR",
                          "reason": type(e).__name__, "frontier": [str(e)],
@@ -142,7 +167,7 @@ def cmd_scan(args) -> int:
         n_refuted = sum(r["refuted"] for r in rows)
         print(f"\n{n_ok}/{len(rows)} achievable under profile "
               f"'{args.profile}'; {n_refuted} refuted, {n_unknown} unknown "
-              f"(outside the decidable fragment -- not refutations)")
+              f"(abstentions -- not refutations or permission to run)")
     return 0
 
 
@@ -315,6 +340,8 @@ def _add_compile_opts(sp) -> None:
                     help="capability profile (built-in name or JSON path)")
     sp.add_argument("--tool", action="append", metavar="NAME",
                     help="grant an extra tool capability (repeatable)")
+    sp.add_argument("--contract", metavar="JSON",
+                    help="bind extraction to reviewed goal, capabilities, and initial state")
     sp.add_argument("--llm", action="store_true",
                     help="use the semantic LLM compaction front-end")
     sp.add_argument("--llm-provider", choices=("anthropic", "azure-openai"),
@@ -345,9 +372,13 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("file")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("-v", "--verbose", action="store_true")
-    sp.add_argument("--adversarial", action="store_true",
+    decisions = sp.add_mutually_exclusive_group()
+    decisions.add_argument("--adversarial", action="store_true",
                     help="require the goal under EVERY resolution of choices "
                          "marked external (must-achievability)")
+    decisions.add_argument("--goal-only", action="store_true",
+                           help="refute only with a protocol-independent goal certificate; "
+                                "otherwise abstain on protocol rejection")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_check)
 
@@ -355,6 +386,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("dir")
     sp.add_argument("--glob", default="SKILL.md")
     sp.add_argument("--json", action="store_true")
+    sp.add_argument("--goal-only", action="store_true",
+                    help="use conservative goal-impossibility scope instead of protocol admission")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_scan)
 

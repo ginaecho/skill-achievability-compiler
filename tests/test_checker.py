@@ -45,6 +45,55 @@ def test_missing_capability():
     assert v.frontier == ("send_email",)
 
 
+def test_goal_only_abstains_when_missing_action_is_not_goal_essential():
+    p = pack(capabilities={"finish": {"add": ["done"]}},
+             protocol=[act("finish"), act("cleanup")], goal="done")
+    assert check(p).reason == "MISSING_CAPABILITY"
+    result = check(p, scope="goal")
+    assert result.label == "UNKNOWN"
+    assert result.reason == "PROTOCOL_ONLY"
+    assert not result.context_refuted
+
+
+def test_goal_only_rejects_missing_essential_capability_with_context_certificate():
+    p = pack(capabilities={"read": {"add": ["read"]}},
+             protocol=[act("read"), act("publish")], goal="published")
+    result = check(p, scope="goal")
+    assert result.refuted and result.context_refuted
+    assert result.to_dict()["refutation_scope"] == "capability_context"
+    assert result.to_dict()["decision_scope"] == "goal"
+
+
+def test_goal_only_rejects_adversarial_semantics():
+    with pytest.raises(ValueError, match="may"):
+        check(pack(), semantics="adversarial", scope="goal")
+
+
+def test_goal_only_proves_permanently_blocked_guard_without_rejecting_repair():
+    p = pack(capabilities={
+        "publish": {"pre": "authorized", "add": ["published"]}},
+        protocol=[act("publish")], goal="published")
+    assert check(p, scope="goal").context_refuted
+    p["capabilities"]["authorize"] = {"add": ["authorized"]}
+    result = check(p, scope="goal")
+    assert result.unknown and not result.refuted
+
+
+def test_goal_guard_closure_is_conservative_for_negative_preconditions():
+    p = pack(capabilities={
+        "finish": {"pre": {"not": "blocked"}, "add": ["done"]},
+        "block": {"add": ["blocked"]}},
+        protocol=[act("finish")], goal="done")
+    assert check(p, scope="goal").achievable
+
+
+def test_context_certificate_separates_predicates_from_numeric_placeholders():
+    p = pack(init_true=["__cmp_0"], goal={
+        "and": ["__cmp_0", {"not": {"cmp": [0, "==", 1]}}]})
+    assert check(p).achievable
+    assert check(p, scope="goal").achievable
+
+
 def test_goal_unsat_no_establisher():
     # STRIPS frame: confirmation_sent is false unless some effect adds it.
     v = check(pack(
@@ -150,6 +199,49 @@ def test_delete_effect_and_frame():
     assert v.reason == "GOAL_UNSAT"
 
 
+def test_add_then_delete_matches_world_act_order():
+    v = check(pack(
+        capabilities={"toggle": {"add": ["holding"], "del": ["holding"]}},
+        protocol=[act("toggle")],
+        goal={"not": "holding"}))
+    assert v.achievable
+
+
+def test_deterministic_assignment_precedes_overlapping_nondet_update():
+    v = check(pack(
+        capabilities={"set": {
+            "assigns": {"x": 1},
+            "nondet": {"x": {"cmp": ["x", "==", 2]}}}},
+        protocol=[act("set")],
+        goal={"cmp": ["x", "==", 1]}))
+    assert v.achievable
+
+
+def test_nondeterministic_updates_are_simultaneous():
+    v = check(pack(
+        capabilities={"swap": {"nondet": {
+            "x": {"cmp": ["x", "==", "y"]},
+            "y": {"cmp": ["y", "==", "x"]}}}},
+        protocol=[act("swap")],
+        init_constraints=[
+            {"cmp": ["x", "==", 0]},
+            {"cmp": ["y", "==", 1]}],
+        goal={"and": [
+            {"cmp": ["x", "==", 1]},
+            {"cmp": ["y", "==", 0]}]}))
+    assert v.achievable
+
+
+def test_action_with_empty_nondeterministic_effect_relation_is_blocked():
+    v = check(pack(
+        capabilities={"impossible": {"nondet": {"x": False}}},
+        protocol=[act("impossible")],
+        goal=True))
+    assert v.refuted
+    assert v.reason == "BLOCKED_GUARD"
+    assert "no successor world" in v.detail
+
+
 def test_goal_marker_midway():
     v = check(pack(
         capabilities={"a": {"add": ["done"]}, "b": {"del": ["done"]}},
@@ -163,6 +255,70 @@ def test_unsatisfied_goal_marker_blocks_later_achievement():
         capabilities={"finish": {"add": ["done"]}},
         protocol=[{"goal": "done"}, act("finish")],
         goal="done"))
+    assert v.refuted
+    assert v.reason == "GOAL_UNSAT"
+
+
+def test_direct_typing_checks_every_choice_branch_at_one_initial_world():
+    v = check(pack(
+        capabilities={
+            "zero": {"pre": {"cmp": ["x", "==", 0]}, "add": ["done"]},
+            "one": {"pre": {"cmp": ["x", "==", 1]}, "add": ["done"]}},
+        protocol=[{"choice": {"by": "agent", "branches": {
+            "zero": [act("zero")],
+            "one": [act("one")]}}}],
+        goal="done"))
+    assert v.refuted
+    assert v.reason == "NON_CONFORMANT"
+    assert "same initial world" in v.detail
+
+
+def test_direct_typing_checks_goal_marker_on_every_choice_branch():
+    v = check(pack(
+        capabilities={"finish": {"add": ["done"]}},
+        protocol=[{"choice": {"by": "agent", "branches": {
+            "valid": [act("finish"), {"goal": "done"}],
+            "invalid": [{"goal": "done"}]}}}],
+        goal="done"))
+    assert v.refuted
+    assert v.reason == "NON_CONFORMANT"
+
+
+def test_terminal_goal_and_conformance_share_initial_world():
+    v = check(pack(
+        capabilities={
+            "finish": {"add": ["done"]},
+            "require_one": {"pre": {"cmp": ["x", "==", 1]},
+                            "add": ["done"]}},
+        protocol=[{"choice": {"by": "agent", "branches": {
+            "first": [act("finish")],
+            "second": [act("require_one")]}}}],
+        goal={"and": ["done", {"cmp": ["x", "==", 0]}]}))
+    assert v.refuted
+    assert v.reason == "NON_CONFORMANT"
+
+
+def test_joint_typing_search_tries_another_goal_witness():
+    v = check(pack(
+        capabilities={
+            "finish": {"add": ["done"]},
+            "repair": {"pre": {"cmp": ["x", "==", 1]},
+                       "assigns": {"x": 0}, "add": ["done"]}},
+        protocol=[{"choice": {"by": "agent", "branches": {
+            "first": [act("finish")],
+            "second": [act("repair")]}}}],
+        goal={"and": ["done", {"cmp": ["x", "==", 0]}]}))
+    assert v.achievable
+    assert ("choose", "second") in v.witness
+
+
+def test_guard_is_retained_in_reachability_path_condition():
+    v = check(pack(
+        capabilities={"a": {
+            "pre": {"cmp": ["x", "==", 0]},
+            "add": ["done"]}},
+        protocol=[act("a")],
+        goal={"and": ["done", {"cmp": ["x", "==", 5]}]}))
     assert v.refuted
     assert v.reason == "GOAL_UNSAT"
 
@@ -337,6 +493,16 @@ def test_verdict_dict_is_self_describing():
     assert d["semantics"] == "may"
     assert d["skillc_version"] == __version__
     assert d["pack_digest"].startswith("sha256:")
+    assert d["deferred_obligations"] == [
+        "intent_fidelity", "payload_faithfulness"]
+
+
+def test_only_achievable_verdicts_carry_deferred_obligations():
+    impossible = check(pack(
+        protocol=[act("missing")],
+        goal=True))
+    assert impossible.to_dict()["deferred_obligations"] == []
+    assert check(SPAWN_PACK).to_dict()["deferred_obligations"] == []
 
 
 def test_verdict_records_the_semantics_it_was_decided_under():
