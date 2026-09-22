@@ -8,17 +8,13 @@ frame assumption) that no run of the declared pack can reach its goal.  It is
 deliberately **incomplete for achievement**: `ACHIEVABLE` means "structurally
 admissible", not "guaranteed".
 
-The paper presents the direct-typing and goal-achievability core. Its
-refutation-sound abstraction theorem is mechanized in Coq
+The refutation-sound abstraction theorem is mechanized in Coq
 ([`proof/SkillAchievability.v`](proof/SkillAchievability.v), zero axioms,
 audited by [`proof/check_assumptions.v`](proof/check_assumptions.v)); the
 executable checker is schema-gated and tested against that specification, but
 its exact symbolic transition system is not yet instantiated in Coq. It decides
 capability-guarded may-reachability with z3, in
-milliseconds, with no LLM in the trusted path. The exact scope of the
-accompanying paper and the implementation-only extensions is recorded in
-[`paper/README.md`](paper/README.md); the paper source and built
-[PDF](paper/skillachievability.pdf) live in [`paper/`](paper/).
+milliseconds, with no LLM in the trusted path.
 
 ```
  natural-language skill ──► [ front-end compaction ] ──► pack ──► [ checker ] ──► verdict
@@ -139,8 +135,8 @@ A **pack** declares capabilities (STRIPS pre/effects, numeric assignments,
 constrained non-determinism), a goal-marked global protocol (`act` / `msg` /
 `choice` / tail-recursive `rec`/`continue` loops / `spawn`), a goal formula,
 the initial state, and optionally per-role declared behaviours (`skills`).
-The executable checker decides four algorithmic checks corresponding to the
-paper's direct conformance and achievability judgments (§5.2–§5.3):
+The executable checker decides four algorithmic checks for direct conformance
+and achievability:
 
 ```
    Γ ⊇ caps(G)          capability soundness   — no hallucinated tools
@@ -155,7 +151,7 @@ paper's direct conformance and achievability judgments (§5.2–§5.3):
 Projection implements Proj-Sel / Proj-Brn / Proj-Mrg with the merge `⊓`
 (label-union on external branches). The direct-conformance adapter requires
 exact internal selections and permits receiver-side external supersets. Its
-equivalence to the paper's declarative whole-session judgment is an open proof
+equivalence to the declarative whole-session judgment is an open proof
 obligation. Refutations name the failing check:
 
 | reason | failure mode it catches |
@@ -209,8 +205,8 @@ measured multi-agent with/without benchmark for protocol failures. See
 [Impossible agent coordination example](docs/IMPOSSIBLE_AGENT_COORDINATION.md)
 for the complete skill, repair, benchmark cases, and evidence boundary.
 
-**Participant agreement (`prt(G) = prt(𝕄)`).** The paper's judgment ranges
-over a whole session `𝕄 = ∏ₚ p[Sₚ]`, so `T-Comm`/`T-Act`/`T-Goal` each carry a
+**Participant agreement (`prt(G) = prt(𝕄)`).** The judgment ranges over a whole
+session `𝕄 = ∏ₚ p[Sₚ]`, so `T-Comm`/`T-Act`/`T-Goal` each carry a
 side condition that the protocol's participants agree with the session's. A
 pack that declares behaviours for only *some* of `prt(G)` leaves the rest
 assumed to follow their projected contract — sound for the verdict about `G`,
@@ -227,7 +223,7 @@ Declaring a behaviour for a role that is *not* a participant of `G` is refuted
 outright (`NON_CONFORMANT`): its contract is `end`, and nothing non-trivial
 conforms to `end`.
 
-**The decidable fragment (`thm:dec` / `thm:undec`).** Tail-recursive loops are explored
+**The decidable fragment.** Tail-recursive loops are explored
 with predicate-state saturation plus numeric widening on the back edge —
 widening only enlarges the reachable set, so refutation stays sound.  Dynamic
 participant spawning (`spawn`) crosses the autonomy boundary
@@ -235,8 +231,7 @@ participant spawning (`spawn`) crosses the autonomy boundary
 refutes what survives autonomy and otherwise answers **`UNKNOWN`** (exit
 code 3) instead of guessing.
 
-**Implementation-only extensions** (useful capabilities not claimed by the
-current paper revision):
+**Additional checker extensions:**
 
 - **Establisher-closure refutation** — a goal conjunct no capability
   establishes refutes *every* protocol over Γ in one SMT query, spawning
@@ -250,7 +245,7 @@ current paper revision):
 - **Adversarial must-achievability** (`skillc check --adversarial`, choices
   marked `"external": true`) — the goal must survive every environment
   resolution while the agent's own choices stay existential (AND-OR search);
-  adversarial refutations inherit soundness compositionally from T1.
+  adversarial refutations inherit soundness compositionally.
 - **Counterexample-guided compaction repair** — a `NON_PROJECTABLE`
   counterexample is fed back to the untrusted compactor for one bounded,
   structure-only repair round (it may not invent tools or weaken the goal);
@@ -259,9 +254,8 @@ current paper revision):
 Tolerance comes from may-reachability (detours allowed), receiver-side
 interface slack (a role may offer more receives), and goal-relevant
 abstraction — extra status
-messages or beneficial branches never cause a refutation (Coq T2), and
-*adding* capabilities never flips `ACHIEVABLE` to `IMPOSSIBLE` (Coq T3,
-`cap_monotone`).
+messages or beneficial branches never cause a refutation, and *adding*
+capabilities never flips `ACHIEVABLE` to `IMPOSSIBLE` (`cap_monotone`).
 
 ## Front-ends
 
@@ -313,12 +307,12 @@ files mounted at `/mnt/skills`, or fetched with
 `python3 scripts/fetch_skills.py`):
 
 * **36/36 achievable under the `claude-ai` profile** — their home runtime.
-  Zero false refutations on deployed skills (the empirical face of T1).
+  Zero false refutations on deployed skills.
 * **16/36 refuted under the `claude-code` profile**, each with the exact
   missing tool named (`ask_user_input_v0`, `read_page`, `upload_file`,
   `create_file`, `str_replace`, `show_widget`, `search_mcp_registry`, …) and
   the source line.  Granting the named tools flips every one of them back to
-  achievable (an operational illustration of the contrapositive of T3).
+  achievable.
 
 The corpus grows as upstream publishes new skills; the numbers above are
 regenerated by `python3 scripts/make_report.py <dir>`, so treat the report as
@@ -340,7 +334,7 @@ invoked tool from the profile flips the verdict and names exactly that tool;
 granting the frontier back flips it to achievable.
 
 On the 15-spec ground-truth corpus (`skillc eval`): **FN = 0** (no achievable
-goal ever refuted — T1) and the only false `ACHIEVABLE`s are the two planted
+goal ever refuted) and the only false `ACHIEVABLE`s are the two planted
 `SPURIOUS` cases (payload faithfulness / intent fidelity), i.e. exactly the
 residues the compiler openly defers to runtime monitoring and human review.
 No structural failure was missed in this proof-of-concept corpus.
@@ -426,10 +420,9 @@ src/skillc/            the compiler package
   cli.py                 skillc compile | check | scan | audit | cost | eval
                          | profiles
   data/                  built-in profiles + evaluation corpora
-paper/                 the paper (LaTeX + built PDF): full proofs +
-                       implementation-driven extensions
 proof/                 theorem checkers for specified fragments (Coq 8.18,
-                       zero axioms) -- SkillAchievability.v proves T1/T2/T3;
+                       zero axioms) -- SkillAchievability.v proves
+                       refutation soundness and monotonicity;
                        DirectTyping.v the direct-typing head-move safety;
                        DirectTypingSR.v subject reduction + session fidelity
                        (communication interleaving); the compiler itself is the
@@ -458,7 +451,9 @@ Dynamic subagent spawning is outside the decidable fragment and yields
 
 ## How to cite
 
-The skill-achievability-compiler is an open-source project. If you use it in academic work, research papers, or other publications, please cite it using one of the formats below:
+The skill-achievability-compiler is an open-source project. If you use it in
+academic work or other publications, please cite it using one of the formats
+below:
 
 **BibTeX:**
 ```bibtex
