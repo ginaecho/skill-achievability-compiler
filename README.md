@@ -186,10 +186,28 @@ private-review-routing: IMPOSSIBLE [NON_PROJECTABLE]
 
 The repair is a protocol change, not another tool: the main agent must send the
 editor a branch label such as `publish_security_report` or
-`publish_performance_report`. See
+`publish_performance_report`.
+
+The formal protocol does not require an LLM. Authors can use deterministic
+prose compaction, opt into LLM compaction for unrestricted natural language,
+or embed a reviewed `skillc-pack` directly. In every path, the LLM is outside
+the trusted decision: the schema gate and deterministic checker produce the
+verdict.
+
+The corpus contains two protocol-specific refutations:
+
+| case | protocol defect | verdict |
+|---|---|---|
+| `deadlock_unobserved` | a planner must react to a worker's private choice | `NON_PROJECTABLE` |
+| `nonconformant_handler` | a handler omits one route required by its contract | `NON_CONFORMANT` |
+
+For `deadlock_unobserved`, the published token model estimates **1,888 tokens**
+for one-time LLM compaction versus **231,870 tokens** for a typical two-agent
+deadlock run (54,948–778,740 low–high). Deterministic compaction costs zero
+tokens. These are modeled economics: the repository does not yet claim a valid
+measured multi-agent with/without benchmark for protocol failures. See
 [Impossible agent coordination example](docs/IMPOSSIBLE_AGENT_COORDINATION.md)
-for the complete natural-language skill, interaction diagram, explanation, and
-repair.
+for the complete skill, repair, benchmark cases, and evidence boundary.
 
 **Participant agreement (`prt(G) = prt(𝕄)`).** The paper's judgment ranges
 over a whole session `𝕄 = ∏ₚ p[Sₚ]`, so `T-Comm`/`T-Act`/`T-Goal` each carry a

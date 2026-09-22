@@ -104,6 +104,102 @@ main agent chooses
 This is a protocol repair rather than a capability repair. Adding another tool
 would not tell the editor which existing action to perform.
 
+## Does compaction require an LLM?
+
+No. `skillc` needs a formal pack containing the roles, choices, messages,
+capabilities, and goal, but that pack can come from three paths:
+
+| Frontend | Best suited to | Token cost |
+|---|---|---:|
+| Deterministic prose compaction | Explicit prose patterns supported by the frontend | 0 |
+| LLM compaction (`--llm`) | Unrestricted or less structured natural language | Provider-reported compaction usage |
+| Embedded `skillc-pack` | Author-reviewed formal protocols | 0 |
+
+The corpus descriptions for `deadlock_unobserved` and
+`nonconformant_handler` are accepted by the deterministic frontend and produce
+their intended protocol refutations without an LLM. The private-review example
+above would normally use LLM compaction unless it were rewritten into the
+deterministic frontend's recognized form or supplied as an embedded pack.
+
+LLM compaction is an untrusted translation step. Its output must pass the
+schema gate, and the deterministic checker—not the LLM—returns `ACHIEVABLE`,
+`IMPOSSIBLE`, or `UNKNOWN`.
+
+## Protocol cases in the benchmark corpus
+
+Two impossible corpus cases are caused specifically by interaction protocols
+rather than unavailable tools:
+
+| Case | Interaction defect | Reference verdict |
+|---|---|---|
+| `deadlock_unobserved` | A worker privately selects `ask` or `direct`; the planner must answer only in the `ask` branch but receives no distinguishing message | `IMPOSSIBLE / NON_PROJECTABLE` |
+| `nonconformant_handler` | A router may send `go_simple` or `go_complex`; the handler declares behavior only for `go_simple` | `IMPOSSIBLE / NON_CONFORMANT` |
+
+Two real-skill semantic-validation cases also caused the LLM compactor to
+propose an unobserved choice:
+
+- `call-to-book`: an unobserved choice by the business stranded the agent.
+- `prescription-refill`: an unobserved choice by the pharmacy stranded the
+  agent.
+
+Those two skills are not impossible examples. The checker rejected the
+defective generated protocols, the bounded repair step corrected them, and
+their final packs were `ACHIEVABLE`. They demonstrate checker-guided compaction
+repair rather than early termination of impossible work.
+
+## With and without `skillc`
+
+The case-specific model for `deadlock_unobserved` assumes that both agents hold
+context and wait until a timeout:
+
+| Path | Tokens | Evidence |
+|---|---:|---|
+| With `skillc`, one-time LLM compaction | 1,888 | Modeled |
+| Without `skillc`, 6-turn two-agent deadlock | 54,948 | Modeled low |
+| Without `skillc`, 15-turn two-agent deadlock | 231,870 | Modeled typical |
+| Without `skillc`, 30-turn two-agent deadlock | 778,740 | Modeled high |
+| With deterministic compaction | 0 | By construction |
+
+Against the typical modeled run, one-time LLM compaction is 0.81% of the
+unchecked runtime tokens, or about 123x smaller. Compaction is paid once per
+skill version; an unchecked deadlock pays its runtime cost on every
+invocation.
+
+The repository also publishes a generic median-skill model for both protocol
+failure reasons:
+
+| Reason | Check | Typical unchecked run | Leverage |
+|---|---:|---:|---:|
+| `NON_PROJECTABLE` | 2,778 | 261,900 | 94x |
+| `NON_CONFORMANT` | 2,778 | 261,900 | 94x |
+
+These figures are estimates, not measurements of interacting agent runs.
+
+### Measured pilot limitation
+
+The August token pilot included `deadlock_unobserved`, with 1,295 measured
+compaction tokens and 274 tokens for one bounded runtime simulation. That row
+does not establish protocol savings:
+
+- LLM compaction changed the intended `NON_PROJECTABLE` defect into
+  `MISSING_CAPABILITY`.
+- The runtime used one monolithic simulator rather than separate planner and
+  worker contexts.
+- The simulator selected the favorable direct-delivery branch and reported
+  achievement.
+
+The benchmark therefore identifies the row as construct-mismatched. Likewise,
+the measured `NON_CONFORMANT` result for `choice_informed_ok` was a false
+refutation introduced by LLM compaction of an achievable source, so it is not
+evidence of a prevented protocol failure.
+
+The five-case real-rejection benchmark contains only missing-capability
+refutations. The live-backend matrix explicitly is not a protocol-complexity
+stress test. A valid measured protocol benchmark still needs separate
+main-agent and subagent contexts, hidden branch selection, actual message
+delivery, timeout behavior, and provider-reported usage from every
+participant.
+
 ## Decision boundary
 
 If a skill creates an unbounded number of subagents dynamically, `skillc`
