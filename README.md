@@ -166,6 +166,31 @@ obligation. Refutations name the failing check:
 | `NON_PROJECTABLE` | a role must act inside a branch it is never told about and the branches do not merge (unobserved choice → deadlock/handoff freeze) |
 | `NON_CONFORMANT` | a declared role behaviour does not refine its projected contract — the verdict on `G` cannot be transported to it |
 
+### More than tool checking: stop impossible agent coordination
+
+`skillc` does not only check whether tools exist. It also checks whether the
+goal is reachable, action guards and numeric constraints can be satisfied, and
+the interactions among agents form a realizable protocol.
+
+For example, suppose a main agent privately chooses either a security review
+or a performance review. A reviewer performs the selected analysis, while an
+editor must publish the corresponding report. Every required capability may
+exist, but if the editor is never told which branch the main agent selected,
+the editor cannot know which publication action its local contract requires.
+`skillc` refutes this before any agents are launched:
+
+```text
+private-review-routing: IMPOSSIBLE [NON_PROJECTABLE]
+  role 'editor' must behave differently across an unobserved choice
+```
+
+The repair is a protocol change, not another tool: the main agent must send the
+editor a branch label such as `publish_security_report` or
+`publish_performance_report`. See
+[Impossible agent coordination example](docs/IMPOSSIBLE_AGENT_COORDINATION.md)
+for the complete natural-language skill, interaction diagram, explanation, and
+repair.
+
 **Participant agreement (`prt(G) = prt(𝕄)`).** The paper's judgment ranges
 over a whole session `𝕄 = ∏ₚ p[Sₚ]`, so `T-Comm`/`T-Act`/`T-Goal` each carry a
 side condition that the protocol's participants agree with the session's. A
