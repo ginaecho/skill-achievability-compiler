@@ -1,0 +1,170 @@
+{
+  "name": "render-deploy",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_git_remote": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "remote_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "analyze_codebase": {
+      "owner": "agent",
+      "pre": "remote_checked",
+      "add": [
+        "codebase_analyzed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "generate_render_yaml": {
+      "owner": "agent",
+      "pre": "codebase_analyzed",
+      "add": [
+        "blueprint_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_and_push": {
+      "owner": "agent",
+      "pre": "blueprint_written",
+      "add": [
+        "blueprint_pushed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "generate_deeplink": {
+      "owner": "agent",
+      "pre": "blueprint_pushed",
+      "add": [
+        "deeplink_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_service_direct": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:render_account",
+          "codebase_analyzed"
+        ]
+      },
+      "add": [
+        "service_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_deployment": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:render_account",
+          {
+            "or": [
+              "deeplink_ready",
+              "service_created"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "deployment_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_git_remote",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "analyze_codebase",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "blueprint": [
+            {
+              "act": {
+                "cap": "generate_render_yaml",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "commit_and_push",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "generate_deeplink",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "user",
+                "observed": true,
+                "branches": {
+                  "applied": [
+                    {
+                      "act": {
+                        "cap": "verify_deployment",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "not_applied": []
+                }
+              }
+            }
+          ],
+          "direct_creation": [
+            {
+              "act": {
+                "cap": "create_service_direct",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "verify_deployment",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": "deployment_verified",
+  "init_true": [],
+  "init_constraints": []
+}

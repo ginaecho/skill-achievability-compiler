@@ -1,0 +1,104 @@
+{
+  "name": "run-acceptance-tests",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "confirm_test_account": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "credentials_confirmed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "discover_env_vars": {
+      "owner": "agent",
+      "pre": "credentials_confirmed",
+      "add": [
+        "env_vars_known"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_acceptance_test": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:provider_test_account",
+          "env_vars_known"
+        ]
+      },
+      "add": [
+        "test_run"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "confirm_test_account",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "discover_env_vars",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_acceptance_test",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "pass": [],
+          "fail": [
+            {
+              "rec": {
+                "name": "diagnose",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "run_acceptance_test",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "agent",
+                      "external": true,
+                      "branches": {
+                        "pass": [],
+                        "fail": [
+                          {
+                            "continue": "diagnose"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": "test_run",
+  "init_true": [],
+  "init_constraints": []
+}

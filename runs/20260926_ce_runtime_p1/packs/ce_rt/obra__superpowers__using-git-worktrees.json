@@ -1,0 +1,144 @@
+{
+  "name": "using-git-worktrees",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_isolation": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "isolation_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_git_worktree": {
+      "owner": "agent",
+      "pre": "isolation_checked",
+      "add": [
+        "workspace_isolated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "project_setup": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "setup_done"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_tests": {
+      "owner": "agent",
+      "pre": "setup_done",
+      "add": [
+        "tests_run"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_isolation",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "already_isolated": [
+            {
+              "act": {
+                "cap": "project_setup",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_tests",
+                "by": "agent"
+              }
+            }
+          ],
+          "normal_repo": [
+            {
+              "choice": {
+                "by": "user",
+                "observed": true,
+                "branches": {
+                  "consent": [
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "native_tool": [
+                            {
+                              "act": {
+                                "cap": "use_native_worktree",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "no_native_tool": [
+                            {
+                              "act": {
+                                "cap": "create_git_worktree",
+                                "by": "agent"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "project_setup",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "run_tests",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "decline": [
+                    {
+                      "act": {
+                        "cap": "project_setup",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "run_tests",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": "tests_run",
+  "init_true": [],
+  "init_constraints": []
+}
