@@ -645,3 +645,99 @@ def test_repair_that_drops_a_need_but_keeps_the_tool_is_rejected():
     fixed = REFUTED.replace("needs `cloud_account`; ", "")
     assert repair_violations(parse_ce_detailed(REFUTED), parse_ce_detailed(fixed)) == [
         "Tool `deploy` kept but no longer needs `cloud_account`"]
+
+
+# --------------------------------------------------------------------------
+# Two goal levels (P3)
+# --------------------------------------------------------------------------
+
+from skillc.frontend.runtime import check_levels  # noqa: E402
+
+LEVELS = """\
+Skill `ship`.
+Roles: `agent`.
+Tool `build` (owner `agent`): via `bash`; adds `built`.
+Tool `deploy` (owner `agent`): via `bash`; needs `cloud_account`; requires `built`; adds `deployed`.
+Goal: `built`.
+Live goal: `deployed`.
+Protocol:
+  - `agent` uses `build`.
+  - `agent` chooses one of (observed):
+    - branch `deploy`:
+      - `agent` uses `deploy`.
+    - branch `skip`: none.
+"""
+
+
+def test_live_goal_round_trips():
+    r = parse_ce_detailed(LEVELS)
+    assert r.live_goal == "deployed" or r.live_goal == {"atom": "deployed"} or r.live_goal
+    assert render_ce(r.pack, r.bindings, r.live_goal) == LEVELS
+    assert parse_ce_detailed(BOUND).live_goal is None
+
+
+def test_live_goal_must_follow_goal_and_is_unique():
+    with pytest.raises(CEError, match="after 'Goal:'"):
+        parse_ce_detailed(LEVELS.replace("Goal: `built`.\nLive goal: `deployed`.",
+                                         "Live goal: `deployed`.\nGoal: `built`."))
+    with pytest.raises(CEError, match="duplicate 'Live goal:'"):
+        parse_ce_detailed(LEVELS.replace("Live goal: `deployed`.",
+                                         "Live goal: `deployed`.\nLive goal: `built`."))
+
+
+def test_core_goal_holds_while_live_goal_is_blocked():
+    r = parse_ce_detailed(LEVELS)
+    b = bind_runtime(r.pack, r.bindings, RT)
+    v = check_levels(b.pack, r.live_goal)
+    assert v["core"].achievable
+    assert v["live"].label == "IMPOSSIBLE"
+
+
+def test_live_goal_on_the_mandatory_path_blocks_the_core_goal_too():
+    text = LEVELS.split("  - `agent` chooses")[0] + "  - `agent` uses `deploy`.\n"
+    r = parse_ce_detailed(text)
+    b = bind_runtime(r.pack, r.bindings, RT)
+    assert check_levels(b.pack, r.live_goal)["core"].label == "IMPOSSIBLE"
+
+
+def test_without_live_goal_levels_is_the_plain_check():
+    r = parse_ce_detailed(BOUND)
+    b = bind_runtime(r.pack, r.bindings, RT)
+    v = check_levels(b.pack, None)
+    assert v["live"] is None and v["core"].label == check(b.pack).label
+
+
+def test_repair_that_moves_the_goal_into_the_live_goal_is_rejected():
+    before = parse_ce_detailed(LEVELS.replace("Goal: `built`.", "Goal: `deployed`.")
+                               .replace("Live goal: `deployed`.\n", ""))
+    after = parse_ce_detailed(LEVELS)
+    assert repair_violations(before, after) == ["the Goal changed", "the Live goal changed"]
+
+
+def test_levels_prompt_replaces_rule_10_only():
+    plain, _ = llm.ce_runtime_messages("prose", RT)
+    lv, _ = llm.ce_runtime_messages("prose", RT, levels=True)
+    assert "10. The Goal is" in plain and "10. The Goal is" not in lv
+    assert "10. Two goal levels" in lv and "Live goal: F." in lv
+    assert plain.split("10. ")[0] == lv.split("10. ")[0]
+
+
+def test_binder_prunes_the_agents_unrunnable_branch():
+    r = parse_ce_detailed(LEVELS)
+    b = bind_runtime(r.pack, r.bindings, RT)
+    assert b.pruned == ["agent:deploy"]
+    assert check(b.pack).achievable
+    unpruned = bind_runtime(r.pack, r.bindings, RT, prune=False)
+    assert unpruned.pruned == [] and check(unpruned.pack).reason == "NON_CONFORMANT"
+
+
+def test_binder_keeps_external_choices_and_all_dead_choices():
+    ext = LEVELS.replace("chooses one of (observed)", "chooses one of (external)")
+    r = parse_ce_detailed(ext)
+    b = bind_runtime(r.pack, r.bindings, RT)
+    assert b.pruned == [] and not check(b.pack).achievable
+    dead = LEVELS.replace("    - branch `skip`: none.\n",
+                          "    - branch `again`:\n      - `agent` uses `deploy`.\n")
+    r = parse_ce_detailed(dead)
+    b = bind_runtime(r.pack, r.bindings, RT)
+    assert b.pruned == [] and not check(b.pack).achievable

@@ -308,6 +308,41 @@ CE_RUNTIME_EXTRA_RULES = (
     "with a branch that skips it, or is left out. If the core deliverable "
     "itself is a deployment or publication, it stays on the mandatory path.\n")
 
+# P3: two goal levels.  Replaces rule 10; the rest of the prompt is P1's.
+CE_LEVELS_RULE_10 = (
+    "10. Two goal levels. 'Goal:' is the skill's core deliverable for one "
+    "representative request: the artifact, change, answer or verified result "
+    "a developer would accept as the skill having done its job. 'Live goal:' "
+    "(optional) is an effect OUTSIDE the runtime that the skill goes on to "
+    "produce once the core deliverable exists: deploying or publishing it, "
+    "running it against a live hosted service or a real account, sending or "
+    "posting it to a third party. Steps that only serve the Live goal go in a "
+    "'chooses one of (observed)' with a `skip` branch that is none, so the "
+    "Goal is reachable without them. Decide with this test: remove the live "
+    "effect -- does the skill still leave the user with something they asked "
+    "for (code, configuration, a local build or test run, a report)? If yes, "
+    "that is the Goal and the live effect is the Live goal. If no -- the "
+    "skill's only purpose is the live effect (e.g. querying an account's "
+    "data, publishing an existing artifact, operating a hosted service) -- "
+    "the live effect IS the Goal and there is no Live goal. Other optional or "
+    "follow-up work goes in a skippable branch or is left out.\n")
+
+CE_LEVELS_DOC = (
+    "\nGoal levels:\n"
+    "  Goal: F.           -- the core deliverable (required)\n"
+    "  Live goal: F.      -- optional, right after Goal: the effect outside "
+    "the runtime\n"
+    "Example:\n"
+    "  Goal: `site_built` and `tests_pass`.\n"
+    "  Live goal: `site_deployed`.\n"
+    "  Protocol:\n"
+    "    - `agent` uses `build_site`.\n"
+    "    - `agent` uses `run_tests`.\n"
+    "    - `agent` chooses one of (observed):\n"
+    "      - branch `deploy`:\n"
+    "        - `agent` uses `deploy_site`.\n"
+    "      - branch `skip`: none.\n")
+
 CE_RUNTIME_DOC = (
     "\nRuntime bindings (tool clauses, written first):\n"
     "  via `T`            -- T is the RUNTIME tool that performs this Tool\n"
@@ -318,14 +353,21 @@ CE_RUNTIME_DOC = (
     "`cloud_account`; adds `deployed`.\n")
 
 
-def ce_runtime_messages(nl: str, runtime) -> tuple[str, str]:
-    """(system, user) for manifest-bound NL -> CE compaction."""
+def ce_runtime_messages(nl: str, runtime, levels: bool = False) -> tuple[str, str]:
+    """(system, user) for manifest-bound NL -> CE compaction.
+
+    `levels=True` is P3: rule 10 asks for two goal levels (Goal / Live goal)
+    and the CE documentation gains the 'Live goal:' statement."""
     from .runtime import runtime_note
     head, rest = CE_SYSTEM.split("\n1. ", 1)
     rule1, others = rest.split("\n2. ", 1)
     rules, doc = ("2. " + others).split(CE_DOC, 1)
-    system = (head + "\n" + CE_RUNTIME_RULE_1 + rules + CE_RUNTIME_EXTRA_RULES
-              + CE_DOC + CE_RUNTIME_DOC + runtime_note(runtime))
+    extra = CE_RUNTIME_EXTRA_RULES
+    if levels:
+        extra = extra.split("10. ", 1)[0] + CE_LEVELS_RULE_10
+    system = (head + "\n" + CE_RUNTIME_RULE_1 + rules + extra
+              + CE_DOC + CE_RUNTIME_DOC + (CE_LEVELS_DOC if levels else "")
+              + runtime_note(runtime))
     user = f"Natural-language skill:\n```\n{nl}\n```\nCE document:"
     return system, user
 
@@ -346,7 +388,8 @@ CE_REPAIR_PROMPT = (
     "  (d) mark a choice resolved inside the conversation as (observed).\n"
     "You may NOT bind an operation to a RUNTIME tool that cannot really "
     "perform it, drop a 'needs' for an account or credential the skill really "
-    "requires, add RUNTIME tools, or weaken the Goal. If none of (a)-(d) "
+    "requires, add RUNTIME tools, or change the Goal or the Live goal. If "
+    "none of (a)-(d) "
     "applies, output the document unchanged: the refutation stands.\n"
     "Output the complete CE document only.")
 

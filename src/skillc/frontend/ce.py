@@ -46,6 +46,7 @@ indented two spaces per level; ``#`` starts a comment outside backticks)::
     Initially true: `P`, ... .   | Initially true: none.
     Initially: F.                (one line per initial constraint)
     Goal: F.
+    Live goal: F.                (optional; see below)
     Protocol:                    | Protocol: none.
     Behaviour of `R`:            | Behaviour of `R`: none.
 
@@ -318,12 +319,15 @@ def _render_steps(steps: list, depth: int, local: bool, out: list) -> None:
             raise CEError(f"step kind {kind!r} cannot appear in a {where}")
 
 
-def render_ce(pack: dict, bindings: dict | None = None) -> str:
+def render_ce(pack: dict, bindings: dict | None = None,
+              live_goal: Any = None) -> str:
     """Render a pack as a CE document (one statement per line).
 
     `bindings` ({tool: {"via": runtime tool, "needs": [resource, ...]}}) are
     the runtime bindings a manifest-bound document carries next to the pack;
-    see `frontend.runtime`."""
+    see `frontend.runtime`.  `live_goal` is the optional second goal level
+    (`Live goal:`): an effect outside the runtime that the skill may go on to
+    produce after its core deliverable (the `Goal`)."""
     known = {"name", "roles", "capabilities", "protocol", "goal",
              "init_true", "init_constraints", "skills"}
     extra = set(pack) - known
@@ -339,6 +343,8 @@ def render_ce(pack: dict, bindings: dict | None = None) -> str:
     for c in pack.get("init_constraints", []):
         lines.append("Initially: " + render_formula(c) + ".")
     lines.append("Goal: " + render_formula(pack["goal"]) + ".")
+    if live_goal is not None:
+        lines.append("Live goal: " + render_formula(live_goal) + ".")
     if pack["protocol"]:
         lines.append("Protocol:")
         _render_steps(pack["protocol"], 1, False, lines)
@@ -604,6 +610,8 @@ class ParseResult:
     comments: dict[int, str] = field(default_factory=dict)   # line -> text
     # tool -> {"via": runtime tool or None, "needs": [resource], "line": n}
     bindings: dict[str, dict] = field(default_factory=dict)
+    # optional second goal level ('Live goal:'); None when absent
+    live_goal: Any = None
 
 
 def _lines(text: str) -> list[_Line]:
@@ -640,6 +648,8 @@ def parse_ce_detailed(text: str) -> ParseResult:
     init_true = None
     init_constraints: list = []
     goal_line = None
+    live_line = None
+    live_goal = None
     protocol = None
     skills: dict[str, list] = {}
     bindings: dict[str, dict] = {}
@@ -711,6 +721,18 @@ def parse_ce_detailed(text: str) -> ParseResult:
             pack["goal"] = st.formula()
             st.sym(".")
             st.end()
+        elif st.is_word("Live") and st.is_word("goal", k=1):
+            if live_line is not None:
+                raise CEError(f"duplicate 'Live goal:' statement (first on line "
+                              f"{live_line})", ln.no, 1)
+            if goal_line is None:
+                raise CEError("'Live goal:' must come after 'Goal:'", ln.no, 1)
+            live_line = ln.no
+            st.words("Live goal")
+            st.sym(":")
+            live_goal = st.formula()
+            st.sym(".")
+            st.end()
         elif st.is_word("Protocol"):
             if protocol is not None:
                 raise CEError("duplicate 'Protocol:' statement", ln.no, 1)
@@ -727,7 +749,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
             skills[role], pos = _parse_block_head(st, lines, pos, 1, True)
         else:
             raise st.fail("a statement: Roles, Tool, Initially, Goal, "
-                          "Protocol or Behaviour of")
+                          "Live goal, Protocol or Behaviour of")
 
     if goal_line is None:
         raise CEError("missing 'Goal:' statement")
@@ -745,7 +767,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
     }
     if skills:
         out["skills"] = skills
-    return ParseResult(out, comments, bindings)
+    return ParseResult(out, comments, bindings, live_goal)
 
 
 def _parse_cap(st: _Stream) -> tuple[dict, dict]:

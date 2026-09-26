@@ -59,10 +59,43 @@ class Binding:
     pack: dict
     withdrawn: dict = field(default_factory=dict)   # tool -> runtime tool it named
     blocked: dict = field(default_factory=dict)     # tool -> resources not granted
+    pruned: list = field(default_factory=list)      # "role:branch" labels removed
 
 
-def bind_runtime(pack: dict, bindings: dict, runtime: Runtime) -> Binding:
-    """Apply `via`/`needs` bindings to a parsed pack under `runtime`."""
+def _prune(steps: list, dead: set, pruned: list) -> bool:
+    """Drop the branches of the agent's own (non-external) choices that invoke
+    a dead Tool, when a runnable branch remains.  Returns whether `steps` can
+    run.  The whole-session typing judgment quantifies over every branch of a
+    choice, so without this a skippable branch the runtime cannot run would
+    refute the protocol even though the agent never needs to take it."""
+    ok = True
+    for step in steps:
+        (kind, body), = step.items()
+        if kind == "act":
+            ok &= body["cap"] not in dead
+        elif kind == "rec":
+            ok &= _prune(body["body"], dead, pruned)
+        elif kind == "choice":
+            live = {lbl: _prune(br, dead, pruned)
+                    for lbl, br in body["branches"].items()}
+            if body.get("external"):
+                ok &= all(live.values())
+            elif any(live.values()):
+                for lbl in [lbl for lbl, run in live.items() if not run]:
+                    del body["branches"][lbl]
+                    pruned.append(f"{body['by']}:{lbl}")
+            else:
+                ok = False
+    return ok
+
+
+def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
+                 prune: bool = True) -> Binding:
+    """Apply `via`/`needs` bindings to a parsed pack under `runtime`.
+
+    With `prune` (the default), branches of the agent's own choices that only
+    a withdrawn or blocked Tool could run are removed: the runtime restricts
+    what the agent can choose, not what the environment can."""
     out = deepcopy(pack)
     res = Binding(out)
     for name in list(out["capabilities"]):
@@ -88,6 +121,8 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime) -> Binding:
             for r in needs:
                 if r in runtime.grants and f"needs:{r}" not in out["init_true"]:
                     out["init_true"].append(f"needs:{r}")
+    if prune:
+        _prune(out["protocol"], set(res.withdrawn) | set(res.blocked), res.pruned)
     validate_pack(out)
     return res
 
@@ -106,6 +141,9 @@ def repair_violations(before, after) -> list[str]:
     if (json.dumps(before.pack.get("goal"), sort_keys=True)
             != json.dumps(after.pack.get("goal"), sort_keys=True)):
         out.append("the Goal changed")
+    if (json.dumps(getattr(before, "live_goal", None), sort_keys=True)
+            != json.dumps(getattr(after, "live_goal", None), sort_keys=True)):
+        out.append("the Live goal changed")
     for name, b in sorted(before.bindings.items()):
         a = after.bindings.get(name)
         if a is None:
@@ -115,6 +153,23 @@ def repair_violations(before, after) -> list[str]:
             out.append(f"Tool `{name}` kept but no longer needs "
                        + ", ".join(f"`{r}`" for r in dropped))
     return out
+
+
+def check_levels(pack: dict, live_goal=None, scope: str = "protocol") -> dict:
+    """Two-level verdicts for a runtime-bound pack.
+
+    `core` checks the pack's own Goal (the deliverable the runtime can hand
+    over); `live` checks Goal and Live goal together (the effect outside the
+    runtime, e.g. a public deployment).  Both are ordinary, deterministic
+    `check` calls; `live` is None when the document has no Live goal.
+    """
+    from ..checker import check
+    core = check(pack, scope=scope)
+    if live_goal is None:
+        return {"core": core, "live": None}
+    both = deepcopy(pack)
+    both["goal"] = {"and": [pack["goal"], live_goal]}
+    return {"core": core, "live": check(both, scope=scope)}
 
 
 def runtime_note(runtime: Runtime) -> str:
