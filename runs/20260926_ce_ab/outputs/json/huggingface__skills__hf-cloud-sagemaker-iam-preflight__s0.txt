@@ -1,0 +1,52 @@
+{
+  "name": "sagemaker-iam-preflight",
+  "roles": ["agent"],
+  "capabilities": {
+    "validate_provided_role": {
+      "owner": "agent",
+      "pre": true,
+      "nondet": {"role_valid": {"or": ["role_valid", {"not": "role_valid"}]}}
+    },
+    "discover_roles": {
+      "owner": "agent",
+      "pre": true,
+      "nondet": {"role_found": {"or": ["role_found", {"not": "role_found"}]}}
+    },
+    "create_role": {
+      "owner": "agent",
+      "pre": {"and": [{"not": "role_found"}, "can_create"]},
+      "add": ["role_created"]
+    },
+    "request_admin_help": {
+      "owner": "agent",
+      "pre": {"and": [{"not": "role_found"}, {"not": "can_create"}]},
+      "add": ["blocker_surfaced"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "role_provided": [
+        {"act": {"cap": "validate_provided_role", "by": "agent"}}
+      ],
+      "role_not_provided": [
+        {"act": {"cap": "discover_roles", "by": "agent"}},
+        {"choice": {"by": "agent", "external": true, "branches": {
+          "found": [],
+          "not_found": [
+            {"choice": {"by": "agent", "external": true, "branches": {
+              "can_create": [
+                {"act": {"cap": "create_role", "by": "agent"}}
+              ],
+              "cannot_create": [
+                {"act": {"cap": "request_admin_help", "by": "agent"}}
+              ]
+            }}}
+          ]
+        }}}
+      ]
+    }}}
+  ],
+  "goal": {"or": ["role_valid", {"or": ["role_found", "role_created"]}]},
+  "init_true": [],
+  "init_constraints": []
+}

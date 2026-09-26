@@ -1,0 +1,68 @@
+{
+  "name": "aspire-monitoring",
+  "roles": ["agent"],
+  "capabilities": {
+    "aspire_describe": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["resource_state_known"]
+    },
+    "aspire_otel_logs": {
+      "owner": "agent",
+      "pre": "resource_state_known",
+      "add": ["logs_known"]
+    },
+    "aspire_otel_traces": {
+      "owner": "agent",
+      "pre": "resource_state_known",
+      "add": ["traces_known"]
+    },
+    "aspire_export": {
+      "owner": "agent",
+      "pre": "resource_state_known",
+      "add": ["telemetry_exported"]
+    },
+    "kubectl_logs": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["aks_logs_known"]
+    },
+    "docker_logs": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["docker_logs_known"]
+    }
+  },
+  "protocol": [
+    {"choice": {
+      "by": "agent",
+      "external": true,
+      "branches": {
+        "local": [
+          {"act": {"cap": "aspire_describe", "by": "agent"}},
+          {"act": {"cap": "aspire_otel_logs", "by": "agent"}},
+          {"act": {"cap": "aspire_otel_traces", "by": "agent"}},
+          {"act": {"cap": "aspire_export", "by": "agent"}}
+        ],
+        "aks": [
+          {"act": {"cap": "kubectl_logs", "by": "agent"}},
+          {"act": {"cap": "azure_diagnostics", "by": "agent"}}
+        ],
+        "azure": [
+          {"act": {"cap": "azure_diagnostics", "by": "agent"}}
+        ],
+        "docker": [
+          {"act": {"cap": "docker_logs", "by": "agent"}}
+        ]
+      }
+    }}
+  ],
+  "goal": {"or": [
+    {"and": ["logs_known", "traces_known"]},
+    "aks_logs_known",
+    "docker_logs_known",
+    "azure_health_known"
+  ]},
+  "init_true": [],
+  "init_constraints": []
+}

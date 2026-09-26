@@ -1,0 +1,47 @@
+{
+  "name": "nextjs-on-cloudflare",
+  "roles": ["agent"],
+  "capabilities": {
+    "install_vinext_skills": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["vinext_skills_installed"]
+    },
+    "read_upstream_skill": {
+      "owner": "agent",
+      "pre": "vinext_skills_installed",
+      "add": ["upstream_skill_read"]
+    },
+    "new_project_setup": {
+      "owner": "agent",
+      "pre": "upstream_skill_read",
+      "add": ["project_created"]
+    },
+    "migrate_project": {
+      "owner": "agent",
+      "pre": "upstream_skill_read",
+      "add": ["project_migrated"]
+    },
+    "deploy_workers": {
+      "owner": "agent",
+      "pre": {"or": ["project_created", "project_migrated"]},
+      "add": ["deployed_to_workers"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_vinext_skills", "by": "agent"}},
+    {"act": {"cap": "read_upstream_skill", "by": "agent"}},
+    {"choice": {"by": "agent", "external": true, "branches": {
+      "new_project": [
+        {"act": {"cap": "new_project_setup", "by": "agent"}}
+      ],
+      "existing_project": [
+        {"act": {"cap": "migrate_project", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "deploy_workers", "by": "agent"}}
+  ],
+  "goal": "deployed_to_workers",
+  "init_true": [],
+  "init_constraints": []
+}

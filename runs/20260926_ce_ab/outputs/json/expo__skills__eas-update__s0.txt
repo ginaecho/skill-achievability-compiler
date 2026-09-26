@@ -1,0 +1,46 @@
+{
+  "name": "eas-update",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_expo_updates": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["expo_updates_installed"]
+    },
+    "configure_update": {
+      "owner": "agent",
+      "pre": "expo_updates_installed",
+      "add": ["update_configured"]
+    },
+    "target_production": {
+      "owner": "user",
+      "pre": true,
+      "add": ["production_target"]
+    },
+    "approve_production": {
+      "owner": "user",
+      "pre": "production_target",
+      "add": ["production_approved"]
+    },
+    "publish_update": {
+      "owner": "agent",
+      "pre": {"and": ["update_configured", {"or": [{"not": "production_target"}, "production_approved"]}]},
+      "add": ["update_published"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_expo_updates", "by": "agent"}},
+    {"act": {"cap": "configure_update", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "production": [
+        {"act": {"cap": "target_production", "by": "user"}},
+        {"act": {"cap": "approve_production", "by": "user"}}
+      ],
+      "preview": []
+    }}},
+    {"act": {"cap": "publish_update", "by": "agent"}}
+  ],
+  "goal": "update_published",
+  "init_true": [],
+  "init_constraints": []
+}

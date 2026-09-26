@@ -1,0 +1,56 @@
+{
+  "name": "huggingface-trackio",
+  "roles": ["agent"],
+  "capabilities": {
+    "init_tracking": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["tracking_initialized"]
+    },
+    "insert_alerts": {
+      "owner": "agent",
+      "pre": "tracking_initialized",
+      "add": ["alerts_configured"]
+    },
+    "launch_training": {
+      "owner": "agent",
+      "pre": {"and": ["tracking_initialized", "alerts_configured"]},
+      "add": ["training_running"]
+    },
+    "poll_alerts": {
+      "owner": "agent",
+      "pre": "training_running",
+      "add": ["alerts_checked"]
+    },
+    "get_metrics": {
+      "owner": "agent",
+      "pre": "training_running",
+      "add": ["metrics_retrieved"]
+    },
+    "finish_tracking": {
+      "owner": "agent",
+      "pre": {"and": ["alerts_checked", "metrics_retrieved"]},
+      "add": ["tracking_finished"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "init_tracking", "by": "agent"}},
+    {"act": {"cap": "insert_alerts", "by": "agent"}},
+    {"act": {"cap": "launch_training", "by": "agent"}},
+    {"rec": {"name": "poll_loop", "body": [
+      {"act": {"cap": "poll_alerts", "by": "agent"}},
+      {"act": {"cap": "get_metrics", "by": "agent"}},
+      {"choice": {"by": "agent", "external": true, "branches": {
+        "keep_iterating": [
+          {"continue": "poll_loop"}
+        ],
+        "done": [
+          {"act": {"cap": "finish_tracking", "by": "agent"}}
+        ]
+      }}}
+    ]}}
+  ],
+  "goal": "tracking_finished",
+  "init_true": [],
+  "init_constraints": []
+}
