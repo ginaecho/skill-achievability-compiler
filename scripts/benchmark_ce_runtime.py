@@ -27,7 +27,8 @@ from scripts.benchmark_ce import (CE_SYSTEM_NOTE, VARIANTS, assess, mcnemar_exac
                                   score, sha, wilson, write_json)
 from skillc import check  # noqa: E402
 from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E402
-from skillc.frontend.llm import CE_RETRY_PROMPT, ce_runtime_messages  # noqa: E402
+from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
+                                 ce_runtime_messages, explain_refutation)
 from skillc.frontend.runtime import bind_runtime, load_runtime  # noqa: E402
 from skillc.pack import PackError, validate_pack  # noqa: E402
 
@@ -130,6 +131,48 @@ def retry(out: Path) -> None:
     print(f"{len(new)} retry jobs")
 
 
+class _B:  # the Binding fields explain_refutation reads
+    def __init__(self, withdrawn, blocked):
+        self.withdrawn, self.blocked = withdrawn, blocked
+
+
+def repair(out: Path) -> None:
+    """P2: one counterexample-guided repair round for every real case whose
+    current final reply is refuted (protocol scope)."""
+    frozen = json.loads((out / "frozen.json").read_text())
+    rt = load_runtime(RUNTIME)
+    cases = {c["id"]: c for c in frozen["cases"]}
+    last: dict = {}
+    for job in sorted(frozen["jobs"], key=lambda j: j["round"]):
+        last[job["case"]] = job
+    new = []
+    for cid, job in sorted(last.items()):
+        case = cases[cid]
+        if case["set"] == "labelled" or job["round"] >= 3:
+            continue
+        reply = (out / job["output"]).read_text(encoding="utf-8")
+        parsed = parse_reply(case, reply, rt)
+        if not parsed["ok"]:
+            continue
+        v = check(parsed["pack"])
+        if v.label != "IMPOSSIBLE":
+            continue
+        base = json.loads((out / f"prompts/{frozen['method']}/{cid}__s0.json").read_text())
+        rel = f"prompts/{frozen['method']}/{cid}__s0__r3.json"
+        write_json(out / rel, {"system": base["system"], "user": base["user"]
+                               + CE_REPAIR_PROMPT.format(
+                                   explanation=explain_refutation(
+                                       v, _B(parsed["withdrawn"], parsed["blocked"])),
+                                   text=extract_ce(reply).strip())})
+        new.append({**job, "round": 3, "prompt": rel,
+                    "output": f"outputs/{frozen['method']}/{cid}__s0__r3.txt",
+                    "prompt_sha256": sha((out / rel).read_bytes())})
+    frozen["jobs"] += new
+    frozen["repair_round"] = True
+    write_json(out / "frozen.json", frozen)
+    print(f"{len(new)} repair jobs")
+
+
 def _labels() -> dict:
     labels = json.loads((AB / "adjudication.json").read_text())["labels"]
     extra = ROOT / "runs" / "20260926_ce_runtime_execution.json"
@@ -172,12 +215,19 @@ def score_all(out: Path) -> None:
         rec["rounds"] = job["round"]
         if job["round"] == 1:
             rec["valid_first"] = parsed["ok"]
+        if job["round"] == 3 and not parsed["ok"]:
+            rec["repair_invalid"] = parsed["error"]   # keep the pre-repair pack
+            continue
+        if job["round"] == 3:
+            rec["repaired"] = True
         rec.update(parsed)
     rows = []
     for cid, rec in sorted(final.items()):
         case = cases[cid]
         row = {"case": cid, "set": case["set"], "valid_first": rec["valid_first"],
-               "valid": rec["ok"], "rounds": rec["rounds"], "error": rec.get("error")}
+               "valid": rec["ok"], "rounds": rec["rounds"], "error": rec.get("error"),
+               "repaired": rec.get("repaired", False),
+               "repair_invalid": rec.get("repair_invalid")}
         if rec["ok"] and case["set"] != "labelled":
             v, g = check(rec["pack"]), check(rec["pack"], scope="goal")
             row.update({"verdict": v.label, "reason": v.reason,
@@ -261,11 +311,11 @@ def main() -> None:
     p = sub.add_parser("prepare")
     p.add_argument("out", type=Path)
     p.add_argument("--method", default="ce_rt")
-    for name in ("retry", "score"):
+    for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)
     a = ap.parse_args()
     {"prepare": lambda: prepare(a.out, a.method), "retry": lambda: retry(a.out),
-     "score": lambda: score_all(a.out)}[a.cmd]()
+     "repair": lambda: repair(a.out), "score": lambda: score_all(a.out)}[a.cmd]()
 
 
 if __name__ == "__main__":

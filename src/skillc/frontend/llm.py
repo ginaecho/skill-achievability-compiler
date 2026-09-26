@@ -330,6 +330,41 @@ def ce_runtime_messages(nl: str, runtime) -> tuple[str, str]:
     return system, user
 
 
+CE_REPAIR_PROMPT = (
+    "\n\nThe deterministic checker judged your CE document IMPOSSIBLE:\n"
+    "{explanation}\n\n"
+    "Your document:\n```ce\n{text}\n```\n\n"
+    "Check that counterexample against the skill text. A refutation is often "
+    "a compaction slip, but it may also be the truth. You may ONLY:\n"
+    "  (a) bind an operation to a RUNTIME tool that really performs it "
+    "(fix its 'via');\n"
+    "  (b) make optional, conditional or follow-up work skippable (a "
+    "'chooses one of (observed)' with a 'none' branch), or remove it if the "
+    "core deliverable does not need it;\n"
+    "  (c) add a missing effect to the step that really produces it, or "
+    "remove a thinking step that is not a Tool;\n"
+    "  (d) mark a choice resolved inside the conversation as (observed).\n"
+    "You may NOT bind an operation to a RUNTIME tool that cannot really "
+    "perform it, drop a 'needs' for an account or credential the skill really "
+    "requires, add RUNTIME tools, or weaken the Goal. If none of (a)-(d) "
+    "applies, output the document unchanged: the refutation stands.\n"
+    "Output the complete CE document only.")
+
+
+def explain_refutation(verdict, binding=None) -> str:
+    """Plain-language counterexample for the repair round."""
+    lines = [f"  reason: {verdict.reason}"]
+    if verdict.detail:
+        lines.append(f"  detail: {verdict.detail}")
+    for tool, via in (getattr(binding, "withdrawn", None) or {}).items():
+        lines.append(f"  Tool `{tool}` was withdrawn: `{via}` is not a RUNTIME "
+                     "tool.")
+    for tool, res in (getattr(binding, "blocked", None) or {}).items():
+        lines.append(f"  Tool `{tool}` is blocked: the RUNTIME does not grant "
+                     + ", ".join(f"`{r}`" for r in res) + ".")
+    return "\n".join(lines)
+
+
 def compile_ce_runtime(text: str, runtime):
     """CE text -> (pack, Binding) under `runtime`; raises CEError/PackError."""
     from .ce import parse_ce_detailed
