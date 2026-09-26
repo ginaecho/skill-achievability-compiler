@@ -609,3 +609,39 @@ def test_compact_ce_with_runtime_binds_and_retries(monkeypatch):
                         lambda s, u, m, t: calls.append(u) or next(replies))
     pack = llm.compact_ce("prose", provider="anthropic", runtime=RT)
     assert check(pack).achievable and "no 'via' clause" in calls[1]
+
+
+# --------------------------------------------------------------------------
+# Repair guard (P2g)
+# --------------------------------------------------------------------------
+
+from skillc.frontend.runtime import repair_violations  # noqa: E402
+
+REFUTED = BOUND.replace("Goal: `built`.", "Goal: `deployed`.") + "  - `agent` uses `deploy`.\n"
+
+
+def test_repair_that_makes_follow_up_skippable_is_accepted():
+    fixed = REFUTED.replace("Goal: `deployed`.", "Goal: `deployed`.").replace(
+        "  - `agent` uses `deploy`.\n",
+        "  - `agent` chooses one of (observed):\n"
+        "    - branch `now`:\n      - `agent` uses `deploy`.\n"
+        "    - branch `later`: none.\n")
+    assert repair_violations(parse_ce_detailed(REFUTED), parse_ce_detailed(fixed)) == []
+
+
+def test_repair_that_removes_the_tool_is_accepted():
+    fixed = "\n".join(line for line in REFUTED.splitlines()
+                      if "deploy`" not in line or line.startswith("Goal")) + "\n"
+    assert repair_violations(parse_ce_detailed(REFUTED), parse_ce_detailed(fixed)) == []
+
+
+def test_repair_that_weakens_the_goal_is_rejected():
+    fixed = REFUTED.replace("Goal: `deployed`.", "Goal: `built`.")
+    assert repair_violations(parse_ce_detailed(REFUTED),
+                             parse_ce_detailed(fixed)) == ["the Goal changed"]
+
+
+def test_repair_that_drops_a_need_but_keeps_the_tool_is_rejected():
+    fixed = REFUTED.replace("needs `cloud_account`; ", "")
+    assert repair_violations(parse_ce_detailed(REFUTED), parse_ce_detailed(fixed)) == [
+        "Tool `deploy` kept but no longer needs `cloud_account`"]

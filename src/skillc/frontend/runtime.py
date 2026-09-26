@@ -92,6 +92,31 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime) -> Binding:
     return res
 
 
+def repair_violations(before, after) -> list[str]:
+    """Deterministic guard for a counterexample-guided repair.
+
+    `before` and `after` are `ParseResult`s of the refuted document and of the
+    model's repair.  The repair prompt forbids weakening the Goal and dropping
+    a `needs` the skill really has; a prompt rule is not a guarantee, so the
+    two checkable halves are enforced here: the Goal must be unchanged, and a
+    Tool that survives the repair must keep every resource it needed.  (A Tool
+    may still be removed or made skippable; that judgement stays semantic.)
+    """
+    out = []
+    if (json.dumps(before.pack.get("goal"), sort_keys=True)
+            != json.dumps(after.pack.get("goal"), sort_keys=True)):
+        out.append("the Goal changed")
+    for name, b in sorted(before.bindings.items()):
+        a = after.bindings.get(name)
+        if a is None:
+            continue
+        dropped = sorted(set(b.get("needs") or []) - set(a.get("needs") or []))
+        if dropped:
+            out.append(f"Tool `{name}` kept but no longer needs "
+                       + ", ".join(f"`{r}`" for r in dropped))
+    return out
+
+
 def runtime_note(runtime: Runtime) -> str:
     """The prompt section that tells the compactor what the runtime is."""
     tools = "\n".join(f"  - `{t}`: {d}" for t, d in runtime.tools.items())

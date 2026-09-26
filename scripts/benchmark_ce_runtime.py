@@ -29,7 +29,7 @@ from skillc import check  # noqa: E402
 from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E402
 from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
                                  ce_runtime_messages, explain_refutation)
-from skillc.frontend.runtime import bind_runtime, load_runtime  # noqa: E402
+from skillc.frontend.runtime import bind_runtime, load_runtime, repair_violations  # noqa: E402
 from skillc.pack import PackError, validate_pack  # noqa: E402
 
 AB = ROOT / "runs" / "20260926_ce_ab"
@@ -100,10 +100,11 @@ def parse_reply(case: dict, text: str, rt) -> dict:
         parsed = parse_ce_detailed(extract_ce(text))
         if case["set"] == "labelled":          # Gamma comes from the contract
             validate_pack(parsed.pack)
-            return {"ok": True, "pack": parsed.pack, "withdrawn": {}, "blocked": {}}
+            return {"ok": True, "pack": parsed.pack, "withdrawn": {}, "blocked": {},
+                    "parsed": parsed}
         b = bind_runtime(parsed.pack, parsed.bindings, rt)
         return {"ok": True, "pack": b.pack, "withdrawn": b.withdrawn,
-                "blocked": b.blocked}
+                "blocked": b.blocked, "parsed": parsed}
     except (PackError, CEError, ValueError, KeyError, TypeError) as e:
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
@@ -200,7 +201,7 @@ def _precision(case_ids: list, labels: dict, scheme: str) -> dict:
             "ci95": wilson(conf, conf + fp)}
 
 
-def score_all(out: Path) -> None:
+def score_all(out: Path, guard: bool = True) -> None:
     frozen = json.loads((out / "frozen.json").read_text())
     method = frozen["method"]
     rt = load_runtime(RUNTIME)
@@ -218,6 +219,11 @@ def score_all(out: Path) -> None:
         if job["round"] == 3 and not parsed["ok"]:
             rec["repair_invalid"] = parsed["error"]   # keep the pre-repair pack
             continue
+        if job["round"] == 3 and guard:
+            bad = repair_violations(rec["parsed"], parsed["parsed"])
+            if bad:
+                rec["repair_rejected"] = bad          # P2g: keep the refuted pack
+                continue
         if job["round"] == 3:
             rec["repaired"] = True
         rec.update(parsed)
@@ -227,7 +233,8 @@ def score_all(out: Path) -> None:
         row = {"case": cid, "set": case["set"], "valid_first": rec["valid_first"],
                "valid": rec["ok"], "rounds": rec["rounds"], "error": rec.get("error"),
                "repaired": rec.get("repaired", False),
-               "repair_invalid": rec.get("repair_invalid")}
+               "repair_invalid": rec.get("repair_invalid"),
+               "repair_rejected": rec.get("repair_rejected")}
         if rec["ok"] and case["set"] != "labelled":
             v, g = check(rec["pack"]), check(rec["pack"], scope="goal")
             row.update({"verdict": v.label, "reason": v.reason,
@@ -244,7 +251,7 @@ def score_all(out: Path) -> None:
     ab = json.loads((AB / "results.json").read_text())
     ab0 = {(r["case"], r["arm"]): r for r in ab if r["set"] == "real" and r["sample"] == 0}
     dev = [r for r in rows if r["set"] == "dev"]
-    metrics: dict = {"method": method, "validity": {
+    metrics: dict = {"method": method, "repair_guard": guard, "validity": {
         s: {"cases": sum(r["set"] == s for r in rows),
             "valid_first": sum(r["valid_first"] for r in rows if r["set"] == s),
             "valid_final": sum(r["valid"] for r in rows if r["set"] == s)}
@@ -313,9 +320,12 @@ def main() -> None:
     p.add_argument("--method", default="ce_rt")
     for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)
+    sub.choices["score"].add_argument(
+        "--no-guard", action="store_true",
+        help="accept every valid repair (P2) instead of guarded repair (P2g)")
     a = ap.parse_args()
     {"prepare": lambda: prepare(a.out, a.method), "retry": lambda: retry(a.out),
-     "repair": lambda: repair(a.out), "score": lambda: score_all(a.out)}[a.cmd]()
+     "repair": lambda: repair(a.out), "score": lambda: score_all(a.out, guard=not a.no_guard)}[a.cmd]()
 
 
 if __name__ == "__main__":
