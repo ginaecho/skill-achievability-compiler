@@ -41,6 +41,8 @@ indented two spaces per level; ``#`` starts a comment outside backticks)::
     Tool `C` [(owner `R`)] [: CLAUSE; CLAUSE; ...].
         CLAUSE := requires F | adds `P`, ... | removes `P`, ...
                 | sets `V` to E | picks `V` with F
+                | via `T` | needs `R`, ...     (runtime bindings, see
+                                                frontend.runtime)
     Initially true: `P`, ... .   | Initially true: none.
     Initially: F.                (one line per initial constraint)
     Goal: F.
@@ -234,7 +236,7 @@ def _formula_operand(f: Any) -> str:
     return f"({text})" if infix else text
 
 
-def _render_cap(name: str, cap: dict) -> str:
+def _render_cap(name: str, cap: dict, binding: dict | None = None) -> str:
     unknown = set(cap) - set(CAP_FIELDS)
     if unknown:
         raise CEError(f"capability {name!r} has fields CE cannot express: "
@@ -243,6 +245,11 @@ def _render_cap(name: str, cap: dict) -> str:
     if "owner" in cap:
         head += f" (owner {_name(cap['owner'])})"
     clauses = []
+    if binding:
+        if binding.get("via"):
+            clauses.append("via " + _name(binding["via"]))
+        if binding.get("needs"):
+            clauses.append("needs " + _names(binding["needs"]))
     pre = cap.get("pre", True)
     if pre is not True:
         clauses.append("requires " + render_formula(pre))
@@ -311,8 +318,12 @@ def _render_steps(steps: list, depth: int, local: bool, out: list) -> None:
             raise CEError(f"step kind {kind!r} cannot appear in a {where}")
 
 
-def render_ce(pack: dict) -> str:
-    """Render a pack as a CE document (one statement per line)."""
+def render_ce(pack: dict, bindings: dict | None = None) -> str:
+    """Render a pack as a CE document (one statement per line).
+
+    `bindings` ({tool: {"via": runtime tool, "needs": [resource, ...]}}) are
+    the runtime bindings a manifest-bound document carries next to the pack;
+    see `frontend.runtime`."""
     known = {"name", "roles", "capabilities", "protocol", "goal",
              "init_true", "init_constraints", "skills"}
     extra = set(pack) - known
@@ -322,7 +333,7 @@ def render_ce(pack: dict) -> str:
     roles = pack.get("roles", [])
     lines.append("Roles: " + (_names(roles) if roles else "none") + ".")
     for name, cap in pack["capabilities"].items():
-        lines.append(_render_cap(name, cap))
+        lines.append(_render_cap(name, cap, (bindings or {}).get(name)))
     if pack.get("init_true"):
         lines.append("Initially true: " + _names(pack["init_true"]) + ".")
     for c in pack.get("init_constraints", []):
@@ -591,6 +602,8 @@ class _Line:
 class ParseResult:
     pack: dict
     comments: dict[int, str] = field(default_factory=dict)   # line -> text
+    # tool -> {"via": runtime tool or None, "needs": [resource], "line": n}
+    bindings: dict[str, dict] = field(default_factory=dict)
 
 
 def _lines(text: str) -> list[_Line]:
@@ -629,6 +642,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
     goal_line = None
     protocol = None
     skills: dict[str, list] = {}
+    bindings: dict[str, dict] = {}
 
     first = lines[0]
     st = first.stream()
@@ -666,7 +680,9 @@ def parse_ce_detailed(text: str) -> ParseResult:
             name = st.name("the tool name in backticks")
             if name in caps:
                 raise CEError(f"duplicate tool {name!r}", ln.no, name_col)
-            caps[name] = _parse_cap(st)
+            caps[name], binding = _parse_cap(st)
+            if binding["via"] or binding["needs"]:
+                bindings[name] = {**binding, "line": ln.no}
         elif st.is_word("Initially") and st.is_word("true", k=1):
             if init_true is not None:
                 raise CEError("duplicate 'Initially true:' statement", ln.no, 1)
@@ -729,11 +745,12 @@ def parse_ce_detailed(text: str) -> ParseResult:
     }
     if skills:
         out["skills"] = skills
-    return ParseResult(out, comments)
+    return ParseResult(out, comments, bindings)
 
 
-def _parse_cap(st: _Stream) -> dict:
+def _parse_cap(st: _Stream) -> tuple[dict, dict]:
     cap: dict[str, Any] = {}
+    binding: dict[str, Any] = {"via": None, "needs": []}
     if st.is_sym("("):
         st.sym("(")
         st.word("owner")
@@ -743,12 +760,22 @@ def _parse_cap(st: _Stream) -> dict:
     if st.is_sym("."):
         st.sym(".")
         st.end()
-        return cap
+        return cap, binding
     st.sym(":")
     seen = set()
     while True:
         col = st.col()
-        if st.is_word("requires"):
+        if st.is_word("via", "needs"):
+            key = st.peek().value
+            st.i += 1
+            if key in seen:
+                raise CEError(f"'{key}' may appear once per tool", st.line, col)
+            if key == "via":
+                binding["via"] = st.name("the runtime tool in backticks")
+            else:
+                binding["needs"] = st.names()
+            seen.add(key)
+        elif st.is_word("requires"):
             st.i += 1
             if "requires" in seen:
                 raise CEError("'requires' may appear once per tool; combine "
@@ -779,13 +806,14 @@ def _parse_cap(st: _Stream) -> dict:
             st.word("with")
             cap["nondet"][var] = st.formula()
         else:
-            raise st.fail("a tool clause: requires, adds, removes, sets or picks")
+            raise st.fail("a tool clause: via, needs, requires, adds, removes, "
+                          "sets or picks")
         if st.is_sym(";"):
             st.sym(";")
             continue
         st.sym(".")
         st.end()
-        return cap
+        return cap, binding
 
 
 def _parse_block_head(st: _Stream, lines: list[_Line], pos: int, depth: int,

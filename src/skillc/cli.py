@@ -45,10 +45,15 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
             from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact, compact_ce
             abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
             abilities.extend(args.runtime_ability or [])
-            front = compact_ce if getattr(args, "via_ce", False) else compact
+            kwargs = {}
+            if getattr(args, "runtime", None):
+                from .frontend.runtime import load_runtime
+                front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
+            else:
+                front = compact_ce if getattr(args, "via_ce", False) else compact
             pack = front(path.read_text(encoding="utf-8"), model=args.model,
                          provider=args.llm_provider,
-                         runtime_abilities=abilities or None)
+                         runtime_abilities=abilities or None, **kwargs)
         else:
             res = compile_file(path, profile)
             pack = res.pack
@@ -372,6 +377,10 @@ def _add_compile_opts(sp) -> None:
                     help="runtime abilities supplied to semantic compaction")
     sp.add_argument("--runtime-ability", action="append", metavar="TEXT",
                     help="additional granted runtime ability (repeatable)")
+    sp.add_argument("--runtime", metavar="NAME|JSON",
+                    help="with --llm: compact via Controlled English bound to a "
+                         "runtime manifest (e.g. developer-sandbox); tools are "
+                         "granted only through the manifest")
     sp.add_argument("--via-ce", action="store_true",
                     help="with --llm: the model writes Controlled English, "
                          "which is parsed into the pack deterministically")

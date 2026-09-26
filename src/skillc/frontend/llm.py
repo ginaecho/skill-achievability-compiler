@@ -279,6 +279,65 @@ CE_RETRY_PROMPT = (
     "tools the prose does not grant.")
 
 
+CE_RUNTIME_RULE_1 = (
+    "1. Declare a Tool for every operation in the plan that changes the world "
+    "or reaches beyond the conversation (running commands, writing files, "
+    "calling services, deploying), and bind it with 'via' to the RUNTIME tool "
+    "that performs it. Most developer operations -- installing a CLI or "
+    "package, building, running tests or scripts, generating or converting "
+    "files, rendering media, querying a local tool or database, git -- are "
+    "via `bash` or a file tool. If no RUNTIME tool can perform the operation "
+    "(another operating system, a device, a hosted service's own console), "
+    "still declare it and write 'via' with a short name of what it would take "
+    "(e.g. via `windows_desktop`); the checker withdraws such tools. If the "
+    "operation can only succeed with an account, credential, API key, paid "
+    "service or publishing right, add 'needs' with a short resource name "
+    "(e.g. needs `aws_account`); the checker blocks it unless the RUNTIME "
+    "grants that resource. Never bind an operation to a RUNTIME tool that "
+    "cannot really perform it. This is the single most important rule.\n")
+
+CE_RUNTIME_EXTRA_RULES = (
+    "9. Thinking is not a Tool. Reasoning, deciding, planning, reading these "
+    "instructions or reference text you already have, following a procedure, "
+    "and writing text in your reply are done by the agent itself: do not "
+    "declare them as Tools and do not write them as protocol steps.\n"
+    "10. The Goal is the skill's core deliverable for one representative "
+    "request. Optional, conditional or follow-up work (extra diagnostics, "
+    "notifications, clean-up extras, publishing or production deploys the "
+    "core request does not require) goes in a 'chooses one of (observed)' "
+    "with a branch that skips it, or is left out. If the core deliverable "
+    "itself is a deployment or publication, it stays on the mandatory path.\n")
+
+CE_RUNTIME_DOC = (
+    "\nRuntime bindings (tool clauses, written first):\n"
+    "  via `T`            -- T is the RUNTIME tool that performs this Tool\n"
+    "  needs `R`, ...     -- resources outside the conversation it needs\n"
+    "Example: Tool `run_tests` (owner `agent`): via `bash`; requires "
+    "`code_written`; adds `tests_pass`.\n"
+    "Example: Tool `deploy_prod` (owner `agent`): via `bash`; needs "
+    "`cloud_account`; adds `deployed`.\n")
+
+
+def ce_runtime_messages(nl: str, runtime) -> tuple[str, str]:
+    """(system, user) for manifest-bound NL -> CE compaction."""
+    from .runtime import runtime_note
+    head, rest = CE_SYSTEM.split("\n1. ", 1)
+    rule1, others = rest.split("\n2. ", 1)
+    rules, doc = ("2. " + others).split(CE_DOC, 1)
+    system = (head + "\n" + CE_RUNTIME_RULE_1 + rules + CE_RUNTIME_EXTRA_RULES
+              + CE_DOC + CE_RUNTIME_DOC + runtime_note(runtime))
+    user = f"Natural-language skill:\n```\n{nl}\n```\nCE document:"
+    return system, user
+
+
+def compile_ce_runtime(text: str, runtime):
+    """CE text -> (pack, Binding) under `runtime`; raises CEError/PackError."""
+    from .ce import parse_ce_detailed
+    from .runtime import bind_runtime
+    parsed = parse_ce_detailed(text)
+    return bind_runtime(parsed.pack, parsed.bindings, runtime)
+
+
 def ce_messages(nl: str, runtime_abilities: list[str] | None = None
                 ) -> tuple[str, str]:
     """(system, user) for NL -> CE compaction; mirrors `compact`."""
@@ -295,7 +354,7 @@ def ce_messages(nl: str, runtime_abilities: list[str] | None = None
 def compact_ce(nl: str, model: str | None = None, timeout: int = 600,
                runtime_abilities: list[str] | None = None,
                provider: str | None = None, retries: int = 1,
-               return_text: bool = False):
+               return_text: bool = False, runtime=None):
     """Compact natural language into a pack via Controlled English.
 
     The model writes CE (untrusted); `ce.compile_ce` turns it into a pack
@@ -312,7 +371,10 @@ def compact_ce(nl: str, model: str | None = None, timeout: int = 600,
     if selected not in PROVIDERS:
         raise RuntimeError(
             f"unsupported LLM provider {selected!r}; choose one of {PROVIDERS}")
-    system, user = ce_messages(nl, runtime_abilities)
+    if runtime is not None:          # manifest-bound: Gamma from the runtime
+        system, user = ce_runtime_messages(nl, runtime)
+    else:
+        system, user = ce_messages(nl, runtime_abilities)
     prompt = user
     for attempt in range(retries + 1):
         if selected == "anthropic":
@@ -323,7 +385,8 @@ def compact_ce(nl: str, model: str | None = None, timeout: int = 600,
                                          json_mode=False)
         try:
             ce_text = extract_ce(text)
-            pack = compile_ce(ce_text)
+            pack = (compile_ce_runtime(ce_text, runtime).pack
+                    if runtime is not None else compile_ce(ce_text))
         except (CEError, PackError) as e:
             if attempt == retries:
                 raise

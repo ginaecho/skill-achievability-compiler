@@ -521,3 +521,91 @@ def test_cli_reports_ce_errors_as_usage_errors(tmp_path, capsys):
     bad.write_text("Skill `s`.\nGoal: `g`\n")
     assert main(["check", str(bad)]) == 2
     assert "line 2" in capsys.readouterr().err
+
+
+# --------------------------------------------------------------------------
+# Runtime-manifest binding
+# --------------------------------------------------------------------------
+
+from skillc.frontend.runtime import Runtime, bind_runtime, load_runtime  # noqa: E402
+
+RT = load_runtime("developer-sandbox")
+BOUND = """\
+Skill `ship`.
+Roles: `agent`.
+Tool `build` (owner `agent`): via `bash`; adds `built`.
+Tool `launch_gui` (owner `agent`): via `windows_desktop`; requires `built`; adds `launched`.
+Tool `deploy` (owner `agent`): via `bash`; needs `cloud_account`; requires `built`; adds `deployed`.
+Tool `fetch` (owner `agent`): via `web_fetch`; needs `public_internet`; adds `docs_read`.
+Goal: `built`.
+Protocol:
+  - `agent` uses `build`.
+"""
+
+
+def _bound(text):
+    r = parse_ce_detailed(text)
+    return bind_runtime(r.pack, r.bindings, RT)
+
+
+def test_via_and_needs_round_trip_through_render():
+    r = parse_ce_detailed(BOUND)
+    assert r.bindings["deploy"]["via"] == "bash"
+    assert r.bindings["deploy"]["needs"] == ["cloud_account"]
+    assert render_ce(r.pack, r.bindings) == BOUND
+
+
+def test_manifest_tool_is_granted_and_goal_is_achievable():
+    assert check(_bound(BOUND).pack).achievable
+
+
+def test_tool_outside_the_manifest_is_withdrawn():
+    b = _bound(BOUND.replace("Goal: `built`.", "Goal: `launched`.")
+               + "  - `agent` uses `launch_gui`.\n")
+    assert b.withdrawn == {"launch_gui": "windows_desktop"}
+    v = check(b.pack)
+    assert v.reason == "MISSING_CAPABILITY" and v.frontier == ("launch_gui",)
+
+
+def test_needed_resource_the_runtime_lacks_blocks_the_step():
+    b = _bound(BOUND.replace("Goal: `built`.", "Goal: `deployed`.")
+               + "  - `agent` uses `deploy`.\n")
+    assert b.blocked == {"deploy": ["cloud_account"]}
+    v = check(b.pack)
+    assert v.reason == "BLOCKED_GUARD" and "cloud_account" in v.frontier[0]
+
+
+def test_needed_resource_the_runtime_grants_holds_initially():
+    b = _bound(BOUND.replace("Goal: `built`.", "Goal: `docs_read`.")
+               + "  - `agent` uses `fetch`.\n")
+    assert "needs:public_internet" in b.pack["init_true"]
+    assert check(b.pack).achievable
+
+
+def test_tool_without_via_is_a_located_error():
+    with pytest.raises(CEError, match="no 'via' clause"):
+        _bound(BOUND.replace("Tool `build` (owner `agent`): via `bash`; adds",
+                             "Tool `build` (owner `agent`): adds"))
+
+
+def test_runtime_prompt_replaces_rule_1_and_lists_the_manifest():
+    system, _ = llm.ce_runtime_messages("prose", RT)
+    assert system.count("\n1. ") == 1 and "bind it with 'via'" in system
+    assert "9. Thinking is not a Tool" in system and "10. The Goal" in system
+    for tool in RT.tools:
+        assert f"`{tool}`" in system
+    assert "Never invent" not in system.split("2. ")[0]
+
+
+def test_compact_ce_with_runtime_binds_and_retries(monkeypatch):
+    replies = iter([
+        "```ce\nSkill `s`.\nTool `t` (owner `agent`): adds `g`.\nGoal: `g`.\n"
+        "Protocol:\n  - `agent` uses `t`.\n```",                       # no via
+        "```ce\nSkill `s`.\nTool `t` (owner `agent`): via `bash`; adds `g`.\n"
+        "Goal: `g`.\nProtocol:\n  - `agent` uses `t`.\n```",
+    ])
+    calls = []
+    monkeypatch.setattr(llm, "_compact_anthropic",
+                        lambda s, u, m, t: calls.append(u) or next(replies))
+    pack = llm.compact_ce("prose", provider="anthropic", runtime=RT)
+    assert check(pack).achievable and "no 'via' clause" in calls[1]
