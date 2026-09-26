@@ -1,0 +1,93 @@
+{
+  "name": "doc-coauthoring",
+  "roles": ["agent", "user", "reader_subagent"],
+  "capabilities": {
+    "offer_workflow": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["workflow_offered"]
+    },
+    "gather_context": {
+      "owner": "agent",
+      "pre": "workflow_offered",
+      "add": ["context_gathered"]
+    },
+    "create_structure": {
+      "owner": "agent",
+      "pre": "context_gathered",
+      "add": ["structure_created"]
+    },
+    "draft_section": {
+      "owner": "agent",
+      "pre": "structure_created",
+      "add": ["sections_drafted"]
+    },
+    "refine_section": {
+      "owner": "agent",
+      "pre": "sections_drafted",
+      "add": ["sections_refined"]
+    },
+    "review_full_doc": {
+      "owner": "agent",
+      "pre": "sections_refined",
+      "add": ["doc_reviewed"]
+    },
+    "predict_reader_questions": {
+      "owner": "agent",
+      "pre": "doc_reviewed",
+      "add": ["questions_predicted"]
+    },
+    "test_with_subagent": {
+      "owner": "reader_subagent",
+      "pre": "questions_predicted",
+      "add": ["reader_tested"]
+    },
+    "test_manually": {
+      "owner": "user",
+      "pre": "questions_predicted",
+      "add": ["reader_tested"]
+    },
+    "final_review": {
+      "owner": "agent",
+      "pre": "reader_tested",
+      "add": ["final_reviewed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "offer_workflow", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "accept": [
+          {"act": {"cap": "gather_context", "by": "agent"}},
+          {"act": {"cap": "create_structure", "by": "agent"}},
+          {"act": {"cap": "draft_section", "by": "agent"}},
+          {"act": {"cap": "refine_section", "by": "agent"}},
+          {"act": {"cap": "review_full_doc", "by": "agent"}},
+          {"act": {"cap": "predict_reader_questions", "by": "agent"}},
+          {"choice": {
+            "by": "agent",
+            "external": true,
+            "branches": {
+              "has_subagent": [
+                {"spawn": {"role": "reader_subagent"}},
+                {"act": {"cap": "test_with_subagent", "by": "reader_subagent"}}
+              ],
+              "no_subagent": [
+                {"msg": {"from": "agent", "to": "user", "label": "test_instructions"}},
+                {"msg": {"from": "user", "to": "agent", "label": "test_results"}},
+                {"act": {"cap": "test_manually", "by": "user"}}
+              ]
+            }
+          }},
+          {"act": {"cap": "final_review", "by": "agent"}}
+        ],
+        "decline": []
+      }
+    }}
+  ],
+  "goal": {"and": ["doc_reviewed", "reader_tested", "final_reviewed"]},
+  "init_true": [],
+  "init_constraints": []
+}
