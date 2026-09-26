@@ -36,11 +36,13 @@ class Runtime:
     tools: dict            # runtime tool -> what it does
     grants: tuple          # resources the runtime provides
     lacks: tuple           # human-readable list of what it does not provide
+    forbid_effects: tuple = ()   # effect classes the runtime's policy forbids
 
     @staticmethod
     def from_dict(d: dict) -> "Runtime":
         return Runtime(d["name"], d.get("description", ""), dict(d["tools"]),
-                       tuple(d.get("grants", [])), tuple(d.get("lacks", [])))
+                       tuple(d.get("grants", [])), tuple(d.get("lacks", [])),
+                       tuple(d.get("forbid_effects", [])))
 
 
 def load_runtime(name_or_path: str) -> Runtime:
@@ -89,13 +91,40 @@ def _prune(steps: list, dead: set, pruned: list) -> bool:
     return ok
 
 
+def _spawn_to_act(steps: list, by: str) -> list:
+    out = []
+    for s in steps:
+        (kind, body), = s.items()
+        if kind == "spawn":
+            out.append({"act": {"cap": SPAWN_TOOL, "by": by}})
+        elif kind == "choice":
+            out.append({"choice": {**body, "branches": {
+                k: _spawn_to_act(v, by) for k, v in body["branches"].items()}}})
+        elif kind == "rec":
+            out.append({"rec": {**body, "body": _spawn_to_act(body["body"], by)}})
+        else:
+            out.append(s)
+    return out
+
+
+SPAWN_TOOL = "agent_spawn"
+
+
 def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
-                 prune: bool = True) -> Binding:
+                 prune: bool = True, library=None) -> Binding:
     """Apply `via`/`needs` bindings to a parsed pack under `runtime`.
 
     With `prune` (the default), branches of the agent's own choices that only
     a withdrawn or blocked Tool could run are removed: the runtime restricts
-    what the agent can choose, not what the environment can."""
+    what the agent can choose, not what the environment can.
+
+    With a tool-policy `library` (frontend.toolpolicy), three more facts are
+    bound: a Tool whose `effect` the runtime forbids is blocked by a
+    `policy:<effect>` guard; a Tool that `runs` a program the library knows
+    to be unavailable here is withdrawn; and, when the runtime has no
+    `agent_spawn` tool, every `spawn` step becomes an act of that missing
+    capability (MISSING_CAPABILITY is decided before the undecidable
+    dynamic-topology boundary)."""
     out = deepcopy(pack)
     res = Binding(out)
     for name in list(out["capabilities"]):
@@ -121,8 +150,32 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
             for r in needs:
                 if r in runtime.grants and f"needs:{r}" not in out["init_true"]:
                     out["init_true"].append(f"needs:{r}")
+        if library is not None:
+            from .toolpolicy import resolve_program
+            for prog in b.get("runs") or []:
+                status, why = resolve_program(prog, runtime, library)
+                if status == "unavailable":
+                    res.withdrawn[name] = f"program:{prog} ({why})"
+                    del out["capabilities"][name]
+                    break
+            if name in out["capabilities"] and b.get("effect") in runtime.forbid_effects:
+                cap = out["capabilities"][name]
+                guard = f"policy:{b['effect']}"
+                pre = cap.get("pre", True)
+                cap["pre"] = {"and": [guard]} if pre is True else {"and": [guard, pre]}
+                res.blocked.setdefault(name, []).append(guard)
+    dead = set(res.withdrawn) | set(res.blocked)
+    if library is not None and SPAWN_TOOL not in runtime.tools:
+        by = (out.get("roles") or ["agent"])[0]
+        converted = _spawn_to_act(out["protocol"], by)
+        if converted != out["protocol"]:
+            out["protocol"] = converted
+            if by not in out["roles"]:
+                out["roles"] = list(out["roles"]) + [by]
+            res.withdrawn[SPAWN_TOOL] = SPAWN_TOOL
+            dead.add(SPAWN_TOOL)
     if prune:
-        _prune(out["protocol"], set(res.withdrawn) | set(res.blocked), res.pruned)
+        _prune(out["protocol"], dead, res.pruned)
     validate_pack(out)
     return res
 
@@ -152,6 +205,13 @@ def repair_violations(before, after) -> list[str]:
         if dropped:
             out.append(f"Tool `{name}` kept but no longer needs "
                        + ", ".join(f"`{r}`" for r in dropped))
+        lost = sorted(set(b.get("runs") or []) - set(a.get("runs") or []))
+        if lost:
+            out.append(f"Tool `{name}` kept but no longer runs "
+                       + ", ".join(f"`{p}`" for p in lost))
+        if b.get("effect") and a.get("effect") != b.get("effect"):
+            out.append(f"Tool `{name}` kept but its effect changed from "
+                       f"`{b['effect']}`")
     return out
 
 

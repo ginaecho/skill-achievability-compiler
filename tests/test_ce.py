@@ -741,3 +741,134 @@ def test_binder_keeps_external_choices_and_all_dead_choices():
     r = parse_ce_detailed(dead)
     b = bind_runtime(r.pack, r.bindings, RT)
     assert b.pruned == [] and not check(b.pack).achievable
+
+
+# --------------------------------------------------------------------------
+# Tool-policy library (TPL)
+# --------------------------------------------------------------------------
+
+from skillc.frontend.toolpolicy import (Library, coverage, load_library,  # noqa: E402
+                                        match, resolve_program)
+
+LIB = load_library()
+
+
+def test_library_entries_are_well_formed_and_have_provenance():
+    kinds = {"resource", "runtime_tool", "program", "effect"}
+    for e in LIB.entries:
+        (kind, _), = e["requires"].items()
+        assert kind in kinds and e["evidence"] and e["provenance"], e["id"]
+
+
+def test_match_raises_obligations_with_lines():
+    text = "Setup\nexport OPENAI_API_KEY=...\nThen dispatch a fresh subagent per task.\n"
+    obs = match(text, LIB)
+    assert [(o.kind, o.value, o.line) for o in obs] == [
+        ("resource", "llm_api_key", 2), ("runtime_tool", "agent_spawn", 3)]
+
+
+def test_mcp_tool_names_become_runtime_tool_obligations():
+    obs = match("allowed-tools: mcp__sentry__search_issues", LIB)
+    assert [(o.kind, o.value) for o in obs] == [("runtime_tool", "sentry_mcp")]
+
+
+TPL = """\
+Skill `t`.
+Roles: `agent`.
+Tool `write_code` (owner `agent`): via `write`; effect `local`; adds `code`.
+Tool `call_model` (owner `agent`): via `bash`; needs `llm_api_key`; runs `python`; requires `code`; adds `scored`.
+Tool `submit` (owner `agent`): via `bash`; effect `writes_external`; requires `scored`; adds `sent`.
+Goal: `scored`.
+Protocol:
+  - `agent` uses `write_code`.
+  - `agent` uses `call_model`.
+"""
+
+
+def test_runs_and_effect_round_trip():
+    r = parse_ce_detailed(TPL)
+    assert r.bindings["call_model"]["runs"] == ["python"]
+    assert r.bindings["submit"]["effect"] == "writes_external"
+    assert render_ce(r.pack, r.bindings) == TPL
+
+
+def test_unknown_effect_is_a_located_error():
+    with pytest.raises(CEError, match="unknown effect"):
+        parse_ce_detailed(TPL.replace("`writes_external`", "`sends`"))
+
+
+def test_coverage_reports_unmet_obligations():
+    r = parse_ce_detailed(TPL)
+    obs = match("OPENAI_API_KEY\ngit push origin main\nuse a subagent", LIB)
+    msgs = coverage(r, obs)
+    assert len(msgs) == 1 and "via `agent_spawn`" in msgs[0]
+
+
+def test_forbidden_effect_blocks_the_step():
+    r = parse_ce_detailed(TPL.replace("Goal: `scored`.", "Goal: `code`.")
+                          .replace("  - `agent` uses `call_model`.\n",
+                                   "  - `agent` uses `submit`.\n"))
+    b = bind_runtime(r.pack, r.bindings, RT, library=LIB)
+    assert "policy:writes_external" in b.blocked["submit"]
+    assert check(b.pack).reason in ("BLOCKED_GUARD", "NON_CONFORMANT")
+    # without the library the effect is ignored (P1/P2 reproducibility)
+    plain = bind_runtime(r.pack, r.bindings, RT)
+    assert "submit" not in plain.blocked
+
+
+def test_unavailable_program_is_withdrawn():
+    text = TPL.replace("runs `python`", "runs `cli_exercise_helper`")
+    r = parse_ce_detailed(text)
+    b = bind_runtime(r.pack, r.bindings, RT, library=LIB)
+    assert b.withdrawn["call_model"].startswith("program:cli_exercise_helper")
+    assert check(b.pack).reason == "MISSING_CAPABILITY"
+
+
+def test_program_resolution():
+    assert resolve_program("cli_exercise_helper", RT, LIB)[0] == "unavailable"
+    assert resolve_program("winget", RT, LIB)[0] == "unavailable"      # needs windows
+    assert resolve_program("terraform", RT, LIB)[0] == "installable"
+
+
+SPAWN = """\
+Skill `s`.
+Roles: `agent`.
+Tool `work` (owner `agent`): via `bash`; adds `done`.
+Goal: `done`.
+Protocol:
+  - spawn `helper`.
+  - `agent` uses `work`.
+"""
+
+
+def test_spawn_without_agent_spawn_is_missing_capability():
+    r = parse_ce_detailed(SPAWN)
+    assert check(bind_runtime(r.pack, r.bindings, RT).pack).reason == "DYNAMIC_TOPOLOGY"
+    b = bind_runtime(r.pack, r.bindings, RT, library=LIB)
+    assert check(b.pack).reason == "MISSING_CAPABILITY"
+
+
+def test_optional_spawn_is_pruned():
+    text = SPAWN.replace("  - spawn `helper`.\n",
+                         "  - `agent` chooses one of (observed):\n"
+                         "    - branch `delegate`:\n      - spawn `helper`.\n"
+                         "    - branch `self`: none.\n")
+    r = parse_ce_detailed(text)
+    b = bind_runtime(r.pack, r.bindings, RT, library=LIB)
+    assert b.pruned == ["agent:delegate"] and check(b.pack).achievable
+
+
+def test_repair_guard_freezes_runs_and_effect():
+    before = parse_ce_detailed(TPL)
+    after = parse_ce_detailed(TPL.replace("; runs `python`", "")
+                              .replace("effect `writes_external`", "effect `local`"))
+    msgs = repair_violations(before, after)
+    assert any("no longer runs" in m for m in msgs)
+    assert any("effect changed" in m for m in msgs)
+
+
+def test_tpl_prompt_lists_obligations_and_forbidden_effects():
+    obs = match("export OPENAI_API_KEY=x", LIB)
+    system, user = llm.ce_tpl_messages("export OPENAI_API_KEY=x", RT, obs)
+    assert "effect `E`" in system and "`writes_external`, `publishes`" in system
+    assert "needs `llm_api_key`" in user and user.endswith("CE document:")

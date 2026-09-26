@@ -34,7 +34,8 @@ from skillc import check  # noqa: E402
 from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E402
 from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
                                  _extract_json_object, ce_runtime_messages,
-                                 explain_refutation)
+                                 ce_tpl_messages, explain_refutation)
+from skillc.frontend.toolpolicy import coverage, load_library, match  # noqa: E402
 from skillc.frontend.runtime import (bind_runtime, check_levels, load_runtime,  # noqa: E402
                                      repair_violations)
 from skillc.pack import PackError, validate_pack  # noqa: E402
@@ -59,9 +60,28 @@ def _heldout() -> list[dict]:
     return [{"id": s["id"], "set": "heldout"} for s in picked]
 
 
-def _cases(case_set: str = "dev") -> list[dict]:
+def _fresh() -> list[dict]:
+    """TPL test set: the next 40 skills of the same stratified order after the
+    A/B and held-out skills; none was compacted, executed or inspected before
+    the TPL plan was committed."""
+    used = {r["case"] for r in json.loads((AB / "results.json").read_text())}
+    used |= {c["id"] for c in _heldout()}
+    picked = [s for s in select_real(10_000) if s["id"] not in used][:N_HELDOUT]
+    return [{"id": s["id"], "set": "fresh"} for s in picked]
+
+
+def _labelled() -> list[dict]:
+    frozen = json.loads((LABELLED_RUN / "frozen.json").read_text())
+    return [{"id": sc["id"], "set": "labelled", "source": sc["source"],
+             "profile": sc["profile"], "category": sc["category"],
+             "truth": sc["truth"]} for sc in frozen["scenarios"]]
+
+
+def _cases(case_set: str = "dev", method: str = "ce_rt") -> list[dict]:
     if case_set == "heldout":
         return _heldout()
+    if case_set == "fresh":
+        return _fresh() + (_labelled() if method == "ce_tpl" else [])
     labels = json.loads((AB / "adjudication.json").read_text())["labels"]
     dev = sorted(set(labels) | set(EXTRA_DEV))
     rows = json.loads((AB / "results.json").read_text())
@@ -85,13 +105,17 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
     rt = load_runtime(RUNTIME)
     levels = method == "ce_lv"
     jobs = []
-    cases = _cases(case_set)
+    cases = _cases(case_set, method)
+    lib = load_library() if method == "ce_tpl" else None
     if method == "json":
         cases = [c for c in cases if c["set"] != "labelled"]
     for case in cases:
         if case["set"] == "labelled":
             text = (LABELLED_RUN / case["id"] / "input.md").read_text(encoding="utf-8")
-            system, _ = ce_runtime_messages("", rt, levels=levels)
+            if lib is not None:
+                system, _ = ce_tpl_messages("", rt, [])
+            else:
+                system, _ = ce_runtime_messages("", rt, levels=levels)
             prompt = {"system": system + CE_SYSTEM_NOTE, "user": text}
             for f in ("contract.json", "oracle.json"):
                 target = out / "labelled" / case["id"] / f
@@ -101,6 +125,11 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
             text = (SOURCES / case["id"] / "SKILL.md").read_text(encoding="utf-8")
             if method == "json":
                 prompt = real_prompt("json", text)
+            elif lib is not None:
+                obligations = match(text, lib)
+                case["obligations"] = [o.__dict__ for o in obligations]
+                system, user = ce_tpl_messages(text, rt, obligations)
+                prompt = {"system": system, "user": user}
             else:
                 system, user = ce_runtime_messages(text, rt, levels=levels)
                 prompt = {"system": system, "user": user}
@@ -113,11 +142,14 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
             [ROOT / "src/skillc/frontend/ce.py", ROOT / "src/skillc/frontend/llm.py",
              ROOT / "scripts/benchmark_ce.py",
              ROOT / "src/skillc/frontend/runtime.py", ROOT / "src/skillc/checker.py",
+             ROOT / "src/skillc/frontend/toolpolicy.py",
+             ROOT / "src/skillc/data/toolpolicy/library.json",
              ROOT / f"src/skillc/data/runtimes/{RUNTIME}.json",
              ROOT / "scripts/benchmark_ce_runtime.py"]}
     write_json(out / "frozen.json", {
         "created_utc": datetime.now(timezone.utc).isoformat(), "method": method,
-        "runtime": RUNTIME, "case_set": case_set, "prune": method == "ce_lv",
+        "runtime": RUNTIME, "case_set": case_set,
+        "prune": method in ("ce_lv", "ce_tpl"),
         "cases": cases, "jobs": jobs,
         "implementation_sha256": impl})
     print(f"prepared {len(cases)} cases ({Counter(c['set'] for c in cases)}) in {out}")
@@ -136,10 +168,15 @@ def parse_reply(case: dict, text: str, rt, method: str = "ce_rt",
             validate_pack(parsed.pack)
             return {"ok": True, "pack": parsed.pack, "withdrawn": {}, "blocked": {},
                     "pruned": [], "parsed": parsed, "live_goal": parsed.live_goal}
-        b = bind_runtime(parsed.pack, parsed.bindings, rt, prune=prune)
+        lib = load_library() if method == "ce_tpl" else None
+        b = bind_runtime(parsed.pack, parsed.bindings, rt, prune=prune, library=lib)
+        unmet = []
+        if lib is not None:
+            from skillc.frontend.toolpolicy import Obligation
+            unmet = coverage(parsed, [Obligation(**o) for o in case.get("obligations", [])])
         return {"ok": True, "pack": b.pack, "withdrawn": b.withdrawn,
                 "blocked": b.blocked, "pruned": b.pruned, "parsed": parsed,
-                "live_goal": parsed.live_goal}
+                "live_goal": parsed.live_goal, "unmet": unmet}
     except (PackError, CEError, ValueError, KeyError, TypeError) as e:
         return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
@@ -153,8 +190,12 @@ def retry(out: Path) -> None:
     for job in [j for j in frozen["jobs"] if j["round"] == 1]:
         reply = (out / job["output"]).read_text(encoding="utf-8")
         parsed = parse_reply(cases[job["case"]], reply, rt, method, prune)
-        if parsed["ok"]:
+        if parsed["ok"] and not parsed.get("unmet"):
             continue
+        if parsed["ok"]:     # TPL: parses, but a library obligation is not covered
+            parsed["error"] = ("tool-policy coverage: " + "; ".join(parsed["unmet"])
+                               + ". Add the clause to the Tool that does that work "
+                               "(on a skippable branch if it is optional)")
         prompt = json.loads((out / job["prompt"]).read_text())
         rel = job["prompt"].replace(".json", "__r2.json")
         tail = (JSON_RETRY.format(text=reply.strip(), error=parsed["error"])
@@ -266,6 +307,9 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
             continue
         if job["round"] == 3 and guard and rec.get("parsed") is not None:
             bad = repair_violations(rec["parsed"], parsed["parsed"])
+            new_unmet = set(parsed.get("unmet") or []) - set(rec.get("unmet") or [])
+            if new_unmet:
+                bad = bad + ["a tool-policy obligation is no longer covered"]
             if bad:
                 rec["repair_rejected"] = bad          # P2g: keep the refuted pack
                 continue
@@ -279,7 +323,8 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
                "valid": rec["ok"], "rounds": rec["rounds"], "error": rec.get("error"),
                "repaired": rec.get("repaired", False),
                "repair_invalid": rec.get("repair_invalid"),
-               "repair_rejected": rec.get("repair_rejected")}
+               "repair_rejected": rec.get("repair_rejected"),
+               "unmet_obligations": rec.get("unmet") or []}
         if rec["ok"] and case["set"] != "labelled":
             lv = check_levels(rec["pack"], rec["live_goal"])
             v, g = lv["core"], check(rec["pack"], scope="goal")
@@ -296,6 +341,22 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
         rows.append(row)
     write_json(out / f"results{tag}.json", rows)
     if not any(r["set"] == "dev" for r in rows):
+        lab = [r for r in rows if r["set"] == "labelled"]
+        if lab:
+            lab_rows = []
+            for r in lab:
+                case = cases[r["case"]]
+                scen = {k: case[k] for k in ("source", "profile", "category", "truth")}
+                scen["id"] = case["id"]
+                if r["valid"]:
+                    pack = json.loads((out / "packs" / method / f"{r['case']}.json").read_text())
+                    contract = json.loads((out / "labelled" / r["case"] / "contract.json").read_text())
+                    lab_rows.extend(assess(pack, contract, scen, method, method))
+                else:
+                    lab_rows += [{**scen, "mode": method, "variant": v, "predicted": "UNKNOWN",
+                                  "reason": "COMPACTION_ERROR"} for v in VARIANTS]
+            write_json(out / f"labelled{tag}.json",
+                       {v: score([x for x in lab_rows if x["variant"] == v]) for v in VARIANTS})
         print(json.dumps({"rows": len(rows), "verdicts": dict(Counter(
             r.get("verdict") for r in rows))}))
         return
@@ -371,8 +432,8 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prepare")
     p.add_argument("out", type=Path)
-    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json"))
-    p.add_argument("--cases", default="dev", choices=("dev", "heldout"))
+    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl"))
+    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh"))
     for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)
     sc = sub.choices["score"]

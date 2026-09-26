@@ -42,7 +42,7 @@ indented two spaces per level; ``#`` starts a comment outside backticks)::
         CLAUSE := requires F | adds `P`, ... | removes `P`, ...
                 | sets `V` to E | picks `V` with F
                 | via `T` | needs `R`, ...     (runtime bindings, see
-                                                frontend.runtime)
+                | runs `P`, ... | effect `E`    frontend.runtime / toolpolicy)
     Initially true: `P`, ... .   | Initially true: none.
     Initially: F.                (one line per initial constraint)
     Goal: F.
@@ -83,8 +83,10 @@ from typing import Any
 
 from ..pack import validate_pack
 
-CE_VERSION = "1.1"   # 1.1: "Initially true: none." (consistent with Roles/Protocol)
+CE_VERSION = "1.2"   # 1.1: "Initially true: none."; 1.2: runs/effect clauses, Live goal
 INDENT = "  "
+# Effect classes of a Tool (frontend.toolpolicy); cf. MCP's readOnly/openWorld hints.
+EFFECTS = ("local", "reads_external", "writes_external", "publishes")
 CMP_OPS = ("<=", ">=", "==", "!=", "<", ">")
 ARITH_OPS = ("+", "-", "*")
 CHOICE_FLAGS = ("external", "observed")
@@ -251,6 +253,10 @@ def _render_cap(name: str, cap: dict, binding: dict | None = None) -> str:
             clauses.append("via " + _name(binding["via"]))
         if binding.get("needs"):
             clauses.append("needs " + _names(binding["needs"]))
+        if binding.get("runs"):
+            clauses.append("runs " + _names(binding["runs"]))
+        if binding.get("effect"):
+            clauses.append("effect " + _name(binding["effect"]))
     pre = cap.get("pre", True)
     if pre is not True:
         clauses.append("requires " + render_formula(pre))
@@ -691,7 +697,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
             if name in caps:
                 raise CEError(f"duplicate tool {name!r}", ln.no, name_col)
             caps[name], binding = _parse_cap(st)
-            if binding["via"] or binding["needs"]:
+            if binding["via"] or binding["needs"] or binding["runs"] or binding["effect"]:
                 bindings[name] = {**binding, "line": ln.no}
         elif st.is_word("Initially") and st.is_word("true", k=1):
             if init_true is not None:
@@ -772,7 +778,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
 
 def _parse_cap(st: _Stream) -> tuple[dict, dict]:
     cap: dict[str, Any] = {}
-    binding: dict[str, Any] = {"via": None, "needs": []}
+    binding: dict[str, Any] = {"via": None, "needs": [], "runs": [], "effect": None}
     if st.is_sym("("):
         st.sym("(")
         st.word("owner")
@@ -787,15 +793,21 @@ def _parse_cap(st: _Stream) -> tuple[dict, dict]:
     seen = set()
     while True:
         col = st.col()
-        if st.is_word("via", "needs"):
+        if st.is_word("via", "needs", "runs", "effect"):
             key = st.peek().value
             st.i += 1
             if key in seen:
                 raise CEError(f"'{key}' may appear once per tool", st.line, col)
             if key == "via":
                 binding["via"] = st.name("the runtime tool in backticks")
+            elif key == "effect":
+                ecol = st.col()
+                binding["effect"] = st.name("the effect in backticks")
+                if binding["effect"] not in EFFECTS:
+                    raise CEError(f"unknown effect {binding['effect']!r}: use one of "
+                                  + ", ".join(f"`{e}`" for e in EFFECTS), st.line, ecol)
             else:
-                binding["needs"] = st.names()
+                binding[key] = st.names()
             seen.add(key)
         elif st.is_word("requires"):
             st.i += 1
@@ -828,8 +840,8 @@ def _parse_cap(st: _Stream) -> tuple[dict, dict]:
             st.word("with")
             cap["nondet"][var] = st.formula()
         else:
-            raise st.fail("a tool clause: via, needs, requires, adds, removes, "
-                          "sets or picks")
+            raise st.fail("a tool clause: via, needs, runs, effect, requires, "
+                          "adds, removes, sets or picks")
         if st.is_sym(";"):
             st.sym(";")
             continue

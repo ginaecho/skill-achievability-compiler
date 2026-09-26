@@ -353,6 +353,33 @@ CE_RUNTIME_DOC = (
     "`cloud_account`; adds `deployed`.\n")
 
 
+# Tool-policy library (frontend.toolpolicy): extra clauses and the per-skill
+# obligations.  Appended to P1's prompt; nothing else changes.
+CE_TPL_DOC = (
+    "\nTool-policy clauses (tool clauses, written after via/needs):\n"
+    "  runs `P`, ...       -- the concrete program(s) the Tool runs inside its "
+    "RUNTIME tool, when the tool-policy library names one\n"
+    "  effect `E`          -- one of `local`, `reads_external`, "
+    "`writes_external`, `publishes`: what the Tool does to the world outside "
+    "the machine. Write `writes_external` for any Tool that submits, pushes, "
+    "posts, comments or sends to a third party, and `publishes` for public "
+    "releases or deployments.\n"
+    "Example: Tool `submit_report` (owner `agent`): via `bash`; effect "
+    "`writes_external`; requires `report_ready`; adds `report_sent`.\n"
+    "Subagents: spawning a subagent is not a RUNTIME tool here unless listed; "
+    "write it as a 'spawn' step.\n")
+
+
+def ce_tpl_messages(nl: str, runtime, obligations) -> tuple[str, str]:
+    """(system, user) for NL -> CE with the tool-policy library (TPL)."""
+    from .toolpolicy import obligations_note
+    system, user = ce_runtime_messages(nl, runtime)
+    forbid = ", ".join(f"`{e}`" for e in runtime.forbid_effects) or "none"
+    system += CE_TPL_DOC + f"Effects this RUNTIME forbids: {forbid}.\n"
+    user = user.replace("\nCE document:", obligations_note(obligations) + "\nCE document:")
+    return system, user
+
+
 def ce_runtime_messages(nl: str, runtime, levels: bool = False) -> tuple[str, str]:
     """(system, user) for manifest-bound NL -> CE compaction.
 
