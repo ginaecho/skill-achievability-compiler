@@ -1,0 +1,165 @@
+{
+  "name": "render-deploy",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_git_remote": {
+      "owner": "agent",
+      "nondet": {
+        "git_remote_exists": true
+      }
+    },
+    "analyze_codebase": {
+      "owner": "agent",
+      "pre": "git_remote_exists",
+      "add": [
+        "codebase_analyzed"
+      ]
+    },
+    "generate_render_yaml": {
+      "owner": "agent",
+      "pre": "codebase_analyzed",
+      "add": [
+        "render_yaml_created"
+      ]
+    },
+    "validate_blueprint": {
+      "owner": "agent",
+      "pre": "render_yaml_created",
+      "add": [
+        "blueprint_validated"
+      ]
+    },
+    "commit_and_push": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "render_yaml_created",
+          "git_remote_exists"
+        ]
+      },
+      "add": [
+        "render_yaml_pushed"
+      ]
+    },
+    "get_repo_url": {
+      "owner": "agent",
+      "pre": "git_remote_exists",
+      "add": [
+        "repo_url_known"
+      ]
+    },
+    "provide_deeplink": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "render_yaml_pushed",
+          "repo_url_known",
+          "blueprint_validated"
+        ]
+      },
+      "add": [
+        "deeplink_given"
+      ]
+    },
+    "apply_blueprint": {
+      "owner": "user",
+      "pre": "deeplink_given",
+      "nondet": {
+        "deployed": true
+      }
+    },
+    "verify_deployment": {
+      "owner": "agent",
+      "pre": "deployed",
+      "add": [
+        "verified"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_git_remote",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "has_remote": [
+            {
+              "act": {
+                "cap": "analyze_codebase",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "generate_render_yaml",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "validate_blueprint",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "commit_and_push",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "get_repo_url",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "provide_deeplink",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "apply_blueprint",
+                "by": "user"
+              }
+            },
+            {
+              "act": {
+                "cap": "verify_deployment",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_remote": [
+            {
+              "msg": {
+                "from": "agent",
+                "to": "user",
+                "label": "ask_create_remote_or_use_docker"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "deployed",
+      "verified"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

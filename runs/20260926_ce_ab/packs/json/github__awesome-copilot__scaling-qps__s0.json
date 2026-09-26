@@ -1,0 +1,105 @@
+{
+  "name": "qdrant-scaling-qps",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "tune_segments": {
+      "owner": "agent",
+      "add": [
+        "segments_tuned"
+      ]
+    },
+    "enable_quantization": {
+      "owner": "agent",
+      "add": [
+        "quantization_enabled"
+      ]
+    },
+    "configure_cpu_budget": {
+      "owner": "agent",
+      "add": [
+        "cpu_budget_configured"
+      ]
+    },
+    "use_batch_search": {
+      "owner": "agent",
+      "pre": "segments_tuned",
+      "add": [
+        "batch_search_used"
+      ]
+    },
+    "restart_service": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "segments_tuned",
+          "quantization_enabled",
+          "cpu_budget_configured"
+        ]
+      },
+      "add": [
+        "service_restarted"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "tune_segments",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "enable_quantization",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "configure_cpu_budget",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "use_batch_search",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "restart_service",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "throughput_sufficient": [],
+          "still_saturated": [
+            {
+              "act": {
+                "cap": "scale_horizontally",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "segments_tuned",
+      "quantization_enabled",
+      "batch_search_used",
+      "service_restarted"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,155 @@
+{
+  "name": "slicing-code-context",
+  "roles": [
+    "coordinator",
+    "worker"
+  ],
+  "capabilities": {
+    "build_slice_packet": {
+      "owner": "coordinator",
+      "pre": true,
+      "add": [
+        "packet_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "validate_response": {
+      "owner": "coordinator",
+      "pre": true,
+      "add": [
+        "response_validated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_edit": {
+      "owner": "coordinator",
+      "pre": "response_validated",
+      "add": [
+        "edit_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_tests": {
+      "owner": "coordinator",
+      "pre": "edit_applied",
+      "add": [
+        "tests_run"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "build_slice_packet",
+        "by": "coordinator"
+      }
+    },
+    {
+      "spawn": {
+        "role": "worker"
+      }
+    },
+    {
+      "msg": {
+        "from": "coordinator",
+        "to": "worker",
+        "label": "task_and_packet"
+      }
+    },
+    {
+      "msg": {
+        "from": "worker",
+        "to": "coordinator",
+        "label": "worker_response"
+      }
+    },
+    {
+      "act": {
+        "cap": "validate_response",
+        "by": "coordinator"
+      }
+    },
+    {
+      "choice": {
+        "by": "coordinator",
+        "observed": true,
+        "branches": {
+          "needs_context": [
+            {
+              "act": {
+                "cap": "build_slice_packet",
+                "by": "coordinator"
+              }
+            },
+            {
+              "spawn": {
+                "role": "worker"
+              }
+            },
+            {
+              "msg": {
+                "from": "coordinator",
+                "to": "worker",
+                "label": "task_and_packet"
+              }
+            },
+            {
+              "msg": {
+                "from": "worker",
+                "to": "coordinator",
+                "label": "worker_response"
+              }
+            },
+            {
+              "act": {
+                "cap": "validate_response",
+                "by": "coordinator"
+              }
+            }
+          ],
+          "complete": []
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "coordinator",
+        "observed": true,
+        "branches": {
+          "apply_authorized": [
+            {
+              "act": {
+                "cap": "apply_edit",
+                "by": "coordinator"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_tests",
+                "by": "coordinator"
+              }
+            }
+          ],
+          "no_edit": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "packet_built",
+      "response_validated"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

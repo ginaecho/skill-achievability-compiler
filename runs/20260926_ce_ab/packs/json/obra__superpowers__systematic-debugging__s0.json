@@ -1,0 +1,185 @@
+{
+  "name": "systematic-debugging",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "investigate_root_cause": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "root_cause_found"
+      ]
+    },
+    "analyze_pattern": {
+      "owner": "agent",
+      "pre": "root_cause_found",
+      "add": [
+        "pattern_analyzed"
+      ]
+    },
+    "form_hypothesis": {
+      "owner": "agent",
+      "pre": "pattern_analyzed",
+      "add": [
+        "hypothesis_formed"
+      ]
+    },
+    "create_failing_test": {
+      "owner": "agent",
+      "pre": "hypothesis_formed",
+      "add": [
+        "test_created"
+      ]
+    },
+    "implement_fix": {
+      "owner": "agent",
+      "pre": "test_created",
+      "assigns": {
+        "attempts": {
+          "+": [
+            "attempts",
+            1
+          ]
+        }
+      },
+      "add": [
+        "fix_implemented"
+      ]
+    },
+    "verify_fix": {
+      "owner": "agent",
+      "pre": "fix_implemented",
+      "add": [
+        "fix_verified"
+      ]
+    },
+    "retry_gate": {
+      "owner": "agent",
+      "pre": {
+        "cmp": [
+          "attempts",
+          "<",
+          3
+        ]
+      },
+      "add": []
+    },
+    "question_architecture": {
+      "owner": "agent",
+      "pre": {
+        "cmp": [
+          "attempts",
+          ">=",
+          3
+        ]
+      },
+      "add": [
+        "architecture_questioned"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "rec": {
+        "name": "debug_loop",
+        "body": [
+          {
+            "act": {
+              "cap": "investigate_root_cause",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "analyze_pattern",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "form_hypothesis",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "create_failing_test",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "implement_fix",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "verified": [
+                  {
+                    "act": {
+                      "cap": "verify_fix",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "not_verified": [
+                  {
+                    "choice": {
+                      "by": "agent",
+                      "observed": true,
+                      "branches": {
+                        "retry": [
+                          {
+                            "act": {
+                              "cap": "retry_gate",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "continue": "debug_loop"
+                          }
+                        ],
+                        "escalate": [
+                          {
+                            "act": {
+                              "cap": "question_architecture",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "msg": {
+                              "from": "agent",
+                              "to": "user",
+                              "label": "question_architecture"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": "fix_verified",
+  "init_true": [],
+  "init_constraints": [
+    {
+      "cmp": [
+        "attempts",
+        "==",
+        0
+      ]
+    }
+  ]
+}

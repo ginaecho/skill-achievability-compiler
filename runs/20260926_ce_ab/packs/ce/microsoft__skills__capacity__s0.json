@@ -1,0 +1,133 @@
+{
+  "name": "capacity",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_azure_account": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "account_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "query_capacity_versions": {
+      "owner": "agent",
+      "pre": "account_verified",
+      "add": [
+        "versions_queried"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_discovery": {
+      "owner": "agent",
+      "pre": "versions_queried",
+      "add": [
+        "discovery_run"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "validate_subscription_quota": {
+      "owner": "agent",
+      "pre": "discovery_run",
+      "add": [
+        "quota_validated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "present_results": {
+      "owner": "agent",
+      "pre": "quota_validated",
+      "add": [
+        "results_presented"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_azure_account",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "discovery_cycle",
+        "body": [
+          {
+            "act": {
+              "cap": "query_capacity_versions",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "run_discovery",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "validate_subscription_quota",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "present_results",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "user",
+              "observed": true,
+              "branches": {
+                "quick_deploy": [
+                  {
+                    "msg": {
+                      "from": "agent",
+                      "to": "user",
+                      "label": "handoff_preset"
+                    }
+                  }
+                ],
+                "custom_deploy": [
+                  {
+                    "msg": {
+                      "from": "agent",
+                      "to": "user",
+                      "label": "handoff_customize"
+                    }
+                  }
+                ],
+                "check_another": [
+                  {
+                    "continue": "discovery_cycle"
+                  }
+                ],
+                "cancel": []
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": "results_presented",
+  "init_true": [],
+  "init_constraints": []
+}
