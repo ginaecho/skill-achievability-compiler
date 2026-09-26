@@ -1,0 +1,125 @@
+{
+  "name": "subagent-driven-development",
+  "roles": [
+    "controller",
+    "implementer",
+    "reviewer"
+  ],
+  "capabilities": {
+    "create_workspace": {
+      "owner": "controller",
+      "pre": true,
+      "add": [
+        "workspace_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_ledger": {
+      "owner": "controller",
+      "pre": "workspace_ready",
+      "add": [
+        "ledger_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "finish_cleanup": {
+      "owner": "controller",
+      "pre": "ledger_created",
+      "add": [
+        "workspace_deleted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "create_workspace",
+        "by": "controller"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_ledger",
+        "by": "controller"
+      }
+    },
+    {
+      "rec": {
+        "name": "tasks",
+        "body": [
+          {
+            "spawn": {
+              "role": "implementer"
+            }
+          },
+          {
+            "spawn": {
+              "role": "reviewer"
+            }
+          },
+          {
+            "choice": {
+              "by": "controller",
+              "observed": true,
+              "branches": {
+                "approved": [],
+                "needs_fix": [
+                  {
+                    "rec": {
+                      "name": "fix_round",
+                      "body": [
+                        {
+                          "spawn": {
+                            "role": "implementer"
+                          }
+                        },
+                        {
+                          "spawn": {
+                            "role": "reviewer"
+                          }
+                        },
+                        {
+                          "continue": "fix_round"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "continue": "tasks"
+          }
+        ]
+      }
+    },
+    {
+      "spawn": {
+        "role": "reviewer"
+      }
+    },
+    {
+      "act": {
+        "cap": "finish_cleanup",
+        "by": "controller"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "workspace_ready",
+      "ledger_created",
+      "workspace_deleted"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,88 @@
+{
+  "name": "terraform-test",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "write_test_file": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "test_file_written"
+      ]
+    },
+    "run_tests_pass": {
+      "owner": "agent",
+      "pre": "test_file_written",
+      "add": [
+        "tests_pass"
+      ]
+    },
+    "run_tests_fail": {
+      "owner": "agent",
+      "pre": "test_file_written",
+      "add": []
+    },
+    "fix_test_file": {
+      "owner": "agent",
+      "pre": "test_file_written",
+      "add": [
+        "test_file_written"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "write_test_file",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "TestLoop",
+        "body": [
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "pass": [
+                  {
+                    "act": {
+                      "cap": "run_tests_pass",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "goal": "tests_pass"
+                  }
+                ],
+                "fail": [
+                  {
+                    "act": {
+                      "cap": "run_tests_fail",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "fix_test_file",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "TestLoop"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": "tests_pass",
+  "init_true": [],
+  "init_constraints": []
+}

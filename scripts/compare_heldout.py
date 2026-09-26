@@ -68,7 +68,10 @@ def main() -> None:
                           for r in rows}
         missing = set(labels) - set(verdicts[name])
         if missing:
-            raise ValueError(f"{name}: unlabelled comparison, missing {sorted(missing)}")
+            raise ValueError(f"{name}: no verdict for {sorted(missing)}")
+        unlabelled = sorted(set(verdicts[name]) - set(labels))
+        verdicts[name] = {c: v for c, v in verdicts[name].items() if c in labels}
+        table.setdefault("unlabelled", unlabelled)
         table[name] = {"valid": sum(r["valid"] for r in rows),
                        **{s: metrics(verdicts[name], labels, s) for s in ("L1", "L2")}}
     achieved = [c for c, e in labels.items() if e["outcome"] == "achieved"]
@@ -82,6 +85,21 @@ def main() -> None:
                     for c in achieved)
             table[name].setdefault("false_rejections_vs", {})[base] = {
                 "fixed": b, "introduced": w, "mcnemar_p": mcnemar_exact(b, w)}
+    # paired decided-accuracy test (L2 labels): correct = rejected a confirmed
+    # impossible, or did not reject an achieved skill
+    decided = {c: label(labels[c], "L2") for c in labels}
+    decided = {c: l for c, l in decided.items() if l != "INCONCLUSIVE"}
+
+    def right(name, c):
+        return (verdicts[name][c] == "IMPOSSIBLE") == (decided[c] == "IMPOSSIBLE")
+    for base in ("json (original)", "P2g ce_rt+repair+guard"):
+        for name in VARIANTS:
+            if name == base:
+                continue
+            b = sum(right(name, c) and not right(base, c) for c in decided)
+            w = sum(right(base, c) and not right(name, c) for c in decided)
+            table[name].setdefault("accuracy_vs", {})[base] = {
+                "better": b, "worse": w, "mcnemar_p": mcnemar_exact(b, w)}
     table["per_case"] = {c: {"label": labels[c]["outcome"],
                              "blocker_kind": labels[c]["blocker_kind"],
                              **{n: verdicts[n][c] for n in VARIANTS}}
@@ -93,7 +111,9 @@ def main() -> None:
         print(f"{name:24} valid={t['valid']:2}  L2: rej={t['L2']['rejections']:2} "
               f"prec={t['L2']['precision']:>5} rec={t['L2']['recall']:>5} "
               f"FR={t['L2']['false_rejection_rate']:>5} acc={t['L2']['accuracy_decided']:>5}"
-              f"  | L1 prec={t['L1']['precision']:>5} rec={t['L1']['recall']:>4}")
+              f"  | L1 prec={t['L1']['precision']:>5} rec={t['L1']['recall']:>4}"
+              + ("" if name.startswith("json") else
+                 f"  | acc vs json {t['accuracy_vs']['json (original)']}"))
 
 
 if __name__ == "__main__":

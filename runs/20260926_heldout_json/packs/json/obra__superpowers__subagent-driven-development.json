@@ -1,0 +1,180 @@
+{
+  "name": "subagent-driven-development",
+  "roles": [
+    "controller",
+    "implementer",
+    "task_reviewer",
+    "final_reviewer"
+  ],
+  "capabilities": {
+    "setup_workspace": {
+      "owner": "controller",
+      "pre": true,
+      "add": [
+        "workspace_ready"
+      ]
+    },
+    "dispatch_implementer": {
+      "owner": "controller",
+      "pre": "workspace_ready",
+      "add": [
+        "task_dispatched"
+      ]
+    },
+    "implement_task": {
+      "owner": "implementer",
+      "pre": "task_dispatched",
+      "add": [
+        "task_implemented"
+      ],
+      "del": [
+        "task_dispatched"
+      ]
+    },
+    "fix_task": {
+      "owner": "implementer",
+      "pre": "task_implemented",
+      "add": [
+        "task_implemented"
+      ]
+    },
+    "complete_task": {
+      "owner": "controller",
+      "pre": "task_implemented",
+      "add": [
+        "task_complete"
+      ]
+    },
+    "fix_final_issues": {
+      "owner": "implementer",
+      "pre": "task_complete",
+      "add": []
+    },
+    "finish": {
+      "owner": "controller",
+      "pre": "task_complete",
+      "add": [
+        "done"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "setup_workspace",
+        "by": "controller"
+      }
+    },
+    {
+      "spawn": {
+        "role": "implementer"
+      }
+    },
+    {
+      "spawn": {
+        "role": "task_reviewer"
+      }
+    },
+    {
+      "rec": {
+        "name": "TaskLoop",
+        "body": [
+          {
+            "act": {
+              "cap": "dispatch_implementer",
+              "by": "controller"
+            }
+          },
+          {
+            "act": {
+              "cap": "implement_task",
+              "by": "implementer"
+            }
+          },
+          {
+            "choice": {
+              "by": "task_reviewer",
+              "external": true,
+              "branches": {
+                "needs_fix": [
+                  {
+                    "act": {
+                      "cap": "fix_task",
+                      "by": "implementer"
+                    }
+                  },
+                  {
+                    "continue": "TaskLoop"
+                  }
+                ],
+                "approved": [
+                  {
+                    "act": {
+                      "cap": "complete_task",
+                      "by": "controller"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "controller",
+                      "observed": true,
+                      "branches": {
+                        "more_tasks": [
+                          {
+                            "continue": "TaskLoop"
+                          }
+                        ],
+                        "no_more_tasks": []
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "spawn": {
+        "role": "final_reviewer"
+      }
+    },
+    {
+      "choice": {
+        "by": "final_reviewer",
+        "external": true,
+        "branches": {
+          "clean": [
+            {
+              "act": {
+                "cap": "finish",
+                "by": "controller"
+              }
+            },
+            {
+              "goal": "done"
+            }
+          ],
+          "issues": [
+            {
+              "act": {
+                "cap": "fix_final_issues",
+                "by": "implementer"
+              }
+            },
+            {
+              "act": {
+                "cap": "finish",
+                "by": "controller"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": "done",
+  "init_true": [],
+  "init_constraints": []
+}
