@@ -105,3 +105,9 @@ cannot be meaningfully tested. That will be stated rather than claimed.
     directory, so ablations cannot overwrite the primary packs.
 
   Neither change affects the method or the primary scoring.
+
+## Outcome (recorded after scoring)
+
+Criterion 1: not met (TPL recall 10/14 vs P2g 12/14). Criterion 2: not met
+(false rejections 3 vs 2). Criterion 3: met (16/16, 0 FP). See
+docs/TOOL_POLICY_LIBRARY_20260926.md.

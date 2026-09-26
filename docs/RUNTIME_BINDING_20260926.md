@@ -1,5 +1,8 @@
 # Improving IMPOSSIBLE accuracy: runtime-bound compaction (P1–P3)
 
+Follow-up: the tool-policy library test and the pooled P2g result are in
+[`TOOL_POLICY_LIBRARY_20260926.md`](TOOL_POLICY_LIBRARY_20260926.md).
+
 Follow-up to `CONTROLLED_ENGLISH_AB_20260926.md`. That A/B found that most
 IMPOSSIBLE verdicts on real skills were false: the executor could do the job.
 The question here: *why were missing tools not detected as missing
