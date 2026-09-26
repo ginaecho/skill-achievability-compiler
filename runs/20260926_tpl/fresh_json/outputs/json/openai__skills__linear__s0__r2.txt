@@ -1,0 +1,52 @@
+{
+  "name": "linear",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "setup_mcp": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["mcp_connected"]
+    },
+    "list_issues": {
+      "owner": "agent",
+      "pre": "mcp_connected",
+      "add": ["context_gathered"]
+    },
+    "create_issue": {
+      "owner": "agent",
+      "pre": {"and": ["mcp_connected", "context_gathered"]},
+      "add": ["issue_created"]
+    },
+    "update_issue": {
+      "owner": "agent",
+      "pre": {"and": ["mcp_connected", "context_gathered"]},
+      "add": ["issue_updated"]
+    },
+    "summarize": {
+      "owner": "agent",
+      "pre": {"or": ["issue_created", "issue_updated"]},
+      "add": ["results_summarized"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "external": true, "branches": {
+      "needs_setup": [
+        {"act": {"cap": "setup_mcp", "by": "agent"}}
+      ],
+      "already_connected": []
+    }}},
+    {"act": {"cap": "list_issues", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "create": [
+        {"act": {"cap": "create_issue", "by": "agent"}}
+      ],
+      "update": [
+        {"act": {"cap": "update_issue", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "summarize", "by": "agent"}}
+  ],
+  "goal": {"and": ["mcp_connected", "context_gathered", {"or": ["issue_created", "issue_updated"]}, "results_summarized"]},
+  "init_true": [],
+  "init_constraints": []
+}

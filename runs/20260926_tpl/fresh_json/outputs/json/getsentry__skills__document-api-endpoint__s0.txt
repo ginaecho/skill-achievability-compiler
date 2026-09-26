@@ -1,0 +1,31 @@
+{
+  "name": "document-api-endpoint",
+  "roles": ["agent"],
+  "capabilities": {
+    "add_class_schema": {"owner": "agent", "add": ["class_schema_added"]},
+    "add_method_schema": {"owner": "agent", "pre": "class_schema_added", "add": ["method_schema_added"]},
+    "reuse_response_type": {"owner": "agent", "pre": "method_schema_added", "add": ["types_reused"]},
+    "migrate_legacy_docs": {"owner": "agent", "pre": "types_reused", "add": ["legacy_migrated"]},
+    "validate_spec": {"owner": "agent", "pre": "types_reused", "add": ["spec_validated"]},
+    "verify_live_endpoint": {"owner": "agent", "pre": "spec_validated", "add": ["live_verified"]},
+    "promote_to_public": {"owner": "agent", "pre": "live_verified", "add": ["endpoint_public"]}
+  },
+  "protocol": [
+    {"act": {"cap": "add_class_schema", "by": "agent"}},
+    {"act": {"cap": "add_method_schema", "by": "agent"}},
+    {"act": {"cap": "reuse_response_type", "by": "agent"}},
+    {"choice": {"by": "agent", "external": true, "branches": {
+      "legacy_exists": [{"act": {"cap": "migrate_legacy_docs", "by": "agent"}}],
+      "no_legacy": []
+    }}},
+    {"act": {"cap": "validate_spec", "by": "agent"}},
+    {"act": {"cap": "verify_live_endpoint", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "promote": [{"act": {"cap": "promote_to_public", "by": "agent"}}],
+      "no_promote": []
+    }}}
+  ],
+  "goal": {"and": [{"and": ["types_reused", "spec_validated"]}, "live_verified"]},
+  "init_true": [],
+  "init_constraints": []
+}

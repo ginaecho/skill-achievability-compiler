@@ -1,0 +1,39 @@
+{
+  "name": "sentry-commit",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "check_branch": {
+      "owner": "agent",
+      "add": ["branch_checked"]
+    },
+    "create_feature_branch": {
+      "owner": "agent",
+      "pre": "branch_checked",
+      "add": ["on_feature_branch"]
+    },
+    "commit_changes": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["commit_created"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "check_branch", "by": "agent"}},
+    {"choice": {"by": "agent", "external": true, "branches": {
+      "on_feature_branch": [],
+      "on_main_or_master": [
+        {"choice": {"by": "user", "observed": true, "branches": {
+          "requested_direct_commit": [],
+          "not_requested": [
+            {"act": {"cap": "create_feature_branch", "by": "agent"}},
+            {"act": {"cap": "check_branch", "by": "agent"}}
+          ]
+        }}}
+      ]
+    }}},
+    {"act": {"cap": "commit_changes", "by": "agent"}}
+  ],
+  "goal": "commit_created",
+  "init_true": [],
+  "init_constraints": []
+}
