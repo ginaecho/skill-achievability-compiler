@@ -5,6 +5,7 @@
   skillc scan    DIR      [--profile P] [--json|--md]    batch-check a skill tree
   skillc audit   PATH     [--json]                       bundle security pre-pass
   skillc cost    FILE|DIR [--llm] [--json]                token economics of checking
+  skillc ce      FILE     [--to ce|json]                  controlled English <-> pack
   skillc eval                                            corpus evaluation
   skillc profiles                                        list capability profiles
 
@@ -22,6 +23,7 @@ from pathlib import Path
 from . import __version__
 from .checker import Verdict, check
 from .evaluate import evaluate, format_report, load_corpus
+from .frontend.ce import CEError
 from .frontend.markdown import CompileResult, compile_file
 from .pack import Pack, PackError, pack_digest
 from .profiles import builtin_profiles, load_profile
@@ -32,17 +34,21 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
     res = None
     if path.suffix == ".json":
         pack = json.loads(path.read_text(encoding="utf-8"))
+    elif path.suffix == ".ce":
+        from .frontend.ce import compile_ce
+        pack = compile_ce(path.read_text(encoding="utf-8"))
     else:
         profile = load_profile(args.profile)
         if getattr(args, "tool", None):
             profile = profile.with_tools(args.tool)
         if getattr(args, "llm", False):
-            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact
+            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact, compact_ce
             abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
             abilities.extend(args.runtime_ability or [])
-            pack = compact(path.read_text(encoding="utf-8"), model=args.model,
-                           provider=args.llm_provider,
-                           runtime_abilities=abilities or None)
+            front = compact_ce if getattr(args, "via_ce", False) else compact
+            pack = front(path.read_text(encoding="utf-8"), model=args.model,
+                         provider=args.llm_provider,
+                         runtime_abilities=abilities or None)
         else:
             res = compile_file(path, profile)
             pack = res.pack
@@ -328,6 +334,19 @@ def cmd_eval(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_ce(args) -> int:
+    """Render a pack (or any compiled input) as CE, or a .ce file as JSON."""
+    from .frontend.ce import render_ce
+    path = Path(args.file)
+    if args.to == "json" or (args.to is None and path.suffix == ".ce"):
+        pack, _ = _load_result(path, args)
+        print(json.dumps(pack, indent=2))
+    else:
+        pack, _ = _load_result(path, args)
+        sys.stdout.write(render_ce(pack))
+    return 0
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -353,6 +372,9 @@ def _add_compile_opts(sp) -> None:
                     help="runtime abilities supplied to semantic compaction")
     sp.add_argument("--runtime-ability", action="append", metavar="TEXT",
                     help="additional granted runtime ability (repeatable)")
+    sp.add_argument("--via-ce", action="store_true",
+                    help="with --llm: the model writes Controlled English, "
+                         "which is parsed into the pack deterministically")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -422,6 +444,14 @@ def main(argv: list[str] | None = None) -> int:
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_cost)
 
+    sp = sub.add_parser("ce", help="Controlled English: render a pack as CE, "
+                                   "or parse a .ce file to a JSON pack")
+    sp.add_argument("file")
+    sp.add_argument("--to", choices=("ce", "json"),
+                    help="output form (default: json for .ce input, else ce)")
+    _add_compile_opts(sp)
+    sp.set_defaults(fn=cmd_ce)
+
     sp = sub.add_parser("eval", help="run the corpus evaluation")
     sp.set_defaults(fn=cmd_eval)
 
@@ -431,8 +461,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return args.fn(args)
-    except (PackError, KeyError, FileNotFoundError, json.JSONDecodeError,
-            RuntimeError) as e:
+    except (PackError, CEError, KeyError, FileNotFoundError,
+            json.JSONDecodeError, RuntimeError) as e:
         print(f"skillc: error: {e}", file=sys.stderr)
         return 2
 

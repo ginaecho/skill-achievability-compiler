@@ -176,6 +176,163 @@ def compact(nl: str, model: str | None = None, timeout: int = 600,
     return pack
 
 
+CE_DOC = """
+SkillC Controlled English (CE). One statement per line; identifiers are ALWAYS
+in backticks; nested steps are "- " bullets indented two spaces per level.
+
+  Skill `NAME`.
+  Roles: `R`, ... .                       (or: Roles: none.)
+  Tool `C` (owner `R`): CLAUSE; CLAUSE.   (or: Tool `C` (owner `R`).  when it has no clauses)
+      CLAUSE = requires F | adds `P`, ... | removes `P`, ...
+             | sets `V` to E | picks `V` with F
+  Initially true: `P`, ... .              (predicates true at the start)
+  Initially: F.                           (one line per initial constraint)
+  Goal: F.                                (checked at termination)
+  Protocol:                               (or: Protocol: none.)
+    - `R` uses `C`.
+    - `A` tells `B` `LABEL`.
+    - `R` chooses one of (observed):      (flags in parentheses are optional:
+      - branch `LABEL`:                    external, observed)
+        - `R` uses `C`.
+      - branch `LABEL`: none.
+    - loop `X`:
+      - `R` uses `C`.
+      - repeat `X`.                       (repeat must be the last step of its loop)
+    - checkpoint: F.                      (asserts F ALREADY holds here)
+    - spawn `R`.
+  Behaviour of `R`:                       (optional per-role behaviour)
+    - use `C`.   - send `L` to `B`.   - receive `L` from `A`.
+    - select one of:  /  - branch on `A` one of:   (then "- branch `L`:" lines)
+
+  F = F or F | F and F | not F | ( F ) | true | false | `P`
+    | all of (F, ...) | any of (F, ...) | E OP E       OP = < <= == > >= !=
+  E = `V` | INT | -INT | ( E ) | E + E | E - E | E * E
+      (one arithmetic operator per level -- nest with parentheses; '*' needs
+      an integer on one side)
+
+Example:
+  Skill `book-flight`.
+  Roles: `agent`, `user`.
+  Tool `search_flights` (owner `agent`): adds `options_found`.
+  Tool `book_flight` (owner `agent`): requires `options_found`; adds `booked`; picks `price` with `price` < 500.
+  Initially: `price` == 0.
+  Goal: `booked` and `confirmation_sent` and `price` < 500.
+  Protocol:
+    - `agent` uses `search_flights`.
+    - `user` chooses one of (observed):
+      - branch `accept`:
+        - `agent` uses `book_flight`.
+        - `agent` uses `send_email`.
+      - branch `decline`: none.
+(`send_email` is used but is not declared as a Tool, because the prose grants
+no such tool: the checker reports that gap.)
+"""
+
+CE_SYSTEM = (
+    "You convert a natural-language agent skill into a formal achievability "
+    "pack written in SkillC Controlled English (CE). Output ONLY the CE "
+    "document, inside one ```ce fenced block. Be conservative:\n"
+    "1. Declare a Tool ONLY if the prose grants that tool. Never invent "
+    "a tool to make the goal reachable. If the plan mentions an action with "
+    "no corresponding tool, still write it in the Protocol as a 'uses' step, "
+    "but do NOT declare it as a Tool -- the checker will flag the gap. This is "
+    "the single most important rule.\n"
+    "2. For each Tool, extract its precondition (requires) and effects "
+    "(adds/removes/sets/picks) from what the prose claims. Use 'picks' for "
+    "\"books a fare under 500\"-style post-conditions.\n"
+    "3. Encode the Goal as a formula capturing every conjunct the user asked "
+    "for, including refinements like \"under $500\". The Goal is "
+    "checked at termination automatically. A protocol 'checkpoint' step is "
+    "an assertion that the goal ALREADY holds at that point, not a declaration "
+    "of future intent. Omit checkpoints unless the prose explicitly "
+    "requires such a checkpoint; never put one before actions that establish "
+    "the goal. Any checkpoint must equal the Goal exactly.\n"
+    "4. Encode the plan as the Protocol; use 'chooses one of' for branching "
+    "and 'tells' for inter-role messages. If a role must act inside a branch, "
+    "include the informing message only if the prose provides one.\n"
+    "5. List predicates true at the start in 'Initially true'; everything else "
+    "is false by default (frame assumption).\n"
+    "6. Use loop/repeat for retry loops (repeat must be the last step of "
+    "its loop: only tail recursion is decidable). If the prose spawns "
+    "subagents at run time, write a spawn step -- the checker degrades to "
+    "UNKNOWN rather than guessing.\n"
+    "7. Abstract goal-irrelevant payload detail away (the tolerance dial): "
+    "keep the pack SMALL -- at most ~12 tools and ~25 protocol steps. "
+    "Merge micro-steps that share a tool; model only state that the goal or "
+    "some guard mentions.\n"
+    "8. IMPORTANT -- observed choices. Unobserved choice is a phenomenon of "
+    "asynchronous multi-agent handoffs; inside a live conversation the "
+    "outcome of a choice is announced by the medium itself. Whenever a "
+    "choice is resolved within a conversation among the roles that then act "
+    "on it (an assistant<->user chat, a phone call), mark that choice "
+    "(observed). In a skill that is one continuous conversation between "
+    "the agent and its user, EVERY choice by either of them is observed. "
+    "Reserve 'tells' steps for genuinely asynchronous handoffs between separate "
+    "agents; a choice with neither (observed) nor informing messages is "
+    "refuted as a deadlock. Mark a choice (external) when the environment "
+    "rather than the agent resolves it.\n" + CE_DOC)
+
+CE_RETRY_PROMPT = (
+    "\n\nYour previous CE document was rejected by the deterministic parser "
+    "or schema gate:\n  {error}\n\nPrevious document:\n```ce\n{text}\n```\n"
+    "Output the corrected CE document only. Do not weaken the goal or add "
+    "tools the prose does not grant.")
+
+
+def ce_messages(nl: str, runtime_abilities: list[str] | None = None
+                ) -> tuple[str, str]:
+    """(system, user) for NL -> CE compaction; mirrors `compact`."""
+    system = CE_SYSTEM
+    if runtime_abilities:
+        system += RUNTIME_ABILITIES_NOTE.replace(
+            "DECLARE it as a capability (owner: the acting role)",
+            "DECLARE it as a Tool (owner: the acting role)").format(
+            abilities="; ".join(runtime_abilities))
+    user = f"Natural-language skill:\n```\n{nl}\n```\nCE document:"
+    return system, user
+
+
+def compact_ce(nl: str, model: str | None = None, timeout: int = 600,
+               runtime_abilities: list[str] | None = None,
+               provider: str | None = None, retries: int = 1,
+               return_text: bool = False):
+    """Compact natural language into a pack via Controlled English.
+
+    The model writes CE (untrusted); `ce.compile_ce` turns it into a pack
+    deterministically and runs the same schema gate as `compact`.  A parse or
+    gate error is fed back verbatim for at most `retries` rounds -- the error
+    names the line and column, so the retry is a targeted edit, not a
+    re-generation.  With `return_text` returns (pack, ce_text).
+    """
+    from .ce import CEError, compile_ce, extract_ce
+    from ..pack import PackError
+
+    selected = (provider or os.environ.get("SKILLC_LLM_PROVIDER")
+                or DEFAULT_PROVIDER).lower()
+    if selected not in PROVIDERS:
+        raise RuntimeError(
+            f"unsupported LLM provider {selected!r}; choose one of {PROVIDERS}")
+    system, user = ce_messages(nl, runtime_abilities)
+    prompt = user
+    for attempt in range(retries + 1):
+        if selected == "anthropic":
+            text = _compact_anthropic(system, prompt, model or DEFAULT_MODEL,
+                                      timeout)
+        else:
+            text = _compact_azure_openai(system, prompt, model, timeout,
+                                         json_mode=False)
+        try:
+            ce_text = extract_ce(text)
+            pack = compile_ce(ce_text)
+        except (CEError, PackError) as e:
+            if attempt == retries:
+                raise
+            prompt = user + CE_RETRY_PROMPT.format(error=e, text=text.strip())
+            continue
+        return (pack, ce_text) if return_text else pack
+    raise AssertionError("unreachable")
+
+
 def _compact_anthropic(system: str, user: str, model: str,
                        timeout: int) -> str:
     key = os.environ.get("ANTHROPIC_API_KEY")
@@ -199,7 +356,7 @@ def _compact_anthropic(system: str, user: str, model: str,
 
 
 def _compact_azure_openai(system: str, user: str, model: str | None,
-                          timeout: int) -> str:
+                          timeout: int, json_mode: bool = True) -> str:
     key = os.environ.get("AZURE_OPENAI_API_KEY")
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
     deployment = model or os.environ.get("AZURE_OPENAI_DEPLOYMENT")
@@ -247,8 +404,9 @@ def _compact_azure_openai(system: str, user: str, model: str | None,
             {"role": "user", "content": user},
         ],
         "max_completion_tokens": 32000,
-        "response_format": {"type": "json_object"},
     }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
     if include_model:
         payload["model"] = deployment
     headers = {"content-type": "application/json"}
