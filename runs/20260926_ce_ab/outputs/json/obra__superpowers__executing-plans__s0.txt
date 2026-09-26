@@ -1,0 +1,64 @@
+{
+  "name": "executing-plans-inline",
+  "roles": ["agent"],
+  "capabilities": {
+    "setup_workspace": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["workspace_ready"]
+    },
+    "read_plan_spec": {
+      "owner": "agent",
+      "pre": "workspace_ready",
+      "add": ["plan_read"]
+    },
+    "preflight_scan": {
+      "owner": "agent",
+      "pre": "plan_read",
+      "add": ["preflight_done"]
+    },
+    "load_tdd_subskill": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["tdd_loaded"]
+    },
+    "execute_task": {
+      "owner": "agent",
+      "pre": {"and": ["preflight_done", "tdd_loaded", {"cmp": ["tasks_remaining", ">", 0]}]},
+      "assigns": {"tasks_remaining": {"-": ["tasks_remaining", 1]}},
+      "add": ["ledger_updated"]
+    },
+    "final_review": {
+      "owner": "agent",
+      "pre": {"cmp": ["tasks_remaining", "==", 0]},
+      "add": ["review_done"]
+    },
+    "fix_pass": {
+      "owner": "agent",
+      "pre": "review_done",
+      "add": ["fixes_applied"]
+    },
+    "delete_workspace": {
+      "owner": "agent",
+      "pre": "fixes_applied",
+      "add": ["workspace_deleted"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "setup_workspace", "by": "agent"}},
+    {"act": {"cap": "read_plan_spec", "by": "agent"}},
+    {"act": {"cap": "preflight_scan", "by": "agent"}},
+    {"act": {"cap": "load_tdd_subskill", "by": "agent"}},
+    {"rec": {"name": "TaskLoop", "body": [
+      {"act": {"cap": "execute_task", "by": "agent"}},
+      {"continue": "TaskLoop"}
+    ]}},
+    {"act": {"cap": "final_review", "by": "agent"}},
+    {"act": {"cap": "fix_pass", "by": "agent"}},
+    {"act": {"cap": "delete_workspace", "by": "agent"}},
+    {"act": {"cap": "finish_development_branch", "by": "agent"}}
+  ],
+  "goal": {"and": ["review_done", "fixes_applied", "workspace_deleted"]},
+  "init_true": [],
+  "init_constraints": [{"cmp": ["tasks_remaining", ">", 0]}]
+}
