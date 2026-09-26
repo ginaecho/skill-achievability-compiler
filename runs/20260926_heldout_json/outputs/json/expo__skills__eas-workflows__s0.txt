@@ -1,0 +1,51 @@
+{
+  "name": "eas-workflows",
+  "roles": ["agent"],
+  "capabilities": {
+    "fetch_schema": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["schema_fetched"]
+    },
+    "write_workflow": {
+      "owner": "agent",
+      "pre": "schema_fetched",
+      "add": ["workflow_written"]
+    },
+    "validate_pass": {
+      "owner": "agent",
+      "pre": "workflow_written",
+      "add": ["workflow_valid"]
+    },
+    "validate_fail": {
+      "owner": "agent",
+      "pre": "workflow_written",
+      "add": []
+    },
+    "fix_workflow": {
+      "owner": "agent",
+      "pre": "workflow_written",
+      "add": ["workflow_written"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "fetch_schema", "by": "agent"}},
+    {"act": {"cap": "write_workflow", "by": "agent"}},
+    {"rec": {"name": "ValidateLoop", "body": [
+      {"choice": {"by": "agent", "external": true, "branches": {
+        "valid": [
+          {"act": {"cap": "validate_pass", "by": "agent"}},
+          {"goal": "workflow_valid"}
+        ],
+        "invalid": [
+          {"act": {"cap": "validate_fail", "by": "agent"}},
+          {"act": {"cap": "fix_workflow", "by": "agent"}},
+          {"continue": "ValidateLoop"}
+        ]
+      }}}
+    ]}}
+  ],
+  "goal": "workflow_valid",
+  "init_true": [],
+  "init_constraints": []
+}
