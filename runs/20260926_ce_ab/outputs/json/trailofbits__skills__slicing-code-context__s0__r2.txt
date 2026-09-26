@@ -1,0 +1,50 @@
+{
+  "name": "slicing-code-context",
+  "roles": ["coordinator", "worker"],
+  "capabilities": {
+    "define_task": {
+      "owner": "coordinator",
+      "add": ["task_defined"]
+    },
+    "build_packet": {
+      "owner": "coordinator",
+      "pre": "task_defined",
+      "add": ["packet_built"]
+    },
+    "validate_response": {
+      "owner": "coordinator",
+      "pre": "packet_built",
+      "add": ["response_validated"]
+    },
+    "apply_edit": {
+      "owner": "coordinator",
+      "pre": "response_validated",
+      "add": ["edit_applied"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "define_task", "by": "coordinator"}},
+    {"act": {"cap": "build_packet", "by": "coordinator"}},
+    {"spawn": {"role": "worker"}},
+    {"msg": {"from": "coordinator", "to": "worker", "label": "task_and_packet"}},
+    {"choice": {
+      "by": "worker",
+      "branches": {
+        "complete": [
+          {"msg": {"from": "worker", "to": "coordinator", "label": "response_complete"}},
+          {"act": {"cap": "validate_response", "by": "coordinator"}},
+          {"act": {"cap": "apply_edit", "by": "coordinator"}}
+        ],
+        "needs_context": [
+          {"msg": {"from": "worker", "to": "coordinator", "label": "response_needs_context"}},
+          {"act": {"cap": "build_packet", "by": "coordinator"}},
+          {"msg": {"from": "coordinator", "to": "worker", "label": "task_and_packet"}},
+          {"act": {"cap": "validate_response", "by": "coordinator"}}
+        ]
+      }
+    }}
+  ],
+  "goal": "response_validated",
+  "init_true": [],
+  "init_constraints": []
+}
