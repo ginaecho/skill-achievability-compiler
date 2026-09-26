@@ -41,7 +41,7 @@ indented two spaces per level; ``#`` starts a comment outside backticks)::
     Tool `C` [(owner `R`)] [: CLAUSE; CLAUSE; ...].
         CLAUSE := requires F | adds `P`, ... | removes `P`, ...
                 | sets `V` to E | picks `V` with F
-    Initially true: `P`, ... .
+    Initially true: `P`, ... .   | Initially true: none.
     Initially: F.                (one line per initial constraint)
     Goal: F.
     Protocol:                    | Protocol: none.
@@ -80,7 +80,7 @@ from typing import Any
 
 from ..pack import validate_pack
 
-CE_VERSION = "1"
+CE_VERSION = "1.1"   # 1.1: "Initially true: none." (consistent with Roles/Protocol)
 INDENT = "  "
 CMP_OPS = ("<=", ">=", "==", "!=", "<", ">")
 ARITH_OPS = ("+", "-", "*")
@@ -672,7 +672,11 @@ def parse_ce_detailed(text: str) -> ParseResult:
                 raise CEError("duplicate 'Initially true:' statement", ln.no, 1)
             st.words("Initially true")
             st.sym(":")
-            init_true = st.names()
+            if st.is_word("none"):
+                st.word("none")
+                init_true = []
+            else:
+                init_true = st.names()
             st.sym(".")
             st.end()
         elif st.is_word("Initially"):

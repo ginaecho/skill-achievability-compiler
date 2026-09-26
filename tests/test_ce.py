@@ -138,6 +138,12 @@ def test_minimal_document_and_defaults():
                  "goal": True, "init_true": [], "init_constraints": []}
 
 
+def test_none_is_accepted_wherever_a_list_may_be_empty():
+    p = compile_ce("Skill `s`.\nRoles: none.\nInitially true: none.\nGoal: true.\n"
+                   "Protocol: none.\n")
+    assert p["roles"] == [] and p["init_true"] == [] and p["protocol"] == []
+
+
 def test_statements_after_skill_may_come_in_any_order():
     a = parse_ce("Skill `s`.\nProtocol: none.\nGoal: `g`.\nTool `t`: adds `g`.\n"
                  "Roles: `agent`.\n")

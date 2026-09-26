@@ -510,6 +510,49 @@ def score_all(out: Path) -> None:
     print(json.dumps({k: metrics[k] for k in ("real_paired", "stability")}, indent=2))
 
 
+def _coerce_list_pre(pack):
+    """The JSON arm's most common near-miss: `pre` written as a list of
+    predicates.  Read it as their conjunction (post-hoc analysis only)."""
+    for cap in pack.get("capabilities", {}).values():
+        if isinstance(cap, dict) and isinstance(cap.get("pre"), list):
+            cap["pre"] = {"and": cap["pre"]}
+    return pack
+
+
+def posthoc(out: Path) -> None:
+    """Re-parse the recorded round-1 replies with each arm's most common
+    near-miss accepted: CE grammar 1.1 ('Initially true: none.') and, for
+    JSON, a list-valued `pre` read as a conjunction.  No model is called;
+    metrics.json (the primary result) is left untouched."""
+    from skillc.frontend.ce import CE_VERSION
+    frozen = json.loads((out / "frozen.json").read_text())
+    cases = {c["id"]: c for c in frozen["cases"]}
+    res: dict = {"ce_grammar": CE_VERSION, "arms": {}}
+    for arm in ARMS:
+        n = strict = lenient = 0
+        by_set = Counter()
+        for job in frozen["jobs"]:
+            if job["round"] != 1 or job["arm"] != arm:
+                continue
+            reply = (out / job["output"]).read_text(encoding="utf-8")
+            n += 1
+            first = parse_reply(arm, reply)["ok"]
+            if arm == "json" and not first:
+                try:
+                    pack = _coerce_list_pre(_extract_json_object(reply))
+                    validate_pack(pack)
+                    first = True
+                except (PackError, ValueError, KeyError, TypeError):
+                    pass
+            lenient += first
+            by_set[cases[job["case"]]["set"]] += first
+        res["arms"][arm] = {"round1_outputs": n, "valid_with_near_miss_accepted": lenient,
+                            "rate": round(lenient / n, 4), "ci95": wilson(lenient, n),
+                            "by_set": dict(by_set)}
+    write_json(out / "posthoc.json", res)
+    print(json.dumps(res, indent=2))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -522,11 +565,15 @@ def main() -> None:
     p.add_argument("out", type=Path)
     p = sub.add_parser("score")
     p.add_argument("out", type=Path)
+    p = sub.add_parser("posthoc")
+    p.add_argument("out", type=Path)
     a = ap.parse_args()
     if a.cmd == "prepare":
         prepare(a.out, a.real, a.stable, a.samples)
     elif a.cmd == "retry":
         retry(a.out)
+    elif a.cmd == "posthoc":
+        posthoc(a.out)
     else:
         score_all(a.out)
 

@@ -185,7 +185,7 @@ in backticks; nested steps are "- " bullets indented two spaces per level.
   Tool `C` (owner `R`): CLAUSE; CLAUSE.   (or: Tool `C` (owner `R`).  when it has no clauses)
       CLAUSE = requires F | adds `P`, ... | removes `P`, ...
              | sets `V` to E | picks `V` with F
-  Initially true: `P`, ... .              (predicates true at the start)
+  Initially true: `P`, ... .              (predicates true at the start; or: Initially true: none.)
   Initially: F.                           (one line per initial constraint)
   Goal: F.                                (checked at termination)
   Protocol:                               (or: Protocol: none.)
