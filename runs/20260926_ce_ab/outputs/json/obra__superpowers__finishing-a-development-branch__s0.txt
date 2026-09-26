@@ -1,0 +1,60 @@
+{
+  "name": "finishing-a-development-branch",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "run_tests": {
+      "owner": "agent",
+      "add": ["tests_passed"]
+    },
+    "detect_environment": {
+      "owner": "agent",
+      "pre": "tests_passed",
+      "add": ["environment_detected"]
+    },
+    "determine_base_branch": {
+      "owner": "agent",
+      "pre": "environment_detected",
+      "add": ["base_determined"]
+    },
+    "merge_locally": {
+      "owner": "agent",
+      "pre": "base_determined",
+      "add": ["merged"]
+    },
+    "push_and_create_pr": {
+      "owner": "agent",
+      "pre": "base_determined",
+      "add": ["pr_created"]
+    },
+    "keep_as_is": {
+      "owner": "agent",
+      "pre": "base_determined",
+      "add": ["kept"]
+    },
+    "cleanup_workspace": {
+      "owner": "agent",
+      "pre": "merged",
+      "add": ["cleaned_up"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "run_tests", "by": "agent"}},
+    {"act": {"cap": "detect_environment", "by": "agent"}},
+    {"act": {"cap": "determine_base_branch", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "merge": [
+        {"act": {"cap": "merge_locally", "by": "agent"}},
+        {"act": {"cap": "cleanup_workspace", "by": "agent"}}
+      ],
+      "pull_request": [
+        {"act": {"cap": "push_and_create_pr", "by": "agent"}}
+      ],
+      "keep": [
+        {"act": {"cap": "keep_as_is", "by": "agent"}}
+      ]
+    }}}
+  ],
+  "goal": {"or": ["merged", "pr_created", "kept"]},
+  "init_true": [],
+  "init_constraints": []
+}

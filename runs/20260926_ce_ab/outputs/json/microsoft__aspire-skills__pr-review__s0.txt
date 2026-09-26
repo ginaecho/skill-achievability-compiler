@@ -1,0 +1,91 @@
+{
+  "name": "aspire-skills-pr-review",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "identify_pr": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["pr_identified"]
+    },
+    "check_local_branch": {
+      "owner": "agent",
+      "pre": "pr_identified",
+      "add": ["branch_state_known"]
+    },
+    "checkout_pr_branch": {
+      "owner": "agent",
+      "pre": "branch_state_known",
+      "add": ["branch_ready"]
+    },
+    "use_diff_only": {
+      "owner": "agent",
+      "pre": "branch_state_known",
+      "add": ["diff_ready"]
+    },
+    "gather_pr_context": {
+      "owner": "agent",
+      "pre": {"or": ["branch_ready", "diff_ready"]},
+      "add": ["context_gathered"]
+    },
+    "categorize_changes": {
+      "owner": "agent",
+      "pre": "context_gathered",
+      "add": ["changes_categorized"]
+    },
+    "review_code": {
+      "owner": "agent",
+      "pre": "changes_categorized",
+      "add": ["findings_ready"]
+    },
+    "present_findings": {
+      "owner": "agent",
+      "pre": "findings_ready",
+      "add": ["findings_presented"]
+    },
+    "post_review": {
+      "owner": "agent",
+      "pre": "findings_presented",
+      "add": ["review_posted"]
+    },
+    "confirm_none_posted": {
+      "owner": "agent",
+      "pre": "findings_presented",
+      "add": ["review_skipped"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "identify_pr", "by": "agent"}},
+    {"act": {"cap": "check_local_branch", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "checkout": [
+          {"act": {"cap": "checkout_pr_branch", "by": "agent"}}
+        ],
+        "diff_only": [
+          {"act": {"cap": "use_diff_only", "by": "agent"}}
+        ]
+      }
+    }},
+    {"act": {"cap": "gather_pr_context", "by": "agent"}},
+    {"act": {"cap": "categorize_changes", "by": "agent"}},
+    {"act": {"cap": "review_code", "by": "agent"}},
+    {"act": {"cap": "present_findings", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "post_selected": [
+          {"act": {"cap": "post_review", "by": "agent"}}
+        ],
+        "post_none": [
+          {"act": {"cap": "confirm_none_posted", "by": "agent"}}
+        ]
+      }
+    }}
+  ],
+  "goal": {"or": ["review_posted", "review_skipped"]},
+  "init_true": [],
+  "init_constraints": []
+}

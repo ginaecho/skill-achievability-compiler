@@ -1,0 +1,75 @@
+{
+  "name": "dependabot-triager",
+  "roles": ["agent"],
+  "capabilities": {
+    "read_worklist": {
+      "owner": "agent",
+      "add": ["worklist_read"]
+    },
+    "get_diff": {
+      "owner": "agent",
+      "pre": "worklist_read",
+      "add": ["diff_read"]
+    },
+    "read_manifest": {
+      "owner": "agent",
+      "pre": "worklist_read",
+      "add": ["manifest_read"]
+    },
+    "check_reachability": {
+      "owner": "agent",
+      "pre": "manifest_read",
+      "add": ["reachability_checked"]
+    },
+    "get_upstream_evidence": {
+      "owner": "agent",
+      "pre": "diff_read",
+      "add": ["upstream_checked"]
+    },
+    "determine_recommendation": {
+      "owner": "agent",
+      "pre": {
+        "and": ["diff_read", "reachability_checked", "upstream_checked"]
+      },
+      "add": ["recommendation_determined"]
+    },
+    "post_comment": {
+      "owner": "agent",
+      "pre": "recommendation_determined",
+      "add": ["comment_posted"]
+    },
+    "mark_done": {
+      "owner": "agent",
+      "add": ["all_processed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "read_worklist", "by": "agent"}},
+    {"rec": {
+      "name": "process_loop",
+      "body": [
+        {"choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "more": [
+              {"act": {"cap": "get_diff", "by": "agent"}},
+              {"act": {"cap": "read_manifest", "by": "agent"}},
+              {"act": {"cap": "check_reachability", "by": "agent"}},
+              {"act": {"cap": "get_upstream_evidence", "by": "agent"}},
+              {"act": {"cap": "determine_recommendation", "by": "agent"}},
+              {"act": {"cap": "post_comment", "by": "agent"}},
+              {"continue": "process_loop"}
+            ],
+            "done": [
+              {"act": {"cap": "mark_done", "by": "agent"}}
+            ]
+          }
+        }}
+      ]
+    }}
+  ],
+  "goal": "all_processed",
+  "init_true": [],
+  "init_constraints": []
+}

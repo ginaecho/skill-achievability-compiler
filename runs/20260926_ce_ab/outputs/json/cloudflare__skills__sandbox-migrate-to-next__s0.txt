@@ -1,0 +1,62 @@
+{
+  "name": "sandbox-migrate-to-next",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "audit_codebase": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["audit_done"]
+    },
+    "clarify_with_user": {
+      "owner": "agent",
+      "pre": "audit_done",
+      "add": ["clarified"]
+    },
+    "upgrade_package_and_image": {
+      "owner": "agent",
+      "pre": "clarified",
+      "add": ["package_image_upgraded"]
+    },
+    "update_code": {
+      "owner": "agent",
+      "pre": "package_image_upgraded",
+      "add": ["code_updated"]
+    },
+    "validate_migration": {
+      "owner": "agent",
+      "pre": "code_updated",
+      "add": ["validated"]
+    },
+    "record_user_agreement": {
+      "owner": "user",
+      "pre": "validated",
+      "add": ["user_agreed_cutover"]
+    },
+    "deploy_cutover": {
+      "owner": "agent",
+      "pre": {"and": ["validated", "user_agreed_cutover"]},
+      "add": ["deployed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "audit_codebase", "by": "agent"}},
+    {"act": {"cap": "clarify_with_user", "by": "agent"}},
+    {"act": {"cap": "upgrade_package_and_image", "by": "agent"}},
+    {"act": {"cap": "update_code", "by": "agent"}},
+    {"act": {"cap": "validate_migration", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "agree": [
+          {"act": {"cap": "record_user_agreement", "by": "user"}},
+          {"act": {"cap": "deploy_cutover", "by": "agent"}}
+        ],
+        "decline": []
+      }
+    }}
+  ],
+  "goal": "validated",
+  "init_true": [],
+  "init_constraints": []
+}

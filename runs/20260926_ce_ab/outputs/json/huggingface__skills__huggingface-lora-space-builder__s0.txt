@@ -1,0 +1,98 @@
+{
+  "name": "huggingface-lora-space-builder",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_lora_repo": {
+      "owner": "agent",
+      "add": ["repo_read"]
+    },
+    "obtain_token": {
+      "owner": "agent",
+      "pre": {"not": "repo_read"},
+      "add": ["token_obtained"]
+    },
+    "pick_pipeline": {
+      "owner": "agent",
+      "pre": "repo_read",
+      "add": ["pipeline_chosen"]
+    },
+    "design_ui": {
+      "owner": "agent",
+      "pre": "pipeline_chosen",
+      "add": ["ui_designed"]
+    },
+    "write_files": {
+      "owner": "agent",
+      "pre": "ui_designed",
+      "add": ["files_written"]
+    },
+    "request_approval": {
+      "owner": "agent",
+      "pre": "files_written",
+      "add": ["approval_requested"]
+    },
+    "approve": {
+      "owner": "user",
+      "pre": "approval_requested",
+      "add": ["approved"]
+    },
+    "request_changes": {
+      "owner": "user",
+      "pre": "approval_requested",
+      "add": ["changes_requested"],
+      "del": ["approval_requested"]
+    },
+    "publish_space": {
+      "owner": "agent",
+      "pre": "approved",
+      "add": ["space_published"]
+    },
+    "smoke_test": {
+      "owner": "agent",
+      "pre": "space_published",
+      "add": ["smoke_tested"]
+    },
+    "share_url": {
+      "owner": "agent",
+      "pre": "smoke_tested",
+      "add": ["url_shared"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "read_lora_repo", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "external": true,
+      "branches": {
+        "public": [],
+        "private": [{"act": {"cap": "obtain_token", "by": "agent"}}]
+      }
+    }},
+    {"act": {"cap": "pick_pipeline", "by": "agent"}},
+    {"act": {"cap": "design_ui", "by": "agent"}},
+    {"rec": {
+      "name": "write_approve_loop",
+      "body": [
+        {"act": {"cap": "write_files", "by": "agent"}},
+        {"act": {"cap": "request_approval", "by": "agent"}},
+        {"choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "approved": [{"act": {"cap": "approve", "by": "user"}}],
+            "changes": [
+              {"act": {"cap": "request_changes", "by": "user"}},
+              {"continue": "write_approve_loop"}
+            ]
+          }
+        }}
+      ]
+    }},
+    {"act": {"cap": "publish_space", "by": "agent"}},
+    {"act": {"cap": "smoke_test", "by": "agent"}},
+    {"act": {"cap": "share_url", "by": "agent"}}
+  ],
+  "goal": {"and": ["space_published", "smoke_tested", "url_shared"]},
+  "init_true": [],
+  "init_constraints": []
+}

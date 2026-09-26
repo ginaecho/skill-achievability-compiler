@@ -1,0 +1,35 @@
+{
+  "name": "using-git-worktrees",
+  "roles": ["agent"],
+  "capabilities": {
+    "detect_isolation": {"owner": "agent", "add": ["isolation_checked"]},
+    "ask_consent": {"owner": "agent", "pre": "isolation_checked", "add": ["consent_obtained"]},
+    "use_native_tool": {"owner": "agent", "pre": "consent_obtained", "add": ["workspace_created"]},
+    "git_worktree_fallback": {"owner": "agent", "pre": "consent_obtained", "add": ["workspace_created"]},
+    "project_setup": {"owner": "agent", "add": ["setup_done"]},
+    "verify_baseline": {"owner": "agent", "pre": "setup_done", "add": ["baseline_verified"]}
+  },
+  "protocol": [
+    {"act": {"cap": "detect_isolation", "by": "agent"}},
+    {"choice": {"by": "agent", "external": true, "branches": {
+      "already_isolated": [],
+      "normal_repo": [
+        {"act": {"cap": "ask_consent", "by": "agent"}},
+        {"choice": {"by": "agent", "observed": true, "branches": {
+          "consent_given": [
+            {"choice": {"by": "agent", "external": true, "branches": {
+              "native_available": [{"act": {"cap": "use_native_tool", "by": "agent"}}],
+              "native_unavailable": [{"act": {"cap": "git_worktree_fallback", "by": "agent"}}]
+            }}}
+          ],
+          "consent_declined": []
+        }}}
+      ]
+    }}},
+    {"act": {"cap": "project_setup", "by": "agent"}},
+    {"act": {"cap": "verify_baseline", "by": "agent"}}
+  ],
+  "goal": "baseline_verified",
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,81 @@
+{
+  "name": "aspire-project-v2-migration",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_resources": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["inventory_done"]
+    },
+    "propose_plan": {
+      "owner": "agent",
+      "pre": "inventory_done",
+      "add": ["plan_presented"]
+    },
+    "request_approval": {
+      "owner": "agent",
+      "pre": "plan_presented",
+      "add": ["approval_requested"]
+    },
+    "approve_plan": {
+      "owner": "user",
+      "pre": "approval_requested",
+      "add": ["plan_approved"]
+    },
+    "reject_plan": {
+      "owner": "user",
+      "pre": "approval_requested",
+      "add": ["plan_rejected"]
+    },
+    "apply_migration": {
+      "owner": "agent",
+      "pre": "plan_approved",
+      "add": ["migration_applied"]
+    },
+    "clean_references": {
+      "owner": "agent",
+      "pre": "migration_applied",
+      "add": ["references_cleaned"]
+    },
+    "validate_build": {
+      "owner": "agent",
+      "pre": "references_cleaned",
+      "add": ["build_validated"]
+    },
+    "start_and_wait": {
+      "owner": "agent",
+      "pre": "build_validated",
+      "add": ["app_validated"]
+    },
+    "report_results": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["report_done"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_resources", "by": "agent"}},
+    {"act": {"cap": "propose_plan", "by": "agent"}},
+    {"act": {"cap": "request_approval", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "approved": [
+          {"act": {"cap": "approve_plan", "by": "user"}},
+          {"act": {"cap": "apply_migration", "by": "agent"}},
+          {"act": {"cap": "clean_references", "by": "agent"}},
+          {"act": {"cap": "validate_build", "by": "agent"}},
+          {"act": {"cap": "start_and_wait", "by": "agent"}},
+          {"act": {"cap": "report_results", "by": "agent"}}
+        ],
+        "rejected": [
+          {"act": {"cap": "reject_plan", "by": "user"}}
+        ]
+      }
+    }}
+  ],
+  "goal": {"and": ["migration_applied", "app_validated", "report_done"]},
+  "init_true": [],
+  "init_constraints": []
+}

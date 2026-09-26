@@ -1,0 +1,52 @@
+{
+  "name": "hatch-pet",
+  "roles": ["agent", "discovery_worker", "qa_worker"],
+  "capabilities": {
+    "brand_discovery": {"owner": "discovery_worker", "add": ["brand_researched"]},
+    "prepare_run": {"owner": "agent", "add": ["run_prepared"]},
+    "generate_base": {"owner": "agent", "pre": "run_prepared", "add": ["base_generated"]},
+    "generate_rows": {"owner": "agent", "pre": "base_generated", "add": ["rows_generated"]},
+    "derive_running_left": {"owner": "agent", "pre": "rows_generated", "add": ["running_left_derived"]},
+    "process_atlas": {"owner": "agent", "pre": "rows_generated", "add": ["atlas_composed"]},
+    "validate_atlas": {"owner": "agent", "pre": "atlas_composed", "add": ["atlas_validated"]},
+    "generate_qa_media": {"owner": "agent", "pre": "atlas_validated", "add": ["qa_media_generated"]},
+    "visual_qa": {"owner": "qa_worker", "pre": "qa_media_generated", "add": ["qa_checked"]},
+    "package_pet": {"owner": "agent", "pre": "qa_checked", "add": ["pet_packaged"]},
+    "cleanup": {"owner": "agent", "pre": "pet_packaged", "add": ["cleanup_done"]}
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "brand_request": [
+        {"spawn": {"role": "discovery_worker"}},
+        {"act": {"cap": "brand_discovery", "by": "discovery_worker"}}
+      ],
+      "direct_request": []
+    }}},
+    {"act": {"cap": "prepare_run", "by": "agent"}},
+    {"act": {"cap": "generate_base", "by": "agent"}},
+    {"act": {"cap": "generate_rows", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "mirror_safe": [{"act": {"cap": "derive_running_left", "by": "agent"}}],
+      "generate_directly": []
+    }}},
+    {"rec": {"name": "produce_loop", "body": [
+      {"act": {"cap": "process_atlas", "by": "agent"}},
+      {"act": {"cap": "validate_atlas", "by": "agent"}},
+      {"act": {"cap": "generate_qa_media", "by": "agent"}},
+      {"spawn": {"role": "qa_worker"}},
+      {"act": {"cap": "visual_qa", "by": "qa_worker"}},
+      {"choice": {"by": "agent", "external": true, "branches": {
+        "pass": [
+          {"act": {"cap": "package_pet", "by": "agent"}},
+          {"act": {"cap": "cleanup", "by": "agent"}}
+        ],
+        "fail": [
+          {"continue": "produce_loop"}
+        ]
+      }}}
+    ]}}
+  ],
+  "goal": "pet_packaged",
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,43 @@
+{
+  "name": "tech-debt-burndown",
+  "roles": ["agent"],
+  "capabilities": {
+    "check_authorization": {"owner": "agent", "add": ["authorized"]},
+    "check_preconditions": {"owner": "agent", "pre": "authorized", "add": ["preconditions_ok"]},
+    "establish_baseline": {"owner": "agent", "pre": "preconditions_ok", "add": ["baseline_established"]},
+    "pick_target": {"owner": "agent", "pre": "baseline_established", "add": ["target_picked"]},
+    "fix_target": {"owner": "agent", "pre": "target_picked", "add": ["fix_applied"]},
+    "write_test": {"owner": "agent", "pre": "fix_applied", "add": ["test_written"]},
+    "validate_fix": {"owner": "agent", "pre": "test_written", "add": ["fix_checked"]},
+    "commit_and_pr": {"owner": "agent", "pre": "fix_checked", "add": ["pr_opened"]},
+    "update_memory": {"owner": "agent", "pre": "pr_opened", "add": ["memory_updated"]}
+  },
+  "protocol": [
+    {"act": {"cap": "check_authorization", "by": "agent"}},
+    {"choice": {"by": "agent", "external": true, "branches": {
+      "authorized": [
+        {"act": {"cap": "check_preconditions", "by": "agent"}},
+        {"act": {"cap": "establish_baseline", "by": "agent"}},
+        {"rec": {"name": "attempt_loop", "body": [
+          {"act": {"cap": "pick_target", "by": "agent"}},
+          {"act": {"cap": "fix_target", "by": "agent"}},
+          {"act": {"cap": "write_test", "by": "agent"}},
+          {"act": {"cap": "validate_fix", "by": "agent"}},
+          {"choice": {"by": "agent", "external": true, "branches": {
+            "pass": [
+              {"act": {"cap": "commit_and_pr", "by": "agent"}},
+              {"act": {"cap": "update_memory", "by": "agent"}}
+            ],
+            "fail": [
+              {"continue": "attempt_loop"}
+            ]
+          }}}
+        ]}}
+      ],
+      "not_authorized": []
+    }}}
+  ],
+  "goal": "pr_opened",
+  "init_true": [],
+  "init_constraints": []
+}

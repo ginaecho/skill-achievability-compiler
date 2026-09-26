@@ -1,0 +1,58 @@
+{
+  "name": "cli-exercise-preflight",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "build_helper": {
+      "owner": "agent",
+      "pre": true,
+      "add": ["helper_built"]
+    },
+    "run_check": {
+      "owner": "agent",
+      "pre": "helper_built",
+      "add": ["capabilities_checked"]
+    },
+    "propose_install": {
+      "owner": "agent",
+      "pre": "capabilities_checked",
+      "add": ["install_proposed"]
+    },
+    "execute_approved_setup": {
+      "owner": "agent",
+      "pre": {"and": ["install_proposed", "approval_granted"]},
+      "add": ["dependencies_installed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "build_helper", "by": "agent"}},
+    {"act": {"cap": "run_check", "by": "agent"}},
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "ready": [],
+          "missing_dependency": [
+            {"act": {"cap": "propose_install", "by": "agent"}},
+            {
+              "choice": {
+                "by": "user",
+                "observed": true,
+                "branches": {
+                  "approve": [
+                    {"act": {"cap": "execute_approved_setup", "by": "agent"}},
+                    {"act": {"cap": "run_check", "by": "agent"}}
+                  ],
+                  "decline": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": "capabilities_checked",
+  "init_true": [],
+  "init_constraints": []
+}
