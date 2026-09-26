@@ -553,6 +553,72 @@ def posthoc(out: Path) -> None:
     print(json.dumps(res, indent=2))
 
 
+CONFIRMING_BLOCKERS = {"missing_tool_in_runtime"}
+
+
+def adjudicate(out: Path, exec_dir: Path) -> None:
+    """Label each IMPOSSIBLE verdict by the blind execution outcome of its
+    skill, exactly as fixed in EXECUTION_PROTOCOL.md: achieved -> the
+    rejection was false; not achieved because the runtime lacks a tool ->
+    confirmed; any other blocker -> inconclusive."""
+    rows = json.loads((out / "results.json").read_text())
+    rejected = sorted({r["case"] for r in rows
+                       if r["set"] == "real" and r.get("verdict") == "IMPOSSIBLE"})
+    labels, missing = {}, []
+    for cid in rejected:
+        path = exec_dir / cid / "result.json"
+        if not path.exists():
+            missing.append(cid)
+            continue
+        res = json.loads(path.read_text())
+        write_json(out / "execution" / f"{cid}.json", res)
+        if res.get("outcome") == "achieved":
+            label = "ACHIEVABLE"
+        elif res.get("blocker_kind") in CONFIRMING_BLOCKERS:
+            label = "CONFIRMED"
+        else:
+            label = "INCONCLUSIVE"
+        labels[cid] = {"label": label, "outcome": res.get("outcome"),
+                       "blocker_kind": res.get("blocker_kind")}
+    if missing:
+        raise ValueError(f"no execution result for: {missing}")
+
+    def precision(sel):
+        c = Counter(labels[r["case"]]["label"] for r in sel)
+        conf, fp, inc = c["CONFIRMED"], c["ACHIEVABLE"], c["INCONCLUSIVE"]
+        n = conf + fp + inc
+        return {"rejections": n, "confirmed": conf, "false": fp,
+                "inconclusive": inc,
+                "precision_decided": round(conf / (conf + fp), 4) if conf + fp else None,
+                "precision_decided_ci95": wilson(conf, conf + fp),
+                "precision_lower_bound": round(conf / n, 4) if n else None,
+                "precision_upper_bound": round((conf + inc) / n, 4) if n else None,
+                "false_rejection_rate_lower": round(fp / n, 4) if n else None,
+                "false_rejection_rate_upper": round((fp + inc) / n, 4) if n else None}
+
+    res: dict = {"skills_executed": len(labels),
+                 "skill_labels": dict(Counter(v["label"] for v in labels.values())),
+                 "blockers": dict(Counter(v["blocker_kind"] for v in labels.values())),
+                 "per_arm": {}}
+    for arm in ARMS:
+        imp = [r for r in rows if r["set"] == "real" and r["arm"] == arm
+               and r.get("verdict") == "IMPOSSIBLE"]
+        res["per_arm"][arm] = {
+            "first_sample_only": precision([r for r in imp if r["sample"] == 0]),
+            "all_samples": precision(imp),
+            "by_reason": {reason: dict(Counter(labels[r["case"]]["label"] for r in imp
+                                               if r["sample"] == 0 and r["reason"] == reason))
+                          for reason in sorted({r["reason"] for r in imp})}}
+    both = {r["case"] for r in rows if r["set"] == "real" and r["sample"] == 0
+            and r["arm"] == "json" and r.get("verdict") == "IMPOSSIBLE"} & \
+           {r["case"] for r in rows if r["set"] == "real" and r["sample"] == 0
+            and r["arm"] == "ce" and r.get("verdict") == "IMPOSSIBLE"}
+    res["rejected_by_both_first_sample"] = dict(Counter(labels[c]["label"] for c in both))
+    res["labels"] = labels
+    write_json(out / "adjudication.json", res)
+    print(json.dumps({k: v for k, v in res.items() if k != "labels"}, indent=2))
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -567,6 +633,9 @@ def main() -> None:
     p.add_argument("out", type=Path)
     p = sub.add_parser("posthoc")
     p.add_argument("out", type=Path)
+    p = sub.add_parser("adjudicate")
+    p.add_argument("out", type=Path)
+    p.add_argument("exec_dir", type=Path)
     a = ap.parse_args()
     if a.cmd == "prepare":
         prepare(a.out, a.real, a.stable, a.samples)
@@ -574,6 +643,8 @@ def main() -> None:
         retry(a.out)
     elif a.cmd == "posthoc":
         posthoc(a.out)
+    elif a.cmd == "adjudicate":
+        adjudicate(a.out, a.exec_dir)
     else:
         score_all(a.out)
 
