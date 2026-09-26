@@ -56,7 +56,23 @@ def metrics(verdicts: dict, labels: dict, scheme: str) -> dict:
             "accuracy_ci95": wilson(tp + tn, decided)}
 
 
+FRESH_LABELS = RUNS / "20260926_tpl" / "execution.json"
+FRESH_VARIANTS = {
+    "json (original)": ("20260926_tpl/fresh_json", "results.json"),
+    "P1 ce_rt": ("20260926_tpl/fresh_ce_rt", "results_p1.json"),
+    "P2g ce_rt+repair+guard": ("20260926_tpl/fresh_ce_rt", "results.json"),
+    "TPL (no repair)": ("20260926_tpl/fresh_ce_tpl", "results_norepair.json"),
+    "TPL, binder without library": ("20260926_tpl/fresh_ce_tpl", "results_nolib.json"),
+    "TPL, no pruning": ("20260926_tpl/fresh_ce_tpl", "results_noprune.json"),
+    "TPL": ("20260926_tpl/fresh_ce_tpl", "results.json"),
+}
+
+
 def main() -> None:
+    global LABELS, VARIANTS
+    fresh = "--fresh" in sys.argv
+    if fresh:
+        LABELS, VARIANTS = FRESH_LABELS, FRESH_VARIANTS
     labels = json.loads(LABELS.read_text())
     table: dict = {"labels": {s: {k: sum(label(e, s) == k for e in labels.values())
                                   for k in ("ACHIEVABLE", "IMPOSSIBLE", "INCONCLUSIVE")}
@@ -104,7 +120,8 @@ def main() -> None:
                              "blocker_kind": labels[c]["blocker_kind"],
                              **{n: verdicts[n][c] for n in VARIANTS}}
                          for c in sorted(labels)}
-    write_json(RUNS / "20260926_heldout_comparison.json", table)
+    write_json(RUNS / ("20260926_tpl/comparison.json" if fresh else
+                       "20260926_heldout_comparison.json"), table)
     print(json.dumps(table["labels"]))
     for name in VARIANTS:
         t = table[name]

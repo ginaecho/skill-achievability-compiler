@@ -156,7 +156,7 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
 
 
 def parse_reply(case: dict, text: str, rt, method: str = "ce_rt",
-                prune: bool = False) -> dict:
+                prune: bool = False, use_library: bool = True) -> dict:
     try:
         if method == "json":
             pack = _extract_json_object(text)
@@ -168,10 +168,10 @@ def parse_reply(case: dict, text: str, rt, method: str = "ce_rt",
             validate_pack(parsed.pack)
             return {"ok": True, "pack": parsed.pack, "withdrawn": {}, "blocked": {},
                     "pruned": [], "parsed": parsed, "live_goal": parsed.live_goal}
-        lib = load_library() if method == "ce_tpl" else None
+        lib = load_library() if method == "ce_tpl" and use_library else None
         b = bind_runtime(parsed.pack, parsed.bindings, rt, prune=prune, library=lib)
         unmet = []
-        if lib is not None:
+        if method == "ce_tpl":
             from skillc.frontend.toolpolicy import Obligation
             unmet = coverage(parsed, [Obligation(**o) for o in case.get("obligations", [])])
         return {"ok": True, "pack": b.pack, "withdrawn": b.withdrawn,
@@ -283,7 +283,7 @@ def _precision(case_ids: list, labels: dict, scheme: str) -> dict:
 
 
 def score_all(out: Path, guard: bool = True, prune: bool | None = None,
-              repair_round: bool = True, tag: str = "") -> None:
+              repair_round: bool = True, tag: str = "", use_library: bool = True) -> None:
     frozen = json.loads((out / "frozen.json").read_text())
     method = frozen["method"]
     if prune is None:
@@ -297,7 +297,7 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
         if job["round"] == 3 and not repair_round:
             continue
         reply = (out / job["output"]).read_text(encoding="utf-8")
-        parsed = parse_reply(cases[job["case"]], reply, rt, method, prune)
+        parsed = parse_reply(cases[job["case"]], reply, rt, method, prune, use_library)
         rec = final.setdefault(job["case"], {"rounds": 0})
         rec["rounds"] = job["round"]
         if job["round"] == 1:
@@ -335,9 +335,9 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
                         "live_reason": lv["live"].reason if lv["live"] else None,
                         "withdrawn": rec["withdrawn"], "blocked": rec["blocked"],
                         "pruned": rec["pruned"]})
-            write_json(out / "packs" / method / f"{cid}.json", rec["pack"])
+            write_json(out / f"packs{tag}" / method / f"{cid}.json", rec["pack"])
         elif rec["ok"]:
-            write_json(out / "packs" / method / f"{cid}.json", rec["pack"])
+            write_json(out / f"packs{tag}" / method / f"{cid}.json", rec["pack"])
         rows.append(row)
     write_json(out / f"results{tag}.json", rows)
     if not any(r["set"] == "dev" for r in rows):
@@ -349,7 +349,7 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
                 scen = {k: case[k] for k in ("source", "profile", "category", "truth")}
                 scen["id"] = case["id"]
                 if r["valid"]:
-                    pack = json.loads((out / "packs" / method / f"{r['case']}.json").read_text())
+                    pack = json.loads((out / f"packs{tag}" / method / f"{r['case']}.json").read_text())
                     contract = json.loads((out / "labelled" / r["case"] / "contract.json").read_text())
                     lab_rows.extend(assess(pack, contract, scen, method, method))
                 else:
@@ -413,7 +413,7 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
         scen = {k: case[k] for k in ("source", "profile", "category", "truth")}
         scen["id"] = case["id"]
         if r["valid"]:
-            pack = json.loads((out / "packs" / method / f"{r['case']}.json").read_text())
+            pack = json.loads((out / f"packs{tag}" / method / f"{r['case']}.json").read_text())
             contract = json.loads((out / "labelled" / r["case"] / "contract.json").read_text())
             lab_rows.extend(assess(pack, contract, scen, method, method))
         else:
@@ -443,12 +443,15 @@ def main() -> None:
                     help="override the frozen branch-pruning setting")
     sc.add_argument("--no-repair", action="store_true", help="ignore round 3")
     sc.add_argument("--tag", default="", help="suffix for results/metrics files")
+    sc.add_argument("--no-library", action="store_true",
+                    help="TPL ablation: bind without the tool-policy library")
     a = ap.parse_args()
     {"prepare": lambda: prepare(a.out, a.method, a.cases), "retry": lambda: retry(a.out),
      "repair": lambda: repair(a.out),
      "score": lambda: score_all(a.out, guard=not a.no_guard,
                                 prune=None if a.prune is None else a.prune == "yes",
-                                repair_round=not a.no_repair, tag=a.tag)}[a.cmd]()
+                                repair_round=not a.no_repair, tag=a.tag,
+                                use_library=not a.no_library)}[a.cmd]()
 
 
 if __name__ == "__main__":

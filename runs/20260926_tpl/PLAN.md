@@ -95,3 +95,13 @@ cannot be meaningfully tested. That will be stated rather than claimed.
 - **Program probe.** In v0 the probe consults the library catalogue plus
   host PATH presence. Absence from PATH is never taken as unavailability.
 - **Sample size.** n = 40 again gives wide intervals.
+
+## Amendments log
+
+- After commit c4dee58, before any reply was scored:
+  - `--no-library` scoring flag, for the pre-registered "binder without
+    library" ablation;
+  - each tagged scoring now writes its packs to its own `packs<tag>`
+    directory, so ablations cannot overwrite the primary packs.
+
+  Neither change affects the method or the primary scoring.
