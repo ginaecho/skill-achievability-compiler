@@ -3,6 +3,8 @@
 Date: 2026-09-26. Branch: `gc/controlled-English`.
 Evidence: [`runs/20260926_ce_ab`](../runs/20260926_ce_ab).
 Primary result commit: `9567231` (frozen CE grammar 1.0).
+Follow-up on IMPOSSIBLE accuracy (runtime-bound compaction, held-out test):
+[`RUNTIME_BINDING_20260926.md`](RUNTIME_BINDING_20260926.md).
 
 ## Main conclusion
 
