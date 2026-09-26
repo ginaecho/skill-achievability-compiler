@@ -1,0 +1,13 @@
+{
+  "skill": "microsoft__skills__kql",
+  "task_instance": "Write a correct KQL query over a sample 'Events' table (with a dynamic column and a free-text message column) that groups by a dynamic field, extracts words via regex, and computes a running cumulative count -- applying the skill's gotchas (cast dynamic columns before summarize/order-by, add capturing parentheses to extract_all, serialize/order before window functions). Verify correctness by running the query through Microsoft's official Kusto.Language engine (the same offline parser/semantic-analyzer used by Kusto Explorer/ADX tooling) since the public help.kusto.windows.net cluster was unreachable from this sandbox.",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": null,
+  "tools_used": [
+    "npm",
+    "node",
+    "@kusto/language-service-next (Microsoft's official Kusto.Language JS bridge)"
+  ],
+  "evidence": "Attempted to run queries against the public help cluster (https://help.kusto.windows.net, db Samples) via curl REST API -- blocked by the sandbox's egress proxy (CONNECT to help.kusto.windows.net:443 rejected with 403, confirmed via `curl $HTTPS_PROXY/__agentproxy/status`). Fell back to `npm install @kusto/language-service-next`, which bundles Microsoft's real Kusto.Language semantic analyzer compiled to JS (used by Kusto Explorer's IntelliSense). Loaded it in Node (bridge.js + Kusto.Language.Bridge.js) and used `Kusto.Language.KustoCode.ParseAndAnalyze(text, GlobalState.Default).GetDiagnostics()` to genuinely parse/type-check KQL offline. First wrote a 'naive' query violating the skill's gotchas (`summarize count() by Details.loc` where Details is dynamic, and `extract_all(@\"[a-zA-Z]{3,}\", Message)` with no capturing group) and confirmed the engine raised the exact class of error the skill's lookup table predicts: \"The value of type 'dynamic' is not allowed in this context.\" Then rewrote the query following the skill's rules (`extend Loc = tostring(Details.loc), words = extract_all(@\"([a-zA-Z]{3,})\", Message) | summarize EventCount = count() by Loc | order by Loc asc | extend CumulativeCount = row_cumsum(EventCount)`) and re-ran it through the same analyzer, which returned zero diagnostics (syntactically and semantically valid). Files: /tmp/claude-0/.../microsoft__skills__kql/check.js (harness), run.js / run2.js (test queries), package.json / node_modules/@kusto/language-service-next (installed engine). This confirms the skill's core deliverable -- producing a correct, gotcha-free KQL query -- was achieved and independently verified, even though live execution against an actual Kusto cluster was not possible due to network restrictions in this sandbox."
+}

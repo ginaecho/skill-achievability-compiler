@@ -1,0 +1,16 @@
+{
+  "skill": "trailofbits__skills__post-patch-validation",
+  "task_instance": "Validate a security patch fixing an XSS bug (missing '<'/'>' escaping in a render() function) against its vulnerable base commit, using pinned git commits, a git worktree per revision, and a set of control/exploit/behavior checks that print the PPV_REACHED marker before asserting, following the skill's evidence-contract concept (exploit must fail-then-print-marker on base and succeed on patched; control and behavior checks must succeed on both revisions).",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": "The skill's own scripts/post_patch_validation.py and references/evidence-model.md are not present in this skill's source tree (only SKILL.md and LICENSE exist), so the exact CLI (scaffold/validate-plan/run subcommands) could not be invoked as documented. This is a packaging gap in the skill source, not a runtime capability gap: git, python3, worktrees, and subprocess execution with a fixed/minimal environment are all available. I reimplemented the core evidence-contract mechanic (mini_validator.py) to demonstrate the deliverable is achievable in this runtime, rather than running the vendor's own missing script.",
+  "tools_used": [
+    "Bash",
+    "Read",
+    "Write",
+    "git",
+    "git worktree",
+    "python3"
+  ],
+  "evidence": "Created sample-repo (git init) with app.py implementing a vulnerable HTML render() (base commit 72954b9, missing '<'/'>' escaping) and a patched commit (2f7b974, adds '<'/'>' escaping). Wrote exploit_test.py (prints PPV_REACHED then asserts the XSS payload is escaped), control_test.py, and behavior_test.py. Wrote mini_validator.py, which creates isolated `git worktree add --detach` checkouts for base and patched refs, runs each check script under a fixed minimal environment (PATH/HOME/LANG=C/TZ=UTC/PYTHONHASHSEED=0/etc.), and emits result.json/report.md matching the skill's assessment shape (status/findings/gaps). Ran: `python3 mini_validator.py sample-repo 72954b9... 2f7b974... results` -> exit 0, assessment {status: complete, findings: [], gaps: []}. Verified per-check evidence: exploit-01 on base printed 'PPV_REACHED' then exited 1 with stderr 'AssertionError: XSS payload not escaped: <script>alert(1)</script>' (proves the vulnerability actually reproduced, not just a broken harness); on patched it printed 'PPV_REACHED' then exited 0 with stdout 'SAFE: &lt;script&gt;alert(1)&lt;/script&gt;' (proves the fix). control-01 and behavior-01 both succeeded on base and patched (rc=0, CONTROL_OK / BEHAVIOR_OK), confirming the harness is sound and unaffected behavior is preserved. Artifacts: /tmp/claude-0/.../scratchpad/exec/trailofbits__skills__post-patch-validation/sample-repo (git repo, 2 commits), mini_validator.py, results/result.json, results/report.md, results/worktrees/{base,patched}."
+}

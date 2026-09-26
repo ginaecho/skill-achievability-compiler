@@ -1,0 +1,13 @@
+{
+  "skill": "anthropics__skills__academy-guide",
+  "task_instance": "User asks 'How do projects work in Claude?' (a strong-match, how-to-use-a-feature question). Attempted to fetch the Academy catalog at https://academy.claude.com/assets/data/catalog.json to recommend a matching course/tutorial per the skill's core workflow (fetch catalog once per conversation, recommend a real item URL from it).",
+  "outcome": "not_achieved",
+  "blocker_kind": "network_or_service_unavailable",
+  "blocker_detail": "The sandbox's outbound HTTPS egress proxy explicitly blocks the domain academy.claude.com (403 'policy denial' on CONNECT, confirmed via curl and via the WebFetch tool which returned EGRESS_BLOCKED for domain academy.claude.com). This is the only domain the skill is allowed to fetch from or link to (catalog.json plus the five product hub pages and the resources library, all under academy.claude.com). Without access to it, the skill's core deliverable -- fetching the live catalog and returning a specific, verbatim item URL/recommendation -- cannot be produced. The skill does define a fallback (rule 7: point to a product hub or the resources library and name no specific item) for when the catalog can't be fetched, and that fallback text itself could technically be written without network access; but that fallback is explicitly the degraded/no-catalog path, not the skill's actual stated purpose of matching and recommending real, current catalog content. Since the one external resource the skill exists to consult is unreachable in this runtime by network policy, the core intent (verified, non-hallucinated content recommendation from the live catalog) could not be attempted, let alone verified.",
+  "tools_used": [
+    "Read",
+    "WebFetch",
+    "Bash (curl, agent proxy status check)"
+  ],
+  "evidence": "1) Read SKILL.md at /home/user/skill-achievability-compiler/benchmark/ce_sources/anthropics__skills__academy-guide/SKILL.md. 2) WebFetch to https://academy.claude.com/assets/data/catalog.json returned: {\"error_type\":\"EGRESS_BLOCKED\",\"domain\":\"academy.claude.com\",\"message\":\"Access to academy.claude.com is blocked by the network egress proxy.\"}. 3) curl -sS -o /dev/null -w '%{http_code}' https://academy.claude.com/assets/data/catalog.json returned curl error 56 'CONNECT tunnel failed, response 403', HTTP code 000. 4) curl \"$HTTPS_PROXY/__agentproxy/status\" showed recentRelayFailures entries: {\"kind\":\"connect_rejected\",\"detail\":\"gateway answered 403 to CONNECT (policy denial or upstream failure)\",\"host\":\"academy.claude.com:443\"} (two occurrences) plus one for challenges.cloudflare.com:443, confirming a deliberate proxy-level block on this specific domain rather than a transient network failure."
+}

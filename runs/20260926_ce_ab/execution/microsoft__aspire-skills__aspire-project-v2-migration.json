@@ -1,0 +1,18 @@
+{
+  "skill": "microsoft__aspire-skills__aspire-project-v2-migration",
+  "task_instance": "Migrate a minimal Aspire AppHost's legacy `builder.AddProject<Projects.ApiService>(\"apiservice\")` (ProjectResource API) to the experimental Project v2 `builder.AddDotnetProject(\"apiservice\", \"../ApiService/ApiService.csproj\")` (DotnetProjectResource API), per the skill's assess -> apply -> validate workflow, then build and actually run the migrated AppHost to confirm the resource comes up.",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": null,
+  "tools_used": [
+    "Bash",
+    "Read",
+    "Edit",
+    "Write",
+    "dotnet CLI",
+    "apt-get (dotnet-sdk-8.0, dotnet-sdk-10.0)",
+    "aspire CLI (13.5.4)",
+    "NuGet (nuget.org)"
+  ],
+  "evidence": "Built a minimal 2-project sample under sample/ (ApiService web project + AppHost) at /tmp/.../sample/. Installed dotnet SDKs (8.0 and 10.0) via apt since dotnet was not preinstalled; dotnet-install.sh/builds.dotnet.microsoft.com was blocked by the sandbox's egress proxy (403, org policy) but apt packages worked. Confirmed 'aspire' CLI 13.5.4 was already available. Baseline AppHost used legacy `builder.AddProject<Projects.ApiService>(\"apiservice\")`, referencing Aspire.Hosting.AppHost 13.5.4 (the latest stable Aspire release found on nuget.org as of 2026-09-26; no 13.6 has shipped yet, so this represents the closest real analog to the skill's 13.6+ eligibility gate). Verified baseline `dotnet build` succeeded (0 errors). Located and added the real `Aspire.Hosting.Dotnet` package (version 13.5.4-preview.1.26464.4, the only version series published) which exposes `AddDotnetProject` (confirmed via binary string inspection of the DLL). Edited AppHost/Program.cs to replace the legacy call with `builder.AddDotnetProject(\"apiservice\", \"../ApiService/ApiService.csproj\")` wrapped in the skill-mandated `#pragma warning disable/restore ASPIREDOTNETPROJECT001` around the experimental API. Retargeted both projects to net10.0 (a runtime actually installed in this sandbox) after net9.0 failed at runtime for lack of an installed net9.0 shared runtime. `dotnet build` of the migrated AppHost succeeded (0 errors, 1 unrelated ASPIRE010 bundle warning). Ran `aspire start --non-interactive --isolated --apphost ./AppHost.csproj` -> 'AppHost started successfully' (exit 0). Ran `aspire wait apiservice --apphost ./AppHost.csproj --non-interactive` -> exit 0, confirming the migrated Project-v2-backed resource actually started and became healthy. Stopped the AppHost with `aspire stop`. Files: /tmp/claude-0/-home-user-skill-achievability-compiler/a1321181-416f-5422-8c3b-9ffc8650b51c/scratchpad/exec/microsoft__aspire-skills__aspire-project-v2-migration/sample/AppHost/Program.cs, .../sample/AppHost/AppHost.csproj, .../sample/ApiService/ApiService.csproj, .../sample/ApiService/Program.cs. This demonstrates the skill's core deliverable (assess a legacy AddProject resource, apply the approved AddDotnetProject migration mapping with required experimental-API suppression, then build/start/wait-validate) is fully achievable in this runtime, end to end against real Aspire/NuGet packages and the real aspire CLI."
+}

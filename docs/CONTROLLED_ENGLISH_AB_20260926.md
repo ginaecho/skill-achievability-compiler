@@ -15,8 +15,10 @@ checking scope.
 Its measured advantages are:
 
 - **Shorter output.** CE output is about 35% shorter (median 797 vs 1,212
-  characters per compaction). Total output tokens across the run were about
-  24% lower, even counting CE's extra retries.
+  characters per compaction). Output is only ~7% of all compaction tokens,
+  though: counting input as well, CE as run used **20% more** tokens (+10%
+  cost), because its 48 retries resend the whole skill. With grammar 1.1 the
+  projection is ~2% fewer tokens and ~10% lower cost (see "Token consumption").
 - **Deterministic second half.** CE→pack is deterministic and exactly
   invertible. All 444 packs produced by either arm in this run, and all 169
   earlier packs in the repository, round-trip through CE with an identical
@@ -24,6 +26,14 @@ Its measured advantages are:
 - **Possibly more stable verdicts.** Across three samples of the same skill,
   CE's verdict was stable for 15/20 skills vs 11/20 for JSON. With n = 20 this
   is suggestive, not significant (p = 0.22).
+
+**Accuracy, judged by executing the skills.** On real skills, most IMPOSSIBLE
+verdicts were wrong in *both* arms. An agent blind to the verdicts actually
+accomplished the intent of 29 of the 46 rejected skills. Among rejections
+that execution could decide, JSON was right 2/19 times (10.5%) and CE 3/17
+(17.6%), a difference well within noise. On the 32 contract-labelled
+scenarios both arms were 16/16 correct on rejections. See "Accuracy of
+IMPOSSIBLE, judged by execution".
 
 It did **not** show an accuracy gain. The labelled benchmark is saturated for
 both arms. On unlabelled real skills, the two arms disagree about as often as
@@ -160,7 +170,7 @@ not be tested here: the prompt fix already removed them for both arms.
 | ACHIEVABLE / IMPOSSIBLE / UNKNOWN | 115 / 28 / 7 | 117 / 24 / 9 | IMPOSSIBLE: p = 0.60 (18 vs 14 discordant) |
 | IMPOSSIBLE rate on deployed skills | 18.7% (CI 13.2–25.7) | 16.0% (CI 11.0–22.7) | — |
 | Median output per compaction (first attempt) | 1,212 characters, ≈319 tokens | 797 characters, ≈211 tokens | 0.65× characters, 0.55× word/punctuation proxy |
-| Total output tokens, including retries (≈, characters/3.8) | 55,481 | 42,108 | −24% |
+| Total output tokens, including retries (≈, characters/3.8) | 55,481 | 42,108 | −24% output (total tokens: see below) |
 | Median tools / protocol steps / goal atoms | 5 / 6 / 1 | 5 / 6 / 2 | — |
 | Packs with a trivial `true` goal | 0 | 0 | — |
 | JSON-arm packs expressible in CE and round-tripping exactly | 150/150 | — | — |
@@ -175,6 +185,105 @@ repository's own real-skills test treats it as a probable false refutation.
 Here, though, some skills genuinely need tools outside the `developer`
 runtime abilities, such as cloud credentials. The 7–9 UNKNOWN verdicts are
 abstentions, mostly because the skill spawns subagents (`DYNAMIC_TOPOLOGY`).
+
+### Token consumption (input + output, all 222 compactions per arm)
+
+All figures are estimates: characters ÷ 3.8, the repository's
+`estimate_tokens`. Cost uses the repository's default "mid" price
+($3 input / $15 output per million tokens) and includes both the labelled
+and the real cases.
+
+| Arm | Input tokens | Output tokens | Total | Cost | Retries |
+|---|---:|---:|---:|---:|---:|
+| JSON (original) | 957,750 | 76,427 | **1,034,177** | **$4.02** | 11 |
+| CE, grammar 1.0 (as run) | 1,184,420 | 57,840 | **1,242,260 (+20%)** | **$4.42 (+10%)** | 48 |
+| CE, grammar 1.1 (projection: only the 3 replies still invalid would retry) | — | — | ≈1,010,000 (−2%) | ≈$3.60 (−10%) | 3 |
+
+Input, which is mostly the skill text, is about 93% of all tokens. CE's
+shorter output therefore matters much less than its retry rate: every retry
+resends the whole skill. The CE system prompt is also slightly longer
+(≈1,326 vs ≈1,159 tokens).
+
+### Accuracy of IMPOSSIBLE, judged by execution
+
+**Protocol.** The protocol was fixed and committed before any execution
+(`runs/20260926_ce_ab/EXECUTION_PROTOCOL.md`).
+
+- **Set.** Every real skill that got IMPOSSIBLE from either arm in any
+  sample: 46 skills.
+- **Executor.** For each skill, one agent, blind to both verdicts, received
+  the SKILL.md and the same `developer` runtime abilities the compaction
+  prompts granted. It picked a minimal concrete instance of the skill's core
+  deliverable and tried to produce and verify it for real.
+- **Sandbox limits.** No pushes, accounts, credentials or public deploys.
+  This sandbox's network policy also blocks several hosts, among them
+  huggingface.co, parts of NuGet, and Alpine mirrors.
+- **Labels.**
+  - *achieved* → the rejection was false.
+  - *not achieved because the runtime lacks a tool* → confirmed.
+  - *any other blocker* → inconclusive: accounts, network policy, safety
+    limits, or a skill package with missing files.
+
+Per-skill results are in `runs/20260926_ce_ab/execution/`; the scoring is in
+`adjudication.json`.
+
+| Skills executed | Achieved (rejection false) | Confirmed (rejection correct) | Inconclusive |
+|---:|---:|---:|---:|
+| 46 | 29 | 4 | 13 (5 account/credential, 5 network policy, 2 safety limit, 1 missing package files) |
+
+Precision of IMPOSSIBLE on real skills, first sample (the protocol's labels):
+
+| Arm | Rejections | Correct | False | Inconclusive | Precision on decided rejections (95% CI) | Bounds (inconclusive counted false … correct) |
+|---|---:|---:|---:|---:|---|---|
+| JSON (original) | 28 | 2 | 17 | 9 | 2/19 = 10.5% (2.9–31.4) | 7.1% … 39.3% |
+| CE | 24 | 3 | 14 | 7 | 3/17 = 17.6% (6.2–41.0) | 12.5% … 41.7% |
+
+Across all samples, JSON is 2/22 (9.1%) and CE 3/19 (15.8%).
+
+**Strict sensitivity reading.** Two adjustments, both conservative for the
+checker:
+
+- 10 *achieved* skills are recounted as inconclusive. In these the executor
+  reimplemented scripts missing from the package, took a fallback path,
+  validated offline instead of against the live service, or demonstrated
+  the mechanism with a different skill.
+- 2 *confirmed* skills are recounted as inconclusive. These are the
+  `cli-exercise-explore` and `cli-exercise-exact` executors, whose own
+  evidence names an installable tool (ffmpeg) or unbundled helper code as the
+  blocker. A sibling executor did install ffmpeg successfully.
+
+Under that reading, JSON is 1/13 and CE 1/9 correct on decided rejections.
+19 skills were achieved without any substitution, and 12 of those were
+rejected under `MISSING_CAPABILITY`.
+
+**Where the false rejections come from.** In both arms, 20 of the 31 false
+first-sample rejections are `MISSING_CAPABILITY` (JSON 12, CE 8). The
+compactor left an ordinary developer action undeclared as a tool: installing
+a CLI, running a build, rendering a GIF. The checker then correctly refuted
+the *pack*. The checker's refutations are sound relative to the pack; what
+fails is the compaction of Γ. That is exactly the variance the cross-arm
+analysis above attributed to tool declaration, and changing the output
+representation does not fix it. What would help is binding Γ to the real
+runtime's tool manifest, or a contract, instead of letting the model decide
+which abilities to declare.
+
+**Contract-labelled scenarios, for contrast.** There Γ is fixed by the
+contract, and both arms' IMPOSSIBLE verdicts were 16/16 correct with no false
+rejection. The gap between these two settings is the clearest evidence in
+this study that the weak point is extraction of Γ, not the checker and not
+the output format.
+
+**Executor caveats.**
+
+- Executors choose the task instance and what counts as the core
+  deliverable. The strict reading bounds the effect of lenient choices.
+- Executor variance is real: two executors disagreed on whether ffmpeg was
+  installable.
+- Two early executors used session tools that were not forbidden in their
+  prompts. One attached the public repository `githubnext/gh-aw` (and
+  another probed `add_repo`) for read access. One created, and then archived,
+  a separate cloud Claude session to act as a "fresh reader". Later executor
+  prompts forbade session and connector tools.
 
 ### Stability: 20 skills × 3 independent samples
 

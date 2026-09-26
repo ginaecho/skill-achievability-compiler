@@ -1,0 +1,12 @@
+{
+  "skill": "huggingface__skills__hf-mem",
+  "task_instance": "Estimate memory requirements for a small model on the Hugging Face Hub (google/embeddinggemma-300m) using `uvx hf-mem --model-id google/embeddinggemma-300m --json-output`",
+  "outcome": "not_achieved",
+  "blocker_kind": "network_or_service_unavailable",
+  "blocker_detail": "uv/uvx is installed and successfully installed the hf-mem package (11 packages resolved and installed), so the tool itself runs. However, hf-mem must fetch model metadata/config files from huggingface.co via HTTP(S) (Range requests) to compute memory estimates without downloading weights. The sandbox's outbound HTTPS agent proxy explicitly denies CONNECT to huggingface.co:443 with a 403 ('gateway answered 403 to CONNECT (policy denial or upstream failure)'), confirmed both via the hf-mem crash traceback (httpx2.ProxyError: 403 Forbidden) and a direct curl to https://huggingface.co (curl exit 56, CONNECT tunnel failed, response 403) and the proxy's own /__agentproxy/status log showing huggingface.co is not in the allowed egress list. This is an organization-level network policy block on the required external service, not a missing capability of the CLI tool or a fixable local issue.",
+  "tools_used": [
+    "Bash (uv/uvx install and run)",
+    "curl (proxy status and connectivity check)"
+  ],
+  "evidence": "Commands run in /tmp/.../huggingface__skills__hf-mem: `which uv uvx` -> /root/.local/bin/uv, /root/.local/bin/uvx (uv 0.8.17). `uvx hf-mem --model-id google/embeddinggemma-300m --json-output` -> installed 11 packages successfully, then crashed with httpx2.ProxyError: 403 Forbidden while calling hf_mem/_fetch.py get_json_file against the HF Hub API (via httpcore2.ProxyError from http_proxy.py: 'raise ProxyError(msg)'). `curl -sS $HTTPS_PROXY/__agentproxy/status` shows the proxy's noProxy/allow list does not include huggingface.co and logs repeated connect_rejected entries for other blocked hosts, confirming a default-deny egress policy for non-allowlisted domains. `curl -sS -o /dev/null -w '%{http_code}\\n' https://huggingface.co` returned exit code 56 with 'CONNECT tunnel failed, response 403', and the wrapper explicitly reported: 'huggingface.co:443 — connect_rejected (the egress proxy denied the CONNECT (organization policy) or could not reach the destination)'. Full log saved at /tmp/claude-0/-home-user-skill-achievability-compiler/a1321181-416f-5422-8c3b-9ffc8650b51c/scratchpad/exec/huggingface__skills__hf-mem/run1.log."
+}

@@ -1,0 +1,16 @@
+{
+  "skill": "cli__cli__gh-skill",
+  "task_instance": "Create a minimal local Agent Skill repo (skills/hello-world/SKILL.md with valid frontmatter), then use `gh skill` to (1) validate it with `gh skill publish --dry-run`, (2) install it into a sample project with `gh skill install <local-repo> hello-world --from-local --agent claude-code --scope project`, and (3) run `gh skill update --all` to confirm the installed skill is tracked.",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": "The runtime's stock `gh` (apt, v2.45.0) predates the `gh skill` feature (shipped in GitHub CLI v2.90.0, 2026-04-16), so it had to be downloaded and installed manually from the official GitHub release tarball. Separately, GitHub-API-backed subcommands that operate on remote repos (`gh skill search`, `gh skill preview <owner>/<repo> ...`, `gh skill install <owner>/<repo> ...`) returned HTTP 403 from this session's proxy ('GitHub access to this repository is not enabled for this session' / 'sessions are bound to their configured repositories') because this sandbox's git/GitHub proxy only serves anonymous git clone/fetch for public repos, not general GitHub REST API calls (search, releases) unless a repo is explicitly attached via add_repo with push access. This did not block the core deliverable, which was fully exercised via the `--from-local` / local-repo code paths that don't need the GitHub API.",
+  "tools_used": [
+    "Bash",
+    "curl",
+    "tar",
+    "git",
+    "gh (v2.90.0, manually installed)",
+    "mcp__Claude_Code_Remote__add_repo (probed, not ultimately needed)"
+  ],
+  "evidence": "Installed real gh v2.90.0 from https://github.com/cli/cli/releases/download/v2.90.0/gh_2.90.0_linux_amd64.tar.gz (apt's gh was 2.45.0 and lacked `gh skill`). `gh skill --help` confirmed subcommands install/preview/publish/search/update. Built sample skill repo at .../local-skills-repo/skills/hello-world/SKILL.md with required frontmatter (name/description/license), committed with git. Ran `gh skill publish --dry-run` in that repo -> 'Dry run complete. Use without --dry-run to publish.' (only warned about missing git remote, as expected offline). Ran `gh skill install <local-skills-repo> hello-world --from-local --agent claude-code --scope project` from .../project -> output 'Installed hello-world ... in .claude/skills' and produced the real file .../project/.claude/skills/hello-world/SKILL.md, verified by reading it back (frontmatter preserved plus injected metadata.local-path). Ran `gh skill update --all` -> reported the installed skill and said 'All skills are up to date.' Remote-repo operations (`gh skill search`, `gh skill preview github/awesome-copilot ...`) failed with HTTP 403 from the session's GitHub proxy, confirmed as a session-scoping restriction (not a missing tool) via mcp__Claude_Code_Remote__add_repo, which stated anonymous git clone of public repos is served but GitHub REST API access requires explicit repo attachment; this was not pursued further since it falls outside the local install/publish workflow needed to demonstrate the skill's core deliverable, and per instructions no external write actions (real publish/release) were attempted."
+}
