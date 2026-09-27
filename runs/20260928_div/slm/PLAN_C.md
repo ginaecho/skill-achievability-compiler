@@ -99,3 +99,29 @@ logit adjustment" corrects for the class prior twice.
 Following Menon et al. (2021), the cls head is now an **unweighted** LR with post-hoc logit
 adjustment (τ = 1). The core head stays class-balanced. No full-data result existed when this
 was changed.
+
+## Results (2026-09-28; gold evaluation rows: 2,676; silver training rows: 8,206)
+
+Macro-F1 over 11 classes, pooled over 5 folds (`results2_*.json`):
+
+| arm | unseen terms | org5 |
+|---|---|---|
+| A0 lexical, gold | 0.406 | 0.231 |
+| A1 lexical, gold + silver | 0.401 | 0.298 |
+| B1g contrastive, gold | 0.388 | 0.274 |
+| B1 contrastive, gold + silver | 0.317 | 0.299 |
+| B1 + kNN | 0.340 | 0.298 |
+| **B1 + ensemble with A1** | **0.438** | **0.345** |
+| B2 (B1 + neologism) | 0.291 | 0.266 |
+| B2 + ensemble | 0.420 | 0.322 |
+
+Answers to the three questions:
+
+1. **Does silver help?** Not by the criterion.
+   - For the lexical model: +0.067 on org5, −0.005 on unseen terms.
+   - For the contrastive model: +0.025 on org5, −0.071 on unseen terms.
+2. **Does the recipe beat the lexical baseline?** **Yes, but only as the ensemble with the
+   lexical model:** +0.037 on unseen terms and +0.047 on org5.
+   - The contrastive encoder alone (B1) does not beat A1 on unseen terms.
+3. **Does the neologism help?** **No.** B2 against B1 gives −0.026 on unseen terms and −0.033 on
+   org5.

@@ -180,8 +180,7 @@ bucket; it is the only reachable model host.
 | retrieval, GPT-2 medium | 0.18 / 0.11 | 0.53 / 0.45 | 0.64 / 0.55 |
 | LoRA r=8, 3 epochs, RoBERTa | 0.18 / 0.16 | 0.61 / **0.59** | 0.61 / 0.61 |
 | neologism (new `<t:term>` embeddings + heads), RoBERTa | 0.12 / 0.11 | 0.57 / 0.55 | 0.60 / 0.60 |
-| LoRA, GPT-2 medium | running | | |
-| neologism, GPT-2 medium | running | | |
+| LoRA / neologism, GPT-2 medium | stopped after 1 fold to free the CPU (see amendment C) | | |
 
 **Reading.**
 - No model arm so far beats the lexical baseline on macro-F1. The fine-tuned arms mostly
@@ -194,11 +193,40 @@ bucket; it is the only reachable model host.
 - **The neologism arm cannot help on the unseen-terms split by construction.** A test term has
   no trained embedding. It is also no better on org5, where most test terms were seen in
   training.
-- **On this evidence**, a small model does not yet earn a place next to the lookup index plus
-  a lexical classifier.
-  - More labelled rows, and class-balanced training, would be needed before trying a
-    1–3B model.
-  - A class-weighted rerun would be a new, post-hoc arm and has not been run.
+- **More data and a literature-based recipe (amendment C,
+  [`runs/20260928_div/slm/PLAN_C.md`](../runs/20260928_div/slm/PLAN_C.md)).** It was
+  pre-registered before any model saw the new data.
+  - **Gold** grew to 2,676 rows, including the 120 gr reports.
+  - **Silver** adds 8,206 rows from 1,747 new licensed skill documents, labelled from the
+    document only and used for training only.
+  - **Leakage.** In each fold, silver rows sharing a test term or test organisation are removed.
+  - **Encoder.** distilroberta-base with SetFit-style supervised-contrastive fine-tuning
+    (200 steps).
+  - **Head.** A logit-adjusted head.
+
+  | arm | macro-F1, unseen terms | macro-F1, org5 |
+  |---|---|---|
+  | lexical, gold (A0) | 0.406 | 0.231 |
+  | lexical, gold + silver (A1) | 0.401 | 0.298 |
+  | contrastive, gold (B1g) | 0.388 | 0.274 |
+  | contrastive, gold + silver (B1) | 0.317 | 0.299 |
+  | **contrastive + lexical ensemble (B1 + A1)** | **0.438** | **0.345** |
+  | B1 + subword-mean neologism tokens (B2) | 0.291 | 0.266 |
+
+  **Pre-registered answers** (a gain of +0.03 on both splits is required):
+  - **Silver does not help by that criterion.** It helps held-out organisations (lexical
+    +0.067) but not unseen terms, and it *hurts* the contrastive encoder on unseen terms
+    (−0.071).
+  - **The recipe beats the lexical baseline only as an ensemble** (+0.037 and +0.047).
+  - **Neologism tokens hurt** (−0.026 and −0.033). This matches the literature: a per-term token
+    cannot represent an unseen term.
+- **On this evidence**, the useful small model is the contrastive embedding *combined* with
+  character n-grams. It is a modest gain, measured on single runs with no significance test.
+- **Neither larger silver data nor neologisms improved the RoBERTa retrieval arm on its own.**
+  Plausible reasons:
+  - the fixed 200-step budget meant each row was seen less often as the data grew;
+  - silver-label noise (one labeller inferred about 20 documents from a shared template);
+  - a shift from document-only labels to report-grounded ones.
 
 **Distillation (step 5).** The dataset of checker-valid compactions with execution labels is
 defined, but not trained, for the same reason.
@@ -224,9 +252,9 @@ defined, but not trained, for the same reason.
 2. **The index is a candidate, not a proven default.** It lowered false rejections and raised
    accuracy, but missed its pre-registered recall criterion. A confirmatory run on fresh
    skills should test "false rejections and decided accuracy" as the primary outcome.
-3. **The small-model arms have been run on CPU.** None beats the lexical baseline on
-   macro-F1 (see "Model arms").
-   - More labelled data and class-balanced training should come before trying a larger
-     model.
+3. **The small-model arms have been run on CPU, first on the old data and then with
+   silver data and a SetFit-style recipe.** Only the ensemble of the contrastive embedding and
+   the lexical model beats the lexical baseline: +0.04 macro-F1 on both splits. Silver data
+   and neologism tokens did not help on their own (see "Model arms").
 4. **P2g-grounded,** an attempted improvement of P2g, failed its fresh pre-registered test;
    see [`P2G_GROUNDED_TEST.md`](P2G_GROUNDED_TEST.md).
