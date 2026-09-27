@@ -37,12 +37,14 @@ class Runtime:
     grants: tuple          # resources the runtime provides
     lacks: tuple           # human-readable list of what it does not provide
     forbid_effects: tuple = ()   # effect classes the runtime's policy forbids
+    software: str = "installable"  # installable | preinstalled | none (see resolve_software)
 
     @staticmethod
     def from_dict(d: dict) -> "Runtime":
         return Runtime(d["name"], d.get("description", ""), dict(d["tools"]),
                        tuple(d.get("grants", [])), tuple(d.get("lacks", [])),
-                       tuple(d.get("forbid_effects", [])))
+                       tuple(d.get("forbid_effects", [])),
+                       d.get("software", "installable"))
 
 
 def load_runtime(name_or_path: str) -> Runtime:
@@ -54,6 +56,42 @@ def load_runtime(name_or_path: str) -> Runtime:
         return Runtime.from_dict(json.loads(ref.read_text(encoding="utf-8")))
     except FileNotFoundError:
         raise KeyError(f"unknown runtime {name_or_path!r}") from None
+
+
+_INVENTORY: dict = {}
+
+
+def inventory() -> set:
+    """Names of the software installed on the machine the runtimes describe
+    (data/runtimes/inventory.json, from scripts/snapshot_inventory.py)."""
+    if not _INVENTORY:
+        ref = resources.files("skillc").joinpath("data/runtimes/inventory.json")
+        d = json.loads(ref.read_text(encoding="utf-8"))
+        _INVENTORY["names"] = set(d["python"]) | set(d["executables"]) | set(d["npm"])
+    return _INVENTORY["names"]
+
+
+def _variants(name: str) -> set:
+    n = name.strip().lower().split("==")[0].split(">=")[0].split("[")[0]
+    base = {n, n.replace("_", "-"), n.replace("-", "_"), n.split("/")[-1]}
+    return base | {b[len("python-"):] for b in base if b.startswith("python-")} \
+        | {b[len("py"):] for b in base if b.startswith("py") and len(b) > 4}
+
+
+def resolve_software(name: str, runtime: "Runtime") -> tuple[bool, str]:
+    """Whether a Tool that `runs` this software can run in the runtime.
+
+    installable  -> always (a registry is reachable; absence on the machine is
+                    never evidence that software cannot be installed);
+    preinstalled -> only if the machine's inventory has it (no installs);
+    none         -> never (the runtime cannot execute software at all)."""
+    if runtime.software == "none":
+        return False, "this runtime cannot run software"
+    if runtime.software == "preinstalled":
+        if _variants(name) & inventory():
+            return True, "installed on the machine"
+        return False, "not installed, and this runtime cannot install software"
+    return True, "installable from public registries"
 
 
 @dataclass
@@ -111,7 +149,7 @@ SPAWN_TOOL = "agent_spawn"
 
 
 def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
-                 prune: bool = True, library=None) -> Binding:
+                 prune: bool = True, library=None, software: bool = False) -> Binding:
     """Apply `via`/`needs` bindings to a parsed pack under `runtime`.
 
     With `prune` (the default), branches of the agent's own choices that only
@@ -150,6 +188,15 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
             for r in needs:
                 if r in runtime.grants and f"needs:{r}" not in out["init_true"]:
                     out["init_true"].append(f"needs:{r}")
+        if software:
+            for prog in b.get("runs") or []:
+                ok, why = resolve_software(prog, runtime)
+                if not ok:
+                    res.withdrawn[name] = f"software:{prog} ({why})"
+                    del out["capabilities"][name]
+                    break
+            if name not in out["capabilities"]:
+                continue
         if library is not None:
             from .toolpolicy import resolve_program
             for prog in b.get("runs") or []:

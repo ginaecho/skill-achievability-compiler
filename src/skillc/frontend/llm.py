@@ -399,6 +399,56 @@ def ce_runtime_messages(nl: str, runtime, levels: bool = False) -> tuple[str, st
     return system, user
 
 
+# P2g-grounded (ce_gr): P2g plus software grounding (rule 11), documented fallbacks
+# (appended to rule 10) and the `runs` clause.  The binder resolves `runs` against the
+# runtime's software policy (frontend.runtime.resolve_software).
+CE_FALLBACK_RULE = (
+    "If the skill itself documents a fallback for when a tool, connector, account "
+    "or service is unavailable (e.g. 'if no CRM is connected, ask the user to "
+    "paste the records'; 'without the API, work from an uploaded export'), write "
+    "the primary path and the documented fallback as branches of a 'chooses one "
+    "of (observed)', the fallback using only RUNTIME tools. Never invent a "
+    "fallback the skill does not describe.\n")
+
+CE_SOFTWARE_RULE = (
+    "11. Name the software. When a Tool's work depends on a specific program, "
+    "library, SDK or framework beyond generic shell utilities and the language "
+    "runtime itself (e.g. `cudf`, `scvi-tools`, `packer`, `pandoc`, `ffmpeg`, "
+    "a vendor SDK), add 'runs' with its package or command name as you would "
+    "install or invoke it; the checker decides from the RUNTIME's software "
+    "policy whether it can run. When the work needs another operating system, "
+    "a GPU, a mobile device or emulator, or a physical instrument, say so with "
+    "'via' (e.g. via `macos_desktop`, via `gpu`, via `usb_instrument`). Do not "
+    "list software for work the agent does by writing text.\n")
+
+CE_SOFTWARE_DOC = (
+    "  runs `P`, ...       -- the specific software (package or command name) the "
+    "Tool runs\n"
+    "Example: Tool `train_model` (owner `agent`): via `bash`; runs `scvi-tools`; "
+    "requires `data_loaded`; adds `model_trained`.\n")
+
+SOFTWARE_NOTE = {
+    "installable": "Software policy: any public package can be installed.\n",
+    "preinstalled": ("Software policy: only software already installed on the "
+                     "machine can run; nothing can be installed.\n"),
+    "none": "Software policy: no software can be run at all.\n",
+}
+
+
+def ce_grounded_messages(nl: str, runtime) -> tuple[str, str]:
+    """(system, user) for P2g-grounded: P2g's messages with the documented-
+    fallback sentence added to rule 10, rule 11 (software), the `runs` clause and
+    the runtime's software policy."""
+    system, user = ce_runtime_messages(nl, runtime)
+    r10_end = "it stays on the mandatory path.\n"
+    assert r10_end in system
+    system = system.replace(r10_end, r10_end.rstrip("\n") + " " + CE_FALLBACK_RULE
+                            + CE_SOFTWARE_RULE, 1)
+    doc_anchor = "  needs `R`, ...     -- resources outside the conversation it needs\n"
+    system = system.replace(doc_anchor, doc_anchor + CE_SOFTWARE_DOC, 1)
+    return system + SOFTWARE_NOTE.get(runtime.software, ""), user
+
+
 CE_REPAIR_PROMPT = (
     "\n\nThe deterministic checker judged your CE document IMPOSSIBLE:\n"
     "{explanation}\n\n"

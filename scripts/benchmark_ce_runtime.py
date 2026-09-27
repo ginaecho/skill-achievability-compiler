@@ -32,7 +32,8 @@ from scripts.benchmark_ce import (CE_SYSTEM_NOTE, JSON_RETRY, VARIANTS, assess, 
 from skillc import check  # noqa: E402
 from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E402
 from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
-                                 _extract_json_object, ce_index_messages,
+                                 _extract_json_object, ce_grounded_messages,
+                                 ce_index_messages,
                                  ce_runtime_messages, ce_tpl_messages,
                                  explain_refutation, render_index_facts)
 from skillc.frontend.policyindex import (CLASSES, Mention, PolicyIndex,  # noqa: E402
@@ -154,6 +155,28 @@ def _div() -> list[dict]:
     return cases
 
 
+def _gr() -> list[dict]:
+    """Fresh test set for P2g-grounded (runs/20261001_gr/PLAN.md): the 50 skills of
+    benchmark/ce_sources_gr plus 35 not-yet-used skills from each of ce_sources and
+    ce_sources_ext (sha256("gr-pick:" + id) order); each skill gets one runtime by
+    sha256("gr-rt:" + id) mod 3."""
+    used = set()
+    for cs in ("dev", "heldout", "fresh", "ext", "div"):
+        used |= {c.get("skill", c["id"]) for c in _cases(cs, "ce_rt")}
+    picks = [(s["id"], "ce_sources_gr", "real-nondev") for s in
+             json.loads((ROOT / "benchmark/ce_sources_gr/sources.json").read_text())]
+    for corpus in ("ce_sources", "ce_sources_ext"):
+        ids = sorted((p.parent.name for p in (ROOT / "benchmark" / corpus).glob("*/SKILL.md")
+                      if p.parent.name not in used), key=lambda i: sha("gr-pick:" + i))
+        picks += [(i, corpus, "real-dev") for i in ids[:35]]
+    cases = []
+    for sid, corpus, stratum in picks:
+        rt = RUNTIMES_DIV[int(sha("gr-rt:" + sid), 16) % 3]
+        cases.append({"id": f"{sid}@{rt}", "skill": sid, "set": "gr", "corpus": corpus,
+                      "runtime": rt, "stratum": stratum})
+    return cases
+
+
 def _labelled() -> list[dict]:
     frozen = json.loads((LABELLED_RUN / "frozen.json").read_text())
     return [{"id": sc["id"], "set": "labelled", "source": sc["source"],
@@ -170,6 +193,8 @@ def _cases(case_set: str = "dev", method: str = "ce_rt") -> list[dict]:
         return _ext()
     if case_set == "div":
         return _div()
+    if case_set == "gr":
+        return _gr()
     labels = json.loads((AB / "adjudication.json").read_text())["labels"]
     dev = sorted(set(labels) | set(EXTRA_DEV))
     rows = json.loads((AB / "results.json").read_text())
@@ -266,6 +291,9 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
                 case["obligations"] = [o.__dict__ for o in obligations]
                 system, user = ce_tpl_messages(text, rt_c, obligations)
                 prompt = {"system": system, "user": user}
+            elif method == "ce_gr":
+                system, user = ce_grounded_messages(text, rt_c)
+                prompt = {"system": system, "user": user}
             elif method == "ce_idx":
                 k = batch[case["id"]]
                 if k not in indexes:
@@ -321,7 +349,8 @@ def parse_reply(case: dict, text: str, rt, method: str = "ce_rt",
             return {"ok": True, "pack": parsed.pack, "withdrawn": {}, "blocked": {},
                     "pruned": [], "parsed": parsed, "live_goal": parsed.live_goal}
         lib = load_library() if method == "ce_tpl" and use_library else None
-        b = bind_runtime(parsed.pack, parsed.bindings, rt, prune=prune, library=lib)
+        b = bind_runtime(parsed.pack, parsed.bindings, rt, prune=prune, library=lib,
+                         software=method == "ce_gr")
         unmet = []
         if method == "ce_tpl":
             from skillc.frontend.toolpolicy import Obligation
@@ -436,9 +465,11 @@ def _precision(case_ids: list, labels: dict, scheme: str) -> dict:
 
 def score_all(out: Path, guard: bool = True, prune: bool | None = None,
               repair_round: bool = True, tag: str = "", use_library: bool = True,
-              veto_scope: str = "none") -> None:
+              veto_scope: str = "none", grounded: bool | None = None) -> None:
     frozen = json.loads((out / "frozen.json").read_text())
     method = frozen["method"]
+    if grounded is None:
+        grounded = method == "ce_gr"
     if prune is None:
         prune = frozen.get("prune", False)
     rt = load_runtime(RUNTIME)
@@ -488,6 +519,12 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
                         "live_reason": lv["live"].reason if lv["live"] else None,
                         "withdrawn": rec["withdrawn"], "blocked": rec["blocked"],
                         "pruned": rec["pruned"]})
+        if (grounded and row.get("verdict") == "IMPOSSIBLE"
+                and not row.get("withdrawn") and not row.get("blocked")):
+            # P2g-grounded: a refutation no missing runtime resource witnesses is
+            # a structural (compaction) failure, not evidence of impossibility
+            row.update({"verdict_before_grounding": "IMPOSSIBLE", "verdict": "UNKNOWN",
+                        "reason": "STRUCTURAL:" + str(row.get("reason"))})
         if case["set"] != "labelled" and veto_scope != "none":
             # P2g + library: a deterministic IMPOSSIBLE when the library finds
             # a requirement the runtime cannot meet (in the core statement)
@@ -595,8 +632,8 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prepare")
     p.add_argument("out", type=Path)
-    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl", "ce_idx"))
-    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext", "div"))
+    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl", "ce_idx", "ce_gr"))
+    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext", "div", "gr"))
     for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)
     sc = sub.choices["score"]
@@ -611,6 +648,9 @@ def main() -> None:
     sc.add_argument("--veto", default="none", choices=("none", "core", "any"),
                     help="P2g + library: IMPOSSIBLE on an unmet library requirement "
                          "(core: stated in the skill's core statement)")
+    sc.add_argument("--grounded", choices=("yes", "no"),
+                    help="IMPOSSIBLE only when a withdrawn/blocked capability witnesses "
+                         "it (default: yes for ce_gr, no otherwise)")
     a = ap.parse_args()
     {"prepare": lambda: prepare(a.out, a.method, a.cases), "retry": lambda: retry(a.out),
      "repair": lambda: repair(a.out),
@@ -618,7 +658,8 @@ def main() -> None:
                                 prune=None if a.prune is None else a.prune == "yes",
                                 repair_round=not a.no_repair, tag=a.tag,
                                 use_library=not a.no_library,
-                                veto_scope=a.veto)}[a.cmd]()
+                                veto_scope=a.veto,
+                                grounded=None if a.grounded is None else a.grounded == "yes")}[a.cmd]()
 
 
 if __name__ == "__main__":
