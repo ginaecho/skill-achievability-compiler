@@ -139,8 +139,9 @@ from `scripts/slm_dataset.py`.
 - LoRA;
 - neologism: one new trained embedding per term, with the base model frozen.
 
-They share one likelihood-scoring prompt. **None of them has been run.** This environment
-cannot download model weights (huggingface.co is blocked) and has no GPU.
+They share one likelihood-scoring prompt. That design (`slm_arms.py`) needs large models
+from huggingface.co, which is blocked. The arms were therefore run in a CPU variant with
+classification heads (`slm_train.py`); see "Model arms" below.
 
 **Baselines that did run:**
 
@@ -156,6 +157,48 @@ Three points follow:
 - Held-out *organisations* are harder than unseen terms.
 
 The model arms must beat the lexical baseline to justify a 1–3B model.
+
+**Model arms, trained on CPU in this sandbox** (`scripts/slm_train.py`, plan amendment B).
+
+**Weights.** GPT-2 medium (355M) and RoBERTa-base (125M), from the legacy Hugging Face S3
+bucket; it is the only reachable model host.
+
+**Readout.** Two linear heads (cls, core) on the mean-pooled hidden state.
+
+**Splits** (5 folds each):
+- unseen terms;
+- org5: organisations hashed into 5 groups.
+
+**Baselines on the same splits** (`results_baselines.json`):
+- lexical: macro-F1 0.40 (unseen) and 0.20 (org5);
+- majority class: 0.06 on both.
+
+| arm | macro-F1, unseen / org5 | class accuracy, unseen / org5 | core accuracy, unseen / org5 |
+|---|---|---|---|
+| lexical TF-IDF + logistic regression (class-balanced) | **0.40 / 0.20** | **0.62** / 0.52 | **0.69 / 0.63** |
+| retrieval (k-NN over frozen embeddings), RoBERTa | 0.27 / 0.13 | 0.59 / 0.50 | 0.68 / 0.60 |
+| retrieval, GPT-2 medium | 0.18 / 0.11 | 0.53 / 0.45 | 0.64 / 0.55 |
+| LoRA r=8, 3 epochs, RoBERTa | 0.18 / 0.16 | 0.61 / **0.59** | 0.61 / 0.61 |
+| neologism (new `<t:term>` embeddings + heads), RoBERTa | 0.12 / 0.11 | 0.57 / 0.55 | 0.60 / 0.60 |
+| LoRA, GPT-2 medium | running | | |
+| neologism, GPT-2 medium | running | | |
+
+**Reading.**
+- No model arm so far beats the lexical baseline on macro-F1. The fine-tuned arms mostly
+  predict the frequent classes: LoRA has the best class *accuracy* on held-out organisations
+  (0.59 against 0.52), but a lower macro-F1.
+- **The comparison is not fully like for like.**
+  - The baseline uses class-balanced weights; the model arms use plain cross-entropy, as
+    frozen in amendment B.
+  - The dataset is small: 2,097 rows, 11 classes, several with fewer than 50 rows.
+- **The neologism arm cannot help on the unseen-terms split by construction.** A test term has
+  no trained embedding. It is also no better on org5, where most test terms were seen in
+  training.
+- **On this evidence**, a small model does not yet earn a place next to the lookup index plus
+  a lexical classifier.
+  - More labelled rows, and class-balanced training, would be needed before trying a
+    1–3B model.
+  - A class-weighted rerun would be a new, post-hoc arm and has not been run.
 
 **Distillation (step 5).** The dataset of checker-valid compactions with execution labels is
 defined, but not trained, for the same reason.
@@ -181,5 +224,9 @@ defined, but not trained, for the same reason.
 2. **The index is a candidate, not a proven default.** It lowered false rejections and raised
    accuracy, but missed its pre-registered recall criterion. A confirmatory run on fresh
    skills should test "false rejections and decided accuracy" as the primary outcome.
-3. **Run the small-model arms** once model weights are reachable, against the lexical baseline
-   above.
+3. **The small-model arms have been run on CPU.** None beats the lexical baseline on
+   macro-F1 (see "Model arms").
+   - More labelled data and class-balanced training should come before trying a larger
+     model.
+4. **P2g-grounded,** an attempted improvement of P2g, failed its fresh pre-registered test;
+   see [`P2G_GROUNDED_TEST.md`](P2G_GROUNDED_TEST.md).
