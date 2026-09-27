@@ -1,0 +1,163 @@
+{
+  "name": "deploy",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "read_artifacts": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "plan_loaded"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "preflight_checks": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:azure_account",
+          "plan_loaded"
+        ]
+      },
+      "add": [
+        "preflight_done"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_result_skeleton": {
+      "owner": "agent",
+      "pre": "preflight_done",
+      "add": [
+        "result_skeleton_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "execute_deployment": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:azure_account",
+          "result_skeleton_written"
+        ]
+      },
+      "add": [
+        "iac_deployed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "deploy_app_code": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:azure_account",
+          "iac_deployed"
+        ]
+      },
+      "add": [
+        "code_deployed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "health_check": {
+      "owner": "agent",
+      "pre": "code_deployed",
+      "add": [
+        "health_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "finalize_artifacts": {
+      "owner": "agent",
+      "pre": "health_checked",
+      "add": [
+        "artifacts_finalized"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "spawn": {
+        "role": "preflight_agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "read_artifacts",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "preflight_checks",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "approve": [
+            {
+              "act": {
+                "cap": "write_result_skeleton",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "execute_deployment",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "deploy_app_code",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "health_check",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "finalize_artifacts",
+                "by": "agent"
+              }
+            }
+          ],
+          "reject": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "iac_deployed",
+      "health_checked",
+      "artifacts_finalized"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}
