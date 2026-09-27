@@ -1,0 +1,13 @@
+{
+ "skill": "k-dense-ai__claude-scientific-skills__transformers@developer-sandbox",
+ "task_instance": "Load a pretrained Hugging Face Hub model (distilbert-base-uncased-finetuned-sst-2-english) and run pipeline(\"text-classification\") inference on a sample sentence, per the skill's Quick Start pattern.",
+ "outcome": "not_achieved",
+ "blocker_kind": "network_or_service_unavailable",
+ "blocker_detail": "The environment's egress proxy denies CONNECT to huggingface.co (403 policy denial), confirmed both via direct curl (curl https://huggingface.co -> exit 56, CONNECT tunnel failed, response 403) and via the proxy status endpoint's recentRelayFailures log, which also shows repeated 403 rejections for the known mirrors hf-mirror.com, www.modelscope.cn, and even cdn-lfs.huggingface.co and download.pytorch.org. Running `pipeline(\"text-classification\", model=\"distilbert-base-uncased-finetuned-sst-2-english\")` in Python raised `ProxyError 403 Forbidden` while attempting to resolve/download the model from the Hub. No models are pre-cached locally (~/.cache/huggingface/hub does not exist; only an unrelated empty datasets cache dir is present), so there is no way to exercise the skill's central use case -- loading a Hub model for pipeline inference -- without Hub network access. transformers (5.17.0) and torch (2.14.0+cu130) are both installed and importable, so the library itself is functional; only the Hub download path is blocked by network policy.",
+ "tools_used": [
+  "bash",
+  "python3 (transformers, torch, huggingface_hub)",
+  "curl"
+ ],
+ "evidence": "Verified transformers/torch installed: `python3 -c \"import transformers; print(transformers.__version__)\"` -> 5.17.0; `python3 -c \"import torch; print(torch.__version__)\"` -> 2.14.0+cu130. Verified network block: `curl -sS -o /dev/null -w '%{http_code}\\n' https://huggingface.co` -> exit 56 'CONNECT tunnel failed, response 403'. Checked proxy status via `curl $HTTPS_PROXY/__agentproxy/status`, which lists recentRelayFailures with 403 connect_rejected entries for huggingface.co:443, hf-mirror.com:443, www.modelscope.cn:443, cdn-lfs.huggingface.co:443, and download.pytorch.org:443. Attempted the actual skill task: `from transformers import pipeline; pipeline('text-classification', model='distilbert-base-uncased-finetuned-sst-2-english')(...)` raised `ProxyError 403 Forbidden`. Confirmed no local model cache exists: `huggingface_hub.scan_cache_dir()` raised 'Cache directory not found: /root/.cache/huggingface/hub'. No workaround (e.g. substituting a from-scratch randomly initialized local model) was attempted, since Hub model loading is the explicitly named core purpose of this skill and the task instructions direct recording the blocker rather than working around it."
+}
