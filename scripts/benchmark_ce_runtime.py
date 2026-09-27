@@ -54,8 +54,21 @@ N_EXT_NEW = 56
 
 
 def skill_path(case: dict) -> Path:
-    base = SOURCES_EXT if case.get("corpus") == "ce_sources_ext" else SOURCES
-    return base / case["id"] / "SKILL.md"
+    base = ROOT / "benchmark" / case.get("corpus", "ce_sources")
+    return base / case.get("skill", case["id"]) / "SKILL.md"
+
+
+_RUNTIMES: dict = {}
+
+
+def case_runtime(case: dict, default=None):
+    """The runtime a case is judged against (default: developer-sandbox)."""
+    name = case.get("runtime", RUNTIME)
+    if default is not None and name == default.name:
+        return default
+    if name not in _RUNTIMES:
+        _RUNTIMES[name] = load_runtime(name)
+    return _RUNTIMES[name]
 
 
 def _heldout() -> list[dict]:
@@ -98,6 +111,45 @@ def _ext() -> list[dict]:
     return cases + [{"id": i, "set": "ext", "corpus": "ce_sources_ext"} for i in picked]
 
 
+RUNTIMES_DIV = ("developer-sandbox", "offline-workstation", "office-assistant")
+
+
+def _div() -> list[dict]:
+    """Diversity test set (docs/DIVERSITY_TEST.md), one case per (skill, runtime):
+    * the 100 non-developer skills of benchmark/ce_sources_div, each assigned one
+      runtime by hash in a 4:3:3 ratio (developer-sandbox, offline-workstation, office-assistant);
+    * 50 skills already executed in developer-sandbox (held-out, fresh, ext sets),
+      re-judged in offline-workstation (25) or office-assistant (25), taken
+      round-robin over repositories in hash order;
+    * the 20 created skills of benchmark/ce_sources_created, in their stated runtime."""
+    cases = []
+    for s in json.loads((ROOT / "benchmark/ce_sources_div/sources.json").read_text()):
+        h = int(sha("div-rt:" + s["id"]), 16) % 10
+        rt = RUNTIMES_DIV[0 if h < 4 else 1 if h < 7 else 2]
+        cases.append({"id": f"{s['id']}@{rt}", "skill": s["id"], "set": "div",
+                      "corpus": "ce_sources_div", "runtime": rt, "stratum": "real-nondev",
+                      "domain": s["domain"]})
+    prior = [dict(c, corpus=c.get("corpus", "ce_sources")) for c in _heldout() + _fresh()]
+    prior += _ext()
+    groups: dict[str, list] = {}
+    for c in sorted(prior, key=lambda c: sha("div-rerun:" + c["id"])):
+        groups.setdefault(c["id"].split("__")[0], []).append(c)
+    picked: list = []
+    while len(picked) < 50 and any(groups.values()):
+        for g in sorted(groups):
+            if groups[g] and len(picked) < 50:
+                picked.append(groups[g].pop(0))
+    for i, c in enumerate(picked):
+        rt = RUNTIMES_DIV[1 + i % 2]
+        cases.append({"id": f"{c['id']}@{rt}", "skill": c["id"], "set": "div",
+                      "corpus": c["corpus"], "runtime": rt, "stratum": "real-rerun"})
+    for s in json.loads((ROOT / "benchmark/ce_sources_created/sources.json").read_text()):
+        cases.append({"id": f"{s['id']}@{s['runtime']}", "skill": s["id"], "set": "div",
+                      "corpus": "ce_sources_created", "runtime": s["runtime"],
+                      "stratum": "created"})
+    return cases
+
+
 def _labelled() -> list[dict]:
     frozen = json.loads((LABELLED_RUN / "frozen.json").read_text())
     return [{"id": sc["id"], "set": "labelled", "source": sc["source"],
@@ -112,6 +164,8 @@ def _cases(case_set: str = "dev", method: str = "ce_rt") -> list[dict]:
         return _fresh() + (_labelled() if method == "ce_tpl" else [])
     if case_set == "ext":
         return _ext()
+    if case_set == "div":
+        return _div()
     labels = json.loads((AB / "adjudication.json").read_text())["labels"]
     dev = sorted(set(labels) | set(EXTRA_DEV))
     rows = json.loads((AB / "results.json").read_text())
@@ -153,15 +207,16 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
                 target.write_bytes((LABELLED_RUN / case["id"] / f).read_bytes())
         else:
             text = skill_path(case).read_text(encoding="utf-8")
+            rt_c = case_runtime(case, rt)
             if method == "json":
                 prompt = real_prompt("json", text)
             elif lib is not None:
                 obligations = match(text, lib)
                 case["obligations"] = [o.__dict__ for o in obligations]
-                system, user = ce_tpl_messages(text, rt, obligations)
+                system, user = ce_tpl_messages(text, rt_c, obligations)
                 prompt = {"system": system, "user": user}
             else:
-                system, user = ce_runtime_messages(text, rt, levels=levels)
+                system, user = ce_runtime_messages(text, rt_c, levels=levels)
                 prompt = {"system": system, "user": user}
         rel = f"prompts/{method}/{case['id']}__s0.json"
         write_json(out / rel, prompt)
@@ -174,7 +229,7 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
              ROOT / "src/skillc/frontend/runtime.py", ROOT / "src/skillc/checker.py",
              ROOT / "src/skillc/frontend/toolpolicy.py",
              ROOT / "src/skillc/data/toolpolicy/library.json",
-             ROOT / f"src/skillc/data/runtimes/{RUNTIME}.json",
+             *sorted((ROOT / "src/skillc/data/runtimes").glob("*.json")),
              ROOT / "scripts/benchmark_ce_runtime.py"]}
     write_json(out / "frozen.json", {
         "created_utc": datetime.now(timezone.utc).isoformat(), "method": method,
@@ -187,6 +242,7 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
 
 def parse_reply(case: dict, text: str, rt, method: str = "ce_rt",
                 prune: bool = False, use_library: bool = True) -> dict:
+    rt = case_runtime(case, rt)
     try:
         if method == "json":
             pack = _extract_json_object(text)
@@ -369,7 +425,7 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
         if case["set"] != "labelled" and veto_scope != "none":
             # P2g + library: a deterministic IMPOSSIBLE when the library finds
             # a requirement the runtime cannot meet (in the core statement)
-            vetoes = veto(skill_path(case).read_text(encoding="utf-8"), rt,
+            vetoes = veto(skill_path(case).read_text(encoding="utf-8"), case_runtime(case, rt),
                           load_library(), scope=veto_scope)
             row["veto"] = [f"{o.entry}:{o.clause()} (line {o.line}: {o.text})"
                            for o in vetoes]
@@ -474,7 +530,7 @@ def main() -> None:
     p = sub.add_parser("prepare")
     p.add_argument("out", type=Path)
     p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl"))
-    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext"))
+    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext", "div"))
     for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)
     sc = sub.choices["score"]
