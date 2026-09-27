@@ -1,0 +1,35 @@
+```ce
+Skill `azure-app-onboard-scaffold`.
+Roles: `agent`, `iac_gen_agent`, `review_agent`, `validate_agent`.
+Tool `read_inputs` (owner `agent`): via `read`; adds `inputs_read`.
+Tool `check_existing_infra` (owner `agent`): via `bash`; requires `inputs_read`; adds `infra_checked`.
+Tool `ask_infra_decision` (owner `agent`): via `ask_user`; requires `infra_checked`; adds `infra_decision_made`.
+Tool `precheck_api_versions` (owner `agent`): via `bash`; needs `azure_account`; requires `infra_decision_made`; adds `api_versions_known`.
+Tool `generate_iac` (owner `iac_gen_agent`): via `write`; requires `api_versions_known`; adds `iac_generated`.
+Tool `self_review_iac` (owner `review_agent`): via `bash`; requires `iac_generated`; adds `self_review_done`.
+Tool `format_iac` (owner `agent`): via `bash`; requires `self_review_done`; adds `iac_formatted`.
+Tool `run_conformance_check` (owner `agent`): via `bash`; requires `iac_formatted`; adds `conformance_passed`.
+Tool `validate_iac` (owner `validate_agent`): via `bash`; requires `conformance_passed`; adds `iac_validated`.
+Tool `write_manifest` (owner `agent`): via `write`; requires `iac_validated`; adds `manifest_written`.
+Tool `update_context_phase` (owner `agent`): via `edit`; requires `manifest_written`; adds `phase_updated`.
+Initially true: none.
+Goal: `iac_generated` and `self_review_done` and `conformance_passed` and `iac_validated` and `manifest_written` and `phase_updated`.
+Protocol:
+  - `agent` uses `read_inputs`.
+  - `agent` uses `check_existing_infra`.
+  - `agent` uses `ask_infra_decision`.
+  - `agent` chooses one of (observed):
+    - branch `start_fresh`:
+      - `agent` uses `precheck_api_versions`.
+      - spawn `iac_gen_agent`.
+      - `iac_gen_agent` uses `generate_iac`.
+      - spawn `review_agent`.
+      - `review_agent` uses `self_review_iac`.
+      - `agent` uses `format_iac`.
+      - `agent` uses `run_conformance_check`.
+      - spawn `validate_agent`.
+      - `validate_agent` uses `validate_iac`.
+      - `agent` uses `write_manifest`.
+      - `agent` uses `update_context_phase`.
+    - branch `use_existing`: none.
+```
