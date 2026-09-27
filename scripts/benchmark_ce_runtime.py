@@ -32,8 +32,11 @@ from scripts.benchmark_ce import (CE_SYSTEM_NOTE, JSON_RETRY, VARIANTS, assess, 
 from skillc import check  # noqa: E402
 from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E402
 from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
-                                 _extract_json_object, ce_runtime_messages,
-                                 ce_tpl_messages, explain_refutation)
+                                 _extract_json_object, ce_index_messages,
+                                 ce_runtime_messages, ce_tpl_messages,
+                                 explain_refutation, render_index_facts)
+from skillc.frontend.policyindex import (CLASSES, Mention, PolicyIndex,  # noqa: E402
+                                         extract_terms, norm, registry_probe)
 from skillc.frontend.toolpolicy import coverage, load_library, match, veto  # noqa: E402
 from skillc.frontend.runtime import (bind_runtime, check_levels, load_runtime,  # noqa: E402
                                      repair_violations)
@@ -49,6 +52,7 @@ L2_CONFIRMING = {"missing_tool_in_runtime", "needs_credentials_or_account",
                  "forbidden_by_safety_rules"}
 
 
+DIV_RUN = ROOT / "runs" / "20260928_div"
 N_HELDOUT = 40
 N_EXT_NEW = 56
 
@@ -184,6 +188,47 @@ def _cases(case_set: str = "dev", method: str = "ce_rt") -> list[dict]:
     return cases
 
 
+def preq_batch(case_ids: list[str]) -> dict[str, int]:
+    """Prequential batch of each div case: sha256("div-preq:" + id) order, 10 per batch."""
+    order = sorted(case_ids, key=lambda i: sha("div-preq:" + i))
+    return {cid: k // 10 for k, cid in enumerate(order)}
+
+
+def build_index(div_cases: set[str]) -> tuple[PolicyIndex, set[str]]:
+    """The policy index from labelled execution reports (runs/20260928_div/labels):
+    every prior report, plus the div cases in `div_cases`. Returns the index and
+    the terms labelled only as non-tools (neither indexed nor "unknown")."""
+    idx, seen_false = PolicyIndex(), set()
+    for f in sorted((DIV_RUN / "labels" / "out").glob("*.json")):
+        if "@" in f.stem and f.stem not in div_cases:
+            continue
+        item = json.loads((DIV_RUN / "labels" / "items" / f.name).read_text())
+        for t in json.loads(f.read_text())["terms"]:
+            if t.get("keep"):
+                idx.add(Mention(t["term"], t["cls"] if t["cls"] in CLASSES else "none",
+                                bool(t.get("core")), item["skill"], item["runtime"],
+                                bool(t.get("blocked")), t.get("note") or ""))
+            else:
+                seen_false.add(norm(t["term"]))
+    return idx, seen_false - set(idx.entries)
+
+
+def index_facts(text: str, idx: PolicyIndex, non_tools: set[str], probes: dict) -> tuple[str, dict]:
+    """REFERENCE INDEX section for one skill; `probes` caches registry lookups."""
+    look = idx.lookup(text)
+    src = {c["term"]: c["source"] for c in extract_terms(text, set(idx.entries))}
+    look["unknown"] = [t for t in look["unknown"] if t not in non_tools]
+    mine = {}
+    for t in look["unknown"]:
+        if src.get(t) in ("code", "backtick"):
+            if t not in probes:
+                probes[t] = registry_probe(t)
+            mine[t] = probes[t]
+    info = {"known": [k["term"] for k in look["known"]], "unknown": look["unknown"],
+            "probes": mine}
+    return render_index_facts(look, mine), info
+
+
 def prepare(out: Path, method: str, case_set: str = "dev") -> None:
     out.mkdir(parents=True, exist_ok=False)
     rt = load_runtime(RUNTIME)
@@ -193,6 +238,12 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
     lib = load_library() if method == "ce_tpl" else None
     if method == "json":
         cases = [c for c in cases if c["set"] != "labelled"]
+    if method == "ce_idx":
+        if case_set != "div":
+            raise ValueError("ce_idx is defined for the div set only")
+        batch = preq_batch([c["id"] for c in cases])
+        indexes: dict = {}
+        probes: dict = {}
     for case in cases:
         if case["set"] == "labelled":
             text = (LABELLED_RUN / case["id"] / "input.md").read_text(encoding="utf-8")
@@ -215,6 +266,15 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
                 case["obligations"] = [o.__dict__ for o in obligations]
                 system, user = ce_tpl_messages(text, rt_c, obligations)
                 prompt = {"system": system, "user": user}
+            elif method == "ce_idx":
+                k = batch[case["id"]]
+                if k not in indexes:
+                    indexes[k] = build_index({c for c, b in batch.items() if b < k})
+                idx, non_tools = indexes[k]
+                facts, info = index_facts(text, idx, non_tools, probes)
+                case["index"] = {"batch": k, "terms": len(idx.entries), **info}
+                system, user = ce_index_messages(text, rt_c, facts)
+                prompt = {"system": system, "user": user}
             else:
                 system, user = ce_runtime_messages(text, rt_c, levels=levels)
                 prompt = {"system": system, "user": user}
@@ -228,6 +288,7 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
              ROOT / "scripts/benchmark_ce.py",
              ROOT / "src/skillc/frontend/runtime.py", ROOT / "src/skillc/checker.py",
              ROOT / "src/skillc/frontend/toolpolicy.py",
+             ROOT / "src/skillc/frontend/policyindex.py",
              ROOT / "src/skillc/data/toolpolicy/library.json",
              *sorted((ROOT / "src/skillc/data/runtimes").glob("*.json")),
              ROOT / "scripts/benchmark_ce_runtime.py"]}
@@ -237,6 +298,11 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
         "prune": method in ("ce_lv", "ce_tpl"),
         "cases": cases, "jobs": jobs,
         "implementation_sha256": impl})
+    if method == "ce_idx":
+        write_json(out / "index_probes.json", probes)
+        (out / "index").mkdir(exist_ok=True)
+        for k, (idx, _) in sorted(indexes.items()):
+            idx.save(out / "index" / f"batch_{k:02d}.json")
     print(f"prepared {len(cases)} cases ({Counter(c['set'] for c in cases)}) in {out}")
 
 
@@ -529,7 +595,7 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prepare")
     p.add_argument("out", type=Path)
-    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl"))
+    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl", "ce_idx"))
     p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext", "div"))
     for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)

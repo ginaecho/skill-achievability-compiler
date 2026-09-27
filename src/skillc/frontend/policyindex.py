@@ -47,6 +47,9 @@ _PRODUCT = re.compile(r"\b([A-Z][A-Za-z0-9.+-]*(?:\s[A-Z][A-Za-z0-9.+-]*){0,2})\
 _MCP = re.compile(r"\bmcp__([A-Za-z0-9-]+)__")
 _FENCE = re.compile(r"^```\s*([A-Za-z0-9_+-]*)\s*$")
 _IDENT = re.compile(r"^[A-Za-z][A-Za-z0-9_.+-]{1,40}$")
+_FILE_EXT = re.compile(r"\.(md|json|csv|tsv|txt|py|js|mjs|cjs|ts|tsx|jsx|yaml|yml|toml|ini|cfg|"
+                       r"env|log|xml|html?|css|sh|ps1|docx?|xlsx?|pptx?|pdf|png|jpe?g|gif|"
+                       r"svg|ipynb|geojson|sql|lock|zip|gz|tar|parquet|c3d|ics|bib|tex|musicxml|midi?|wav|mp[34]|stl|dxf)$", re.I)
 
 
 def norm(term: str) -> str:
@@ -72,6 +75,8 @@ def _cmd_head(s: str) -> str | None:
                "go", "gem", "conda", "uv") and len(s.split()) > 2 and s.split()[1] in (
                "install", "add", "i", "get"):
         return s.split()[2]
+    if not (tok[:1].islower() or tok.startswith("./")) or "_" in tok:
+        return None           # commands are lower-case; Capitalised/under_scored = prose/vars
     return tok if _IDENT.match(tok) and tok.lower() not in _STOP else None
 
 
@@ -99,6 +104,9 @@ def extract_terms(text: str, known: set[str] | None = None, limit: int = 30) -> 
             continue
         if in_fence:
             if lang in _SHELL_LANGS:
+                st = line.strip()
+                if not lang and (st.endswith((".", ":", "?", "]")) or len(st.split()) > 8):
+                    continue          # unlabelled fences often hold prose templates
                 h = _cmd_head(line)
                 if h:
                     add(h, no, "code")
@@ -111,17 +119,22 @@ def extract_terms(text: str, known: set[str] | None = None, limit: int = 30) -> 
                 h = _cmd_head(span)
                 if h:
                     add(h, no, "backtick")
-            elif _IDENT.match(span) and not span.endswith((".md", ".json", ".csv", ".txt",
-                                                            ".py", ".yaml", ".yml")):
+            elif (_IDENT.match(span) and not _FILE_EXT.search(span)
+                  and "_" not in span.strip("_")):
                 add(span, no, "backtick")
         for mm in _PRODUCT.finditer(line):
             add(f"{mm.group(1)} {mm.group(2)}", no, "product")
         if known:
             low = line.lower()
             for k in known:
-                if len(k) >= 3 and k in low and re.search(rf"(?<![a-z0-9]){re.escape(k)}"
-                                                          rf"(?![a-z0-9])", low):
-                    add(k, no, "index")
+                if len(k) < 3 or k not in low:
+                    continue
+                for mm in re.finditer(rf"(?<![a-z0-9]){re.escape(k)}(?![a-z0-9])", low):
+                    # a one-word, all-letter term must appear as a name (not all
+                    # lower-case) to match prose: "Linear" yes, "linear" no
+                    if not k.isalpha() or not line[mm.start():mm.end()].islower():
+                        add(k, no, "index")
+                        break
     return sorted(out.values(), key=lambda d: d["line"])[:limit]
 
 
@@ -181,3 +194,32 @@ class PolicyIndex:
         for t in self.entries:
             by[self.summary(t)["class"]] += 1
         return {"terms": len(self.entries), "by_class": dict(by)}
+
+
+def registry_probe(term: str, timeout: float = 15.0) -> str:
+    """Whether a public package registry (PyPI, npm) has a package of this name.
+
+    Returns "found on PyPI", "found on npm", "found on PyPI and npm",
+    "not found on PyPI or npm", or "registry lookup failed"."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    name = term.strip()
+    if not re.match(r"^@?[A-Za-z0-9][A-Za-z0-9._/-]{0,80}$", name):
+        return "not found on PyPI or npm"
+    found, failed = [], False
+    for reg, url in (("PyPI", f"https://pypi.org/pypi/{urllib.parse.quote(name)}/json"),
+                     ("npm", "https://registry.npmjs.org/"
+                             + urllib.parse.quote(name, safe="@"))):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as r:
+                if r.status == 200:
+                    found.append(reg)
+        except urllib.error.HTTPError as e:
+            failed |= e.code != 404
+        except OSError:
+            failed = True
+    if found:
+        return "found on " + " and ".join(found)
+    return "registry lookup failed" if failed else "not found on PyPI or npm"

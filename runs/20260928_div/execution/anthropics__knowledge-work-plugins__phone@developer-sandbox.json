@@ -1,0 +1,15 @@
+{
+ "skill": "anthropics__knowledge-work-plugins__phone@developer-sandbox",
+ "task_instance": "Implement the 'REST + webhooks' integration surface described in the skill's Common Lifecycle Pattern: a Zoom Phone webhook receiver (Node http server) that (1) answers Zoom's endpoint.url_validation CRC handshake with the correct HMAC-SHA256 encryptedToken, (2) validates the x-zm-signature header (v0=HMAC-SHA256(secret, 'v0:timestamp:body')) on incoming call events and rejects bad signatures, and (3) persists and correlates phone.caller_ring / phone.callee_answered events by call_id and call_history_uuid to a local JSON store.",
+ "outcome": "achieved",
+ "blocker_kind": null,
+ "blocker_detail": null,
+ "tools_used": [
+  "Bash",
+  "Write",
+  "node",
+  "curl",
+  "python3 (hmac verification helper)"
+ ],
+ "evidence": "Built webhook-server.js implementing the CRC handshake, HMAC-SHA256 signature verification, and event persistence. Ran it locally on :8787 and drove it with curl: (1) POST endpoint.url_validation returned encryptedToken 'a74aafb6...' which matched an independently computed HMAC-SHA256(secret, plainToken) via python3, confirming correct CRC handshake logic. (2) POST phone.caller_ring with a deliberately wrong x-zm-signature returned HTTP 401 {\"error\":\"invalid signature\"}. (3) The same event with a correctly computed v0=... signature returned HTTP 200 {\"status\":\"stored\",\"count\":1}. (4) A second event phone.callee_answered with the same call_id/call_history_uuid was also accepted and stored. Verified the on-disk store call-events.json contains both events correctly correlated by call_id 'call-001' and call_history_uuid 'hist-uuid-aaa' with correct caller/callee numbers and timestamps. No real Zoom account, credentials, or network calls were needed since the secret token used is local test data (not a real credential) and Zoom itself was simulated via curl acting as the webhook sender, consistent with the runtime's local-dev-server scope. Files produced: webhook-server.js, call-events.json, server.log, result.json, all under the work directory."
+}

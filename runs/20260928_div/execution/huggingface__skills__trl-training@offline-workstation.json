@@ -1,0 +1,17 @@
+{
+ "skill": "huggingface__skills__trl-training@offline-workstation",
+ "task_instance": "Run `trl sft` (the skill's core SFT command) to supervised-fine-tune a causal language model on a small local instruction-following dataset, entirely offline: built a tiny from-scratch GPT2-style model + byte-level BPE tokenizer locally (no Hub download), wrote a 12-example chat-format JSONL dataset (train/test split) to local disk, then ran `trl sft --model_name_or_path ./tiny-base-model --dataset_name ./data --output_dir ./sft_output ... --use_cpu` to completion, and verified the resulting fine-tuned model loads and generates text.",
+ "outcome": "achieved",
+ "blocker_kind": null,
+ "blocker_detail": null,
+ "tools_used": [
+  "python3",
+  "trl (CLI, v1.14.0)",
+  "transformers (v5.17.0)",
+  "torch (v2.14.0, CPU)",
+  "datasets (v5.0.1)",
+  "tokenizers (v0.23.2)",
+  "bash"
+ ],
+ "evidence": "Work dir: /tmp/claude-0/-home-user-skill-achievability-compiler/a1321181-416f-5422-8c3b-9ffc8650b51c/scratchpad/exec_div/huggingface__skills__trl-training@offline-workstation . Confirmed trl/transformers/torch/datasets pre-installed (peft not installed, but not needed for full fine-tuning without LoRA) and torch.cuda.is_available()==False (CPU-only, no network needed). Built make_model_and_data.py which: (1) writes data/train.jsonl (12 examples) and data/test.jsonl (3 examples) in TRL's chat 'messages' format; (2) trains a byte-level BPE tokenizer (vocab_size=500) on the tiny corpus with tokenizers.ByteLevelBPETokenizer, wraps it as a PreTrainedTokenizerFast with a chat_template, and saves it; (3) builds and saves a small randomly-initialized GPT2LMHeadModel (n_layer=2, n_embd=32, ~42.6K params) to ./tiny-base-model. Ran: `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 trl sft --model_name_or_path ./tiny-base-model --dataset_name ./data --learning_rate 1e-3 --num_train_epochs 3 --per_device_train_batch_size 2 --max_length 64 --output_dir ./sft_output --report_to none --save_strategy no --eval_strategy no --use_cpu`. Training completed in ~4.6s over 18 steps with loss dropping 5.823 -> 5.256 and mean_token_accuracy rising 0.017 -> ~0.40-0.47; printed '✅ Training completed.' and '💾 Model saved to ./sft_output.'. Verified deliverable: `ls sft_output` shows config.json, model.safetensors, tokenizer.json, tokenizer_config.json, chat_template.jinja, generation_config.json, training_args.bin. Loaded the fine-tuned checkpoint with AutoModelForCausalLM.from_pretrained('./sft_output') / AutoTokenizer.from_pretrained('./sft_output'), applied the chat template, and ran model.generate(...) successfully, producing decodable output tokens (content is naturally low-quality since the base model is tiny/randomly initialized and trained on only 12 toy examples for 3 epochs -- the point verified is that the full `trl sft` CLI pipeline: dataset loading, tokenization, chat-template formatting, training loop, checkpoint saving, and reloading for inference -- runs to completion with zero network access, matching the skill's core stated deliverable of fine-tuning a model via `trl sft`.) No network calls, no installs, no credentials, no MCP/connector tools were used at any point."
+}
