@@ -106,3 +106,14 @@ should not decide the verdict. **Use P2g alone.**
   repository root. It was moved out and never committed.
 - Some executors installed system packages or toolchains, or started Docker.
 - No executor wrote to an external service.
+
+## Follow-up: an index to look up instead of a library that decides
+
+A third design is tested in [DIVERSITY_TEST.md](DIVERSITY_TEST.md). The accumulated knowledge
+becomes an indexing library: the model *looks up* evidence-derived facts about each named
+tool, with no obligations and no veto. The index grows prequentially.
+
+On 170 new skill–runtime pairs:
+- decided accuracy rose from 0.86 to 0.91;
+- false rejections fell from 14/117 to 8/117;
+- recall rose only from 38/47 to 40/47, below the pre-registered +10-point bar.

@@ -1,0 +1,79 @@
+{
+  "name": "kiosk-label-printer",
+  "roles": [
+    "agent",
+    "packer"
+  ],
+  "capabilities": {
+    "build_labels": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "labels_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "confirm_printing": {
+      "owner": "packer",
+      "pre": "labels_printed",
+      "add": [
+        "printing_confirmed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "build_labels",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "retry",
+        "body": [
+          {
+            "act": {
+              "cap": "print_label",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "packer",
+              "observed": true,
+              "branches": {
+                "ok": [
+                  {
+                    "act": {
+                      "cap": "confirm_printing",
+                      "by": "packer"
+                    }
+                  }
+                ],
+                "jam": [
+                  {
+                    "continue": "retry"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "labels_printed",
+      "printing_confirmed"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}
