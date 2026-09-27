@@ -49,7 +49,33 @@ def rows() -> list[dict]:
                         "context": context(text, term),
                         "cls": t["cls"] if t["cls"] in CLASSES else "none",
                         "core": bool(t.get("core")), "blocked": bool(t.get("blocked")),
-                        "source": "div" if "@" in f.stem else "prior"})
+                        "source": ("gr" if "20261001_gr" in item.get("report_path", "")
+                                   else "div" if "@" in f.stem else "prior")})
+    return out
+
+
+def silver_rows() -> list[dict]:
+    """Document-only (silver) labels for the skills in benchmark/slm_silver (training only;
+    runs/20260928_div/slm/PLAN_C.md)."""
+    out = []
+    for f in sorted((OUT / "silver" / "out").glob("*.json")):
+        item = json.loads((OUT / "silver" / "items" / f.name).read_text())
+        text = Path(item["skill_path"]).read_text(encoding="utf-8", errors="replace")
+        try:
+            terms = json.loads(f.read_text())["terms"]
+        except (json.JSONDecodeError, KeyError):
+            continue
+        for t in terms:
+            if not isinstance(t, dict) or not t.get("keep") or not t.get("term"):
+                continue
+            term = norm(t["term"])
+            ctx = context(text, term)
+            if not term or not ctx:          # the term must occur in the document
+                continue
+            out.append({"report": None, "skill": item["skill"], "org": item["skill"].split("__")[0],
+                        "runtime": None, "term": term, "context": ctx,
+                        "cls": t["cls"] if t.get("cls") in CLASSES else "none",
+                        "core": bool(t.get("core")), "blocked": None, "source": "silver"})
     return out
 
 
@@ -76,6 +102,11 @@ def main() -> None:
              "by_source": dict(Counter(r["source"] for r in data)),
              "leave_org_out_folds": {o: len(ix) for o, ix in sp["leave_org_out"].items()},
              "unseen_term_folds": {k: len(ix) for k, ix in sp["unseen_terms"].items()}}
+    sil = silver_rows()
+    (OUT / "silver_rows.jsonl").write_text("".join(json.dumps(r) + "\n" for r in sil))
+    stats["silver"] = {"rows": len(sil), "terms": len({r["term"] for r in sil}),
+                       "skills": len({r["skill"] for r in sil}),
+                       "by_cls": dict(Counter(r["cls"] for r in sil).most_common())}
     (OUT / "stats.json").write_text(json.dumps(stats, indent=1) + "\n")
     print(json.dumps(stats, indent=1))
 

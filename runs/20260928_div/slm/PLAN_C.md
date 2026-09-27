@@ -89,3 +89,13 @@ spelling.
 
 **Stopped arms.** The amendment-B GPT-2 medium LoRA and neologism arms were stopped after 1
 of 10 folds to free the CPU. They are not reported.
+
+## Correction (before any full run)
+
+A smoke test on partial data (2 training steps, 250 silver rows) showed the cls head
+collapsing onto rare classes: accuracy 0.006. The cause was that "class-balanced LR + post-hoc
+logit adjustment" corrects for the class prior twice.
+
+Following Menon et al. (2021), the cls head is now an **unweighted** LR with post-hoc logit
+adjustment (τ = 1). The core head stays class-balanced. No full-data result existed when this
+was changed.
