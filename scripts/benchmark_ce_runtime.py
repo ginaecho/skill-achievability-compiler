@@ -1,6 +1,6 @@
 """Evaluate runtime-bound CE compaction against execution-labelled rejections.
 
-Plan and success criteria: runs/20260926_ce_ab/RUNTIME_BINDING_PLAN.md.
+Method and results: docs/P2G_RUNTIME_BINDING.md, docs/LIBRARY_TEST.md.
 
   prepare OUT   freeze prompts for the dev, control and labelled sets
                 (--cases heldout|fresh|ext: real skills never compacted before)
@@ -11,7 +11,6 @@ Plan and success criteria: runs/20260926_ce_ab/RUNTIME_BINDING_PLAN.md.
 --method: ce_rt (P1/P2: runtime-bound CE), ce_lv (P3: runtime-bound CE with
 two goal levels; the binder prunes the agent's unrunnable branches) or json
 (the original JSON compaction, as a baseline on the held-out set).
-P3 plan: runs/20260926_ce_runtime_p1/P3_PLAN.md.
 """
 from __future__ import annotations
 
@@ -78,7 +77,7 @@ def _fresh() -> list[dict]:
 
 
 def _ext() -> list[dict]:
-    """Library-v1 test set (runs/20260927_ext/PLAN.md): every remaining skill
+    """Library-v1 test set (docs/LIBRARY_TEST.md): every remaining skill
     of the original corpus (after the A/B, held-out and fresh skills), plus
     56 skills of the extension corpus benchmark/ce_sources_ext, taken
     round-robin over its repositories in a fixed hash order.  None was

@@ -558,7 +558,7 @@ CONFIRMING_BLOCKERS = {"missing_tool_in_runtime"}
 
 def adjudicate(out: Path, exec_dir: Path) -> None:
     """Label each IMPOSSIBLE verdict by the blind execution outcome of its
-    skill, exactly as fixed in EXECUTION_PROTOCOL.md: achieved -> the
+    skill, exactly as fixed in the pre-registered protocol (commit 978eb4f): achieved -> the
     rejection was false; not achieved because the runtime lacks a tool ->
     confirmed; any other blocker -> inconclusive."""
     rows = json.loads((out / "results.json").read_text())

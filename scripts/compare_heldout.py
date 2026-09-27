@@ -1,4 +1,4 @@
-"""Compare methods on the held-out set (P3_PLAN.md, Evaluation B).
+"""Compare methods on the held-out and fresh sets (docs/P2G_RUNTIME_BINDING.md).
 
 Every held-out skill was executed blindly, so each method's IMPOSSIBLE
 verdicts can be scored for precision AND recall against the same labels.
@@ -26,8 +26,6 @@ VARIANTS = {
     "P1 ce_rt": ("20260926_heldout_ce_rt", "results_p1.json"),
     "P2g ce_rt+repair+guard": ("20260926_heldout_ce_rt", "results.json"),
     "P2g + pruning": ("20260926_heldout_ce_rt", "results_prune.json"),
-    "P3 ce_lv (no repair)": ("20260926_heldout_ce_lv", "results_norepair.json"),
-    "P3 ce_lv": ("20260926_heldout_ce_lv", "results.json"),
 }
 
 

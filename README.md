@@ -76,8 +76,11 @@ Protocol:
 pack as CE for review, and `skillc check SKILL.md --llm --via-ce` has the
 model write CE instead of JSON. See `src/skillc/frontend/ce.py` for the
 grammar, `examples/controlled-english/` for a worked example, and
-[`docs/CONTROLLED_ENGLISH_AB_20260926.md`](docs/CONTROLLED_ENGLISH_AB_20260926.md)
-for an A/B against JSON compaction on 150 real skills.
+[`docs/CONTROLLED_ENGLISH.md`](docs/CONTROLLED_ENGLISH.md) for the language and
+an A/B against JSON compaction. [`docs/P2G_RUNTIME_BINDING.md`](docs/P2G_RUNTIME_BINDING.md)
+describes runtime-bound compaction (P2g), tested on 200 blindly executed
+skills, and [`docs/LIBRARY_TEST.md`](docs/LIBRARY_TEST.md) the tool-policy
+library tests.
 
 ### Protocol checks versus goal-only checks
 
