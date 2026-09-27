@@ -22,7 +22,7 @@ Coq theorem. The simulator errors are confirmed at the actual runtime-trial
 entry point, using deterministic model-response fixtures.
 
 The repaired interpreter is in
-[`scripts/benchmark_semantics.py`](../scripts/benchmark_semantics.py). It does
+[`scripts/benchmark_semantics.py`](../../scripts/benchmark_semantics.py). It does
 not call `skillc.checker` to decide whether a simulated action succeeds.
 Unsupported expressions and unbound numeric values raise errors rather than
 silently becoming failed goals. An unsatisfiable effect rejects an action.
@@ -131,7 +131,7 @@ silently changing the labels or weakening the goals to improve scores.
 ## Corrected with/without comparison
 
 Run:
-[`runs/20260921_110234Z_real_rejection_benchmark`](../runs/20260921_110234Z_real_rejection_benchmark/).
+[`runs/20260921_110234Z_real_rejection_benchmark`](../../runs/20260921_110234Z_real_rejection_benchmark/).
 These are local benchmark artifacts; links require the run directory.
 
 The runtime comparison uses five restricted skill profiles, five trials

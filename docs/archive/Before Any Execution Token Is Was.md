@@ -88,7 +88,7 @@ The guarantee is deliberately precise:
 This is the differentiator: not a prediction, not an AI opinion, but a
 machine-checked refutation theorem. The theorem is relative to the declared
 model and its simulation assumptions; the exact Python checker is not
-mechanized in Coq. See the [paper scope](../paper/README.md).
+mechanized in Coq. See the [paper scope](../../paper/README.md).
 
 ---
 

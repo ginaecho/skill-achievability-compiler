@@ -39,7 +39,7 @@ Eight unchanged, pinned public skill documents cover six categories:
 
 Primary-source URLs, exact commits and license evidence are in
 [`REAL_CASE_EXPANSION_SOURCES.md`](REAL_CASE_EXPANSION_SOURCES.md) and
-[`sources.json`](../benchmark/compaction_sources/sources.json).
+[`sources.json`](../../benchmark/compaction_sources/sources.json).
 The resolved Aspire files, not the plugin symlink text, were used.
 Each source retains its license from the same commit.
 The Hugging Face trainer candidate was excluded because its local license
@@ -103,7 +103,7 @@ multi-role coverage, or real payload correctness.
 ## Baseline: six paired configurations
 
 Baseline evidence:
-[`20260921_113746Z_compaction_comparison`](../runs/20260921_113746Z_compaction_comparison).
+[`20260921_113746Z_compaction_comparison`](../../runs/20260921_113746Z_compaction_comparison).
 Model: `gpt-5.4-2026-03-05`.
 
 | Configuration | TP | FP | FN | TN | Precision | Recall, all impossible | FPR, all achievable | Unknown | Coverage |
@@ -175,7 +175,7 @@ Cells show `TP / FP / FN / TN / unknown`.
 ## Fresh follow-up with the clarified LLM prompt
 
 Follow-up evidence:
-[`20260921_114226Z_compaction_comparison`](../runs/20260921_114226Z_compaction_comparison).
+[`20260921_114226Z_compaction_comparison`](../../runs/20260921_114226Z_compaction_comparison).
 All **32 input, contract and oracle hashes are identical** to the baseline.
 Every scenario was recompiled with a fresh live call; the three problematic
 cases were not the only cases rerun. No generated pack was manually repaired.

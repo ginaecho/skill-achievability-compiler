@@ -8,8 +8,8 @@ but the documented mechanisms and guarantees address different problems.
 
 This comparison uses TypeSafe's first-party website, documentation, launch
 article, and accessible X content. SkillC's baseline is the repository
-documentation at commit `47ebb3b`, especially the [README](../README.md),
-[domain glossary](../CONTEXT.md), and [paper scope](../paper/README.md).
+documentation at commit `47ebb3b`, especially the [README](../../README.md),
+[domain glossary](../../CONTEXT.md), and [paper scope](../../paper/README.md).
 Uncommitted compiler experiments are not evidence of established features.
 Product descriptions are distinguished below from vendor performance claims
 and proposed integrations.
@@ -256,7 +256,7 @@ The work required would include:
    uses integer linear arithmetic. A raw confidence such as `0.8` cannot
    simply be inserted as a supported numeric literal. Use an explicit
    predicate or a documented, conservative integer encoding; review rounding
-   and threshold boundaries. See [formula validation](../src/skillc/formula.py).
+   and threshold boundaries. See [formula validation](../../src/skillc/formula.py).
 3. **Uncertainty modeling.** Include low-confidence, invalid-input, API-error,
    and timeout paths where relevant. Do not treat a high score as proof of
    truth or replace environmental uncertainty with a guaranteed effect.
@@ -338,9 +338,9 @@ TypeSafe primary sources, accessed 2026-09-21:
 
 SkillC primary sources, baseline `47ebb3b`:
 
-- [S1: README and implementation-only extensions](../README.md)
-- [S2: Domain model and trust-boundary vocabulary](../CONTEXT.md)
-- [S3: Paper scope and relation to Coq developments](../paper/README.md)
+- [S1: README and implementation-only extensions](../../README.md)
+- [S2: Domain model and trust-boundary vocabulary](../../CONTEXT.md)
+- [S3: Paper scope and relation to Coq developments](../../paper/README.md)
 
 [T1]: https://typesafe.ai/
 [T2]: https://docs.typesafe.ai/introduction

@@ -152,7 +152,7 @@ avoids 92.2%. The improvement is larger because the pack is reused while the
 unchecked failure repeats.
 
 The raw September artifacts are under
-[`../runs/20260916_132708Z_real_rejection_benchmark/`](../runs/20260916_132708Z_real_rejection_benchmark/).
+[`../runs/20260916_132708Z_real_rejection_benchmark/`](../../runs/20260916_132708Z_real_rejection_benchmark/).
 That directory is currently a local, uncommitted benchmark artifact and is not
 part of the evidence committed with this guide.
 
@@ -297,4 +297,4 @@ The larger experiment is available at the following commit-pinned locations:
 * [Combined token analysis](https://github.com/ginaecho/skill-achievability-compiler/blob/dbb855d1e51c550ce7cdabaf4624e0c2de0325ec/paper/WIP/results/token_economics.json)
 
 The current token model and its assumptions are implemented in
-[`../src/skillc/tokens.py`](../src/skillc/tokens.py).
+[`../src/skillc/tokens.py`](../../src/skillc/tokens.py).

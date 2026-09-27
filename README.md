@@ -103,7 +103,7 @@ For a trusted single-role Boolean contract,
 alternative protocol without an LLM. It does not certify the source's original
 protocol; unsupported inputs and search limits produce abstentions.
 
-Details: [compaction and goal-only policy](docs/COMPACTION_PRECISION_ASSESSMENT_20260921.md).
+Details: [compaction and goal-only policy](docs/archive/COMPACTION_PRECISION_ASSESSMENT_20260921.md).
 
 ## What the checker decides
 
