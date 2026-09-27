@@ -1,0 +1,145 @@
+{
+  "name": "slicing-code-context",
+  "roles": [
+    "coordinator",
+    "worker"
+  ],
+  "capabilities": {
+    "build_packet": {
+      "owner": "coordinator",
+      "pre": true,
+      "add": [
+        "packet_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "build_expansion_packet": {
+      "owner": "coordinator",
+      "pre": "packet_built",
+      "add": [
+        "packet_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "reread_context": {
+      "owner": "coordinator",
+      "pre": "packet_built",
+      "add": [
+        "context_reviewed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_checks": {
+      "owner": "coordinator",
+      "pre": "context_reviewed",
+      "add": [
+        "checks_pass"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_edit": {
+      "owner": "coordinator",
+      "pre": "checks_pass",
+      "add": [
+        "edit_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "build_packet",
+        "by": "coordinator"
+      }
+    },
+    {
+      "spawn": {
+        "role": "worker"
+      }
+    },
+    {
+      "msg": {
+        "from": "worker",
+        "to": "coordinator",
+        "label": "worker_response"
+      }
+    },
+    {
+      "choice": {
+        "by": "coordinator",
+        "observed": true,
+        "branches": {
+          "needs_context": [
+            {
+              "act": {
+                "cap": "build_expansion_packet",
+                "by": "coordinator"
+              }
+            },
+            {
+              "spawn": {
+                "role": "worker"
+              }
+            },
+            {
+              "msg": {
+                "from": "worker",
+                "to": "coordinator",
+                "label": "worker_response"
+              }
+            }
+          ],
+          "complete": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "reread_context",
+        "by": "coordinator"
+      }
+    },
+    {
+      "choice": {
+        "by": "coordinator",
+        "observed": true,
+        "branches": {
+          "authorized": [
+            {
+              "act": {
+                "cap": "apply_edit",
+                "by": "coordinator"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_checks",
+                "by": "coordinator"
+              }
+            }
+          ],
+          "not_authorized": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "packet_built",
+      "context_reviewed"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

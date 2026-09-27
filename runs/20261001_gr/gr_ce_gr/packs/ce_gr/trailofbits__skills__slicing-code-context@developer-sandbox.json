@@ -1,0 +1,115 @@
+{
+  "name": "slicing-code-context",
+  "roles": [
+    "agent",
+    "user",
+    "worker"
+  ],
+  "capabilities": {
+    "build_slice_packet": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "packet_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_edit": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "edit_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_checks": {
+      "owner": "agent",
+      "pre": "edit_applied",
+      "add": [
+        "checks_pass"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "build_slice_packet",
+        "by": "agent"
+      }
+    },
+    {
+      "spawn": {
+        "role": "worker"
+      }
+    },
+    {
+      "msg": {
+        "from": "worker",
+        "to": "agent",
+        "label": "worker_response"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "needs_context": [
+            {
+              "act": {
+                "cap": "build_slice_packet",
+                "by": "agent"
+              }
+            },
+            {
+              "spawn": {
+                "role": "worker"
+              }
+            },
+            {
+              "msg": {
+                "from": "worker",
+                "to": "agent",
+                "label": "worker_response"
+              }
+            }
+          ],
+          "complete": []
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "authorize_edit": [
+            {
+              "act": {
+                "cap": "apply_edit",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_checks",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_edit": []
+        }
+      }
+    }
+  ],
+  "goal": "packet_built",
+  "init_true": [],
+  "init_constraints": []
+}
