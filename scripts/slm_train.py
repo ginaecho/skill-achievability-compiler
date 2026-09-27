@@ -127,12 +127,17 @@ def embed(net, tok, rows):
 def arm_retrieval(model):
     tok, base, hid, dec = build(model)
     net = Net(base, hid, dec).eval()
-    cache = {}
+    cache = {}                     # the encoder is frozen: embed each row once
+
+    def emb(rs):
+        todo = [r for r in rs if id(r) not in cache]
+        if todo:
+            for r, e in zip(todo, embed(net, tok, todo)):
+                cache[id(r)] = e
+        return torch.stack([cache[id(r)] for r in rs])
 
     def run(train_rows, test_rows):
-        key = id(train_rows)
-        E = embed(net, tok, train_rows)
-        Et = embed(net, tok, test_rows)
+        E, Et = emb(train_rows), emb(test_rows)
         top = (Et @ E.T).topk(8, dim=-1)
         pc, pk = [], []
         for sims, idx in zip(top.values.tolist(), top.indices.tolist()):
