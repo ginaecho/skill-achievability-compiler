@@ -3,7 +3,7 @@
 Plan and success criteria: runs/20260926_ce_ab/RUNTIME_BINDING_PLAN.md.
 
   prepare OUT   freeze prompts for the dev, control and labelled sets
-                (--cases heldout: 40 fresh real skills never compacted before)
+                (--cases heldout|fresh|ext: real skills never compacted before)
   retry OUT     freeze one located-error retry per invalid reply
   repair OUT    freeze one counterexample-guided repair per refuted real case
   score OUT     parse, bind, check; compare with the A/B arms on the same cases
@@ -35,13 +35,14 @@ from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E
 from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
                                  _extract_json_object, ce_runtime_messages,
                                  ce_tpl_messages, explain_refutation)
-from skillc.frontend.toolpolicy import coverage, load_library, match  # noqa: E402
+from skillc.frontend.toolpolicy import coverage, load_library, match, veto  # noqa: E402
 from skillc.frontend.runtime import (bind_runtime, check_levels, load_runtime,  # noqa: E402
                                      repair_violations)
 from skillc.pack import PackError, validate_pack  # noqa: E402
 
 AB = ROOT / "runs" / "20260926_ce_ab"
 SOURCES = ROOT / "benchmark" / "ce_sources"
+SOURCES_EXT = ROOT / "benchmark" / "ce_sources_ext"
 LABELLED_RUN = ROOT / "runs" / "20260921_114226Z_compaction_comparison"
 RUNTIME = "developer-sandbox"
 EXTRA_DEV = ["obra__superpowers__requesting-code-review"]
@@ -50,6 +51,12 @@ L2_CONFIRMING = {"missing_tool_in_runtime", "needs_credentials_or_account",
 
 
 N_HELDOUT = 40
+N_EXT_NEW = 56
+
+
+def skill_path(case: dict) -> Path:
+    base = SOURCES_EXT if case.get("corpus") == "ce_sources_ext" else SOURCES
+    return base / case["id"] / "SKILL.md"
 
 
 def _heldout() -> list[dict]:
@@ -70,6 +77,28 @@ def _fresh() -> list[dict]:
     return [{"id": s["id"], "set": "fresh"} for s in picked]
 
 
+def _ext() -> list[dict]:
+    """Library-v1 test set (runs/20260927_ext/PLAN.md): every remaining skill
+    of the original corpus (after the A/B, held-out and fresh skills), plus
+    56 skills of the extension corpus benchmark/ce_sources_ext, taken
+    round-robin over its repositories in a fixed hash order.  None was
+    compacted, executed or inspected before the plan was committed."""
+    used = {r["case"] for r in json.loads((AB / "results.json").read_text())}
+    used |= {c["id"] for c in _heldout()} | {c["id"] for c in _fresh()}
+    cases = [{"id": s["id"], "set": "ext", "corpus": "ce_sources"}
+             for s in select_real(10_000) if s["id"] not in used]
+    groups: dict[str, list] = {}
+    for s in sorted(json.loads((SOURCES_EXT / "sources.json").read_text()),
+                    key=lambda s: sha("ext-test:" + s["id"])):
+        groups.setdefault(s["repo_url"], []).append(s["id"])
+    picked: list = []
+    while len(picked) < N_EXT_NEW and any(groups.values()):
+        for g in sorted(groups):
+            if groups[g] and len(picked) < N_EXT_NEW:
+                picked.append(groups[g].pop(0))
+    return cases + [{"id": i, "set": "ext", "corpus": "ce_sources_ext"} for i in picked]
+
+
 def _labelled() -> list[dict]:
     frozen = json.loads((LABELLED_RUN / "frozen.json").read_text())
     return [{"id": sc["id"], "set": "labelled", "source": sc["source"],
@@ -82,6 +111,8 @@ def _cases(case_set: str = "dev", method: str = "ce_rt") -> list[dict]:
         return _heldout()
     if case_set == "fresh":
         return _fresh() + (_labelled() if method == "ce_tpl" else [])
+    if case_set == "ext":
+        return _ext()
     labels = json.loads((AB / "adjudication.json").read_text())["labels"]
     dev = sorted(set(labels) | set(EXTRA_DEV))
     rows = json.loads((AB / "results.json").read_text())
@@ -122,7 +153,7 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes((LABELLED_RUN / case["id"] / f).read_bytes())
         else:
-            text = (SOURCES / case["id"] / "SKILL.md").read_text(encoding="utf-8")
+            text = skill_path(case).read_text(encoding="utf-8")
             if method == "json":
                 prompt = real_prompt("json", text)
             elif lib is not None:
@@ -283,7 +314,8 @@ def _precision(case_ids: list, labels: dict, scheme: str) -> dict:
 
 
 def score_all(out: Path, guard: bool = True, prune: bool | None = None,
-              repair_round: bool = True, tag: str = "", use_library: bool = True) -> None:
+              repair_round: bool = True, tag: str = "", use_library: bool = True,
+              veto_scope: str = "none") -> None:
     frozen = json.loads((out / "frozen.json").read_text())
     method = frozen["method"]
     if prune is None:
@@ -335,6 +367,16 @@ def score_all(out: Path, guard: bool = True, prune: bool | None = None,
                         "live_reason": lv["live"].reason if lv["live"] else None,
                         "withdrawn": rec["withdrawn"], "blocked": rec["blocked"],
                         "pruned": rec["pruned"]})
+        if case["set"] != "labelled" and veto_scope != "none":
+            # P2g + library: a deterministic IMPOSSIBLE when the library finds
+            # a requirement the runtime cannot meet (in the core statement)
+            vetoes = veto(skill_path(case).read_text(encoding="utf-8"), rt,
+                          load_library(), scope=veto_scope)
+            row["veto"] = [f"{o.entry}:{o.clause()} (line {o.line}: {o.text})"
+                           for o in vetoes]
+            if vetoes:
+                row.update({"verdict_before_veto": row.get("verdict"),
+                            "verdict": "IMPOSSIBLE", "reason": "LIBRARY_VETO"})
             write_json(out / f"packs{tag}" / method / f"{cid}.json", rec["pack"])
         elif rec["ok"]:
             write_json(out / f"packs{tag}" / method / f"{cid}.json", rec["pack"])
@@ -433,7 +475,7 @@ def main() -> None:
     p = sub.add_parser("prepare")
     p.add_argument("out", type=Path)
     p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl"))
-    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh"))
+    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext"))
     for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)
     sc = sub.choices["score"]
@@ -445,13 +487,17 @@ def main() -> None:
     sc.add_argument("--tag", default="", help="suffix for results/metrics files")
     sc.add_argument("--no-library", action="store_true",
                     help="TPL ablation: bind without the tool-policy library")
+    sc.add_argument("--veto", default="none", choices=("none", "core", "any"),
+                    help="P2g + library: IMPOSSIBLE on an unmet library requirement "
+                         "(core: stated in the skill's core statement)")
     a = ap.parse_args()
     {"prepare": lambda: prepare(a.out, a.method, a.cases), "retry": lambda: retry(a.out),
      "repair": lambda: repair(a.out),
      "score": lambda: score_all(a.out, guard=not a.no_guard,
                                 prune=None if a.prune is None else a.prune == "yes",
                                 repair_round=not a.no_repair, tag=a.tag,
-                                use_library=not a.no_library)}[a.cmd]()
+                                use_library=not a.no_library,
+                                veto_scope=a.veto)}[a.cmd]()
 
 
 if __name__ == "__main__":

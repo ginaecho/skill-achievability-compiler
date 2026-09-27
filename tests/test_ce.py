@@ -799,7 +799,7 @@ def test_unknown_effect_is_a_located_error():
 
 def test_coverage_reports_unmet_obligations():
     r = parse_ce_detailed(TPL)
-    obs = match("OPENAI_API_KEY\ngit push origin main\nuse a subagent", LIB)
+    obs = match("OPENAI_API_KEY\ngit push origin main\ndispatch a fresh subagent", LIB)
     msgs = coverage(r, obs)
     assert len(msgs) == 1 and "via `agent_spawn`" in msgs[0]
 
@@ -872,3 +872,31 @@ def test_tpl_prompt_lists_obligations_and_forbidden_effects():
     system, user = llm.ce_tpl_messages("export OPENAI_API_KEY=x", RT, obs)
     assert "effect `E`" in system and "`writes_external`, `publishes`" in system
     assert "needs `llm_api_key`" in user and user.endswith("CE document:")
+
+
+from skillc.frontend.toolpolicy import core_lines, veto  # noqa: E402
+
+VETO_SKILL = """---
+name: t
+description: Submit results with submit-expo-feedback and query the Azure MCP.
+---
+# T
+Intro mentions nothing else.
+## Details
+Optionally set OPENAI_API_KEY.
+"""
+
+
+def test_core_lines_cover_frontmatter_and_intro_only():
+    assert core_lines(VETO_SKILL) == {1, 2, 3, 4, 5, 6}
+
+
+def test_core_veto_ignores_requirements_outside_the_core_statement():
+    core = {o.value for o in veto(VETO_SKILL, RT, LIB, "core")}
+    anywhere = {o.value for o in veto(VETO_SKILL, RT, LIB, "any")}
+    assert core == {"writes_external", "azure_mcp"}
+    assert anywhere == core | {"llm_api_key"}
+
+
+def test_veto_never_fires_on_what_the_runtime_provides():
+    assert veto("---\nname: x\ndescription: run tests with bash\n---\n", RT, LIB) == []

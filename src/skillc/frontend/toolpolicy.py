@@ -30,7 +30,7 @@ from importlib import resources
 from pathlib import Path
 
 __all__ = ["Library", "Obligation", "load_library", "match", "obligations_note",
-           "coverage", "resolve_program"]
+           "coverage", "resolve_program", "core_lines", "unmet", "veto"]
 
 
 @dataclass(frozen=True)
@@ -168,3 +168,45 @@ def resolve_program(program: str, runtime, library: Library,
     if probe_host and shutil.which(program):
         return "present", "on PATH"
     return "installable", "assumed installable from public registries"
+
+
+def core_lines(text: str) -> set[int]:
+    """1-based line numbers of a skill's core statement: its frontmatter
+    (name, description, allowed tools) and the title/introduction before the
+    first `## ` section."""
+    lines = text.splitlines()
+    core, start = set(), 0
+    if lines and lines[0].strip() == "---":
+        core.add(1)
+        for i in range(1, len(lines)):
+            core.add(i + 1)
+            if lines[i].strip() == "---":
+                start = i + 1
+                break
+    for i in range(start, len(lines)):
+        if lines[i].startswith("## "):
+            break
+        core.add(i + 1)
+    return core
+
+
+def unmet(o: Obligation, runtime, library: Library) -> bool:
+    """Whether the runtime cannot satisfy this obligation."""
+    if o.kind == "resource":
+        return o.value not in runtime.grants
+    if o.kind == "runtime_tool":
+        return o.value not in runtime.tools
+    if o.kind == "program":
+        return resolve_program(o.value, runtime, library)[0] == "unavailable"
+    return o.value in runtime.forbid_effects       # effect
+
+
+def veto(text: str, runtime, library: Library, scope: str = "core") -> list[Obligation]:
+    """Requirements the library finds in the skill that the runtime cannot
+    meet; with scope='core', only those stated in the skill's core statement.
+    A non-empty result is a deterministic IMPOSSIBLE, independent of the LLM."""
+    obs = [o for o in match(text, library) if unmet(o, runtime, library)]
+    if scope == "core":
+        cl = core_lines(text)
+        obs = [o for o in obs if o.line in cl]
+    return obs
