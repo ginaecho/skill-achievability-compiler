@@ -190,3 +190,39 @@ Two further rules apply to the index lookup:
   web-dependent tasks. Under L2 these reports are inconclusive, not confirmed.
 - **offline-workstation.** PyPI and GitHub are reachable. Executors that used them are
   listed in `protocol_violations.txt`.
+
+## Amendment B (small-model arms, before any model arm was run)
+
+**Weights.** huggingface.co is blocked here, but the legacy Hugging Face S3 bucket
+(`s3.amazonaws.com/models.huggingface.co/bert/...`) is reachable. It serves only pre-2021
+checkpoints: the GPT-2 family (124M–1.5B), BERT, RoBERTa and T5.
+
+**Compute.** There is no GPU: 4 CPU threads and 15 GB of RAM. A LoRA step (batch 16) takes
+6.2 s on GPT-2 medium and 1.1 s on RoBERTa-base.
+
+**Models.**
+- Generative model: GPT-2 medium (355M). GPT-2 large and XL do not fit the compute or disk
+  budget.
+- Encoder: RoBERTa-base (125M).
+
+**Readout (changed).** Each model gets two linear heads, `cls` and `core`, on the mean-pooled
+hidden state. This replaces likelihood scoring of class names, which needs 13 forward passes
+per row. The arms are otherwise as planned:
+
+| arm | what is trained |
+|---|---|
+| retrieval | nothing: cosine k-NN (k = 8) over frozen embeddings |
+| LoRA | r = 8 on the attention layers |
+| neologism | only the new `<t:term>` embedding rows and the heads; the model is frozen |
+
+**Epochs.** 3 for RoBERTa-base, 2 for GPT-2 medium.
+
+**Splits.**
+- *unseen_terms*: the 5 frozen folds.
+- *held-out organisations*: organisations are hashed into 5 groups (`org5`) instead of 17
+  leave-one-out folds, because of compute. The baselines are recomputed on the same folds.
+
+**Metrics.** Macro-F1 on `cls` and accuracy on `core`, pooled over folds.
+
+**Comparison.** Every arm is compared with the character n-gram TF-IDF + logistic regression
+baseline. An arm "helps" only if it beats that baseline on both splits.
