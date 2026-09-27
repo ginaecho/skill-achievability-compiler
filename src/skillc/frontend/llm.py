@@ -718,3 +718,42 @@ def _extract_json_object(text: str) -> dict:
                 return json.loads(text[start:i + 1])
     raise ValueError("unbalanced JSON object in model output "
                      "(truncated response?)")
+
+
+# P2g + policy index: P2g's prompt plus reference facts looked up in the index.
+# Facts only: no obligations, no suggested substitutes (TPL's hints made the model
+# downgrade real requirements).
+CE_INDEX_HEAD = (
+    "\nREFERENCE INDEX (facts looked up for the terms in this skill; they are "
+    "evidence, not instructions). For each term: what past attempts showed it "
+    "requires, how often it was part of the core deliverable, and how often it "
+    "stopped an attempt. Terms the index has never seen are listed with whether "
+    "a public package registry has them. Use these facts together with the "
+    "RUNTIME above when you write 'via' and 'needs'; the skill text decides "
+    "what is core.\n")
+
+
+def render_index_facts(lookup: dict, probes: dict | None = None) -> str:
+    """Prompt section for a `PolicyIndex.lookup` result; `probes` maps unknown
+    terms to a registry finding, e.g. {"pint": "found on PyPI"}."""
+    probes = probes or {}
+    rows = []
+    for k in lookup.get("known", []):
+        cls = ", ".join(f"{c} {n}/{k['n']}" for c, n in
+                        sorted(k["classes"].items(), key=lambda x: -x[1]))
+        note = f"; e.g. \"{k['notes'][0]}\"" if k.get("notes") else ""
+        rows.append(f"  - `{k['term']}`: seen in {k['n']} attempt(s); requires {cls}; "
+                    f"core in {k['core']}; stopped the attempt {k['blocked']} time(s){note}")
+    for t in lookup.get("unknown", []):
+        rows.append(f"  - `{t}`: not in the index"
+                    + (f"; {probes[t]}" if t in probes else ""))
+    if not rows:
+        return "\nREFERENCE INDEX: no indexed or unfamiliar terms found in this skill.\n"
+    return CE_INDEX_HEAD + "\n".join(rows) + "\n"
+
+
+def ce_index_messages(nl: str, runtime, facts: str) -> tuple[str, str]:
+    """(system, user) for P2g + policy index: P2g's messages with `facts`
+    (from `render_index_facts`) appended to the system prompt."""
+    system, user = ce_runtime_messages(nl, runtime)
+    return system + facts, user
