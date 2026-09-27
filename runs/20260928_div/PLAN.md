@@ -155,3 +155,38 @@ Model weights cannot be downloaded in this environment. The network policy rejec
 huggingface.co, hf-mirror.com and modelscope.cn, and there is no GPU. The arms run once
 the environment allows huggingface.co, and preferably with a GPU. Until then only the
 dataset, splits and scripts are delivered.
+
+## Amendment A (before any `ce_idx` prompt was generated or run)
+
+A dry run of the index on the div skills showed the extractor producing ordinary words
+as unknown "terms". Examples: `is`, `with` and `week` came from template text in
+unlabelled code fences, and all of them were "found on npm" by the registry probe.
+File names such as `alerts.log` and variables such as `target_servings` also appeared.
+
+These generic changes were made to `policyindex.extract_terms`. None of them was tuned
+to any case's outcome:
+
+1. **Command heads.** A command head must start with a lower-case letter (or `./`) and
+   must not contain `_`.
+2. **Unlabelled code fences.** Lines ending in `.`, `:`, `?` or `]`, and lines of more
+   than 8 words, are treated as prose.
+3. **Backticked spans.** Spans with a common file extension, or containing `_`, are not
+   candidates.
+4. **Index terms in prose.** A one-word, all-letter index term matches only where it is
+   written as a name (not all lower case), or where another rule (code or backtick)
+   extracts it. For example, `Linear` matches but `linear` does not.
+
+Two further rules apply to the index lookup:
+
+- **Non-tools.** A term that the labellers only ever marked `keep: false` is a known
+  non-tool. It is left out of both the known list and the unknown list.
+- **Registry probes.** As planned, a term is probed only if its source is a code block
+  or a backtick. A network failure is reported as "registry lookup failed".
+
+**Environment notes found during execution, reported as found:**
+
+- **office-assistant.** In this sandbox, `web_fetch` is blocked by egress for most
+  domains. Office executors therefore reported `network_or_service_unavailable` for
+  web-dependent tasks. Under L2 these reports are inconclusive, not confirmed.
+- **offline-workstation.** PyPI and GitHub are reachable. Executors that used them are
+  listed in `protocol_violations.txt`.
