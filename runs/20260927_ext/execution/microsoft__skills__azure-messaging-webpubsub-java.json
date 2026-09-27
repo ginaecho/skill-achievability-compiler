@@ -1,0 +1,13 @@
+{
+  "skill": "microsoft__skills__azure-messaging-webpubsub-java",
+  "task_instance": "Create a Maven Java project depending on com.azure:azure-messaging-webpubsub 1.5.0; build a WebPubSubServiceClient with AzureKeyCredential as shown in the skill doc; generate a client access token (negotiate URL/JWT) with a userId, roles, group, and expiration; verify the resulting JWT is well-formed and its claims match the requested options; then attempt an actual sendToAll call to confirm real message delivery requires a live Azure Web PubSub resource.",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": null,
+  "tools_used": [
+    "Bash (mvn compile, mvn exec:java)",
+    "Write",
+    "python3 (JWT payload decode for verification)"
+  ],
+  "evidence": "Project at /tmp/claude-0/-home-user-skill-achievability-compiler/a1321181-416f-5422-8c3b-9ffc8650b51c/scratchpad/exec_ext/microsoft__skills__azure-messaging-webpubsub-java (pom.xml, src/main/java/com/example/WebPubSubDemo.java). `mvn -q compile` resolved the azure-messaging-webpubsub:1.5.0 dependency from Maven Central through the sandbox's proxy and compiled cleanly. `mvn -q exec:java` ran the program: it built a WebPubSubServiceClient via WebPubSubServiceClientBuilder().credential(AzureKeyCredential).endpoint(...).hub('chat').buildClient(), then called client.getClientAccessToken(new GetClientAccessTokenOptions().setUserId('user123').addRole(...).addGroup('announcements').setExpiresAfter(Duration.ofHours(2))), producing a real negotiate URL: wss://fake-resource.webpubsub.azure.com/client/hubs/chat?access_token=<JWT>. This token generation happens entirely locally (HMAC-signed JWT from the access key, no network call), so it succeeded even though the endpoint/key were dummy values. Decoded the JWT payload with python3 base64/json and confirmed it exactly reflects the requested options: {\"aud\": \".../client/hubs/chat\", \"sub\": \"user123\", \"role\": [\"webpubsub.joinLeaveGroup\", \"webpubsub.sendToGroup\"], \"webpubsub.group\": [\"announcements\"], \"exp\": 1790503799}. This is the skill's core deliverable (generating a Web PubSub client access token/negotiate URL server-side). As a secondary check, calling client.sendToAll(...) against the fake endpoint correctly threw UncheckedIOException/UnknownHostException, confirming that real message broadcast (as opposed to local token issuance) genuinely requires a live, credentialed Azure Web PubSub resource, which was correctly not attempted (no real Azure account/credentials were used, per the safety rules)."
+}

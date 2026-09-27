@@ -1,0 +1,15 @@
+{
+  "skill": "huggingface__skills__hf-cli",
+  "task_instance": "Install the `hf` CLI (huggingface_hub) and download a small public file (config.json) from the openai-community/gpt2 model repo on the Hugging Face Hub using `hf download openai-community/gpt2 config.json --local-dir ./downloaded`, then verify the file exists locally.",
+  "outcome": "not_achieved",
+  "blocker_kind": "network_or_service_unavailable",
+  "blocker_detail": "All outbound HTTPS traffic in this runtime goes through a pre-configured agent proxy. The proxy rejects CONNECT requests to huggingface.co (and its CDN, cdn-lfs.huggingface.co) with 'HTTP/1.1 403 Forbidden' / 'gateway answered 403 to CONNECT (policy denial or upstream failure)' as confirmed by curl -sI https://huggingface.co and by the proxy's own status endpoint ($HTTPS_PROXY/__agentproxy/status), whose recentRelayFailures logged: {kind: connect_rejected, detail: 'gateway answered 403 to CONNECT (policy denial or upstream failure)', host: 'hf.co:443'}. huggingface.co is not in the proxy's noProxy allowlist (only hosts like pypi.org, npmjs.org, github's api, etc. are). Since every hf-cli command (auth, download, upload, models/datasets/spaces browsing, jobs, repos, etc.) requires reaching the Hugging Face Hub API/CDN, none of the skill's core functionality can be exercised in this sandbox. This is a runtime/network policy restriction, not something fixable by installing more tools.",
+  "tools_used": [
+    "bash",
+    "curl",
+    "python3 -m venv",
+    "pip install huggingface_hub[cli] (from pypi.org, which is allowed)",
+    "hf CLI (installed successfully, v2.0.0)"
+  ],
+  "evidence": "1) Verified proxy blocks the target host: `curl -sI https://huggingface.co` -> 'HTTP/1.1 403 Forbidden'; `curl -sI https://hf.co` -> same. 2) Confirmed via `curl -sS \"$HTTPS_PROXY/__agentproxy/status\"` which reported recentRelayFailures with host 'hf.co:443' and detail 'gateway answered 403 to CONNECT (policy denial or upstream failure)'. huggingface.co/hf.co are absent from the proxy's noProxy allowlist. 3) The `hf` CLI itself installs and runs fine: created venv at /tmp/.../exec_ext/huggingface__skills__hf-cli/venv, ran `pip install huggingface_hub[cli]` successfully (from allowed pypi.org), and `hf version` printed 'version: 2.0.0' successfully, proving the tool itself is not the missing piece. 4) Attempted the actual core deliverable: `hf download openai-community/gpt2 config.json --local-dir ./downloaded` failed with a Python traceback ending in `httpx2.ProxyError: 403 Forbidden`, i.e. the CLI could not reach the Hub API through the proxy. No file was downloaded/created under ./downloaded. This demonstrates the skill's stated core intent (interacting with the Hugging Face Hub via the `hf` CLI) cannot be accomplished in this runtime because the network path to huggingface.co is blocked at the proxy/gateway level, independent of any missing local tooling or credentials."
+}

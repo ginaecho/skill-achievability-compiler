@@ -1,0 +1,15 @@
+{
+  "skill": "trailofbits__skills__aflpp",
+  "task_instance": "Install AFL++, compile a small C++ libFuzzer-style harness (harness.cc) containing a deliberate stack-buffer-overflow bug with afl-clang-fast++ under AddressSanitizer, run a short afl-fuzz campaign against it, and verify AFL++ discovers and saves a crashing input that reproduces the bug.",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": null,
+  "tools_used": [
+    "bash",
+    "apt-get",
+    "afl-clang-fast++",
+    "afl-fuzz",
+    "afl-whatsup"
+  ],
+  "evidence": "Installed AFL++ 4.09c via `apt-get install -y afl++ lld-17` (host mode; docker/root kernel tuning from the skill's wrapper script was not needed for this instance). Wrote /tmp/.../harness.cc with LLVMFuzzerTestOneInput calling check_buf(), which does an out-of-bounds memcpy into a 4-byte stack buffer when input starts with 'B' and is longer than 4 bytes. Compiled with `AFL_USE_ASAN=1 afl-clang-fast++ -DNO_MAIN=1 -O1 -g -fsanitize=fuzzer,address harness.cc -o fuzz` (succeeded, produced instrumented ELF binary 'fuzz'). Created seeds/ with minimal_seed and magic. Ran `afl-fuzz -i seeds -o out -V 45 -- ./fuzz` (AFL_NO_UI=1, AFL_TMPDIR=/tmp): campaign completed in 45s, 164723 execs, found 1 new corpus item and 1 saved crash (out/default/fuzzer_stats: corpus_count=3, saved_crashes=1). Verified the deliverable by reproducing the saved crash directly: `./fuzz out/default/crashes/id:000000,sig:06,src:000000,...` printed 'AddressSanitizer: stack-buffer-overflow ... in __asan_memcpy' and aborted, confirming AFL++ found a genuine memory-safety bug end-to-end (compile -> fuzz -> crash -> triage/reproduce). Also ran `afl-whatsup out` to confirm the status-reporting tooling works. No docker, root/grub system tuning (afl-system-config/afl-persistent-config), or multi-core/CI features were needed for this minimal instance and none were attempted since they are optional performance add-ons, not required for the core deliverable (finding a bug with AFL++)."
+}

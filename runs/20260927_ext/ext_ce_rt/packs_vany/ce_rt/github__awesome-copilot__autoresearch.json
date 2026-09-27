@@ -1,0 +1,232 @@
+{
+  "name": "autoresearch",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "create_branch": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "branch_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "init_results_log": {
+      "owner": "agent",
+      "pre": "branch_created",
+      "add": [
+        "results_log_initialized"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_baseline": {
+      "owner": "agent",
+      "pre": "results_log_initialized",
+      "add": [
+        "baseline_established"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "edit_code": {
+      "owner": "agent",
+      "pre": "branch_created",
+      "add": [
+        "code_modified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_experiment": {
+      "owner": "agent",
+      "pre": "code_modified",
+      "add": [
+        "experiment_committed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_metric": {
+      "owner": "agent",
+      "pre": "experiment_committed",
+      "add": [
+        "metric_measured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "log_result": {
+      "owner": "agent",
+      "pre": "metric_measured",
+      "add": [
+        "result_logged"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "keep_experiment": {
+      "owner": "agent",
+      "pre": "metric_measured",
+      "add": [
+        "experiment_kept"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "revert_experiment": {
+      "owner": "agent",
+      "pre": "metric_measured",
+      "add": [
+        "experiment_reverted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "report_results": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "baseline_established",
+          "result_logged"
+        ]
+      },
+      "add": [
+        "report_generated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "confirm_setup": [
+            {
+              "act": {
+                "cap": "create_branch",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "init_results_log",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_baseline",
+                "by": "agent"
+              }
+            },
+            {
+              "rec": {
+                "name": "experiment_loop",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "edit_code",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "commit_experiment",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "run_metric",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "log_result",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "agent",
+                      "observed": true,
+                      "branches": {
+                        "keep": [
+                          {
+                            "act": {
+                              "cap": "keep_experiment",
+                              "by": "agent"
+                            }
+                          }
+                        ],
+                        "discard": [
+                          {
+                            "act": {
+                              "cap": "revert_experiment",
+                              "by": "agent"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "user",
+                      "observed": true,
+                      "branches": {
+                        "continue": [
+                          {
+                            "continue": "experiment_loop"
+                          }
+                        ],
+                        "stop": [
+                          {
+                            "act": {
+                              "cap": "report_results",
+                              "by": "agent"
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "decline_setup": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "branch_created",
+      "results_log_initialized",
+      "baseline_established",
+      "result_logged",
+      "report_generated"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

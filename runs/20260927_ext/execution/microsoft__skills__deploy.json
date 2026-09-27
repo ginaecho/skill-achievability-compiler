@@ -1,0 +1,11 @@
+{
+  "skill": "microsoft__skills__deploy",
+  "task_instance": "Given a minimal prepare-plan.json + scaffold-manifest.json (as would be produced by the upstream azure-app-onboard phases), execute the deploy skill's core action: run `az deployment` to provision the Azure resources and then HTTP-health-check the deployed endpoint, writing deploy-result.json.",
+  "outcome": "not_achieved",
+  "blocker_kind": "needs_credentials_or_account",
+  "blocker_detail": "The skill's entire deliverable is executing IaC against a real Azure subscription (az login/az deployment sub create/az webapp deploy) and then verifying health of the live deployed resources, including toggling SCM publishing credentials via `az rest`. This requires an authenticated, account-bound Azure subscription and credentials, which the safety rules explicitly forbid ('no account-bound or paid services; no public deployment; do not use or search for credentials'). Independently, network egress to management.azure.com (the Azure Resource Manager endpoint) is denied by the sandbox's egress proxy ('connect_rejected... organization policy'), and the Azure CLI (`az`) is not installed/available in this runtime. There is no way to genuinely attempt cloud resource deployment or live health verification without violating the credential/account rule and without network access to Azure's control plane.",
+  "tools_used": [
+    "Bash"
+  ],
+  "evidence": "Ran `which az; az version` -> 'az: command not found' (Azure CLI absent). Ran `pip show azure-cli` -> not found. Ran `curl -m 5 https://management.azure.com/` -> exit 56 / agent-proxy reported 'management.azure.com:443 \u2014 connect_rejected (the egress proxy denied the CONNECT (organization policy))'. No prepare-plan.json/scaffold-manifest.json inputs were fabricated further because even with synthetic inputs, Step 6 (Execute deployment) and Step 7 (Health-check + SCM re-disable) require live `az deployment`/`az rest` calls against an authenticated Azure subscription, which is both forbidden by the safety rules (no account-bound/paid services, no credentials) and unreachable over the network in this sandbox."
+}

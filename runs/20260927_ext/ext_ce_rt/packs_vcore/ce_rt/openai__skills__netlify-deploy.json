@@ -1,0 +1,196 @@
+{
+  "name": "netlify-deploy",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_auth": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "auth_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "login": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:netlify_account",
+          "auth_checked"
+        ]
+      },
+      "add": [
+        "authenticated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "link_site": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:netlify_account",
+          "authenticated"
+        ]
+      },
+      "add": [
+        "site_linked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "init_site": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:netlify_account",
+          "authenticated"
+        ]
+      },
+      "add": [
+        "site_linked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_deps": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "deps_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "deploy_preview": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:netlify_account",
+          {
+            "and": [
+              "site_linked",
+              "deps_installed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "deployed_preview"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "deploy_prod": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:netlify_account",
+          {
+            "and": [
+              "site_linked",
+              "deps_installed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "deployed_prod"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_auth",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "already_authenticated": [],
+          "not_authenticated": [
+            {
+              "act": {
+                "cap": "login",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "already_linked": [],
+          "link_existing": [
+            {
+              "act": {
+                "cap": "link_site",
+                "by": "agent"
+              }
+            }
+          ],
+          "create_new": [
+            {
+              "act": {
+                "cap": "init_site",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "install_deps",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "deploy_preview",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "promote_to_prod": [
+            {
+              "act": {
+                "cap": "deploy_prod",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip": []
+        }
+      }
+    }
+  ],
+  "goal": "deployed_preview",
+  "init_true": [],
+  "init_constraints": []
+}

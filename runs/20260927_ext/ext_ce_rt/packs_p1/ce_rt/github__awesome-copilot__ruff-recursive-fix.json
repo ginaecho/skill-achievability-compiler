@@ -1,0 +1,170 @@
+{
+  "name": "ruff-recursive-fix",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_ruff": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_safe_fix": {
+      "owner": "agent",
+      "pre": "checked",
+      "add": [
+        "safe_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_unsafe_fix": {
+      "owner": "agent",
+      "pre": "safe_applied",
+      "add": [
+        "unsafe_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "manual_fix": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "manual_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "format_code": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "formatted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "ask_user_choice": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "user_choice_made"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_ruff",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "fix_loop",
+        "body": [
+          {
+            "act": {
+              "cap": "apply_safe_fix",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "format_code",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "check_ruff",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "clean": [],
+                "unsafe_needed": [
+                  {
+                    "act": {
+                      "cap": "apply_unsafe_fix",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "format_code",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "check_ruff",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "ambiguous": [
+                  {
+                    "act": {
+                      "cap": "ask_user_choice",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "manual_needed": [
+                  {
+                    "act": {
+                      "cap": "manual_fix",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "format_code",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "check_ruff",
+                      "by": "agent"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "continue": "fix_loop"
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "checked",
+      "formatted"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

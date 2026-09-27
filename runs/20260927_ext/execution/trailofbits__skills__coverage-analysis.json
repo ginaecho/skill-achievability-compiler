@@ -1,0 +1,15 @@
+{
+  "skill": "trailofbits__skills__coverage-analysis",
+  "task_instance": "Built a small C++ 'fuzz harness' (harness.cc) with a magic-value-gated code path (ELF magic number check), plus an execute-rt.cc corpus-replay runtime, per the skill's Step 1-4 workflow. Compiled with clang++ -fprofile-instr-generate -fcoverage-mapping to produce an LLVM-instrumented binary (fuzz_exec). Ran it over a baseline corpus (4 seeds, none containing the magic value) to get a baseline .profraw, merged it with llvm-profdata, and generated an llvm-cov text report plus a line-by-line 'show' report -- which correctly flagged the magic-value-gated block (lines 20-27) as 0-executed, i.e. a fuzzing blocker. Then simulated the remediation step the skill describes (adding a dictionary entry / seed derived from the uncovered magic value), re-ran coverage, and generated an llvm-cov HTML report (fuzz_html/) showing coverage improve from 58.33% line / 52.94% region coverage to 79.17% line / 70.59% region coverage.",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": null,
+  "tools_used": [
+    "clang++",
+    "llvm-cov",
+    "llvm-profdata",
+    "python3 (to synthesize corpus seed files)",
+    "bash"
+  ],
+  "evidence": "Commands run (all in the work directory): `clang++ -fprofile-instr-generate -fcoverage-mapping -O2 -g harness.cc execute-rt.cc -o fuzz_exec` succeeded. `LLVM_PROFILE_FILE=baseline.profraw ./fuzz_exec corpus/` produced baseline.profraw (648 bytes). `llvm-profdata merge -sparse baseline.profraw -o baseline.profdata` succeeded. `llvm-cov report ./fuzz_exec -instr-profile=baseline.profdata -ignore-filename-regex='execute-rt.cc'` showed harness.cc at 52.94% region / 58.33% line coverage, and `llvm-cov show ... harness.cc` showed exact line hit-counts, with lines 20-27 (the code guarded by `if (magic == 0x464C457Fu)`) all at count 0 -- correctly identifying the magic-value fuzzing blocker described in the skill's 'Identifying Magic Values' pattern. After adding a corpus seed containing the magic value (corpus/seed_elf_magic) and a magic.dict entry, re-running coverage gave 70.59% region / 79.17% line coverage (llvm-cov report output captured above), confirming the coverage-driven remediation loop works end-to-end. Generated fuzz_html/ (index.html, style.css, per-file HTML under fuzz_html/coverage/...harness.cc.html) via `llvm-cov show -format=html -output-dir fuzz_html/`; verified the HTML file exists and contains 'harness.cc' and 'parse_buffer' text. Files produced under the work directory: harness.cc, execute-rt.cc, corpus/ (5 seed files), fuzz_exec (instrumented binary), baseline.profraw/.profdata, improved.profraw/.profdata, magic.dict, fuzz_html/ (HTML coverage report)."
+}
