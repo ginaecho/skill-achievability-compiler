@@ -1,0 +1,14 @@
+{
+ "skill": "trailofbits__skills__harness-writing@developer-sandbox",
+ "task_instance": "Write a minimal libFuzzer harness (Step 2-3 of the skill: entry point + input-size validation) in C++ for a small sample SUT (parse_record in target.h, a toy record parser with two intentional bugs: an out-of-bounds-adjacent write path and a null-pointer dereference reachable via a magic 4-byte value), compile it with clang++ -fsanitize=fuzzer,address per the skill's libFuzzer tool guidance, and run it to confirm the harness reaches and reproduces the injected crash.",
+ "outcome": "achieved",
+ "blocker_kind": null,
+ "blocker_detail": null,
+ "tools_used": [
+  "clang++ (Ubuntu clang 18.1.3, with libFuzzer + FuzzedDataProvider.h bundled)",
+  "AddressSanitizer",
+  "python3",
+  "bash"
+ ],
+ "evidence": "Created /tmp/.../target.h (toy SUT with parse_record(), containing a null-deref bug triggered when type=='N' and a 4-byte payload equals 0xDEADBEEF) and harness.cc implementing extern \"C\" int LLVMFuzzerTestOneInput per the skill's Step 2/3 pattern (size<2||size>4096 rejection then pass-through to parse_record). Compiled with `clang++ -fsanitize=fuzzer,address -g -O0 harness.cc -o fuzz_target_o0` (clean build, confirmed FuzzedDataProvider.h exists at /usr/lib/llvm-18/lib/clang/18/include/fuzzer/FuzzedDataProvider.h so the SDK skill patterns are usable). Manually tested the harness with a known crafted input (crash_input = bytes 4e 00 ef be ad de) per the skill's 'test harness manually first' tip: `./fuzz_target_o0 crash_input` triggered `AddressSanitizer: SEGV ... in parse_record ... target.h:41:20`, exit code 1. Then ran an actual libFuzzer campaign seeded with that input (`./fuzz_target_o0 -max_total_time=20 corpus2/`), which detected the crash on seed execution and wrote a minimized reproducer to `crash-726e474d056aba2bbd592ca4b252ca629e8fd35b`. Re-ran the harness against that saved artifact and got the identical SEGV/stack trace, confirming determinism/reproducibility as the skill requires. Also ran an unseeded 46-second campaign on the -O1 build (`./fuzz_target -max_total_time=45 corpus/`) reaching >1,000,000 exec/sec, demonstrating a working, fast harness (the -O1 build happened not to hit the specific magic-value crash by pure random mutation in that short window because it requires an exact 32-bit match, which is expected and doesn't affect achievement of the core deliverable already verified via the seeded run and manual reproduction). Final artifacts left in the work directory: target.h, harness.cc, fuzz_target_o0 (binary), crash_input, crash-726e474d... (saved crash reproducer), result.json."
+}
