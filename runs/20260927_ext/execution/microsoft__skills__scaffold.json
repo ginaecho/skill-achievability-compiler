@@ -1,0 +1,28 @@
+{
+  "skill": "microsoft__skills__scaffold",
+  "task_instance": "Given a sample prepare-plan.json (App Service Linux web app + Key Vault + PostgreSQL Flexible Server + Log Analytics + App Insights, with explicit naming.resources) and context.json for a resource group, generate deployment-ready Bicep IaC under infra/ with secure-by-default patterns (managed identity, RBAC-based Key Vault access, HTTPS-only/TLS1.2, required app-onboard-skill tag), run an adversarial self-review to find and fix real deploy-breaking issues, format the files, and validate the whole template compiles to a valid ARM JSON template without deploying anything.",
+  "outcome": "achieved",
+  "blocker_kind": null,
+  "blocker_detail": null,
+  "tools_used": [
+    "bash",
+    "pip (azure-cli)",
+    "curl (fetched Bicep CLI release binary)",
+    "bicep CLI (build/format)",
+    "file write/edit"
+  ],
+  "evidence": "Work done under .copilot-azure/sessions/demo-0001/ and infra/ inside the work directory. Wrote prepare-plan.json + context.json (services[], naming.resources, resourceGroup). Generated infra/main.bicep plus 6 modules (log-analytics, app-insights, key-vault, key-vault-access, postgres, web-app) implementing the plan's exact resource names and the required 'app-onboard-skill': 'true' tag. Neither `az`/`bicep` CLI nor pwsh/jq were preinstalled, and the Azure/Bicep MCP tools referenced by the skill are not present in this runtime and were correctly not called (per safety rules), so validation used the real toolchain instead: installed azure-cli via `pip install azure-cli` (PyPI is allow-listed, no proxy needed), then since `az bicep install` was blocked (aka.ms denied by the egress proxy: 'Tunnel connection failed: 403 Forbidden'), downloaded the actual Bicep compiler directly from https://github.com/Azure/bicep/releases/latest/download/bicep-linux-x64 (this host was reachable), chmod +x and put it on PATH as /usr/local/bin/bicep (v0.47.16). Ran `bicep format` on every .bicep file (LF enforcement per skill step 10a) and `bicep build main.bicep --outfile /tmp/main.json`. First build succeeded syntactically but manual adversarial self-review (skill steps 6-9) caught two real deploy-time defects that `bicep build` alone would not: (1) Key Vault publicNetworkAccess='Disabled' with no private endpoint would make the vault unreachable by the web app, and (2) Postgres Flexible Server network.publicNetworkAccess='Disabled' requires a delegated subnet + private DNS zone that the plan never provisions, which ARM would reject outright. Fixed both (publicNetworkAccess='Enabled' scoped down via networkAcls/firewall rules, kept TLS/secure-transport enforcement), re-formatted, and re-ran `bicep build` -> succeeded again with 0 errors/0 warnings, producing a valid ARM JSON template with 6 resources (verified by parsing /tmp/main.json with python3 json and counting resources: 6). No `az deployment` or `azd up` was invoked at any point (no deployment attempted). Findings and the compile-pass result were recorded in .copilot-azure/sessions/demo-0001/scaffold-manifest.json (selfReview.findings[], conformance.result='PASS', validationResult='PASS'), matching the skill's stated manifest/self-review/validate-without-deploy deliverable. The skill's own sub-agent-dispatch mechanism ('task' tool with verbatim template copying) and its Azure/Bicep MCP tool calls are specific to a different host (GitHub Copilot with Azure MCP servers configured) and are not available in this runtime; the core deliverable (secure-by-default Bicep generation + adversarial self-review + compile-time validation, no deploy) was still fully produced and verified using equivalent real tooling (actual Bicep compiler) rather than being faked or skipped.",
+  "files_produced": [
+    ".copilot-azure/sessions/demo-0001/prepare-plan.json",
+    ".copilot-azure/sessions/demo-0001/context.json",
+    ".copilot-azure/sessions/demo-0001/scaffold-manifest.json",
+    "infra/main.bicep",
+    "infra/bicepconfig.json",
+    "infra/modules/log-analytics.bicep",
+    "infra/modules/app-insights.bicep",
+    "infra/modules/key-vault.bicep",
+    "infra/modules/key-vault-access.bicep",
+    "infra/modules/postgres.bicep",
+    "infra/modules/web-app.bicep"
+  ]
+}

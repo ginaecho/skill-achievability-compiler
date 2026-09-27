@@ -113,3 +113,16 @@ Reported regardless of outcome:
 - Executor labels are one attempt by one agent. An `achieved` label can be
   wrong where the agent substituted a local stand-in for the real
   deliverable.
+
+## Outcome (recorded after scoring)
+
+- **Criterion 1** (recall gain at least 10 points): not met, and formally
+  untestable. P2g misses only 2 confirmed impossibles; the veto gains 0.
+- **Criterion 2** (added false rejections): not met. The veto adds 4 false
+  rejections; the precision of its flips is 0/4.
+- **Criterion 3** (net gain): not met. Decided accuracy falls from 103/115
+  (P2g) to 99/115.
+
+No code, library or prompt was changed after this plan was committed. One
+malformed executor result file (a trailing comma) was fixed at collection.
+See `docs/LIBRARY_VETO_EXT_20260927.md`.

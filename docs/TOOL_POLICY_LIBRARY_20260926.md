@@ -1,5 +1,9 @@
 # Tool-policy library (TPL) v0: pre-registered test on 40 fresh skills
 
+Follow-up: the library v1 as a deterministic veto on top of P2g, tested on
+120 new skills, is in
+[`LIBRARY_VETO_EXT_20260927.md`](LIBRARY_VETO_EXT_20260927.md).
+
 Plan and criteria: `runs/20260926_tpl/PLAN.md`, committed with the frozen
 library before any fresh prompt was answered. Data: `runs/20260926_tpl/`
 (`comparison.json`, `execution/`, one directory per method).
