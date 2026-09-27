@@ -1,0 +1,113 @@
+{
+  "name": "vessel-ais-monitor",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "connect_stream": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:aisstream_api_key"
+        ]
+      },
+      "add": [
+        "stream_connected"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_position": {
+      "owner": "agent",
+      "pre": "stream_connected",
+      "add": [
+        "position_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_alert": {
+      "owner": "agent",
+      "pre": "position_checked",
+      "add": [
+        "alert_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "summarize_alerts": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "summary_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "connect_stream",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "monitor",
+        "body": [
+          {
+            "act": {
+              "cap": "check_position",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "outside_corridor": [
+                  {
+                    "act": {
+                      "cap": "write_alert",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "inside_corridor": []
+              }
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "continue": [
+                  {
+                    "continue": "monitor"
+                  }
+                ],
+                "hour_elapsed": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "summarize_alerts",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": "summary_written",
+  "init_true": [],
+  "init_constraints": []
+}
