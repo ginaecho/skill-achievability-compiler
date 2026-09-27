@@ -1,6 +1,9 @@
 """Score the diversity test (runs/20260928_div/PLAN.md) against blind execution labels.
 
-  python scripts/score_div.py RUN_DIR [RUN_DIR ...]      e.g. div_ce_rt div_ce_idx
+  python scripts/score_div.py [--base DIR] RUN_DIR [RUN_DIR ...]   e.g. div_ce_rt div_ce_idx
+
+--base: the test directory holding execution/, adjudication.json and
+protocol_violations.txt (default runs/20260928_div; runs/20261001_gr for the gr test).
 
 Each RUN_DIR must already be scored by `benchmark_ce_runtime.py score` (results.json).
 Labels (L2): achieved -> ACHIEVABLE; blocker missing_tool_in_runtime,
@@ -8,7 +11,8 @@ needs_credentials_or_account or forbidden_by_safety_rules -> CONFIRMED (in
 offline-workstation, network_or_service_unavailable too); otherwise INCONCLUSIVE.
 Sensitivity: `strict` treats achieved reports that runs/20260928_div/adjudication.json
 marks "simulated" as INCONCLUSIVE; `no_violations` drops protocol_violations.txt cases.
-Writes RUN_DIR/div_metrics.json and, for two runs, DIV/comparison.json.
+`physical` (gr plan) also counts needs_human_or_physical as CONFIRMED.
+Writes RUN_DIR/div_metrics.json and, for two runs, BASE/comparison_<a>_vs_<b>.json.
 """
 from __future__ import annotations
 
@@ -38,7 +42,8 @@ def labels(scheme: str = "L2") -> dict:
             lab = "ACHIEVABLE"
             if scheme == "strict" and adj.get(cid, {}).get("verdict") == "simulated":
                 lab = "INCONCLUSIVE"
-        elif bk in L2_CONFIRMING or (rt == "offline-workstation"
+        elif bk in L2_CONFIRMING or (scheme == "physical" and bk == "needs_human_or_physical") \
+                or (rt == "offline-workstation"
                                      and bk == "network_or_service_unavailable"):
             lab = "CONFIRMED"
         else:
@@ -89,7 +94,7 @@ def score_run(run: Path) -> dict:
     batch = preq_batch(list(cases))
     out = {"method": frozen["method"], "valid_final": sum(r["valid"] for r in rows)}
     viol = violations()
-    for scheme in ("L2", "strict"):
+    for scheme in ("L2", "strict", "physical"):
         lab = labels(scheme)
         m = {"all": metrics(rows, lab),
              "no_violations": metrics([r for r in rows if r["case"] not in viol], lab),
@@ -120,7 +125,7 @@ def compare(a: Path, b: Path) -> dict:
     ra = {r["case"]: r for r in json.loads((a / "results.json").read_text())}
     rb = {r["case"]: r for r in json.loads((b / "results.json").read_text())}
     out = {}
-    for scheme in ("L2", "strict"):
+    for scheme in ("L2", "strict", "physical"):
         lab = labels(scheme)
         dec = [c for c in ra if lab.get(c, {}).get("label") in ("CONFIRMED", "ACHIEVABLE")]
         ok = lambda r, c: (r[c].get("verdict") == "IMPOSSIBLE") == (lab[c]["label"] == "CONFIRMED")
@@ -145,12 +150,25 @@ def compare(a: Path, b: Path) -> dict:
                 "decided_accuracy_not_lower":
                     (mb["decided_accuracy"]["value"] or 0) >= (ma["decided_accuracy"]["value"] or 0)}}
         out[scheme]["Q2_passes"] = all(out[scheme]["criteria"].values())
-    (DIV / "comparison.json").write_text(json.dumps(out, indent=1) + "\n")
+        # gr plan (runs/20261001_gr/PLAN.md): accuracy not lower, false rejections not
+        # higher, recall at most one case lower
+        out[scheme]["gr_criteria"] = {
+            "decided_accuracy_not_lower": out[scheme]["criteria"]["decided_accuracy_not_lower"],
+            "false_rejections_not_higher":
+                mb["false_rejections"]["k"] <= ma["false_rejections"]["k"],
+            "recall_at_most_one_case_lower": mb["recall"]["k"] >= ma["recall"]["k"] - 1}
+        out[scheme]["gr_passes"] = all(out[scheme]["gr_criteria"].values())
+    name = "comparison.json" if DIV.name == "20260928_div" else f"comparison_{a.name}_vs_{b.name}.json"
+    (DIV / name).write_text(json.dumps(out, indent=1) + "\n")
     return out
 
 
 def main() -> None:
-    runs = [Path(p) for p in sys.argv[1:]]
+    global DIV
+    args = sys.argv[1:]
+    if args[:1] == ["--base"]:
+        DIV, args = Path(args[1]).resolve(), args[2:]
+    runs = [Path(p) for p in args]
     for r in runs:
         m = score_run(r)
         print(r.name, json.dumps({k: m["L2"]["all"][k] for k in
@@ -159,6 +177,7 @@ def main() -> None:
     if len(runs) == 2:
         c = compare(*runs)
         print(json.dumps({s: {"Q2": c[s]["Q2_passes"], **c[s]["criteria"],
+                              "gr": c[s]["gr_passes"], **c[s]["gr_criteria"],
                               "better": c[s]["b_better"], "worse": c[s]["b_worse"],
                               "p": c[s]["mcnemar_p"]} for s in c}, indent=1))
 
