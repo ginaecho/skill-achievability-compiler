@@ -1,0 +1,70 @@
+{
+  "name": "new-terraform-provider",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "confirm_new_workspace": {
+      "owner": "agent",
+      "via": "ask_user",
+      "add": ["new_workspace_confirmed"]
+    },
+    "create_workspace_and_module": {
+      "owner": "agent",
+      "via": "bash",
+      "add": ["workspace_created", "go_module_initialized"]
+    },
+    "get_plugin_framework": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "go_module_initialized",
+      "add": ["framework_dependency_added"]
+    },
+    "write_main_go": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "workspace_created",
+      "add": ["main_go_written"]
+    },
+    "write_provider_go": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "workspace_created",
+      "add": ["provider_go_written"]
+    },
+    "go_mod_tidy": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": {"and": ["framework_dependency_added", "main_go_written", "provider_go_written"]},
+      "add": ["deps_tidied"]
+    },
+    "go_build": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "deps_tidied",
+      "add": ["build_passes"]
+    },
+    "go_test": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "deps_tidied",
+      "add": ["tests_pass"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "already_in_provider_workspace": [{"act": {"cap": "confirm_new_workspace", "by": "agent"}}],
+      "not_in_provider_workspace": []
+    }}},
+    {"act": {"cap": "create_workspace_and_module", "by": "agent"}},
+    {"act": {"cap": "get_plugin_framework", "by": "agent"}},
+    {"act": {"cap": "write_main_go", "by": "agent"}},
+    {"act": {"cap": "write_provider_go", "by": "agent"}},
+    {"act": {"cap": "go_mod_tidy", "by": "agent"}},
+    {"act": {"cap": "go_build", "by": "agent"}},
+    {"act": {"cap": "go_test", "by": "agent"}}
+  ],
+  "goal": {"and": ["workspace_created", "go_module_initialized", "framework_dependency_added", "main_go_written", "provider_go_written", "build_passes", "tests_pass"]},
+  "init_true": [],
+  "init_constraints": []
+}

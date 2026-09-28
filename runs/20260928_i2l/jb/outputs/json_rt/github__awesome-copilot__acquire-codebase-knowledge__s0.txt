@@ -1,0 +1,78 @@
+{
+  "name": "acquire-codebase-knowledge",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "run_scan": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "repo_present",
+      "add": ["scan_output_written"]
+    },
+    "read_intent_docs": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "repo_present",
+      "add": ["intent_read"]
+    },
+    "investigate_codebase": {
+      "owner": "agent",
+      "via": "read",
+      "pre": {"and": ["scan_output_written", "intent_read"]},
+      "add": ["areas_investigated"]
+    },
+    "populate_docs": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "areas_investigated",
+      "add": ["seven_docs_written"]
+    },
+    "validate_docs": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "seven_docs_written",
+      "nondet": {"docs_valid": true}
+    },
+    "repair_docs": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "seven_docs_written",
+      "add": ["seven_docs_written"]
+    },
+    "mark_validated": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "seven_docs_written",
+      "add": ["docs_validated"]
+    },
+    "resolve_ask_user_items": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "docs_validated",
+      "add": ["ask_user_items_resolved"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "run_scan", "by": "agent"}},
+    {"act": {"cap": "read_intent_docs", "by": "agent"}},
+    {"act": {"cap": "investigate_codebase", "by": "agent"}},
+    {"act": {"cap": "populate_docs", "by": "agent"}},
+    {"rec": {"name": "Validate", "body": [
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "docs_fail": [
+          {"act": {"cap": "repair_docs", "by": "agent"}},
+          {"continue": "Validate"}
+        ],
+        "docs_pass": [
+          {"act": {"cap": "mark_validated", "by": "agent"}}
+        ]
+      }}}
+    ]}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "has_ask_user_items": [{"act": {"cap": "resolve_ask_user_items", "by": "agent"}}],
+      "none": []
+    }}}
+  ],
+  "goal": {"and": ["scan_output_written", "seven_docs_written", "docs_validated"]},
+  "init_true": ["repo_present"],
+  "init_constraints": []
+}

@@ -1,0 +1,83 @@
+{
+  "name": "supabase-schema-change",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "fetch_changelog_and_docs": {
+      "owner": "agent",
+      "via": "web_access",
+      "needs": ["public_internet"],
+      "add": ["docs_checked"]
+    },
+    "inspect_project_layout": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "add": ["workflow_known"]
+    },
+    "edit_declarative_schema": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["workflow_known", "docs_checked"]},
+      "add": ["schema_changed", "rls_configured"]
+    },
+    "run_sql_on_local_db": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["supabase_cli", "local_supabase_stack"],
+      "pre": {"and": ["workflow_known", "docs_checked"]},
+      "add": ["schema_changed", "rls_configured"]
+    },
+    "run_advisors": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["supabase_cli", "local_supabase_stack"],
+      "pre": "schema_changed",
+      "add": ["advisors_clean"]
+    },
+    "generate_migration": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["supabase_cli", "local_supabase_stack"],
+      "pre": {"and": ["schema_changed", "advisors_clean"]},
+      "add": ["migration_generated"]
+    },
+    "verify_migration_list": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["supabase_cli", "local_supabase_stack"],
+      "pre": "migration_generated",
+      "add": ["migration_verified"]
+    },
+    "run_test_query": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["supabase_cli", "local_supabase_stack"],
+      "pre": "schema_changed",
+      "add": ["change_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "fetch_changelog_and_docs", "by": "agent"}},
+    {"act": {"cap": "inspect_project_layout", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "declarative": [
+          {"act": {"cap": "edit_declarative_schema", "by": "agent"}}
+        ],
+        "imperative": [
+          {"act": {"cap": "run_sql_on_local_db", "by": "agent"}}
+        ]
+      }
+    }},
+    {"act": {"cap": "run_advisors", "by": "agent"}},
+    {"act": {"cap": "generate_migration", "by": "agent"}},
+    {"act": {"cap": "verify_migration_list", "by": "agent"}},
+    {"act": {"cap": "run_test_query", "by": "agent"}}
+  ],
+  "goal": {"and": ["schema_changed", "rls_configured", "advisors_clean", "migration_generated", "migration_verified", "change_verified"]},
+  "init_true": [],
+  "init_constraints": []
+}

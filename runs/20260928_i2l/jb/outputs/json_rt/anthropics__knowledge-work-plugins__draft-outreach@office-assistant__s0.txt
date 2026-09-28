@@ -1,0 +1,126 @@
+{
+  "name": "draft-outreach",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "crm_lookup": {
+      "owner": "agent",
+      "via": "crm_connector",
+      "needs": ["crm_account"],
+      "pre": true,
+      "add": ["context_gathered"]
+    },
+    "email_thread_check": {
+      "owner": "agent",
+      "via": "email_connector",
+      "needs": ["email_account"],
+      "pre": true,
+      "add": ["history_checked"]
+    },
+    "read_uploaded_context": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": true,
+      "add": ["context_gathered"]
+    },
+    "ask_org_fact": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["context_gathered"]
+    },
+    "enrichment_hook_research": {
+      "owner": "agent",
+      "via": "enrichment_connector",
+      "needs": ["enrichment_account"],
+      "pre": true,
+      "add": ["hook_found"]
+    },
+    "web_hook_research": {
+      "owner": "agent",
+      "via": "web_search",
+      "needs": ["public_internet"],
+      "pre": true,
+      "add": ["hook_found"]
+    },
+    "create_email_draft": {
+      "owner": "agent",
+      "via": "email_connector",
+      "needs": ["email_account"],
+      "pre": "context_gathered",
+      "add": ["email_draft_created"]
+    },
+    "send_email": {
+      "owner": "agent",
+      "via": "email_connector",
+      "needs": ["email_account"],
+      "pre": {"and": ["email_draft_created", "send_requested"]},
+      "add": ["email_sent"]
+    },
+    "request_send": {
+      "owner": "user",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "email_draft_created",
+      "add": ["send_requested"]
+    },
+    "add_to_sequence": {
+      "owner": "agent",
+      "via": "sales_engagement_connector",
+      "needs": ["sales_engagement_account"],
+      "pre": "context_gathered",
+      "add": ["added_to_sequence"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "crm_connected": [
+        {"act": {"cap": "crm_lookup", "by": "agent"}}
+      ],
+      "files_uploaded": [
+        {"act": {"cap": "read_uploaded_context", "by": "agent"}}
+      ],
+      "stated_context_only": [
+        {"act": {"cap": "ask_org_fact", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "email_connected": [
+        {"act": {"cap": "email_thread_check", "by": "agent"}}
+      ],
+      "no_email": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "no_history_enrichment": [
+        {"act": {"cap": "enrichment_hook_research", "by": "agent"}}
+      ],
+      "no_history_web": [
+        {"act": {"cap": "web_hook_research", "by": "agent"}}
+      ],
+      "hook_known": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "email_connected_draft": [
+        {"act": {"cap": "create_email_draft", "by": "agent"}},
+        {"choice": {"by": "user", "observed": true, "branches": {
+          "send": [
+            {"act": {"cap": "request_send", "by": "user"}},
+            {"act": {"cap": "send_email", "by": "agent"}}
+          ],
+          "review_only": []
+        }}}
+      ],
+      "paste_ready_text": []
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "add_to_sequence": [
+        {"act": {"cap": "add_to_sequence", "by": "agent"}}
+      ],
+      "no_sequence": []
+    }}}
+  ],
+  "goal": "context_gathered",
+  "init_true": [],
+  "init_constraints": []
+}

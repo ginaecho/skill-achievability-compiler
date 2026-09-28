@@ -1,0 +1,91 @@
+{
+  "name": "crm-hygiene-check",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "query_crm_opps": {
+      "owner": "agent",
+      "via": "crm_connector",
+      "needs": ["crm_account"],
+      "pre": true,
+      "add": ["opps_loaded"]
+    },
+    "read_pipeline_export": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": "export_uploaded",
+      "add": ["opps_loaded"]
+    },
+    "request_export_upload": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["export_uploaded"]
+    },
+    "check_docs_evidence": {
+      "owner": "agent",
+      "via": "docs_connector",
+      "needs": ["docs_account"],
+      "pre": "opps_loaded",
+      "add": ["stage_evidence_checked"]
+    },
+    "read_email_context": {
+      "owner": "agent",
+      "via": "email_connector",
+      "needs": ["email_account"],
+      "pre": "opps_loaded",
+      "add": ["email_context_read"]
+    },
+    "apply_fixes_update_opportunity": {
+      "owner": "agent",
+      "via": "crm_connector",
+      "needs": ["crm_account"],
+      "pre": {"and": ["opps_loaded", "fixes_accepted"]},
+      "add": ["fixes_applied"]
+    },
+    "accept_fixes": {
+      "owner": "user",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "opps_loaded",
+      "add": ["fixes_accepted"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "crm_connected": [
+        {"act": {"cap": "query_crm_opps", "by": "agent"}}
+      ],
+      "files_uploaded": [
+        {"act": {"cap": "read_pipeline_export", "by": "agent"}}
+      ],
+      "nothing_available": [
+        {"act": {"cap": "request_export_upload", "by": "agent"}},
+        {"act": {"cap": "read_pipeline_export", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "docs_connected": [
+        {"act": {"cap": "check_docs_evidence", "by": "agent"}}
+      ],
+      "no_docs": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "email_connected": [
+        {"act": {"cap": "read_email_context", "by": "agent"}}
+      ],
+      "no_email": []
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "apply_via_update_opportunity": [
+        {"act": {"cap": "accept_fixes", "by": "user"}},
+        {"act": {"cap": "apply_fixes_update_opportunity", "by": "agent"}}
+      ],
+      "apply_by_hand": []
+    }}}
+  ],
+  "goal": "opps_loaded",
+  "init_true": [],
+  "init_constraints": []
+}

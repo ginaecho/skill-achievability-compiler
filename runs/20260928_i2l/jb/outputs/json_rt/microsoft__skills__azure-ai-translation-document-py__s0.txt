@@ -1,0 +1,53 @@
+{
+  "name": "azure-ai-translation-document-py",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_sdk": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["sdk_installed"]
+    },
+    "write_translation_script": {
+      "owner": "agent",
+      "via": "write",
+      "add": ["script_written"]
+    },
+    "run_batch_translation": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_account", "azure_translator_resource", "azure_blob_storage"],
+      "pre": {"and": ["sdk_installed", "script_written"]},
+      "add": ["translation_started"]
+    },
+    "poll_translation_status": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_account", "azure_translator_resource"],
+      "pre": "translation_started",
+      "nondet": {"documents_translated": true}
+    },
+    "check_document_statuses": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_account", "azure_translator_resource"],
+      "pre": "translation_started",
+      "add": ["doc_errors_reviewed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_sdk", "by": "agent"}},
+    {"act": {"cap": "write_translation_script", "by": "agent"}},
+    {"act": {"cap": "run_batch_translation", "by": "agent"}},
+    {"act": {"cap": "poll_translation_status", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "inspect_documents": [
+        {"act": {"cap": "check_document_statuses", "by": "agent"}}
+      ],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["script_written", "translation_started", "documents_translated"]},
+  "init_true": [],
+  "init_constraints": []
+}

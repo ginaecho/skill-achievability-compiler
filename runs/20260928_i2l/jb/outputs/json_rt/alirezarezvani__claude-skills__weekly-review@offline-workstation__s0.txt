@@ -1,0 +1,91 @@
+{
+  "name": "weekly-review",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "scan_open_loops": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell", "local_filesystem"],
+      "add": ["open_loops_inventoried"]
+    },
+    "process_loops_with_user": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "open_loops_inventoried",
+      "add": ["get_clear_done"]
+    },
+    "review_lists_and_calendar_with_user": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "get_clear_done",
+      "add": ["get_current_done"]
+    },
+    "update_lists": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": "get_current_done",
+      "add": ["lists_updated"]
+    },
+    "run_review_gate": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": "get_current_done",
+      "add": ["gate_run"],
+      "nondet": {"gate_exit": {"or": [{"cmp": ["gate_exit", "==", 0]}, {"cmp": ["gate_exit", "==", 2]}]}}
+    },
+    "close_gaps_with_user": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "gate_run",
+      "add": ["gaps_addressed"]
+    },
+    "get_creative_with_user": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "get_current_done",
+      "add": ["get_creative_done", "next_action_named"]
+    },
+    "audit_commitments": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell", "local_filesystem"],
+      "pre": "get_creative_done",
+      "add": ["commitments_audited"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "scan_open_loops", "by": "agent"}},
+    {"act": {"cap": "process_loops_with_user", "by": "agent"}},
+    {"act": {"cap": "review_lists_and_calendar_with_user", "by": "agent"}},
+    {"act": {"cap": "update_lists", "by": "agent"}},
+    {"act": {"cap": "get_creative_with_user", "by": "agent"}},
+    {"act": {"cap": "audit_commitments", "by": "agent"}},
+    {"rec": {"name": "GATE", "body": [
+      {"act": {"cap": "run_review_gate", "by": "agent"}},
+      {"choice": {"by": "agent", "external": true, "observed": true, "branches": {
+        "complete": [],
+        "incomplete": [
+          {"act": {"cap": "close_gaps_with_user", "by": "agent"}},
+          {"continue": "GATE"}
+        ]
+      }}}
+    ]}}
+  ],
+  "goal": {"and": [
+    "get_clear_done",
+    "get_current_done",
+    "get_creative_done",
+    "gate_run",
+    {"cmp": ["gate_exit", "==", 0]},
+    "commitments_audited",
+    "next_action_named"
+  ]},
+  "init_true": [],
+  "init_constraints": [{"cmp": ["gate_exit", "==", 2]}]
+}

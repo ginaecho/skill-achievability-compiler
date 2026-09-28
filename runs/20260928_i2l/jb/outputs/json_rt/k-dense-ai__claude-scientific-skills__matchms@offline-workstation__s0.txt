@@ -1,0 +1,70 @@
+{
+  "name": "matchms-library-search",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_matchms": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["matchms_installed"]
+    },
+    "verify_runtime": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "matchms_installed",
+      "add": ["runtime_verified"]
+    },
+    "inspect_inputs": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["runtime_verified", "spectra_files_exist"]},
+      "add": ["inputs_inspected"]
+    },
+    "load_and_process_spectra": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "inputs_inspected",
+      "add": ["spectra_processed"]
+    },
+    "score_and_write_hits": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "spectra_processed",
+      "add": ["hits_written"]
+    },
+    "plot_mirror_validation": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "hits_written",
+      "add": ["top_hits_plotted"]
+    },
+    "fetch_citation_record": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "add": ["citation_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_matchms", "by": "agent"}},
+    {"act": {"cap": "verify_runtime", "by": "agent"}},
+    {"act": {"cap": "inspect_inputs", "by": "agent"}},
+    {"act": {"cap": "load_and_process_spectra", "by": "agent"}},
+    {"act": {"cap": "score_and_write_hits", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "validate_visually": [
+        {"act": {"cap": "plot_mirror_validation", "by": "agent"}}
+      ],
+      "skip_plots": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "cite_with_network": [
+        {"act": {"cap": "fetch_citation_record", "by": "agent"}}
+      ],
+      "no_citation_fetch": []
+    }}}
+  ],
+  "goal": "hits_written",
+  "init_true": ["spectra_files_exist"],
+  "init_constraints": []
+}

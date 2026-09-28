@@ -1,0 +1,53 @@
+{
+  "name": "ad-campaign-analyzer",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "intake_questions": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["intake_complete"]
+    },
+    "read_campaign_export": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": "campaign_file_provided",
+      "add": ["data_loaded"]
+    },
+    "receive_pasted_data": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["data_loaded"]
+    },
+    "save_analysis_report": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["data_loaded", "intake_complete"]},
+      "add": ["report_saved"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "intake_questions", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "csv_file": [
+          {"act": {"cap": "read_campaign_export", "by": "agent"}}
+        ],
+        "pasted_table": [
+          {"act": {"cap": "receive_pasted_data", "by": "agent"}}
+        ]
+      }
+    }},
+    {"act": {"cap": "save_analysis_report", "by": "agent"}}
+  ],
+  "goal": {"and": ["data_loaded", "report_saved"]},
+  "init_true": ["campaign_file_provided"],
+  "init_constraints": []
+}

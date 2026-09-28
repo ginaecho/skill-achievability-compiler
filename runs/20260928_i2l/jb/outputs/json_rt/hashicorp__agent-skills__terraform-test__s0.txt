@@ -1,0 +1,74 @@
+{
+  "name": "terraform-test",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_terraform": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["terraform_installed"]
+    },
+    "read_module": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["module_understood"]
+    },
+    "write_unit_tests": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "module_understood",
+      "add": ["unit_tests_written"]
+    },
+    "run_unit_tests": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["public_internet"],
+      "pre": {"and": ["terraform_installed", "unit_tests_written"]},
+      "nondet": {"unit_tests_pass": true}
+    },
+    "fix_tests": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "unit_tests_written",
+      "add": ["unit_tests_written"]
+    },
+    "write_integration_tests": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "module_understood",
+      "add": ["integration_tests_written"]
+    },
+    "run_integration_tests": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["cloud_account"],
+      "pre": {"and": ["terraform_installed", "integration_tests_written"]},
+      "add": ["integration_tests_run"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_terraform", "by": "agent"}},
+    {"act": {"cap": "read_module", "by": "agent"}},
+    {"act": {"cap": "write_unit_tests", "by": "agent"}},
+    {"rec": {"name": "TEST", "body": [
+      {"act": {"cap": "run_unit_tests", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "external": true, "branches": {
+        "pass": [],
+        "fail": [
+          {"act": {"cap": "fix_tests", "by": "agent"}},
+          {"continue": "TEST"}
+        ]
+      }}}
+    ]}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "integration": [
+        {"act": {"cap": "write_integration_tests", "by": "agent"}},
+        {"act": {"cap": "run_integration_tests", "by": "agent"}}
+      ],
+      "unit_only": []
+    }}}
+  ],
+  "goal": {"and": ["unit_tests_written", "unit_tests_pass"]},
+  "init_true": [],
+  "init_constraints": []
+}

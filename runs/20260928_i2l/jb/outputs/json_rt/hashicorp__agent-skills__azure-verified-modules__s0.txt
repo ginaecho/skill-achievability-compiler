@@ -1,0 +1,82 @@
+{
+  "name": "azure-verified-modules",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_tooling": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["tools_installed"]
+    },
+    "write_module_files": {
+      "owner": "agent",
+      "via": "write",
+      "add": ["module_written", "providers_constrained", "variables_compliant", "outputs_compliant", "terraform_docs_config_present"]
+    },
+    "fmt_and_validate": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["public_internet"],
+      "pre": {"and": ["tools_installed", "module_written"]},
+      "add": ["formatted", "validated"]
+    },
+    "lint_and_scan": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["tools_installed", "module_written"]},
+      "add": ["linted", "security_scanned"]
+    },
+    "fix_module": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "module_written",
+      "del": ["formatted", "validated", "linted", "security_scanned"]
+    },
+    "generate_docs": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["tools_installed", "terraform_docs_config_present"]},
+      "add": ["docs_generated"]
+    },
+    "run_integration_tests": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_subscription"],
+      "pre": "validated",
+      "add": ["integration_tested"]
+    },
+    "set_branch_protection": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["github_admin_access"],
+      "add": ["branch_protected"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_tooling", "by": "agent"}},
+    {"act": {"cap": "write_module_files", "by": "agent"}},
+    {"rec": {"name": "Check", "body": [
+      {"act": {"cap": "fmt_and_validate", "by": "agent"}},
+      {"act": {"cap": "lint_and_scan", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "clean": [],
+        "issues": [
+          {"act": {"cap": "fix_module", "by": "agent"}},
+          {"continue": "Check"}
+        ]
+      }}}
+    ]}},
+    {"act": {"cap": "generate_docs", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "integration_tests": [{"act": {"cap": "run_integration_tests", "by": "agent"}}],
+      "skip": []
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "branch_protection": [{"act": {"cap": "set_branch_protection", "by": "agent"}}],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["module_written", "providers_constrained", "variables_compliant", "outputs_compliant", "terraform_docs_config_present", "formatted", "validated", "linted", "security_scanned", "docs_generated"]},
+  "init_true": [],
+  "init_constraints": []
+}

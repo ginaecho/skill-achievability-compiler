@@ -1,0 +1,66 @@
+{
+  "name": "single-cell-rna-qc",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_python_deps": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": true,
+      "add": ["deps_installed"]
+    },
+    "run_qc_pipeline_script": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["deps_installed", "input_data_present"]},
+      "add": ["qc_metrics_computed", "cells_filtered", "qc_plots_generated", "filtered_h5ad_written"]
+    },
+    "write_custom_qc_script": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "input_data_present",
+      "add": ["custom_script_written"]
+    },
+    "run_custom_qc_script": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["deps_installed", "custom_script_written"]},
+      "add": ["qc_metrics_computed", "cells_filtered", "qc_plots_generated", "filtered_h5ad_written"]
+    },
+    "copy_outputs_for_user": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "filtered_h5ad_written",
+      "add": ["outputs_shared"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_python_deps", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "standard_pipeline": [
+          {"act": {"cap": "run_qc_pipeline_script", "by": "agent"}}
+        ],
+        "custom_workflow": [
+          {"act": {"cap": "write_custom_qc_script", "by": "agent"}},
+          {"act": {"cap": "run_custom_qc_script", "by": "agent"}}
+        ]
+      }
+    }},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "copy_outputs": [
+          {"act": {"cap": "copy_outputs_for_user", "by": "agent"}}
+        ],
+        "skip": []
+      }
+    }}
+  ],
+  "goal": {"and": ["qc_metrics_computed", "cells_filtered", "qc_plots_generated", "filtered_h5ad_written"]},
+  "init_true": ["input_data_present"],
+  "init_constraints": []
+}

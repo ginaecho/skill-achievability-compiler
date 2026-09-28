@@ -1,0 +1,96 @@
+{
+  "name": "expo-migrate-module",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "check_expo_version": {
+      "owner": "agent",
+      "via": "bash",
+      "add": ["version_checked"],
+      "nondet": {"expo_version_ok": true}
+    },
+    "inventory_contract": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "expo_version_ok",
+      "add": ["contract_inventoried", "surface_classified"]
+    },
+    "migrate_group": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": {"and": ["contract_inventoried", "surface_classified"]},
+      "add": ["source_migrated"],
+      "del": ["module_built", "tests_passed"]
+    },
+    "keep_or_revert_group": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "source_migrated",
+      "add": ["blocked_items_resolved"]
+    },
+    "open_tracking_issue": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["github_account"],
+      "add": ["issue_opened"]
+    },
+    "build_apple_module": {
+      "owner": "agent",
+      "via": "macos_xcode",
+      "needs": ["macos"],
+      "pre": "source_migrated",
+      "add": ["module_built"]
+    },
+    "run_js_tests": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "source_migrated",
+      "add": ["tests_passed"]
+    },
+    "launch_example_app": {
+      "owner": "agent",
+      "via": "ios_simulator",
+      "needs": ["macos"],
+      "pre": "module_built",
+      "add": ["example_app_resolves_module"]
+    },
+    "search_stale_entries": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "source_migrated",
+      "add": ["config_and_surface_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "check_expo_version", "by": "agent"}},
+    {"act": {"cap": "inventory_contract", "by": "agent"}},
+    {"rec": {"name": "Groups", "body": [
+      {"act": {"cap": "migrate_group", "by": "agent"}},
+      {"act": {"cap": "build_apple_module", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "clean": [],
+        "blocked": [
+          {"choice": {"by": "user", "observed": true, "branches": {
+            "coexist_or_revert": [{"act": {"cap": "keep_or_revert_group", "by": "agent"}}]
+          }}},
+          {"choice": {"by": "user", "observed": true, "branches": {
+            "file_issue": [{"act": {"cap": "open_tracking_issue", "by": "agent"}}],
+            "skip": []
+          }}}
+        ]
+      }}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "more_groups": [{"continue": "Groups"}],
+        "done": []
+      }}}
+    ]}},
+    {"act": {"cap": "run_js_tests", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "has_example_app": [{"act": {"cap": "launch_example_app", "by": "agent"}}],
+      "no_example_app": []
+    }}},
+    {"act": {"cap": "search_stale_entries", "by": "agent"}}
+  ],
+  "goal": {"and": ["expo_version_ok", "contract_inventoried", "source_migrated", "module_built", "tests_passed", "config_and_surface_verified"]},
+  "init_true": [],
+  "init_constraints": []
+}

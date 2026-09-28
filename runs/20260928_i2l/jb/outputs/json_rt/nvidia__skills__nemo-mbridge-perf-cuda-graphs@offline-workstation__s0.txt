@@ -1,0 +1,56 @@
+{
+  "name": "nemo-mbridge-perf-cuda-graphs",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_config_code": {
+      "owner": "agent",
+      "via": "read",
+      "pre": true,
+      "add": ["config_inspected"]
+    },
+    "set_cuda_graph_config": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "config_inspected",
+      "add": ["cuda_graph_configured", "te_rng_tracker_enabled"]
+    },
+    "run_unit_tests": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["preinstalled_software"],
+      "pre": "cuda_graph_configured",
+      "add": ["unit_tests_pass"]
+    },
+    "run_functional_gpu_smoke_test": {
+      "owner": "agent",
+      "via": "nvidia_gpu_node",
+      "needs": ["gpu_hardware"],
+      "pre": {"and": ["cuda_graph_configured", "te_rng_tracker_enabled"]},
+      "add": ["functional_test_pass"]
+    },
+    "benchmark_eager_vs_graph": {
+      "owner": "agent",
+      "via": "nvidia_gpu_cluster",
+      "needs": ["gpu_hardware"],
+      "pre": "functional_test_pass",
+      "add": ["replay_timing_compared"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "read_config_code", "by": "agent"}},
+    {"act": {"cap": "set_cuda_graph_config", "by": "agent"}},
+    {"act": {"cap": "run_unit_tests", "by": "agent"}},
+    {"act": {"cap": "run_functional_gpu_smoke_test", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "benchmark": [{"act": {"cap": "benchmark_eager_vs_graph", "by": "agent"}}],
+        "skip_benchmark": []
+      }
+    }}
+  ],
+  "goal": {"and": ["cuda_graph_configured", "te_rng_tracker_enabled", "unit_tests_pass", "functional_test_pass"]},
+  "init_true": [],
+  "init_constraints": []
+}

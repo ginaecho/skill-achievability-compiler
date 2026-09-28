@@ -1,0 +1,59 @@
+{
+  "name": "huggingface-vision-trainer",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "verify_hf_auth": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["hf_token", "hf_paid_plan"],
+      "pre": true,
+      "add": ["auth_verified"]
+    },
+    "validate_dataset_locally": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": true,
+      "add": ["dataset_validated"]
+    },
+    "ask_training_preferences": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "dataset_validated",
+      "add": ["preferences_set"]
+    },
+    "save_training_script": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "preferences_set",
+      "add": ["script_saved"]
+    },
+    "submit_training_job": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["hf_token", "hf_paid_plan", "hf_jobs_gpu"],
+      "pre": {"and": ["auth_verified", "script_saved", "dataset_validated"]},
+      "add": ["job_submitted", "model_push_configured"]
+    },
+    "check_job_status": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["hf_token"],
+      "pre": "job_submitted",
+      "add": ["status_reported"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "verify_hf_auth", "by": "agent"}},
+    {"act": {"cap": "validate_dataset_locally", "by": "agent"}},
+    {"act": {"cap": "ask_training_preferences", "by": "agent"}},
+    {"act": {"cap": "save_training_script", "by": "agent"}},
+    {"act": {"cap": "submit_training_job", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "check_status": [{"act": {"cap": "check_job_status", "by": "agent"}}],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["dataset_validated", "script_saved", "job_submitted", "model_push_configured"]},
+  "init_true": [],
+  "init_constraints": []
+}

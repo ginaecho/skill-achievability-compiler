@@ -1,0 +1,63 @@
+{
+  "name": "harness-writing",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_codebase": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["entry_points_identified"]
+    },
+    "install_fuzz_toolchain": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["toolchain_installed"]
+    },
+    "write_harness": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "entry_points_identified",
+      "add": ["harness_written"]
+    },
+    "improve_harness": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "harness_written",
+      "add": ["harness_improved"],
+      "del": ["harness_built", "fuzzer_ran"]
+    },
+    "build_harness": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": {"and": ["harness_written", "toolchain_installed"]},
+      "add": ["harness_built"]
+    },
+    "run_fuzzer": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": "harness_built",
+      "add": ["fuzzer_ran", "coverage_checked"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_codebase", "by": "agent"}},
+    {"act": {"cap": "install_fuzz_toolchain", "by": "agent"}},
+    {"act": {"cap": "write_harness", "by": "agent"}},
+    {"rec": {"name": "Iterate", "body": [
+      {"act": {"cap": "build_harness", "by": "agent"}},
+      {"act": {"cap": "run_fuzzer", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "metrics_ok": [],
+        "needs_improvement": [
+          {"act": {"cap": "improve_harness", "by": "agent"}},
+          {"continue": "Iterate"}
+        ]
+      }}}
+    ]}}
+  ],
+  "goal": {"and": ["harness_written", "harness_built", "fuzzer_ran", "coverage_checked"]},
+  "init_true": [],
+  "init_constraints": []
+}

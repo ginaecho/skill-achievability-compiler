@@ -1,0 +1,66 @@
+{
+  "name": "microsoft-azure-webjobs-extensions-authentication-events-dotnet",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_package": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["package_registries"],
+      "pre": true,
+      "add": ["package_installed"]
+    },
+    "write_function_code": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "package_installed",
+      "add": ["function_code_written"]
+    },
+    "write_function_config": {
+      "owner": "agent",
+      "via": "write",
+      "pre": true,
+      "add": ["function_config_written"]
+    },
+    "test_locally": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": {"and": ["function_code_written", "function_config_written"]},
+      "add": ["function_tested"]
+    },
+    "deploy_function_app": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["azure_account"],
+      "pre": {"and": ["function_code_written", "function_config_written"]},
+      "add": ["function_deployed"]
+    },
+    "configure_entra_extension": {
+      "owner": "agent",
+      "via": "entra_admin_portal",
+      "needs": ["entra_tenant_admin"],
+      "pre": "function_deployed",
+      "add": ["entra_extension_configured"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_package", "by": "agent"}},
+    {"act": {"cap": "write_function_code", "by": "agent"}},
+    {"act": {"cap": "write_function_config", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "test": [
+        {"act": {"cap": "test_locally", "by": "agent"}}
+      ],
+      "skip": []
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "deploy": [
+        {"act": {"cap": "deploy_function_app", "by": "agent"}},
+        {"act": {"cap": "configure_entra_extension", "by": "agent"}}
+      ],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["package_installed", "function_code_written", "function_config_written"]},
+  "init_true": [],
+  "init_constraints": []
+}

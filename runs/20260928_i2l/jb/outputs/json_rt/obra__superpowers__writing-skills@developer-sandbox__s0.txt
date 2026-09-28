@@ -1,0 +1,89 @@
+{
+  "name": "writing-skills",
+  "roles": ["agent", "subagent", "user"],
+  "capabilities": {
+    "write_pressure_scenarios": {
+      "owner": "agent",
+      "via": "write",
+      "add": ["scenarios_written"]
+    },
+    "record_baseline": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "scenarios_written",
+      "add": ["baseline_documented"]
+    },
+    "write_skill_file": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "baseline_documented",
+      "add": ["skill_written"]
+    },
+    "record_compliance": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "skill_written",
+      "add": ["compliance_verified"]
+    },
+    "edit_skill_loopholes": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "skill_written",
+      "add": ["loopholes_closed"],
+      "del": ["compliance_verified"]
+    },
+    "check_word_count": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": "skill_written",
+      "add": ["word_count_checked"]
+    },
+    "commit_skill": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": "compliance_verified",
+      "add": ["skill_committed"]
+    },
+    "push_to_fork": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["github_account"],
+      "pre": "skill_committed",
+      "add": ["skill_pushed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "write_pressure_scenarios", "by": "agent"}},
+    {"spawn": {"role": "subagent"}},
+    {"msg": {"from": "agent", "to": "subagent", "label": "scenario_without_skill"}},
+    {"msg": {"from": "subagent", "to": "agent", "label": "baseline_behavior"}},
+    {"act": {"cap": "record_baseline", "by": "agent"}},
+    {"act": {"cap": "write_skill_file", "by": "agent"}},
+    {"act": {"cap": "check_word_count", "by": "agent"}},
+    {"rec": {"name": "Refactor", "body": [
+      {"spawn": {"role": "subagent"}},
+      {"msg": {"from": "agent", "to": "subagent", "label": "scenario_with_skill"}},
+      {"msg": {"from": "subagent", "to": "agent", "label": "with_skill_behavior"}},
+      {"act": {"cap": "record_compliance", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "bulletproof": [],
+        "new_rationalization": [
+          {"act": {"cap": "edit_skill_loopholes", "by": "agent"}},
+          {"continue": "Refactor"}
+        ]
+      }}}
+    ]}},
+    {"act": {"cap": "commit_skill", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "push_configured": [
+        {"act": {"cap": "push_to_fork", "by": "agent"}}
+      ],
+      "no_push": []
+    }}}
+  ],
+  "goal": {"and": ["baseline_documented", "skill_written", "compliance_verified", "skill_committed"]},
+  "init_true": [],
+  "init_constraints": []
+}

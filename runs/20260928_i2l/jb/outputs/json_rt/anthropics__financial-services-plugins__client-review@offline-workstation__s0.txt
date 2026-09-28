@@ -1,0 +1,69 @@
+{
+  "name": "client-review",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "gather_client_context": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["client_context_known"]
+    },
+    "read_account_data": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": "account_files_available",
+      "add": ["account_data_loaded"]
+    },
+    "collect_account_data_from_user": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["account_data_loaded"]
+    },
+    "compute_performance_and_allocation": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell", "preinstalled_software"],
+      "pre": {"and": ["account_data_loaded", "client_context_known"]},
+      "add": ["performance_table_built", "allocation_drift_computed"]
+    },
+    "render_allocation_chart": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell", "preinstalled_software"],
+      "pre": "allocation_drift_computed",
+      "add": ["allocation_chart_rendered"]
+    },
+    "produce_review_document": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell", "preinstalled_software", "local_filesystem"],
+      "pre": {"and": ["performance_table_built", "allocation_chart_rendered"]},
+      "add": ["review_summary_doc", "agenda_included", "action_items_included"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "gather_client_context", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "files_provided": [
+        {"act": {"cap": "read_account_data", "by": "agent"}}
+      ],
+      "data_in_chat": [
+        {"act": {"cap": "collect_account_data_from_user", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "compute_performance_and_allocation", "by": "agent"}},
+    {"act": {"cap": "render_allocation_chart", "by": "agent"}},
+    {"act": {"cap": "produce_review_document", "by": "agent"}}
+  ],
+  "goal": {"and": [
+    "review_summary_doc",
+    "performance_table_built",
+    "allocation_chart_rendered",
+    "agenda_included",
+    "action_items_included"
+  ]},
+  "init_true": [],
+  "init_constraints": []
+}

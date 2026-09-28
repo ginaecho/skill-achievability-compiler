@@ -1,0 +1,75 @@
+{
+  "name": "signature-request",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_uploaded_document": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "document_uploaded",
+      "add": ["document_loaded"]
+    },
+    "fetch_document_from_storage": {
+      "owner": "agent",
+      "via": "cloud_storage_connector",
+      "needs": ["cloud_storage_account"],
+      "pre": true,
+      "add": ["document_loaded"]
+    },
+    "confirm_checklist_items": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "document_loaded",
+      "add": ["checklist_done"]
+    },
+    "gather_signing_details": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "checklist_done",
+      "add": ["signers_configured"]
+    },
+    "send_esignature_envelope": {
+      "owner": "agent",
+      "via": "esignature_connector",
+      "needs": ["esignature_account"],
+      "pre": {"and": ["checklist_done", "signers_configured"]},
+      "add": ["sent_for_signature"]
+    },
+    "write_signing_instructions": {
+      "owner": "agent",
+      "via": "write",
+      "pre": {"and": ["checklist_done", "signers_configured"]},
+      "add": ["signing_instructions_ready"]
+    }
+  },
+  "protocol": [
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "file_upload": [
+          {"act": {"cap": "read_uploaded_document", "by": "agent"}}
+        ],
+        "storage_link": [
+          {"act": {"cap": "fetch_document_from_storage", "by": "agent"}}
+        ]
+      }
+    }},
+    {"act": {"cap": "confirm_checklist_items", "by": "agent"}},
+    {"act": {"cap": "gather_signing_details", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "esign_connected": [
+          {"act": {"cap": "send_esignature_envelope", "by": "agent"}}
+        ],
+        "not_connected": [
+          {"act": {"cap": "write_signing_instructions", "by": "agent"}}
+        ]
+      }
+    }}
+  ],
+  "goal": {"and": ["document_loaded", "checklist_done", "signers_configured", {"or": ["sent_for_signature", "signing_instructions_ready"]}]},
+  "init_true": ["document_uploaded"],
+  "init_constraints": []
+}

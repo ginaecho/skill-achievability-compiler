@@ -1,0 +1,64 @@
+{
+  "name": "aspnet-core",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_project": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["target_confirmed"]
+    },
+    "read_references": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "target_confirmed",
+      "add": ["references_loaded"]
+    },
+    "scaffold_from_template": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["dotnet_sdk"],
+      "pre": "references_loaded",
+      "add": ["project_exists"]
+    },
+    "implement_feature": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": {"and": ["references_loaded", "project_exists"]},
+      "add": ["feature_implemented"]
+    },
+    "build_and_test": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["dotnet_sdk", "package_registries"],
+      "pre": "feature_implemented",
+      "add": ["build_passes"]
+    },
+    "verify_latest_docs": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "add": ["docs_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_project", "by": "agent"}},
+    {"act": {"cap": "read_references", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "new_app": [
+        {"act": {"cap": "scaffold_from_template", "by": "agent"}}
+      ],
+      "existing_app": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "latest_requested": [
+        {"act": {"cap": "verify_latest_docs", "by": "agent"}}
+      ],
+      "skip": []
+    }}},
+    {"act": {"cap": "implement_feature", "by": "agent"}},
+    {"act": {"cap": "build_and_test", "by": "agent"}}
+  ],
+  "goal": {"and": ["feature_implemented", "build_passes"]},
+  "init_true": ["project_exists"],
+  "init_constraints": []
+}

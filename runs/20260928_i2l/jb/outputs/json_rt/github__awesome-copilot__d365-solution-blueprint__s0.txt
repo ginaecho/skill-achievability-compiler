@@ -1,0 +1,60 @@
+{
+  "name": "d365-solution-blueprint",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_existing_blueprint": {
+      "owner": "agent",
+      "via": "read",
+      "pre": true,
+      "add": ["prior_state_loaded"]
+    },
+    "interview_section": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["section_answers_collected"]
+    },
+    "verify_against_microsoft_docs": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": "section_answers_collected",
+      "add": ["claims_verified"]
+    },
+    "save_blueprint_file": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "section_answers_collected",
+      "add": ["blueprint_saved", "decision_log_updated", "progress_tracker_updated"],
+      "del": ["section_answers_collected"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "resume": [
+        {"act": {"cap": "read_existing_blueprint", "by": "agent"}}
+      ],
+      "new": []
+    }}},
+    {"rec": {"name": "Sections", "body": [
+      {"act": {"cap": "interview_section", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "verify": [
+          {"act": {"cap": "verify_against_microsoft_docs", "by": "agent"}}
+        ],
+        "no_verify": []
+      }}},
+      {"act": {"cap": "save_blueprint_file", "by": "agent"}},
+      {"choice": {"by": "user", "observed": true, "branches": {
+        "next_section": [
+          {"continue": "Sections"}
+        ],
+        "stop": []
+      }}}
+    ]}}
+  ],
+  "goal": {"and": ["blueprint_saved", "decision_log_updated", "progress_tracker_updated"]},
+  "init_true": [],
+  "init_constraints": []
+}

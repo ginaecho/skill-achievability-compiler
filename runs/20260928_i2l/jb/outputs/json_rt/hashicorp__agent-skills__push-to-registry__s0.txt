@@ -1,0 +1,70 @@
+{
+  "name": "push-to-registry",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "write_packer_template": {
+      "owner": "agent",
+      "via": "write",
+      "pre": true,
+      "add": ["template_has_registry_block"]
+    },
+    "install_packer": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": true,
+      "add": ["packer_installed"]
+    },
+    "create_service_principal": {
+      "owner": "user",
+      "via": "hcp_console",
+      "needs": ["hcp_account"],
+      "pre": true,
+      "add": ["service_principal_created"]
+    },
+    "set_hcp_credentials": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["hcp_credentials"],
+      "pre": "service_principal_created",
+      "add": ["hcp_auth_configured"]
+    },
+    "packer_init": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["public_internet"],
+      "pre": {"and": ["packer_installed", "template_has_registry_block"]},
+      "add": ["plugins_initialized"]
+    },
+    "packer_build_and_push": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["aws_account", "hcp_account"],
+      "pre": {"and": ["plugins_initialized", "hcp_auth_configured"]},
+      "add": ["image_built", "metadata_pushed"]
+    },
+    "write_ci_workflow": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "template_has_registry_block",
+      "add": ["ci_workflow_written"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "write_packer_template", "by": "agent"}},
+    {"act": {"cap": "install_packer", "by": "agent"}},
+    {"act": {"cap": "create_service_principal", "by": "user"}},
+    {"act": {"cap": "set_hcp_credentials", "by": "agent"}},
+    {"act": {"cap": "packer_init", "by": "agent"}},
+    {"act": {"cap": "packer_build_and_push", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "add_ci": [
+        {"act": {"cap": "write_ci_workflow", "by": "agent"}}
+      ],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["template_has_registry_block", "metadata_pushed"]},
+  "init_true": [],
+  "init_constraints": []
+}

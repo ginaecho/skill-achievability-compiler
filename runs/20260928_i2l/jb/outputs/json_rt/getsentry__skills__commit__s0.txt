@@ -1,0 +1,45 @@
+{
+  "name": "sentry-commit",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "check_branch": {
+      "owner": "agent",
+      "via": "bash",
+      "add": ["branch_checked"],
+      "nondet": {"on_main": true}
+    },
+    "create_feature_branch": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "branch_checked",
+      "add": ["on_feature_branch"],
+      "del": ["on_main"]
+    },
+    "git_commit": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"or": ["on_feature_branch", "direct_commit_requested"]},
+      "add": ["committed", "message_conventional"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "check_branch", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "external": true, "branches": {
+      "feature_branch": [
+        {"act": {"cap": "create_feature_branch", "by": "agent"}}
+      ],
+      "main_branch": [
+        {"choice": {"by": "user", "observed": true, "branches": {
+          "direct_commit_requested": [],
+          "use_feature_branch": [
+            {"act": {"cap": "create_feature_branch", "by": "agent"}}
+          ]
+        }}}
+      ]
+    }}},
+    {"act": {"cap": "git_commit", "by": "agent"}}
+  ],
+  "goal": {"and": ["committed", "message_conventional"]},
+  "init_true": [],
+  "init_constraints": []
+}

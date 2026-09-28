@@ -1,0 +1,108 @@
+{
+  "name": "entra-agent-id",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "check_latest_docs": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": true,
+      "add": ["docs_checked"]
+    },
+    "install_dependencies": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": true,
+      "add": ["deps_installed"]
+    },
+    "grant_admin_consent": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_entra_tenant", "entra_admin_role"],
+      "pre": "deps_installed",
+      "nondet": {"consent_granted": true}
+    },
+    "acquire_graph_token": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_entra_tenant", "app_registration_client_secret"],
+      "pre": "deps_installed",
+      "add": ["graph_token"]
+    },
+    "create_blueprint": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_entra_tenant", "agent_identity_developer_role"],
+      "pre": "graph_token",
+      "add": ["blueprint_created"]
+    },
+    "create_blueprint_principal": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_entra_tenant", "agent_identity_developer_role"],
+      "pre": {"and": ["graph_token", "blueprint_created"]},
+      "add": ["blueprint_principal_created"]
+    },
+    "create_agent_identity": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_entra_tenant", "agent_identity_developer_role"],
+      "pre": {"and": ["graph_token", "blueprint_principal_created"]},
+      "add": ["agent_identity_created"]
+    },
+    "cleanup_resources": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_entra_tenant"],
+      "pre": "graph_token",
+      "add": ["resources_cleaned"]
+    }
+  },
+  "protocol": [
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "check_docs": [{"act": {"cap": "check_latest_docs", "by": "agent"}}],
+        "skip_docs": []
+      }
+    }},
+    {"act": {"cap": "install_dependencies", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "consent_needed": [
+          {"rec": {"name": "ConsentRetry", "body": [
+            {"act": {"cap": "grant_admin_consent", "by": "agent"}},
+            {"choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "done": [],
+                "retry": [{"continue": "ConsentRetry"}]
+              }
+            }}
+          ]}}
+        ],
+        "already_consented": []
+      }
+    }},
+    {"act": {"cap": "acquire_graph_token", "by": "agent"}},
+    {"act": {"cap": "create_blueprint", "by": "agent"}},
+    {"act": {"cap": "create_blueprint_principal", "by": "agent"}},
+    {"act": {"cap": "create_agent_identity", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "cleanup": [{"act": {"cap": "cleanup_resources", "by": "agent"}}],
+        "keep": []
+      }
+    }}
+  ],
+  "goal": {"and": ["blueprint_created", "blueprint_principal_created", "agent_identity_created"]},
+  "init_true": [],
+  "init_constraints": []
+}

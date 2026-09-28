@@ -1,0 +1,88 @@
+{
+  "name": "test-driven-development",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "write_failing_test": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "add": ["test_written"]
+    },
+    "run_test_verify_red": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": {"and": ["test_written", {"not": "impl_written"}]},
+      "add": ["watched_fail"]
+    },
+    "write_minimal_impl": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": "watched_fail",
+      "add": ["impl_written"]
+    },
+    "run_full_suite": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "impl_written",
+      "add": ["suite_run"]
+    },
+    "fix_impl": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": "suite_run",
+      "del": ["suite_run", "all_tests_pass"]
+    },
+    "confirm_suite_green": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "suite_run",
+      "add": ["all_tests_pass"]
+    },
+    "refactor_code": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": "all_tests_pass",
+      "add": ["refactored"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "write_failing_test", "by": "agent"}},
+    {"act": {"cap": "run_test_verify_red", "by": "agent"}},
+    {"act": {"cap": "write_minimal_impl", "by": "agent"}},
+    {"rec": {"name": "GREEN", "body": [
+      {"act": {"cap": "run_full_suite", "by": "agent"}},
+      {"choice": {
+        "by": "agent",
+        "external": true,
+        "observed": true,
+        "branches": {
+          "pass": [
+            {"act": {"cap": "confirm_suite_green", "by": "agent"}}
+          ],
+          "fail": [
+            {"act": {"cap": "fix_impl", "by": "agent"}},
+            {"continue": "GREEN"}
+          ]
+        }
+      }}
+    ]}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "refactor": [
+          {"act": {"cap": "refactor_code", "by": "agent"}},
+          {"act": {"cap": "run_full_suite", "by": "agent"}},
+          {"act": {"cap": "confirm_suite_green", "by": "agent"}}
+        ],
+        "no_refactor": []
+      }
+    }}
+  ],
+  "goal": {"and": ["test_written", "watched_fail", "impl_written", "all_tests_pass"]},
+  "init_true": [],
+  "init_constraints": []
+}

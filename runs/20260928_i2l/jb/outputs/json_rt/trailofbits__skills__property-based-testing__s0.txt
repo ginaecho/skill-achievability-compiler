@@ -1,0 +1,73 @@
+{
+  "name": "property-based-testing",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_code": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "code_present",
+      "add": ["code_understood"]
+    },
+    "load_reference": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["reference_loaded"]
+    },
+    "offer_pbt_dependency": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "code_understood",
+      "add": ["dependency_offered"]
+    },
+    "install_pbt_library": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "dependency_offered",
+      "add": ["pbt_available"]
+    },
+    "write_property_tests": {
+      "owner": "agent",
+      "via": "write",
+      "pre": {"and": ["code_understood", "pbt_available"]},
+      "add": ["tests_written"]
+    },
+    "write_example_tests": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "code_understood",
+      "add": ["tests_written"]
+    },
+    "run_tests": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "tests_written",
+      "add": ["tests_run"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_code", "by": "agent"}},
+    {"act": {"cap": "load_reference", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "library_present": [
+        {"act": {"cap": "write_property_tests", "by": "agent"}}
+      ],
+      "library_absent": [
+        {"act": {"cap": "offer_pbt_dependency", "by": "agent"}},
+        {"choice": {"by": "user", "observed": true, "branches": {
+          "accept": [
+            {"act": {"cap": "install_pbt_library", "by": "agent"}},
+            {"act": {"cap": "write_property_tests", "by": "agent"}}
+          ],
+          "decline": [
+            {"act": {"cap": "write_example_tests", "by": "agent"}}
+          ]
+        }}}
+      ]
+    }}},
+    {"act": {"cap": "run_tests", "by": "agent"}}
+  ],
+  "goal": {"and": ["tests_written", "tests_run"]},
+  "init_true": ["code_present"],
+  "init_constraints": []
+}

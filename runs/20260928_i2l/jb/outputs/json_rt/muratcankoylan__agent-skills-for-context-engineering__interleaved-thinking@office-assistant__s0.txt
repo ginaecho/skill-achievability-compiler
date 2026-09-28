@@ -1,0 +1,66 @@
+{
+  "name": "reasoning-trace-optimizer",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "capture_trace": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["minimax_api_key"],
+      "add": ["trace_captured"]
+    },
+    "analyze_trace": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["minimax_api_key"],
+      "pre": "trace_captured",
+      "add": ["analysis_done"]
+    },
+    "optimize_prompt_iteration": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["minimax_api_key"],
+      "pre": "analysis_done",
+      "add": ["prompt_optimized"]
+    },
+    "generate_skill_file": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "prompt_optimized",
+      "add": ["skill_generated"]
+    },
+    "write_analysis_report": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "analysis_done",
+      "add": ["report_written"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "capture_trace", "by": "agent"}},
+    {"act": {"cap": "analyze_trace", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "optimize": [
+        {"rec": {"name": "Loop", "body": [
+          {"act": {"cap": "optimize_prompt_iteration", "by": "agent"}},
+          {"choice": {"by": "agent", "observed": true, "branches": {
+            "converged": [],
+            "iterate": [
+              {"continue": "Loop"}
+            ]
+          }}}
+        ]}},
+        {"choice": {"by": "user", "observed": true, "branches": {
+          "generate_skill": [
+            {"act": {"cap": "generate_skill_file", "by": "agent"}}
+          ],
+          "skip_skill": []
+        }}}
+      ],
+      "analysis_only": []
+    }}},
+    {"act": {"cap": "write_analysis_report", "by": "agent"}}
+  ],
+  "goal": {"and": ["analysis_done", "report_written"]},
+  "init_true": [],
+  "init_constraints": []
+}

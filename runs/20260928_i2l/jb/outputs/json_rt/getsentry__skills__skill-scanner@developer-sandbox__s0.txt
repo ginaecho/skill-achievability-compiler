@@ -1,0 +1,57 @@
+{
+  "name": "skill-scanner",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "discover_target": {
+      "owner": "agent",
+      "via": "bash",
+      "add": ["target_located"]
+    },
+    "install_uv": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["uv_available"]
+    },
+    "run_static_scan": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": {"and": ["target_located", "uv_available"]},
+      "add": ["automated_scan_done"]
+    },
+    "manual_grep_scan": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "target_located",
+      "add": ["automated_scan_done"]
+    },
+    "read_skill_files": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "target_located",
+      "add": ["skill_files_reviewed", "references_loaded"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "discover_target", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "uv_missing": [
+        {"act": {"cap": "install_uv", "by": "agent"}}
+      ],
+      "uv_present": []
+    }}},
+    {"choice": {"by": "agent", "external": true, "observed": true, "branches": {
+      "script_works": [
+        {"act": {"cap": "run_static_scan", "by": "agent"}}
+      ],
+      "script_fails": [
+        {"act": {"cap": "manual_grep_scan", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "read_skill_files", "by": "agent"}}
+  ],
+  "goal": {"and": ["target_located", "automated_scan_done", "skill_files_reviewed"]},
+  "init_true": [],
+  "init_constraints": []
+}

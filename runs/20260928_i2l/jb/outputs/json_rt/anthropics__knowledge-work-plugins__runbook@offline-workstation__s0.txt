@@ -1,0 +1,69 @@
+{
+  "name": "runbook",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "ask_process_details": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": true,
+      "add": ["process_details_known"]
+    },
+    "search_existing_runbooks": {
+      "owner": "agent",
+      "via": "knowledge_base_connector",
+      "needs": ["knowledge_base_account"],
+      "pre": true,
+      "add": ["existing_runbook_checked"]
+    },
+    "populate_escalation_from_itsm": {
+      "owner": "agent",
+      "via": "itsm_connector",
+      "needs": ["itsm_account"],
+      "pre": "process_details_known",
+      "add": ["escalation_contacts_populated", "runbook_linked_itsm"]
+    },
+    "publish_runbook_to_wiki": {
+      "owner": "agent",
+      "via": "knowledge_base_connector",
+      "needs": ["knowledge_base_account"],
+      "pre": "process_details_known",
+      "add": ["runbook_published"]
+    }
+  },
+  "protocol": [
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "kb_connected": [
+          {"act": {"cap": "search_existing_runbooks", "by": "agent"}}
+        ],
+        "no_kb": []
+      }
+    }},
+    {"act": {"cap": "ask_process_details", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "itsm_connected": [
+          {"act": {"cap": "populate_escalation_from_itsm", "by": "agent"}}
+        ],
+        "no_itsm": []
+      }
+    }},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "publish": [
+          {"act": {"cap": "publish_runbook_to_wiki", "by": "agent"}}
+        ],
+        "no_publish": []
+      }
+    }}
+  ],
+  "goal": "process_details_known",
+  "init_true": [],
+  "init_constraints": []
+}
