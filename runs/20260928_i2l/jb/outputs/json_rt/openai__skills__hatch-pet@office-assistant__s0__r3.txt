@@ -1,0 +1,266 @@
+{
+ "name": "hatch-pet",
+ "roles": [
+  "agent",
+  "user",
+  "worker"
+ ],
+ "capabilities": {
+  "ask_subagent_permission": {
+   "owner": "agent",
+   "via": "ask_user",
+   "add": [
+    "subagents_allowed"
+   ]
+  },
+  "brand_discovery": {
+   "owner": "worker",
+   "via": "web_search",
+   "needs": [
+    "public_internet"
+   ],
+   "add": [
+    "brand_brief_saved"
+   ]
+  },
+  "prepare_pet_run": {
+   "owner": "agent",
+   "via": "shell",
+   "add": [
+    "run_prepared"
+   ]
+  },
+  "generate_base_image": {
+   "owner": "worker",
+   "via": "image_generation",
+   "pre": "run_prepared",
+   "add": [
+    "base_generated"
+   ]
+  },
+  "record_job_output": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "base_generated",
+   "add": [
+    "canonical_base_ready"
+   ]
+  },
+  "generate_row_strips": {
+   "owner": "worker",
+   "via": "image_generation",
+   "pre": "canonical_base_ready",
+   "add": [
+    "rows_generated"
+   ]
+  },
+  "mirror_running_left": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "rows_generated",
+   "add": [
+    "running_left_derived"
+   ]
+  },
+  "process_and_validate_atlas": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "rows_generated",
+   "add": [
+    "atlas_composed",
+    "atlas_validated",
+    "contact_sheet_made"
+   ]
+  },
+  "visual_qa": {
+   "owner": "worker",
+   "via": "image_vision",
+   "pre": "contact_sheet_made",
+   "add": [
+    "visual_qa_passed"
+   ]
+  },
+  "package_pet": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": {
+    "and": [
+     "atlas_validated",
+     "visual_qa_passed"
+    ]
+   },
+   "add": [
+    "pet_packaged"
+   ]
+  },
+  "cleanup_artifacts": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "pet_packaged",
+   "add": [
+    "artifacts_cleaned"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "user",
+    "observed": true,
+    "branches": {
+     "permission_unclear": [
+      {
+       "act": {
+        "cap": "ask_subagent_permission",
+        "by": "agent"
+       }
+      }
+     ],
+     "already_allowed": []
+    }
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "bare_brand": [
+      {
+       "spawn": {
+        "role": "worker"
+       }
+      },
+      {
+       "act": {
+        "cap": "brand_discovery",
+        "by": "worker"
+       }
+      }
+     ],
+     "concrete_description": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "prepare_pet_run",
+    "by": "agent"
+   }
+  },
+  {
+   "spawn": {
+    "role": "worker"
+   }
+  },
+  {
+   "act": {
+    "cap": "generate_base_image",
+    "by": "worker"
+   }
+  },
+  {
+   "act": {
+    "cap": "record_job_output",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "generate_row_strips",
+    "by": "worker"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "mirror_safe": [
+      {
+       "act": {
+        "cap": "mirror_running_left",
+        "by": "agent"
+       }
+      }
+     ],
+     "generate_normally": []
+    }
+   }
+  },
+  {
+   "rec": {
+    "name": "QA",
+    "body": [
+     {
+      "act": {
+       "cap": "process_and_validate_atlas",
+       "by": "agent"
+      }
+     },
+     {
+      "act": {
+       "cap": "visual_qa",
+       "by": "worker"
+      }
+     },
+     {
+      "choice": {
+       "by": "agent",
+       "external": true,
+       "observed": true,
+       "branches": {
+        "pass": [],
+        "fail": [
+         {
+          "act": {
+           "cap": "generate_row_strips",
+           "by": "worker"
+          }
+         },
+         {
+          "continue": "QA"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "act": {
+    "cap": "package_pet",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "user",
+    "observed": true,
+    "branches": {
+     "cleanup": [
+      {
+       "act": {
+        "cap": "cleanup_artifacts",
+        "by": "agent"
+       }
+      }
+     ],
+     "keep_debug": []
+    }
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "atlas_validated",
+   "visual_qa_passed",
+   "pet_packaged"
+  ]
+ },
+ "init_true": [
+  "subagents_allowed"
+ ],
+ "init_constraints": []
+}
