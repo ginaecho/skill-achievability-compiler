@@ -1,0 +1,233 @@
+{
+ "name": "earth2studio-create-prognostic",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "fetch_reference_script": {
+   "owner": "agent",
+   "via": "web_fetch",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": true,
+   "add": [
+    "reference_script"
+   ]
+  },
+  "ask_reference_script": {
+   "owner": "agent",
+   "via": "ask_user",
+   "needs": [
+    "user_conversation"
+   ],
+   "pre": true,
+   "add": [
+    "reference_script"
+   ]
+  },
+  "confirm_dependencies": {
+   "owner": "agent",
+   "via": "ask_user",
+   "needs": [
+    "user_conversation"
+   ],
+   "pre": "reference_script",
+   "add": [
+    "deps_approved"
+   ]
+  },
+  "add_model_extra": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "deps_approved",
+   "add": [
+    "pyproject_updated"
+   ]
+  },
+  "write_model_file": {
+   "owner": "agent",
+   "via": "write",
+   "pre": "reference_script",
+   "add": [
+    "model_file_created"
+   ]
+  },
+  "write_tests": {
+   "owner": "agent",
+   "via": "write",
+   "pre": "model_file_created",
+   "add": [
+    "tests_created"
+   ]
+  },
+  "run_mock_tests": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "pre": {
+    "and": [
+     "tests_created",
+     "pyproject_updated"
+    ]
+   },
+   "add": [
+    "mock_tests_pass"
+   ]
+  },
+  "run_package_test": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet",
+    "package_registries"
+   ],
+   "pre": "mock_tests_pass",
+   "add": [
+    "package_test_pass"
+   ]
+  },
+  "update_docs_changelog": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "model_file_created",
+   "add": [
+    "docs_updated",
+    "changelog_updated"
+   ]
+  },
+  "format_and_lint": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "pre": {
+    "and": [
+     "model_file_created",
+     "tests_created",
+     "docs_updated"
+    ]
+   },
+   "add": [
+    "lint_clean"
+   ]
+  },
+  "register_model": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "model_file_created",
+   "add": [
+    "model_registered"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "user",
+    "observed": true,
+    "branches": {
+     "url_given": [
+      {
+       "act": {
+        "cap": "fetch_reference_script",
+        "by": "agent"
+       }
+      }
+     ],
+     "not_given": [
+      {
+       "act": {
+        "cap": "ask_reference_script",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "confirm_dependencies",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "add_model_extra",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_model_file",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_tests",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_mock_tests",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_package_test",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "user",
+    "observed": true,
+    "branches": {
+     "register": [
+      {
+       "act": {
+        "cap": "register_model",
+        "by": "agent"
+       }
+      }
+     ],
+     "skip_register": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "update_docs_changelog",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "format_and_lint",
+    "by": "agent"
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "pyproject_updated",
+   "model_file_created",
+   "tests_created",
+   "mock_tests_pass",
+   "package_test_pass",
+   "docs_updated",
+   "changelog_updated",
+   "lint_clean"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

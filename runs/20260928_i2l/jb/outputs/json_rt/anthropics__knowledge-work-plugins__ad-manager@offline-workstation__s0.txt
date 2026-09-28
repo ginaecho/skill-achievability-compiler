@@ -1,0 +1,96 @@
+{
+  "name": "ad-manager",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "pull_tiktok_ads_data": {
+      "owner": "agent",
+      "via": "tiktok_ads_connector",
+      "needs": ["tiktok_ads_account"],
+      "add": ["performance_data_loaded", "connector_mode"]
+    },
+    "request_csv_export": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["csv_provided"]
+    },
+    "read_csv_export": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": "csv_provided",
+      "add": ["performance_data_loaded"]
+    },
+    "pull_crm_revenue": {
+      "owner": "agent",
+      "via": "crm_connector",
+      "needs": ["crm_account"],
+      "add": ["crm_data_loaded"]
+    },
+    "read_voice_profile": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "add": ["voice_profile_checked"]
+    },
+    "write_analysis_artifact": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["performance_data_loaded", "voice_profile_checked"]},
+      "add": ["campaign_verdicts_given", "attribution_gap_reported", "recommendations_with_dollars", "ad_copy_drafted", "creative_briefs_written", "analysis_artifact_rendered"]
+    },
+    "ask_change_approval": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "recommendations_with_dollars",
+      "add": ["change_approved"]
+    },
+    "execute_ad_change": {
+      "owner": "agent",
+      "via": "tiktok_ads_connector",
+      "needs": ["tiktok_ads_account"],
+      "pre": {"and": ["change_approved", "connector_mode"]},
+      "add": ["change_executed"],
+      "del": ["change_approved"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "tiktok_connector": [
+        {"act": {"cap": "pull_tiktok_ads_data", "by": "agent"}}
+      ],
+      "csv_export": [
+        {"act": {"cap": "request_csv_export", "by": "agent"}},
+        {"act": {"cap": "read_csv_export", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "crm_connected": [
+        {"act": {"cap": "pull_crm_revenue", "by": "agent"}}
+      ],
+      "no_crm": []
+    }}},
+    {"act": {"cap": "read_voice_profile", "by": "agent"}},
+    {"act": {"cap": "write_analysis_artifact", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "execute_via_connector": [
+        {"act": {"cap": "ask_change_approval", "by": "agent"}},
+        {"act": {"cap": "execute_ad_change", "by": "agent"}}
+      ],
+      "no_execution": []
+    }}}
+  ],
+  "goal": {"and": [
+    "performance_data_loaded",
+    "campaign_verdicts_given",
+    "attribution_gap_reported",
+    "recommendations_with_dollars",
+    "ad_copy_drafted",
+    "creative_briefs_written",
+    "analysis_artifact_rendered"
+  ]},
+  "init_true": [],
+  "init_constraints": []
+}

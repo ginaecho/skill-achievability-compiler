@@ -1,0 +1,74 @@
+{
+  "name": "neon-postgres-branches",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "ask_branch_type": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["branch_type_known"]
+    },
+    "check_cli": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["neon_account"],
+      "add": ["cli_ready"]
+    },
+    "create_branch_cli": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["neon_account"],
+      "pre": {"and": ["cli_ready", "branch_type_known"]},
+      "add": ["branch_created"]
+    },
+    "create_branch_mcp": {
+      "owner": "agent",
+      "via": "neon_mcp",
+      "needs": ["neon_account"],
+      "pre": "branch_type_known",
+      "add": ["branch_created"]
+    },
+    "get_connection_string": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["neon_account"],
+      "pre": "branch_created",
+      "add": ["connection_string_available"]
+    },
+    "update_env_file": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "connection_string_available",
+      "add": ["env_updated"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "ambiguous": [
+        {"act": {"cap": "ask_branch_type", "by": "agent"}}
+      ],
+      "clear_from_request": [
+        {"act": {"cap": "ask_branch_type", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "use_cli": [
+        {"act": {"cap": "check_cli", "by": "agent"}},
+        {"act": {"cap": "create_branch_cli", "by": "agent"}}
+      ],
+      "use_mcp": [
+        {"act": {"cap": "create_branch_mcp", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "update_env": [
+        {"act": {"cap": "get_connection_string", "by": "agent"}},
+        {"act": {"cap": "update_env_file", "by": "agent"}}
+      ],
+      "leave_env": []
+    }}}
+  ],
+  "goal": {"and": ["branch_type_known", "branch_created"]},
+  "init_true": [],
+  "init_constraints": []
+}

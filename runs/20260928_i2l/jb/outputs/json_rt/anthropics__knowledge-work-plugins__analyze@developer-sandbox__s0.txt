@@ -1,0 +1,86 @@
+{
+  "name": "analyze",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "explore_warehouse_schema": {
+      "owner": "agent",
+      "via": "data_warehouse_mcp",
+      "needs": ["warehouse_credentials"],
+      "add": ["schema_known"]
+    },
+    "run_warehouse_query": {
+      "owner": "agent",
+      "via": "data_warehouse_mcp",
+      "needs": ["warehouse_credentials"],
+      "pre": "schema_known",
+      "add": ["query_attempted"],
+      "nondet": {"query_ok": {"or": [{"cmp": ["query_ok", "==", 0]}, {"cmp": ["query_ok", "==", 1]}]}}
+    },
+    "mark_data_loaded": {
+      "owner": "agent",
+      "via": "data_warehouse_mcp",
+      "needs": ["warehouse_credentials"],
+      "pre": {"and": ["query_attempted", {"cmp": ["query_ok", "==", 1]}]},
+      "add": ["data_available"]
+    },
+    "request_data_from_user": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["data_provided"]
+    },
+    "load_user_data": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell", "local_filesystem"],
+      "pre": "data_provided",
+      "add": ["data_available"]
+    },
+    "analyze_and_validate": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": "data_available",
+      "add": ["analysis_done", "validation_checks_done"]
+    },
+    "render_visualization": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["shell", "package_registries"],
+      "pre": "analysis_done",
+      "add": ["chart_rendered"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "external": true, "observed": true, "branches": {
+      "warehouse_connected": [
+        {"act": {"cap": "explore_warehouse_schema", "by": "agent"}},
+        {"rec": {"name": "QUERY", "body": [
+          {"act": {"cap": "run_warehouse_query", "by": "agent"}},
+          {"choice": {"by": "agent", "external": true, "observed": true, "branches": {
+            "succeeded": [
+              {"act": {"cap": "mark_data_loaded", "by": "agent"}}
+            ],
+            "failed": [
+              {"continue": "QUERY"}
+            ]
+          }}}
+        ]}}
+      ],
+      "no_warehouse": [
+        {"act": {"cap": "request_data_from_user", "by": "agent"}},
+        {"act": {"cap": "load_user_data", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "analyze_and_validate", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "visualize": [
+        {"act": {"cap": "render_visualization", "by": "agent"}}
+      ],
+      "no_chart": []
+    }}}
+  ],
+  "goal": {"and": ["data_available", "analysis_done", "validation_checks_done"]},
+  "init_true": [],
+  "init_constraints": [{"cmp": ["query_ok", "==", 0]}]
+}

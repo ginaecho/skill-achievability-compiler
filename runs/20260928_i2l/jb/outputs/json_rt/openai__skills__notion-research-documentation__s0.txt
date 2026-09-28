@@ -1,0 +1,67 @@
+{
+  "name": "notion-research-documentation",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "search_sources": {
+      "owner": "agent",
+      "via": "notion_mcp",
+      "needs": ["notion_account"],
+      "pre": true,
+      "add": ["sources_found"]
+    },
+    "confirm_scope": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "sources_found",
+      "add": ["scope_confirmed"]
+    },
+    "fetch_pages": {
+      "owner": "agent",
+      "via": "notion_mcp",
+      "needs": ["notion_account"],
+      "pre": "sources_found",
+      "add": ["sources_fetched", "citations_captured"]
+    },
+    "create_doc_page": {
+      "owner": "agent",
+      "via": "notion_mcp",
+      "needs": ["notion_account"],
+      "pre": {"and": ["sources_fetched", "citations_captured"]},
+      "add": ["doc_created", "citations_included", "sources_linked"]
+    },
+    "add_followup_tasks": {
+      "owner": "agent",
+      "via": "notion_mcp",
+      "needs": ["notion_account"],
+      "pre": "doc_created",
+      "add": ["followups_added"]
+    },
+    "update_doc_page": {
+      "owner": "agent",
+      "via": "notion_mcp",
+      "needs": ["notion_account"],
+      "pre": "doc_created",
+      "add": ["doc_updated"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "search_sources", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "multiple_results": [{"act": {"cap": "confirm_scope", "by": "agent"}}],
+      "clear_scope": []
+    }}},
+    {"act": {"cap": "fetch_pages", "by": "agent"}},
+    {"act": {"cap": "create_doc_page", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "followups": [{"act": {"cap": "add_followup_tasks", "by": "agent"}}],
+      "none": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "update": [{"act": {"cap": "update_doc_page", "by": "agent"}}],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["sources_fetched", "doc_created", "citations_included", "sources_linked"]},
+  "init_true": [],
+  "init_constraints": []
+}

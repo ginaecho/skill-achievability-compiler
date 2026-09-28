@@ -1,0 +1,150 @@
+{
+ "name": "dwarf-expert",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "lookup_dwarf_spec": {
+   "owner": "agent",
+   "via": "web_fetch",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": true,
+   "add": [
+    "spec_consulted"
+   ]
+  },
+  "check_dwarfdump_version": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "binary_available",
+   "add": [
+    "dwarfdump_identified"
+   ]
+  },
+  "dump_and_search_dies": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": {
+    "and": [
+     "binary_available",
+     "dwarfdump_identified"
+    ]
+   },
+   "add": [
+    "dies_extracted"
+   ]
+  },
+  "write_pyelftools_script": {
+   "owner": "agent",
+   "via": "write",
+   "needs": [
+    "local_filesystem"
+   ],
+   "pre": "binary_available",
+   "add": [
+    "parse_script_written"
+   ]
+  },
+  "run_pyelftools_script": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "parse_script_written",
+   "add": [
+    "dies_extracted"
+   ]
+  },
+  "verify_dwarf_integrity": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": {
+    "and": [
+     "binary_available",
+     "dwarfdump_identified"
+    ]
+   },
+   "add": [
+    "dwarf_verified"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "consult_spec": [
+      {
+       "act": {
+        "cap": "lookup_dwarf_spec",
+        "by": "agent"
+       }
+      }
+     ],
+     "skip": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "check_dwarfdump_version",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "dwarfdump_query": [
+      {
+       "act": {
+        "cap": "dump_and_search_dies",
+        "by": "agent"
+       }
+      }
+     ],
+     "structural_query_script": [
+      {
+       "act": {
+        "cap": "write_pyelftools_script",
+        "by": "agent"
+       }
+      },
+      {
+       "act": {
+        "cap": "run_pyelftools_script",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "verify": [
+      {
+       "act": {
+        "cap": "verify_dwarf_integrity",
+        "by": "agent"
+       }
+      }
+     ],
+     "skip": []
+    }
+   }
+  }
+ ],
+ "goal": "dies_extracted",
+ "init_true": [
+  "binary_available"
+ ],
+ "init_constraints": []
+}

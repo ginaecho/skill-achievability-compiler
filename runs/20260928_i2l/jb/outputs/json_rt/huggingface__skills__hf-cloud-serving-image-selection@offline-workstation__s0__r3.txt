@@ -1,0 +1,157 @@
+{
+ "name": "hf-cloud-serving-image-selection",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "fetch_model_config": {
+   "owner": "agent",
+   "via": "web_access",
+   "needs": [
+    "public_internet"
+   ],
+   "add": [
+    "architecture_known"
+   ]
+  },
+  "fetch_dlc_catalog": {
+   "owner": "agent",
+   "via": "web_access",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": "architecture_known",
+   "add": [
+    "catalog_read"
+   ]
+  },
+  "fetch_catalog_yaml_fallback": {
+   "owner": "agent",
+   "via": "web_access",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": "architecture_known",
+   "add": [
+    "catalog_read"
+   ]
+  },
+  "query_ecr_tags": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "aws_account",
+    "public_internet"
+   ],
+   "pre": "architecture_known",
+   "add": [
+    "catalog_read"
+   ]
+  },
+  "record_image_uri": {
+   "owner": "agent",
+   "via": "write",
+   "needs": [
+    "local_filesystem"
+   ],
+   "pre": {
+    "and": [
+     "catalog_read",
+     "architecture_known"
+    ]
+   },
+   "add": [
+    "image_uri_selected",
+    "ami_flag_determined"
+   ]
+  },
+  "mirror_image_to_private_ecr": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "aws_account",
+    "docker",
+    "public_internet"
+   ],
+   "pre": "image_uri_selected",
+   "add": [
+    "image_mirrored"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "act": {
+    "cap": "fetch_model_config",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "external": true,
+    "observed": true,
+    "branches": {
+     "catalog_renders": [
+      {
+       "act": {
+        "cap": "fetch_dlc_catalog",
+        "by": "agent"
+       }
+      }
+     ],
+     "yaml_fallback": [
+      {
+       "act": {
+        "cap": "fetch_catalog_yaml_fallback",
+        "by": "agent"
+       }
+      }
+     ],
+     "ecr_fallback": [
+      {
+       "act": {
+        "cap": "query_ecr_tags",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "record_image_uri",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "needs_mirror": [
+      {
+       "act": {
+        "cap": "mirror_image_to_private_ecr",
+        "by": "agent"
+       }
+      }
+     ],
+     "no_mirror": []
+    }
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "architecture_known",
+   "catalog_read",
+   "image_uri_selected",
+   "ami_flag_determined"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

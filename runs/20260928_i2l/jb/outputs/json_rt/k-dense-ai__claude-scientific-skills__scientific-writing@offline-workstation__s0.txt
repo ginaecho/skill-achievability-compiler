@@ -1,0 +1,104 @@
+{
+  "name": "scientific-writing",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "intake": {
+      "owner": "agent",
+      "via": "ask_user",
+      "add": ["intake_done"]
+    },
+    "scaffold_workspace": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "intake_done",
+      "add": ["workspace_ready"]
+    },
+    "select_guidelines": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "intake_done",
+      "add": ["guideline_selected"]
+    },
+    "open_official_guideline": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": "guideline_selected",
+      "add": ["official_checklist_opened"]
+    },
+    "write_evidence_registries": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "intake_done",
+      "add": ["registries_written"]
+    },
+    "human_verify_sources": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "registries_written",
+      "add": ["sources_verified"]
+    },
+    "draft_manuscript": {
+      "owner": "agent",
+      "via": "write",
+      "pre": {"and": ["registries_written", "guideline_selected"]},
+      "add": ["draft_written"]
+    },
+    "run_local_audits": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["draft_written", "sources_verified"]},
+      "add": ["audits_run"]
+    },
+    "fix_audit_issues": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "audits_run",
+      "add": ["draft_revised"]
+    },
+    "fetch_citation_record": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "add": ["citation_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "intake", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "scaffold": [
+        {"act": {"cap": "scaffold_workspace", "by": "agent"}}
+      ],
+      "no_scaffold": []
+    }}},
+    {"act": {"cap": "select_guidelines", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "open_official_statement": [
+        {"act": {"cap": "open_official_guideline", "by": "agent"}}
+      ],
+      "skip_official_statement": []
+    }}},
+    {"act": {"cap": "write_evidence_registries", "by": "agent"}},
+    {"act": {"cap": "human_verify_sources", "by": "agent"}},
+    {"act": {"cap": "draft_manuscript", "by": "agent"}},
+    {"rec": {"name": "Audit", "body": [
+      {"act": {"cap": "run_local_audits", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "issues_found": [
+          {"act": {"cap": "fix_audit_issues", "by": "agent"}},
+          {"continue": "Audit"}
+        ],
+        "clean": []
+      }}}
+    ]}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "cite_with_network": [
+        {"act": {"cap": "fetch_citation_record", "by": "agent"}}
+      ],
+      "no_citation_fetch": []
+    }}}
+  ],
+  "goal": {"and": ["draft_written", "audits_run"]},
+  "init_true": [],
+  "init_constraints": []
+}

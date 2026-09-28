@@ -1,0 +1,147 @@
+{
+ "name": "c-review",
+ "roles": [
+  "agent",
+  "user",
+  "reviewer"
+ ],
+ "capabilities": {
+  "ask_parameters": {
+   "owner": "agent",
+   "via": "ask_user",
+   "needs": [
+    "user_conversation"
+   ],
+   "pre": true,
+   "add": [
+    "params_resolved"
+   ]
+  },
+  "resolve_paths_and_output_dir": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "params_resolved",
+   "add": [
+    "plugin_root_resolved",
+    "output_dir_created",
+    "scope_abs_resolved"
+   ]
+  },
+  "check_uv_available": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "plugin_root_resolved",
+   "add": [
+    "uv_available"
+   ]
+  },
+  "run_review_workflow": {
+   "owner": "agent",
+   "via": "workflow_runtime",
+   "pre": {
+    "and": [
+     "plugin_root_resolved",
+     "output_dir_created",
+     "scope_abs_resolved",
+     "uv_available"
+    ]
+   },
+   "add": [
+    "workflow_ran"
+   ],
+   "nondet": {
+    "artifacts_written": true
+   }
+  },
+  "reassemble_findings": {
+   "owner": "agent",
+   "via": "shell",
+   "pre": "workflow_ran",
+   "add": [
+    "report_md_exists"
+   ]
+  },
+  "read_report": {
+   "owner": "agent",
+   "via": "read",
+   "needs": [
+    "local_filesystem"
+   ],
+   "pre": "report_md_exists",
+   "add": [
+    "report_returned"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "act": {
+    "cap": "ask_parameters",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "resolve_paths_and_output_dir",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "check_uv_available",
+    "by": "agent"
+   }
+  },
+  {
+   "spawn": {
+    "role": "reviewer"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_review_workflow",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "external": true,
+    "observed": true,
+    "branches": {
+     "artifacts_written": [
+      {
+       "act": {
+        "cap": "reassemble_findings",
+        "by": "agent"
+       }
+      }
+     ],
+     "artifacts_missing": [
+      {
+       "act": {
+        "cap": "reassemble_findings",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "read_report",
+    "by": "agent"
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "workflow_ran",
+   "report_md_exists",
+   "report_returned"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

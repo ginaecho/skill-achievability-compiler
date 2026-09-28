@@ -1,0 +1,129 @@
+{
+ "name": "receiving-code-review",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "clarify_unclear_items": {
+   "owner": "agent",
+   "via": "ask_user",
+   "add": [
+    "all_items_clear"
+   ]
+  },
+  "verify_against_codebase": {
+   "owner": "agent",
+   "via": "bash",
+   "pre": "all_items_clear",
+   "add": [
+    "feedback_verified"
+   ]
+  },
+  "implement_fix": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "feedback_verified",
+   "add": [
+    "fix_applied"
+   ],
+   "del": [
+    "fix_tested"
+   ]
+  },
+  "run_tests": {
+   "owner": "agent",
+   "via": "bash",
+   "pre": "fix_applied",
+   "add": [
+    "fix_tested"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "has_unclear": [
+      {
+       "act": {
+        "cap": "clarify_unclear_items",
+        "by": "agent"
+       }
+      }
+     ],
+     "all_clear": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "verify_against_codebase",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "implement": [
+      {
+       "rec": {
+        "name": "Items",
+        "body": [
+         {
+          "act": {
+           "cap": "implement_fix",
+           "by": "agent"
+          }
+         },
+         {
+          "act": {
+           "cap": "run_tests",
+           "by": "agent"
+          }
+         },
+         {
+          "choice": {
+           "by": "agent",
+           "observed": true,
+           "branches": {
+            "more_items": [
+             {
+              "continue": "Items"
+             }
+            ],
+            "done": []
+           }
+          }
+         }
+        ]
+       }
+      }
+     ],
+     "push_back": []
+    }
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "feedback_verified",
+   {
+    "or": [
+     {
+      "not": "fix_applied"
+     },
+     "fix_tested"
+    ]
+   }
+  ]
+ },
+ "init_true": [
+  "all_items_clear"
+ ],
+ "init_constraints": []
+}

@@ -1,0 +1,57 @@
+{
+  "name": "huggingface-best",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "ask_clarification": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["task_known"]
+    },
+    "fetch_benchmark_list": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": "task_known",
+      "add": ["benchmarks_selected"]
+    },
+    "fetch_leaderboards": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": "benchmarks_selected",
+      "nondet": {"leaderboards_available": true},
+      "add": ["candidates_collected"]
+    },
+    "search_popular_models": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": "task_known",
+      "add": ["candidates_collected"]
+    },
+    "fetch_model_metadata": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": "candidates_collected",
+      "add": ["metadata_enriched"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "task_clear": [],
+      "task_ambiguous": [{"act": {"cap": "ask_clarification", "by": "agent"}}]
+    }}},
+    {"act": {"cap": "fetch_benchmark_list", "by": "agent"}},
+    {"act": {"cap": "fetch_leaderboards", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "external": true, "branches": {
+      "leaderboards_ok": [],
+      "all_failed": [{"act": {"cap": "search_popular_models", "by": "agent"}}]
+    }}},
+    {"act": {"cap": "fetch_model_metadata", "by": "agent"}}
+  ],
+  "goal": {"and": ["task_known", "candidates_collected", "metadata_enriched"]},
+  "init_true": ["task_known"],
+  "init_constraints": []
+}

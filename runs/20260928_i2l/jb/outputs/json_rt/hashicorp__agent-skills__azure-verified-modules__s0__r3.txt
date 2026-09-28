@@ -1,0 +1,160 @@
+{
+ "name": "azure-verified-modules",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "install_tooling": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "add": [
+    "tools_installed"
+   ]
+  },
+  "write_module_files": {
+   "owner": "agent",
+   "via": "write",
+   "add": [
+    "module_written",
+    "providers_constrained",
+    "variables_compliant",
+    "outputs_compliant",
+    "terraform_docs_config_present"
+   ]
+  },
+  "fmt_and_validate": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": {
+    "and": [
+     "tools_installed",
+     "module_written"
+    ]
+   },
+   "add": [
+    "formatted",
+    "validated"
+   ]
+  },
+  "lint_and_scan": {
+   "owner": "agent",
+   "via": "bash",
+   "pre": {
+    "and": [
+     "tools_installed",
+     "module_written"
+    ]
+   },
+   "add": [
+    "linted",
+    "security_scanned"
+   ]
+  },
+  "fix_module": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "module_written",
+   "del": [
+    "formatted",
+    "validated",
+    "linted",
+    "security_scanned"
+   ]
+  },
+  "generate_docs": {
+   "owner": "agent",
+   "via": "bash",
+   "pre": {
+    "and": [
+     "tools_installed",
+     "terraform_docs_config_present"
+    ]
+   },
+   "add": [
+    "docs_generated"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "act": {
+    "cap": "install_tooling",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_module_files",
+    "by": "agent"
+   }
+  },
+  {
+   "rec": {
+    "name": "Check",
+    "body": [
+     {
+      "act": {
+       "cap": "fmt_and_validate",
+       "by": "agent"
+      }
+     },
+     {
+      "act": {
+       "cap": "lint_and_scan",
+       "by": "agent"
+      }
+     },
+     {
+      "choice": {
+       "by": "agent",
+       "observed": true,
+       "branches": {
+        "clean": [],
+        "issues": [
+         {
+          "act": {
+           "cap": "fix_module",
+           "by": "agent"
+          }
+         },
+         {
+          "continue": "Check"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "act": {
+    "cap": "generate_docs",
+    "by": "agent"
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "module_written",
+   "providers_constrained",
+   "variables_compliant",
+   "outputs_compliant",
+   "terraform_docs_config_present",
+   "formatted",
+   "validated",
+   "linted",
+   "security_scanned",
+   "docs_generated"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

@@ -1,0 +1,188 @@
+{
+ "name": "provider-framework-migration",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "inspect_provider": {
+   "owner": "agent",
+   "via": "read",
+   "add": [
+    "provider_mode_known",
+    "resource_code_read"
+   ]
+  },
+  "write_mux_main": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "provider_mode_known",
+   "add": [
+    "provider_muxed"
+   ]
+  },
+  "write_baseline_tests": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "resource_code_read",
+   "add": [
+    "baseline_tests_written"
+   ]
+  },
+  "run_baseline_tests": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "cloud_account"
+   ],
+   "pre": "baseline_tests_written",
+   "add": [
+    "baseline_tests_pass"
+   ]
+  },
+  "port_resource": {
+   "owner": "agent",
+   "via": "write",
+   "pre": {
+    "and": [
+     "resource_code_read",
+     "provider_muxed"
+    ]
+   },
+   "add": [
+    "framework_resource_written"
+   ]
+  },
+  "move_registration": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "framework_resource_written",
+   "add": [
+    "registration_moved"
+   ]
+  },
+  "write_state_compat_test": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "framework_resource_written",
+   "add": [
+    "state_compat_test_written"
+   ]
+  },
+  "run_acceptance_tests": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "cloud_account"
+   ],
+   "pre": {
+    "and": [
+     "registration_moved",
+     "baseline_tests_pass",
+     "state_compat_test_written"
+    ]
+   },
+   "add": [
+    "tests_pass_unchanged",
+    "empty_plan_verified"
+   ]
+  },
+  "add_changelog": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "registration_moved",
+   "add": [
+    "changelog_added"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "act": {
+    "cap": "inspect_provider",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "needs_mux": [
+      {
+       "act": {
+        "cap": "write_mux_main",
+        "by": "agent"
+       }
+      }
+     ],
+     "already_muxed": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "write_baseline_tests",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_baseline_tests",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "port_resource",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "move_registration",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_state_compat_test",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_acceptance_tests",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "tracks_changelog": [
+      {
+       "act": {
+        "cap": "add_changelog",
+        "by": "agent"
+       }
+      }
+     ],
+     "no_changelog": []
+    }
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "provider_muxed",
+   "framework_resource_written",
+   "registration_moved",
+   "tests_pass_unchanged",
+   "empty_plan_verified"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

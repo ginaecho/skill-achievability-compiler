@@ -1,0 +1,172 @@
+{
+ "name": "train-sentence-transformers",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "clarify_model_type": {
+   "owner": "agent",
+   "via": "ask_user",
+   "add": [
+    "model_type_known"
+   ]
+  },
+  "install_deps": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "add": [
+    "deps_installed"
+   ]
+  },
+  "read_references": {
+   "owner": "agent",
+   "via": "read",
+   "pre": true,
+   "add": [
+    "references_read"
+   ]
+  },
+  "write_training_script": {
+   "owner": "agent",
+   "via": "write",
+   "pre": "references_read",
+   "add": [
+    "script_written"
+   ]
+  },
+  "smoke_test": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": {
+    "and": [
+     "script_written",
+     "deps_installed"
+    ]
+   },
+   "add": [
+    "smoke_test_passed"
+   ]
+  },
+  "run_training": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": "smoke_test_passed",
+   "add": [
+    "model_trained",
+    "verdict_emitted"
+   ]
+  },
+  "log_experiment": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "verdict_emitted",
+   "add": [
+    "experiment_logged"
+   ]
+  },
+  "push_to_hub": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "huggingface_write_token"
+   ],
+   "pre": "model_trained",
+   "add": [
+    "model_published"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "type_ambiguous": [
+      {
+       "act": {
+        "cap": "clarify_model_type",
+        "by": "agent"
+       }
+      }
+     ],
+     "type_clear": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "install_deps",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "read_references",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_training_script",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "smoke_test",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_training",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "user",
+    "observed": true,
+    "branches": {
+     "push": [
+      {
+       "act": {
+        "cap": "push_to_hub",
+        "by": "agent"
+       }
+      }
+     ],
+     "no_push": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "log_experiment",
+    "by": "agent"
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "script_written",
+   "smoke_test_passed",
+   "model_trained",
+   "verdict_emitted",
+   "experiment_logged"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}
