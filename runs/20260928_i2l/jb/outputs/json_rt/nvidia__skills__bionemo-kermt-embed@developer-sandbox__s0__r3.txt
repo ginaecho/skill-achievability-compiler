@@ -1,0 +1,148 @@
+{
+ "name": "kermt-embed",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "check_system": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "docker",
+    "nvidia_gpu"
+   ],
+   "add": [
+    "system_ok"
+   ]
+  },
+  "ask_download_consent": {
+   "owner": "agent",
+   "via": "ask_user",
+   "add": [
+    "download_consented"
+   ]
+  },
+  "download_released_model": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "docker",
+    "public_internet"
+   ],
+   "pre": {
+    "and": [
+     "system_ok",
+     "download_consented"
+    ]
+   },
+   "add": [
+    "ckpt_available"
+   ]
+  },
+  "validate_checkpoint": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "docker"
+   ],
+   "pre": {
+    "and": [
+     "system_ok",
+     "ckpt_available"
+    ]
+   },
+   "add": [
+    "ckpt_valid"
+   ]
+  },
+  "validate_and_prepare_data": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "docker"
+   ],
+   "pre": {
+    "and": [
+     "system_ok",
+     "csv_provided"
+    ]
+   },
+   "add": [
+    "data_prepared"
+   ]
+  },
+  "run_extract_embeddings": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "docker",
+    "nvidia_gpu"
+   ],
+   "pre": {
+    "and": [
+     "ckpt_valid",
+     "data_prepared"
+    ]
+   },
+   "add": [
+    "embeddings_written"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "act": {
+    "cap": "check_system",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "user",
+    "observed": true,
+    "branches": {
+     "ckpt_given": [],
+     "use_released_model": [
+      {
+       "act": {
+        "cap": "ask_download_consent",
+        "by": "agent"
+       }
+      },
+      {
+       "act": {
+        "cap": "download_released_model",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "validate_checkpoint",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "validate_and_prepare_data",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_extract_embeddings",
+    "by": "agent"
+   }
+  }
+ ],
+ "goal": "embeddings_written",
+ "init_true": [
+  "csv_provided",
+  "ckpt_available"
+ ],
+ "init_constraints": []
+}

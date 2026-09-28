@@ -1,0 +1,167 @@
+{
+ "name": "huggingface-tool-builder",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "confirm_preferences": {
+   "owner": "agent",
+   "via": "ask_user",
+   "needs": [
+    "user_conversation"
+   ],
+   "pre": true,
+   "add": [
+    "preferences_confirmed"
+   ]
+  },
+  "explore_api_shape": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": true,
+   "add": [
+    "api_shape_known"
+   ]
+  },
+  "install_hf_cli": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "pre": true,
+   "add": [
+    "hf_cli_installed"
+   ]
+  },
+  "write_script": {
+   "owner": "agent",
+   "via": "write",
+   "pre": "api_shape_known",
+   "add": [
+    "script_written",
+    "script_has_help"
+   ],
+   "del": [
+    "script_tested"
+   ]
+  },
+  "test_script": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": "script_written",
+   "add": [
+    "script_tested"
+   ]
+  },
+  "fix_script": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "script_written",
+   "add": [
+    "script_has_help"
+   ],
+   "del": [
+    "script_tested"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "clarify": [
+      {
+       "act": {
+        "cap": "confirm_preferences",
+        "by": "agent"
+       }
+      }
+     ],
+     "clear": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "explore_api_shape",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "use_hf_cli": [
+      {
+       "act": {
+        "cap": "install_hf_cli",
+        "by": "agent"
+       }
+      }
+     ],
+     "api_only": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "write_script",
+    "by": "agent"
+   }
+  },
+  {
+   "rec": {
+    "name": "TestLoop",
+    "body": [
+     {
+      "act": {
+       "cap": "test_script",
+       "by": "agent"
+      }
+     },
+     {
+      "choice": {
+       "by": "agent",
+       "external": true,
+       "observed": true,
+       "branches": {
+        "pass": [],
+        "fail": [
+         {
+          "act": {
+           "cap": "fix_script",
+           "by": "agent"
+          }
+         },
+         {
+          "continue": "TestLoop"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "script_written",
+   "script_has_help",
+   "script_tested"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

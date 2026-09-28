@@ -1,0 +1,138 @@
+{
+ "name": "terraform_stacks",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "install_terraform_cli": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "pre": true,
+   "add": [
+    "terraform_installed"
+   ]
+  },
+  "write_component_config": {
+   "owner": "agent",
+   "via": "write",
+   "pre": true,
+   "add": [
+    "component_config_written"
+   ]
+  },
+  "write_deployment_config": {
+   "owner": "agent",
+   "via": "write",
+   "pre": "component_config_written",
+   "add": [
+    "deployment_config_written"
+   ]
+  },
+  "stacks_init": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": {
+    "and": [
+     "terraform_installed",
+     "component_config_written",
+     "deployment_config_written"
+    ]
+   },
+   "add": [
+    "providers_locked"
+   ]
+  },
+  "stacks_fmt_validate": {
+   "owner": "agent",
+   "via": "bash",
+   "pre": "providers_locked",
+   "add": [
+    "config_valid"
+   ]
+  },
+  "fix_config": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "deployment_config_written",
+   "del": [
+    "config_valid"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "act": {
+    "cap": "install_terraform_cli",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_component_config",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_deployment_config",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "stacks_init",
+    "by": "agent"
+   }
+  },
+  {
+   "rec": {
+    "name": "Validate",
+    "body": [
+     {
+      "act": {
+       "cap": "stacks_fmt_validate",
+       "by": "agent"
+      }
+     },
+     {
+      "choice": {
+       "by": "agent",
+       "observed": true,
+       "branches": {
+        "valid": [],
+        "invalid": [
+         {
+          "act": {
+           "cap": "fix_config",
+           "by": "agent"
+          }
+         },
+         {
+          "continue": "Validate"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "component_config_written",
+   "deployment_config_written",
+   "providers_locked",
+   "config_valid"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}
