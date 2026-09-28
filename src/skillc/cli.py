@@ -352,6 +352,45 @@ def cmd_ce(args) -> int:
     return 0
 
 
+HOOKS_SNIPPET = {"hooks": {
+    "UserPromptSubmit": [{"hooks": [{"type": "command",
+                                     "command": "skillc monitor hook prompt"}]}],
+    "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command",
+                                               "command": "skillc monitor hook pre"}]}],
+    "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command",
+                                                "command": "skillc monitor hook post"}]}]}}
+
+
+def cmd_monitor(args) -> int:
+    from .monitor import Config, Monitor
+    root = Path(args.root)
+    cfg_path = root / ".skillc" / "monitor.json"
+    if args.action == "init":
+        cfg = Config(runtime=args.runtime, thinking=args.thinking)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        cfg_path.write_text(json.dumps(cfg.dump(), indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {cfg_path}")
+        print("add to .claude/settings.json:")
+        print(json.dumps(HOOKS_SNIPPET, indent=1))
+        return 0
+    if args.action == "hook":
+        from .monitor_hook import main as hook_main
+        return hook_main(args.arg)
+    mon = Monitor(Config.load(cfg_path), root)
+    if args.action == "plan":
+        d, info = mon.check_plan(Path(args.arg).read_text(encoding="utf-8"))
+        print(json.dumps({**d.to_dict(), **info}, indent=1))
+        return 0 if d.action == "allow" else 1
+    if args.action == "status":
+        print(json.dumps({k: v for k, v in mon.state.__dict__.items() if k != "log"}
+                         | {"log": mon.state.log[-10:]}, indent=1))
+        return 0
+    if args.action == "reset":
+        mon.state_path.unlink(missing_ok=True)
+        return 0
+    raise KeyError(f"unknown monitor action {args.action!r}")
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -463,6 +502,17 @@ def main(argv: list[str] | None = None) -> int:
 
     sp = sub.add_parser("eval", help="run the corpus evaluation")
     sp.set_defaults(fn=cmd_eval)
+
+    sp = sub.add_parser("monitor", help="runtime monitor: gate an agent's plan, "
+                                        "reasoning and actions (docs/RUNTIME_MONITOR.md)")
+    sp.add_argument("action", choices=("init", "hook", "plan", "status", "reset"))
+    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post) or plan file")
+    sp.add_argument("--root", default=".", help="project directory (default: .)")
+    sp.add_argument("--runtime", default="developer-sandbox",
+                    help="init: runtime manifest name or JSON path")
+    sp.add_argument("--thinking", choices=("stop", "warn", "off"), default="stop",
+                    help="init: what reasoning that heads to the impossible does")
+    sp.set_defaults(fn=cmd_monitor)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)
