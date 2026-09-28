@@ -1,0 +1,65 @@
+{
+  "name": "terraform-style-guide",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_terraform": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["terraform_installed"]
+    },
+    "write_tf_files": {
+      "owner": "agent",
+      "via": "write",
+      "add": ["config_written", "files_organized", "variables_typed_described", "outputs_described", "versions_pinned"]
+    },
+    "terraform_fmt": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["terraform_installed", "config_written"]},
+      "add": ["formatted"]
+    },
+    "terraform_init_validate": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["public_internet"],
+      "pre": {"and": ["terraform_installed", "config_written"]},
+      "add": ["validated"]
+    },
+    "run_linters": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "config_written",
+      "add": ["linted"]
+    },
+    "fix_issues": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "config_written",
+      "del": ["formatted", "validated"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_terraform", "by": "agent"}},
+    {"act": {"cap": "write_tf_files", "by": "agent"}},
+    {"rec": {"name": "Check", "body": [
+      {"act": {"cap": "terraform_fmt", "by": "agent"}},
+      {"act": {"cap": "terraform_init_validate", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "ok": [],
+        "errors": [
+          {"act": {"cap": "fix_issues", "by": "agent"}},
+          {"continue": "Check"}
+        ]
+      }}}
+    ]}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "lint": [{"act": {"cap": "run_linters", "by": "agent"}}],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["config_written", "files_organized", "variables_typed_described", "outputs_described", "versions_pinned", "formatted", "validated"]},
+  "init_true": [],
+  "init_constraints": []
+}

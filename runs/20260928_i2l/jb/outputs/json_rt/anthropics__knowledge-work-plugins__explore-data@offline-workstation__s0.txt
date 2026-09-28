@@ -1,0 +1,70 @@
+{
+  "name": "explore-data",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "query_warehouse_metadata": {
+      "owner": "agent",
+      "via": "data_warehouse_mcp",
+      "needs": ["data_warehouse_account"],
+      "pre": "source_is_table",
+      "add": ["data_loaded"]
+    },
+    "run_warehouse_profiling_queries": {
+      "owner": "agent",
+      "via": "data_warehouse_mcp",
+      "needs": ["data_warehouse_account"],
+      "pre": {"and": ["source_is_table", "data_loaded"]},
+      "add": ["profile_computed"]
+    },
+    "ask_for_data_source": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": true,
+      "add": ["source_is_file"]
+    },
+    "read_file_dataset": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "source_is_file",
+      "add": ["data_loaded"]
+    },
+    "profile_file_dataset": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["source_is_file", "data_loaded"]},
+      "add": ["profile_computed", "quality_checked"]
+    },
+    "run_warehouse_quality_checks": {
+      "owner": "agent",
+      "via": "data_warehouse_mcp",
+      "needs": ["data_warehouse_account"],
+      "pre": "profile_computed",
+      "add": ["quality_checked"]
+    }
+  },
+  "protocol": [
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "warehouse_table": [
+          {"act": {"cap": "query_warehouse_metadata", "by": "agent"}},
+          {"act": {"cap": "run_warehouse_profiling_queries", "by": "agent"}},
+          {"act": {"cap": "run_warehouse_quality_checks", "by": "agent"}}
+        ],
+        "file": [
+          {"act": {"cap": "read_file_dataset", "by": "agent"}},
+          {"act": {"cap": "profile_file_dataset", "by": "agent"}}
+        ],
+        "neither": [
+          {"act": {"cap": "ask_for_data_source", "by": "agent"}},
+          {"act": {"cap": "read_file_dataset", "by": "agent"}},
+          {"act": {"cap": "profile_file_dataset", "by": "agent"}}
+        ]
+      }
+    }}
+  ],
+  "goal": {"and": ["data_loaded", "profile_computed", "quality_checked"]},
+  "init_true": ["source_is_file"],
+  "init_constraints": []
+}

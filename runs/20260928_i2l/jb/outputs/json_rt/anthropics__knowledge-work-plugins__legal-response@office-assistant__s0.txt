@@ -1,0 +1,91 @@
+{
+  "name": "legal-response",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "ask_inquiry_type": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": true,
+      "add": ["inquiry_type_known"]
+    },
+    "load_local_templates": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "inquiry_type_known",
+      "add": ["templates_checked"]
+    },
+    "gather_details": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": {"and": ["inquiry_type_known", "templates_checked"]},
+      "add": ["details_gathered"]
+    },
+    "save_new_template": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "templates_checked",
+      "add": ["template_saved"]
+    },
+    "create_email_draft": {
+      "owner": "agent",
+      "via": "email_connector",
+      "needs": ["email_account"],
+      "pre": "details_gathered",
+      "add": ["email_draft_created"]
+    },
+    "set_calendar_reminder": {
+      "owner": "agent",
+      "via": "calendar_connector",
+      "needs": ["calendar_account"],
+      "pre": "details_gathered",
+      "add": ["reminder_set"]
+    }
+  },
+  "protocol": [
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "type_given": [],
+        "type_missing": [
+          {"act": {"cap": "ask_inquiry_type", "by": "agent"}}
+        ]
+      }
+    }},
+    {"act": {"cap": "load_local_templates", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "create_template": [
+          {"act": {"cap": "save_new_template", "by": "agent"}}
+        ],
+        "no_template_creation": []
+      }
+    }},
+    {"act": {"cap": "gather_details", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "email_draft": [
+          {"act": {"cap": "create_email_draft", "by": "agent"}}
+        ],
+        "no_email_draft": []
+      }
+    }},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "calendar_reminder": [
+          {"act": {"cap": "set_calendar_reminder", "by": "agent"}}
+        ],
+        "no_reminder": []
+      }
+    }}
+  ],
+  "goal": {"and": ["inquiry_type_known", "templates_checked", "details_gathered"]},
+  "init_true": ["inquiry_type_known"],
+  "init_constraints": []
+}

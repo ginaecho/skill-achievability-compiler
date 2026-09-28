@@ -1,0 +1,78 @@
+{
+  "name": "wrangler",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_project": {
+      "owner": "agent",
+      "via": "bash",
+      "add": ["project_inspected"]
+    },
+    "install_deps": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "project_inspected",
+      "add": ["wrangler_installed"]
+    },
+    "fetch_docs": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "add": ["docs_retrieved"]
+    },
+    "confirm_target": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "project_inspected",
+      "add": ["target_confirmed"]
+    },
+    "edit_config": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": {"and": ["project_inspected", "docs_retrieved", "target_confirmed"]},
+      "add": ["config_updated"]
+    },
+    "generate_types": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["config_updated", "wrangler_installed"]},
+      "add": ["types_generated"]
+    },
+    "run_checks": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "types_generated",
+      "add": ["checks_passed"]
+    },
+    "dry_run_deploy": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["config_updated", "wrangler_installed"]},
+      "add": ["dry_run_ok"]
+    },
+    "deploy_remote": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["cloudflare_account", "cloudflare_api_token"],
+      "pre": {"and": ["dry_run_ok", "target_confirmed"]},
+      "add": ["deployed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_project", "by": "agent"}},
+    {"act": {"cap": "install_deps", "by": "agent"}},
+    {"act": {"cap": "fetch_docs", "by": "agent"}},
+    {"act": {"cap": "confirm_target", "by": "agent"}},
+    {"act": {"cap": "edit_config", "by": "agent"}},
+    {"act": {"cap": "generate_types", "by": "agent"}},
+    {"act": {"cap": "run_checks", "by": "agent"}},
+    {"act": {"cap": "dry_run_deploy", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "deploy": [{"act": {"cap": "deploy_remote", "by": "agent"}}],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["config_updated", "types_generated", "checks_passed", "dry_run_ok"]},
+  "init_true": [],
+  "init_constraints": []
+}

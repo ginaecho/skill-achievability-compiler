@@ -1,0 +1,78 @@
+{
+  "name": "ruzzy",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_toolchain": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries", "linux"],
+      "add": ["clang_ruby_ready"]
+    },
+    "install_ruzzy": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "clang_ruby_ready",
+      "add": ["ruzzy_installed"]
+    },
+    "verify_dummy": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "ruzzy_installed",
+      "add": ["ruzzy_verified"]
+    },
+    "install_target_gem_sanitized": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "clang_ruby_ready",
+      "add": ["target_instrumented"]
+    },
+    "write_c_ext_harness": {
+      "owner": "agent",
+      "via": "write",
+      "add": ["harness_written"]
+    },
+    "write_pure_ruby_harness_and_tracer": {
+      "owner": "agent",
+      "via": "write",
+      "add": ["harness_written", "tracer_written", "target_instrumented"]
+    },
+    "run_fuzz_campaign": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["ruzzy_installed", "harness_written", "target_instrumented"]},
+      "add": ["campaign_run"]
+    },
+    "reproduce_crash": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "campaign_run",
+      "add": ["crash_reproduced"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_toolchain", "by": "agent"}},
+    {"act": {"cap": "install_ruzzy", "by": "agent"}},
+    {"act": {"cap": "verify_dummy", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "c_extension": [
+        {"act": {"cap": "install_target_gem_sanitized", "by": "agent"}},
+        {"act": {"cap": "write_c_ext_harness", "by": "agent"}}
+      ],
+      "pure_ruby": [
+        {"act": {"cap": "write_pure_ruby_harness_and_tracer", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "run_fuzz_campaign", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "crash_found": [
+        {"act": {"cap": "reproduce_crash", "by": "agent"}}
+      ],
+      "no_crash": []
+    }}}
+  ],
+  "goal": {"and": ["ruzzy_installed", "harness_written", "campaign_run"]},
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,91 @@
+{
+  "name": "notebooklm",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "intake_questions": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["action_chosen", "params_gathered"]
+    },
+    "open_notebooklm": {
+      "owner": "agent",
+      "via": "browser_automation",
+      "needs": ["public_internet", "google_account"],
+      "pre": "params_gathered",
+      "add": ["notebooklm_open", "logged_in"]
+    },
+    "open_notebook": {
+      "owner": "agent",
+      "via": "browser_automation",
+      "needs": ["public_internet", "google_account"],
+      "pre": {"and": ["notebooklm_open", "logged_in"]},
+      "add": ["notebook_open"]
+    },
+    "query_notebook": {
+      "owner": "agent",
+      "via": "browser_automation",
+      "needs": ["public_internet", "google_account"],
+      "pre": "notebook_open",
+      "add": ["answer_extracted", "action_done"]
+    },
+    "add_source": {
+      "owner": "agent",
+      "via": "browser_automation",
+      "needs": ["public_internet", "google_account"],
+      "pre": "notebook_open",
+      "add": ["source_added", "action_done"]
+    },
+    "start_studio_generation": {
+      "owner": "agent",
+      "via": "browser_automation",
+      "needs": ["public_internet", "google_account"],
+      "pre": "notebook_open",
+      "add": ["generation_started", "action_done"]
+    },
+    "create_notebook": {
+      "owner": "agent",
+      "via": "browser_automation",
+      "needs": ["public_internet", "google_account"],
+      "pre": {"and": ["notebooklm_open", "logged_in"]},
+      "add": ["notebook_created", "action_done"]
+    },
+    "save_extract_file": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": "answer_extracted",
+      "add": ["extract_saved"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "intake_questions", "by": "agent"}},
+    {"act": {"cap": "open_notebooklm", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "read_extract": [
+        {"act": {"cap": "open_notebook", "by": "agent"}},
+        {"act": {"cap": "query_notebook", "by": "agent"}},
+        {"choice": {"by": "user", "observed": true, "branches": {
+          "save_to_file": [
+            {"act": {"cap": "save_extract_file", "by": "agent"}}
+          ],
+          "chat_only": []
+        }}}
+      ],
+      "add_source": [
+        {"act": {"cap": "open_notebook", "by": "agent"}},
+        {"act": {"cap": "add_source", "by": "agent"}}
+      ],
+      "studio_output": [
+        {"act": {"cap": "open_notebook", "by": "agent"}},
+        {"act": {"cap": "start_studio_generation", "by": "agent"}}
+      ],
+      "create_notebook": [
+        {"act": {"cap": "create_notebook", "by": "agent"}}
+      ]
+    }}}
+  ],
+  "goal": "action_done",
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,106 @@
+{
+  "name": "build-agent",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_references": {
+      "owner": "agent",
+      "via": "read",
+      "pre": true,
+      "add": ["references_read"]
+    },
+    "capture_task_description": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": {"not": "task_captured"},
+      "add": ["task_captured"]
+    },
+    "write_skill_files": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["task_captured", "references_read"]},
+      "add": ["skill_written"]
+    },
+    "test_run_skill": {
+      "owner": "agent",
+      "via": "owner_business_systems",
+      "needs": ["business_system_access"],
+      "pre": "skill_written",
+      "add": ["test_run_done"],
+      "nondet": {"test_matches": true}
+    },
+    "fix_skill": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["skill_written", "test_run_done"]},
+      "del": ["test_run_done"]
+    },
+    "register_with_router": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["skill_written", "test_matches"]},
+      "add": ["registered"]
+    },
+    "schedule_skill": {
+      "owner": "agent",
+      "via": "scheduler",
+      "needs": ["scheduler_service"],
+      "pre": "registered",
+      "add": ["scheduled"]
+    },
+    "share_with_team": {
+      "owner": "agent",
+      "via": "team_sharing",
+      "needs": ["team_workspace_account"],
+      "pre": {"and": ["registered", "share_approved"]},
+      "add": ["shared"]
+    },
+    "approve_share": {
+      "owner": "user",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "registered",
+      "add": ["share_approved"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "read_references", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "walked_through_in_conversation": [],
+      "needs_description": [
+        {"act": {"cap": "capture_task_description", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "write_skill_files", "by": "agent"}},
+    {"rec": {"name": "TestLoop", "body": [
+      {"act": {"cap": "test_run_skill", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "matches": [],
+        "mismatch": [
+          {"act": {"cap": "fix_skill", "by": "agent"}},
+          {"continue": "TestLoop"}
+        ]
+      }}}
+    ]}},
+    {"act": {"cap": "register_with_router", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "schedule": [
+        {"act": {"cap": "schedule_skill", "by": "agent"}}
+      ],
+      "no_schedule": []
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "share": [
+        {"act": {"cap": "approve_share", "by": "user"}},
+        {"act": {"cap": "share_with_team", "by": "agent"}}
+      ],
+      "no_share": []
+    }}}
+  ],
+  "goal": {"and": ["skill_written", "test_matches", "registered"]},
+  "init_true": ["task_captured"],
+  "init_constraints": []
+}

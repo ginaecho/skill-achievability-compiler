@@ -1,0 +1,90 @@
+{
+  "name": "productivity-update",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "load_state": {
+      "owner": "agent",
+      "via": "read",
+      "pre": "tasks_file_exists",
+      "add": ["state_loaded"]
+    },
+    "fetch_tracker_tasks": {
+      "owner": "agent",
+      "via": "project_tracker_mcp",
+      "needs": ["project_tracker_account"],
+      "pre": "state_loaded",
+      "add": ["external_tasks_fetched"]
+    },
+    "fetch_github_issues": {
+      "owner": "agent",
+      "via": "gh_cli",
+      "needs": ["github_account"],
+      "pre": "state_loaded",
+      "add": ["external_tasks_fetched"]
+    },
+    "ask_sync_decisions": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "external_tasks_fetched",
+      "add": ["sync_decided"]
+    },
+    "apply_sync_to_tasks": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "sync_decided",
+      "add": ["tasks_synced"]
+    },
+    "ask_triage_decisions": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "state_loaded",
+      "add": ["triage_decided"]
+    },
+    "apply_triage_to_tasks": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "triage_decided",
+      "add": ["tasks_triaged"]
+    },
+    "ask_about_gaps": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "state_loaded",
+      "add": ["gap_answers_received"]
+    },
+    "write_memory_files": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "gap_answers_received",
+      "add": ["memory_updated"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "load_state", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "tracker_available": [
+        {"act": {"cap": "fetch_tracker_tasks", "by": "agent"}},
+        {"act": {"cap": "ask_sync_decisions", "by": "agent"}},
+        {"act": {"cap": "apply_sync_to_tasks", "by": "agent"}}
+      ],
+      "github_available": [
+        {"act": {"cap": "fetch_github_issues", "by": "agent"}},
+        {"act": {"cap": "ask_sync_decisions", "by": "agent"}},
+        {"act": {"cap": "apply_sync_to_tasks", "by": "agent"}}
+      ],
+      "no_sources": []
+    }}},
+    {"act": {"cap": "ask_triage_decisions", "by": "agent"}},
+    {"act": {"cap": "apply_triage_to_tasks", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "gaps_found": [
+        {"act": {"cap": "ask_about_gaps", "by": "agent"}},
+        {"act": {"cap": "write_memory_files", "by": "agent"}}
+      ],
+      "all_decoded": []
+    }}}
+  ],
+  "goal": {"and": ["state_loaded", "tasks_triaged"]},
+  "init_true": ["tasks_file_exists"],
+  "init_constraints": []
+}

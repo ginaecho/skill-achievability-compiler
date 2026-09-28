@@ -1,0 +1,59 @@
+{
+  "name": "strategic-alignment",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "ask_alignment_questions": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["strategy_context_gathered"]
+    },
+    "read_okr_file": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": "okr_file_provided",
+      "add": ["okrs_loaded"]
+    },
+    "collect_okrs_in_chat": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["okrs_loaded"]
+    },
+    "run_alignment_checker": {
+      "owner": "agent",
+      "via": "python_runtime",
+      "pre": "okrs_loaded",
+      "add": ["checker_output"]
+    },
+    "write_alignment_report": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["okrs_loaded", "strategy_context_gathered"]},
+      "add": ["cascade_map_written", "orphans_conflicts_gaps_reported", "alignment_score_reported", "realignment_plan_written"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "ask_alignment_questions", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "okr_file": [
+        {"act": {"cap": "read_okr_file", "by": "agent"}}
+      ],
+      "okrs_in_chat": [
+        {"act": {"cap": "collect_okrs_in_chat", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "run_checker_script": [
+        {"act": {"cap": "run_alignment_checker", "by": "agent"}}
+      ],
+      "manual_analysis": []
+    }}},
+    {"act": {"cap": "write_alignment_report", "by": "agent"}}
+  ],
+  "goal": {"and": ["cascade_map_written", "orphans_conflicts_gaps_reported", "alignment_score_reported", "realignment_plan_written"]},
+  "init_true": [],
+  "init_constraints": []
+}

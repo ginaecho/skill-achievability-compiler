@@ -1,0 +1,69 @@
+{
+  "name": "foundry-agent-sync",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "search_repo": {
+      "owner": "agent",
+      "via": "bash",
+      "add": ["repo_searched"]
+    },
+    "ask_agent_definitions": {
+      "owner": "agent",
+      "via": "ask_user",
+      "add": ["agents_specified"]
+    },
+    "write_manifest": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "agents_specified",
+      "add": ["manifest_exists"]
+    },
+    "write_sync_script": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "repo_searched",
+      "add": ["sync_script_exists"]
+    },
+    "ask_parameters": {
+      "owner": "agent",
+      "via": "ask_user",
+      "add": ["params_collected"]
+    },
+    "run_sync": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_account", "azure_foundry_project"],
+      "pre": {"and": ["manifest_exists", "sync_script_exists", "params_collected"]},
+      "add": ["agents_synced"]
+    },
+    "verify_agents": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["azure_account", "azure_foundry_project"],
+      "pre": "agents_synced",
+      "add": ["agents_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "search_repo", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "manifest_missing": [
+        {"act": {"cap": "ask_agent_definitions", "by": "agent"}},
+        {"act": {"cap": "write_manifest", "by": "agent"}}
+      ],
+      "manifest_found": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "script_missing": [
+        {"act": {"cap": "write_sync_script", "by": "agent"}}
+      ],
+      "script_found": []
+    }}},
+    {"act": {"cap": "ask_parameters", "by": "agent"}},
+    {"act": {"cap": "run_sync", "by": "agent"}},
+    {"act": {"cap": "verify_agents", "by": "agent"}}
+  ],
+  "goal": {"and": ["agents_synced", "agents_verified"]},
+  "init_true": [],
+  "init_constraints": []
+}

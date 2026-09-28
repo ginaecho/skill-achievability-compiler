@@ -1,0 +1,117 @@
+{
+  "name": "neon",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_repo": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["repo_inspected"]
+    },
+    "fetch_neon_docs": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "add": ["docs_checked"]
+    },
+    "install_cli": {
+      "owner": "agent",
+      "via": "bash",
+      "add": ["cli_installed"]
+    },
+    "check_credentials": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "cli_installed",
+      "add": ["credentials_checked"]
+    },
+    "ask_user_sign_in": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": "credentials_checked",
+      "add": ["user_signed_in"]
+    },
+    "link_project": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["neon_account"],
+      "pre": {"and": ["cli_installed", "repo_inspected"]},
+      "add": ["project_linked", "env_pulled"]
+    },
+    "create_claimable_project": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["neon_api"],
+      "pre": {"and": ["cli_installed", "repo_inspected"]},
+      "add": ["project_linked", "env_pulled"]
+    },
+    "install_neon_skills": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "cli_installed",
+      "add": ["skills_installed"]
+    },
+    "write_neon_config": {
+      "owner": "agent",
+      "via": "write",
+      "pre": {"and": ["repo_inspected", "project_linked"]},
+      "add": ["neon_ts_written"]
+    },
+    "create_dev_branch": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["neon_account"],
+      "pre": "project_linked",
+      "add": ["dev_branch_checked_out"]
+    },
+    "deploy_config": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["neon_account"],
+      "pre": {"and": ["neon_ts_written", "project_linked"]},
+      "add": ["services_provisioned"]
+    },
+    "verify_app_flow": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "services_provisioned",
+      "add": ["app_flow_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_repo", "by": "agent"}},
+    {"act": {"cap": "fetch_neon_docs", "by": "agent"}},
+    {"act": {"cap": "install_cli", "by": "agent"}},
+    {"act": {"cap": "check_credentials", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "has_account": [
+        {"act": {"cap": "link_project", "by": "agent"}}
+      ],
+      "needs_sign_in": [
+        {"act": {"cap": "ask_user_sign_in", "by": "agent"}},
+        {"act": {"cap": "link_project", "by": "agent"}}
+      ],
+      "no_account": [
+        {"act": {"cap": "create_claimable_project", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "install_skills": [
+        {"act": {"cap": "install_neon_skills", "by": "agent"}}
+      ],
+      "skip_skills": []
+    }}},
+    {"act": {"cap": "write_neon_config", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "branch_first": [
+        {"act": {"cap": "create_dev_branch", "by": "agent"}}
+      ],
+      "default_branch": []
+    }}},
+    {"act": {"cap": "deploy_config", "by": "agent"}},
+    {"act": {"cap": "verify_app_flow", "by": "agent"}}
+  ],
+  "goal": {"and": ["project_linked", "neon_ts_written", "services_provisioned", "app_flow_verified"]},
+  "init_true": [],
+  "init_constraints": []
+}

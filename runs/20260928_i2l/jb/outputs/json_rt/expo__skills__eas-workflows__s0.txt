@@ -1,0 +1,61 @@
+{
+  "name": "eas-workflows",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "fetch_schema_and_docs": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["public_internet"],
+      "add": ["schema_fetched"]
+    },
+    "write_workflow_yaml": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "schema_fetched",
+      "add": ["workflow_written"],
+      "del": ["workflow_valid"]
+    },
+    "validate_with_eas_cli": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["expo_account"],
+      "pre": "workflow_written",
+      "nondet": {"workflow_valid": true}
+    },
+    "fix_workflow_yaml": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "workflow_written",
+      "add": ["workflow_written"]
+    },
+    "submit_feedback": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["public_internet"],
+      "add": ["feedback_submitted"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "fetch_schema_and_docs", "by": "agent"}},
+    {"act": {"cap": "write_workflow_yaml", "by": "agent"}},
+    {"rec": {"name": "VALIDATE", "body": [
+      {"act": {"cap": "validate_with_eas_cli", "by": "agent"}},
+      {"choice": {"by": "agent", "observed": true, "external": true, "branches": {
+        "valid": [],
+        "errors": [
+          {"act": {"cap": "fix_workflow_yaml", "by": "agent"}},
+          {"continue": "VALIDATE"}
+        ]
+      }}}
+    ]}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "report_issue": [
+        {"act": {"cap": "submit_feedback", "by": "agent"}}
+      ],
+      "no_feedback": []
+    }}}
+  ],
+  "goal": {"and": ["workflow_written", "workflow_valid"]},
+  "init_true": [],
+  "init_constraints": []
+}

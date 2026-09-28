@@ -1,0 +1,42 @@
+{
+  "name": "entry-point-analyzer",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_contract_files": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": true,
+      "add": ["contracts_read", "language_detected"]
+    },
+    "run_slither_entry_points": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["slither_installed"],
+      "pre": "language_detected",
+      "add": ["slither_output"]
+    },
+    "write_audit_report": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": {"and": ["contracts_read", "language_detected"]},
+      "add": ["report_written"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "read_contract_files", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "use_slither": [{"act": {"cap": "run_slither_entry_points", "by": "agent"}}],
+        "manual_analysis": []
+      }
+    }},
+    {"act": {"cap": "write_audit_report", "by": "agent"}}
+  ],
+  "goal": {"and": ["contracts_read", "report_written"]},
+  "init_true": [],
+  "init_constraints": []
+}

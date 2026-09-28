@@ -1,0 +1,71 @@
+{
+  "name": "expo-skill-feedback",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "ask_approval": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["user_approved"]
+    },
+    "submit_feedback": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries", "public_internet"],
+      "pre": true,
+      "add": ["feedback_submitted"]
+    },
+    "submit_eval_candidate": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries", "public_internet"],
+      "pre": "user_approved",
+      "add": ["feedback_submitted"]
+    },
+    "resend_as_unknown_category": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries", "public_internet"],
+      "pre": "user_approved",
+      "add": ["feedback_submitted"]
+    },
+    "set_telemetry": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "telemetry_requested",
+      "add": ["telemetry_configured"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "general_feedback": [
+        {"act": {"cap": "submit_feedback", "by": "agent"}}
+      ],
+      "eval_candidate": [
+        {"act": {"cap": "ask_approval", "by": "agent"}},
+        {"choice": {"by": "user", "observed": true, "branches": {
+          "approve": [
+            {"act": {"cap": "submit_eval_candidate", "by": "agent"}},
+            {"choice": {"by": "agent", "external": true, "observed": true, "branches": {
+              "ok": [],
+              "invalid_category_error": [
+                {"act": {"cap": "resend_as_unknown_category", "by": "agent"}}
+              ]
+            }}}
+          ],
+          "decline": []
+        }}}
+      ]
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "telemetry_change": [
+        {"act": {"cap": "set_telemetry", "by": "agent"}}
+      ],
+      "none": []
+    }}}
+  ],
+  "goal": "feedback_submitted",
+  "init_true": [],
+  "init_constraints": []
+}

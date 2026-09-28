@@ -1,0 +1,56 @@
+{
+  "name": "aiq-research",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "check_backend_health": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["aiq_backend"],
+      "pre": true,
+      "add": ["backend_reachable"]
+    },
+    "confirm_endpoint": {
+      "owner": "agent",
+      "via": "ask_user",
+      "pre": "backend_reachable",
+      "add": ["endpoint_trusted"]
+    },
+    "send_chat_request": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["aiq_backend"],
+      "pre": {"and": ["backend_reachable", "endpoint_trusted"]},
+      "add": ["query_sent"]
+    },
+    "poll_research_job": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["aiq_backend"],
+      "pre": "query_sent",
+      "add": ["report_obtained"]
+    },
+    "receive_inline_answer": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["aiq_backend"],
+      "pre": "query_sent",
+      "add": ["report_obtained"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "check_backend_health", "by": "agent"}},
+    {"act": {"cap": "confirm_endpoint", "by": "agent"}},
+    {"act": {"cap": "send_chat_request", "by": "agent"}},
+    {"choice": {"by": "agent", "external": true, "observed": true, "branches": {
+      "deep_research_job": [
+        {"act": {"cap": "poll_research_job", "by": "agent"}}
+      ],
+      "inline_answer": [
+        {"act": {"cap": "receive_inline_answer", "by": "agent"}}
+      ]
+    }}}
+  ],
+  "goal": "report_obtained",
+  "init_true": [],
+  "init_constraints": []
+}

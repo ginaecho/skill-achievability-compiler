@@ -1,0 +1,57 @@
+{
+  "name": "imagegen",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "generate_image_builtin": {
+      "owner": "agent",
+      "via": "image_gen",
+      "add": ["image_generated"]
+    },
+    "install_cli_deps": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "add": ["cli_deps_installed"]
+    },
+    "generate_image_cli": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["openai_api_key"],
+      "pre": "cli_deps_installed",
+      "add": ["image_generated"]
+    },
+    "copy_to_workspace": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "image_generated",
+      "add": ["image_in_workspace"]
+    },
+    "update_references": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "image_in_workspace",
+      "add": ["references_updated"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "builtin": [
+        {"act": {"cap": "generate_image_builtin", "by": "agent"}}
+      ],
+      "explicit_cli": [
+        {"act": {"cap": "install_cli_deps", "by": "agent"}},
+        {"act": {"cap": "generate_image_cli", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "project_bound": [
+        {"act": {"cap": "copy_to_workspace", "by": "agent"}},
+        {"act": {"cap": "update_references", "by": "agent"}}
+      ],
+      "preview_only": []
+    }}}
+  ],
+  "goal": "image_generated",
+  "init_true": [],
+  "init_constraints": []
+}

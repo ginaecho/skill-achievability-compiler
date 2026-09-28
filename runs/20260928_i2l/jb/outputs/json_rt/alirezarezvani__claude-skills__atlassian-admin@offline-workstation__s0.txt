@@ -1,0 +1,62 @@
+{
+  "name": "atlassian-admin-user-provisioning",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "collect_user_details": {
+      "owner": "agent",
+      "via": "ask_user",
+      "add": ["user_details_known"]
+    },
+    "invite_user": {
+      "owner": "agent",
+      "via": "atlassian_cloud_api",
+      "needs": ["atlassian_org_admin_account", "network_access"],
+      "pre": "user_details_known",
+      "add": ["user_account_created"]
+    },
+    "add_user_to_groups": {
+      "owner": "agent",
+      "via": "atlassian_cloud_api",
+      "needs": ["atlassian_org_admin_account", "network_access"],
+      "pre": "user_account_created",
+      "add": ["user_in_groups"]
+    },
+    "assign_product_access": {
+      "owner": "agent",
+      "via": "atlassian_cloud_api",
+      "needs": ["atlassian_org_admin_account", "network_access"],
+      "pre": "user_account_created",
+      "add": ["product_access_granted"]
+    },
+    "send_welcome_and_notify": {
+      "owner": "agent",
+      "via": "email_service",
+      "needs": ["email_account", "network_access"],
+      "pre": "user_account_created",
+      "add": ["team_notified"]
+    },
+    "verify_user_active": {
+      "owner": "agent",
+      "via": "atlassian_cloud_api",
+      "needs": ["atlassian_org_admin_account", "network_access"],
+      "pre": {"and": ["user_in_groups", "product_access_granted"]},
+      "add": ["user_verified_active"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "collect_user_details", "by": "agent"}},
+    {"act": {"cap": "invite_user", "by": "agent"}},
+    {"act": {"cap": "add_user_to_groups", "by": "agent"}},
+    {"act": {"cap": "assign_product_access", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "notify": [
+        {"act": {"cap": "send_welcome_and_notify", "by": "agent"}}
+      ],
+      "skip": []
+    }}},
+    {"act": {"cap": "verify_user_active", "by": "agent"}}
+  ],
+  "goal": {"and": ["user_account_created", "user_in_groups", "product_access_granted", "user_verified_active"]},
+  "init_true": [],
+  "init_constraints": []
+}

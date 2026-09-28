@@ -1,0 +1,80 @@
+{
+  "name": "slicing-code-context",
+  "roles": ["coordinator", "worker"],
+  "capabilities": {
+    "build_slice_packet": {
+      "owner": "coordinator",
+      "via": "bash",
+      "needs": ["shell", "package_registries"],
+      "add": ["packet_built"]
+    },
+    "build_expanded_packet": {
+      "owner": "coordinator",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": "packet_built",
+      "add": ["expanded_packet_built"]
+    },
+    "reread_affected_code": {
+      "owner": "coordinator",
+      "via": "read",
+      "pre": "response_validated",
+      "add": ["affected_code_reread"]
+    },
+    "apply_edit": {
+      "owner": "coordinator",
+      "via": "edit",
+      "pre": {"and": ["response_validated", "affected_code_reread"]},
+      "add": ["edit_applied"]
+    },
+    "run_checks": {
+      "owner": "coordinator",
+      "via": "bash",
+      "needs": ["shell"],
+      "pre": "edit_applied",
+      "add": ["checks_passed"]
+    },
+    "validate_response": {
+      "owner": "coordinator",
+      "via": "read",
+      "pre": "worker_response_received",
+      "add": ["response_validated"]
+    },
+    "receive_response": {
+      "owner": "coordinator",
+      "via": "read",
+      "pre": "packet_built",
+      "add": ["worker_response_received"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "build_slice_packet", "by": "coordinator"}},
+    {"spawn": {"role": "worker"}},
+    {"msg": {"from": "coordinator", "to": "worker", "label": "task_and_packet"}},
+    {"choice": {"by": "worker", "branches": {
+      "complete": [
+        {"msg": {"from": "worker", "to": "coordinator", "label": "complete_response"}}
+      ],
+      "needs_context": [
+        {"msg": {"from": "worker", "to": "coordinator", "label": "needs_context_response"}},
+        {"act": {"cap": "build_expanded_packet", "by": "coordinator"}},
+        {"spawn": {"role": "worker"}},
+        {"msg": {"from": "coordinator", "to": "worker", "label": "task_and_expanded_packet"}},
+        {"msg": {"from": "worker", "to": "coordinator", "label": "second_response"}}
+      ]
+    }}},
+    {"act": {"cap": "receive_response", "by": "coordinator"}},
+    {"act": {"cap": "validate_response", "by": "coordinator"}},
+    {"choice": {"by": "coordinator", "observed": true, "branches": {
+      "apply_proposed_edit": [
+        {"act": {"cap": "reread_affected_code", "by": "coordinator"}},
+        {"act": {"cap": "apply_edit", "by": "coordinator"}},
+        {"act": {"cap": "run_checks", "by": "coordinator"}}
+      ],
+      "analysis_only": []
+    }}}
+  ],
+  "goal": {"and": ["packet_built", "worker_response_received", "response_validated"]},
+  "init_true": [],
+  "init_constraints": []
+}

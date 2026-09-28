@@ -1,0 +1,69 @@
+{
+  "name": "comp-analysis",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "pull_comp_benchmarks": {
+      "owner": "agent",
+      "via": "compensation_data_connector",
+      "needs": ["compensation_data_account"],
+      "pre": true,
+      "add": ["market_data_gathered"]
+    },
+    "web_research_benchmarks": {
+      "owner": "agent",
+      "via": "web_search",
+      "needs": ["public_internet"],
+      "pre": true,
+      "add": ["market_data_gathered"]
+    },
+    "pull_hris_comp": {
+      "owner": "agent",
+      "via": "hris_connector",
+      "needs": ["hris_account"],
+      "pre": true,
+      "add": ["employee_data_loaded"]
+    },
+    "read_uploaded_comp_csv": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": true,
+      "add": ["employee_data_loaded"]
+    },
+    "ask_role_details": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["role_specified"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "role_given": [],
+      "role_missing": [
+        {"act": {"cap": "ask_role_details", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "comp_connector": [
+        {"act": {"cap": "pull_comp_benchmarks", "by": "agent"}}
+      ],
+      "no_connector": [
+        {"act": {"cap": "web_research_benchmarks", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "uploaded_data": [
+        {"act": {"cap": "read_uploaded_comp_csv", "by": "agent"}}
+      ],
+      "hris_connected": [
+        {"act": {"cap": "pull_hris_comp", "by": "agent"}}
+      ],
+      "no_band_data": []
+    }}}
+  ],
+  "goal": {"and": ["role_specified", "market_data_gathered"]},
+  "init_true": ["role_specified"],
+  "init_constraints": []
+}

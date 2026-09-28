@@ -1,0 +1,73 @@
+{
+  "name": "document-api-endpoint",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_endpoint_code": {
+      "owner": "agent",
+      "via": "read",
+      "pre": true,
+      "add": ["endpoint_identified"]
+    },
+    "add_extend_schema": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "endpoint_identified",
+      "add": ["schema_declared", "response_typed"]
+    },
+    "remove_legacy_docs": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "schema_declared",
+      "add": ["legacy_docs_migrated"]
+    },
+    "promote_to_public": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "schema_declared",
+      "add": ["endpoint_public"]
+    },
+    "validate_spec": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["schema_declared", "response_typed"]},
+      "add": ["spec_validated"]
+    },
+    "verify_live_endpoint": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["sentry_api_token"],
+      "pre": "response_typed",
+      "add": ["live_verified"]
+    },
+    "fix_type_drift": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "live_verified",
+      "add": ["drift_fixed"],
+      "del": ["spec_validated"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_endpoint_code", "by": "agent"}},
+    {"act": {"cap": "add_extend_schema", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "legacy_path_exists": [{"act": {"cap": "remove_legacy_docs", "by": "agent"}}],
+      "no_legacy": []
+    }}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "promote": [{"act": {"cap": "promote_to_public", "by": "agent"}}],
+      "keep_status": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "live_check": [
+        {"act": {"cap": "verify_live_endpoint", "by": "agent"}},
+        {"act": {"cap": "fix_type_drift", "by": "agent"}}
+      ],
+      "skip": []
+    }}},
+    {"act": {"cap": "validate_spec", "by": "agent"}}
+  ],
+  "goal": {"and": ["schema_declared", "response_typed", "spec_validated"]},
+  "init_true": [],
+  "init_constraints": []
+}

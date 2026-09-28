@@ -1,0 +1,82 @@
+{
+  "name": "terraform-search-import",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "write_provider_config": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "add": ["provider_config_written"]
+    },
+    "terraform_init_and_check_support": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "provider_config_written",
+      "add": ["initialized", "support_checked"]
+    },
+    "write_query_file": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": "support_checked",
+      "add": ["query_file_written"]
+    },
+    "run_query_generate_config": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["cloud_account"],
+      "pre": {"and": ["initialized", "query_file_written"]},
+      "add": ["resources_discovered", "config_generated"]
+    },
+    "manual_discovery_write_imports": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["cloud_account"],
+      "pre": "support_checked",
+      "add": ["resources_discovered", "config_generated"]
+    },
+    "clean_generated_config": {
+      "owner": "agent",
+      "via": "edit",
+      "needs": ["local_filesystem"],
+      "pre": "config_generated",
+      "add": ["config_cleaned"]
+    },
+    "terraform_plan_apply_import": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["cloud_account"],
+      "pre": {"and": ["config_cleaned", "initialized"]},
+      "add": ["resources_imported"]
+    },
+    "verify_state": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "resources_imported",
+      "add": ["import_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "write_provider_config", "by": "agent"}},
+    {"act": {"cap": "terraform_init_and_check_support", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "search_supported": [
+          {"act": {"cap": "write_query_file", "by": "agent"}},
+          {"act": {"cap": "run_query_generate_config", "by": "agent"}}
+        ],
+        "manual": [
+          {"act": {"cap": "manual_discovery_write_imports", "by": "agent"}}
+        ]
+      }
+    }},
+    {"act": {"cap": "clean_generated_config", "by": "agent"}},
+    {"act": {"cap": "terraform_plan_apply_import", "by": "agent"}},
+    {"act": {"cap": "verify_state", "by": "agent"}}
+  ],
+  "goal": {"and": ["resources_discovered", "config_cleaned", "resources_imported", "import_verified"]},
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,108 @@
+{
+  "name": "playwright-interactive",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "install_playwright": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": true,
+      "add": ["playwright_installed"]
+    },
+    "start_dev_server": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["local_servers"],
+      "pre": true,
+      "add": ["dev_server_running"]
+    },
+    "launch_web_session": {
+      "owner": "agent",
+      "via": "browser",
+      "pre": {"and": ["playwright_installed", "dev_server_running"]},
+      "add": ["session_open"]
+    },
+    "launch_electron_session": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "playwright_installed",
+      "add": ["session_open"]
+    },
+    "apply_code_change": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": true,
+      "add": ["code_changed"],
+      "del": ["functional_qa_passed", "visual_qa_passed", "viewport_fit_checked"]
+    },
+    "reload_or_relaunch": {
+      "owner": "agent",
+      "via": "browser",
+      "pre": {"and": ["session_open", "code_changed"]},
+      "del": ["code_changed"]
+    },
+    "run_functional_qa": {
+      "owner": "agent",
+      "via": "browser",
+      "pre": "session_open",
+      "add": ["functional_qa_passed"]
+    },
+    "run_visual_qa": {
+      "owner": "agent",
+      "via": "browser",
+      "pre": "session_open",
+      "add": ["visual_qa_passed", "screenshots_captured"]
+    },
+    "check_viewport_fit": {
+      "owner": "agent",
+      "via": "browser",
+      "pre": "session_open",
+      "add": ["viewport_fit_checked"]
+    },
+    "cleanup_session": {
+      "owner": "agent",
+      "via": "browser",
+      "pre": "session_open",
+      "del": ["session_open"],
+      "add": ["session_cleaned"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "install_playwright", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "web": [
+        {"act": {"cap": "start_dev_server", "by": "agent"}},
+        {"act": {"cap": "launch_web_session", "by": "agent"}}
+      ],
+      "electron": [
+        {"act": {"cap": "launch_electron_session", "by": "agent"}}
+      ]
+    }}},
+    {"rec": {"name": "Iterate", "body": [
+      {"choice": {"by": "agent", "observed": true, "branches": {
+        "change_code": [
+          {"act": {"cap": "apply_code_change", "by": "agent"}},
+          {"act": {"cap": "reload_or_relaunch", "by": "agent"}},
+          {"act": {"cap": "run_functional_qa", "by": "agent"}},
+          {"act": {"cap": "run_visual_qa", "by": "agent"}},
+          {"act": {"cap": "check_viewport_fit", "by": "agent"}},
+          {"continue": "Iterate"}
+        ],
+        "signoff": [
+          {"act": {"cap": "run_functional_qa", "by": "agent"}},
+          {"act": {"cap": "run_visual_qa", "by": "agent"}},
+          {"act": {"cap": "check_viewport_fit", "by": "agent"}}
+        ]
+      }}}
+    ]}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "cleanup": [
+        {"act": {"cap": "cleanup_session", "by": "agent"}}
+      ],
+      "keep_alive": []
+    }}}
+  ],
+  "goal": {"and": ["functional_qa_passed", "visual_qa_passed", "viewport_fit_checked", "screenshots_captured"]},
+  "init_true": [],
+  "init_constraints": []
+}

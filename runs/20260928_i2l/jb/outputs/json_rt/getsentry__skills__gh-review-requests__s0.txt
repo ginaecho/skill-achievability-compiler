@@ -1,0 +1,45 @@
+{
+  "name": "gh-review-requests",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "ask_team": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["team_known"]
+    },
+    "run_fetch_script": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["github_auth"],
+      "pre": "team_known",
+      "add": ["review_requests_fetched"]
+    },
+    "fetch_manually_via_gh_api": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["github_auth"],
+      "pre": "team_known",
+      "add": ["review_requests_fetched"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "team_given": [],
+      "team_missing": [
+        {"act": {"cap": "ask_team", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "run_fetch_script", "by": "agent"}},
+    {"choice": {"by": "agent", "external": true, "observed": true, "branches": {
+      "script_ok": [],
+      "script_failed": [
+        {"act": {"cap": "fetch_manually_via_gh_api", "by": "agent"}}
+      ]
+    }}}
+  ],
+  "goal": "review_requests_fetched",
+  "init_true": ["team_known"],
+  "init_constraints": []
+}

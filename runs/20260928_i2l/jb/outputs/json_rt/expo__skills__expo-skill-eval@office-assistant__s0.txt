@@ -1,0 +1,121 @@
+{
+  "name": "expo-skill-eval",
+  "roles": ["agent", "user", "grader"],
+  "capabilities": {
+    "clarify_scope": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["scope_confirmed"]
+    },
+    "make_workspace": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "scope_confirmed",
+      "add": ["workspace_ready"]
+    },
+    "write_eval_cases": {
+      "owner": "agent",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": "workspace_ready",
+      "add": ["evals_written"]
+    },
+    "run_trigger_eval": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["claude_cli_account"],
+      "pre": {"and": ["evals_written", "published_plugin_disabled"]},
+      "add": ["trigger_results"]
+    },
+    "confirm_plugin_disabled": {
+      "owner": "user",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "add": ["published_plugin_disabled"]
+    },
+    "build_fixtures_and_run_executors": {
+      "owner": "agent",
+      "via": "shell",
+      "needs": ["claude_cli_account", "package_registries"],
+      "pre": "evals_written",
+      "add": ["executor_outputs"]
+    },
+    "run_static_gate": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "executor_outputs",
+      "add": ["static_results"]
+    },
+    "run_snapshots": {
+      "owner": "agent",
+      "via": "macos_xcode_android_emulator",
+      "pre": "static_results",
+      "add": ["screenshots_captured"]
+    },
+    "grade_outputs": {
+      "owner": "grader",
+      "via": "write",
+      "needs": ["local_filesystem"],
+      "pre": "static_results",
+      "add": ["graded"]
+    },
+    "generate_viewer": {
+      "owner": "agent",
+      "via": "shell",
+      "pre": "graded",
+      "add": ["viewer_generated"]
+    },
+    "publish_viewer_artifact": {
+      "owner": "agent",
+      "via": "claude_artifact",
+      "needs": ["claude_account"],
+      "pre": "viewer_generated",
+      "add": ["viewer_published"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "clarify_scope", "by": "agent"}},
+    {"act": {"cap": "make_workspace", "by": "agent"}},
+    {"act": {"cap": "write_eval_cases", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "trigger_eval": [
+          {"act": {"cap": "confirm_plugin_disabled", "by": "user"}},
+          {"act": {"cap": "run_trigger_eval", "by": "agent"}}
+        ],
+        "no_trigger_eval": []
+      }
+    }},
+    {"act": {"cap": "build_fixtures_and_run_executors", "by": "agent"}},
+    {"act": {"cap": "run_static_gate", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "runtime_screenshots": [
+          {"act": {"cap": "run_snapshots", "by": "agent"}}
+        ],
+        "code_checks_only": []
+      }
+    }},
+    {"spawn": {"role": "grader"}},
+    {"act": {"cap": "grade_outputs", "by": "grader"}},
+    {"act": {"cap": "generate_viewer", "by": "agent"}},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "publish": [
+          {"act": {"cap": "publish_viewer_artifact", "by": "agent"}}
+        ],
+        "local_only": []
+      }
+    }}
+  ],
+  "goal": {"and": ["scope_confirmed", "evals_written", "executor_outputs", "static_results", "graded", "viewer_generated"]},
+  "init_true": [],
+  "init_constraints": []
+}

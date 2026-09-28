@@ -1,0 +1,61 @@
+{
+  "name": "provider-configuration",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_provider_code": {
+      "owner": "agent",
+      "via": "read",
+      "pre": true,
+      "add": ["provider_code_read"]
+    },
+    "write_provider_schema": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "provider_code_read",
+      "add": ["schema_optional_sensitive"]
+    },
+    "write_credential_chain": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "provider_code_read",
+      "add": ["credential_chain_written", "secrets_redacted"]
+    },
+    "wire_configure": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": {"and": ["schema_optional_sensitive", "credential_chain_written"]},
+      "add": ["configure_wired", "unknown_guards_added", "diagnostics_name_sources"]
+    },
+    "write_unit_tests": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "credential_chain_written",
+      "add": ["unit_tests_written"]
+    },
+    "run_unit_tests": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["preinstalled_software"],
+      "pre": {"and": ["unit_tests_written", "configure_wired"]},
+      "nondet": {"tests_pass": true}
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "read_provider_code", "by": "agent"}},
+    {"act": {"cap": "write_provider_schema", "by": "agent"}},
+    {"act": {"cap": "write_credential_chain", "by": "agent"}},
+    {"act": {"cap": "wire_configure", "by": "agent"}},
+    {"act": {"cap": "write_unit_tests", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "run_tests": [{"act": {"cap": "run_unit_tests", "by": "agent"}}],
+        "skip_tests": []
+      }
+    }}
+  ],
+  "goal": {"and": ["schema_optional_sensitive", "credential_chain_written", "secrets_redacted", "configure_wired", "unknown_guards_added", "diagnostics_name_sources", "unit_tests_written"]},
+  "init_true": [],
+  "init_constraints": []
+}

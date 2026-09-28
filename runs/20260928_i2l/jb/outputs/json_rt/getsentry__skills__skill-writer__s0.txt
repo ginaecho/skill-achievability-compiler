@@ -1,0 +1,83 @@
+{
+  "name": "skill-writer",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_workspace": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["workspace_inspected"]
+    },
+    "ask_target_location": {
+      "owner": "agent",
+      "via": "ask_user",
+      "add": ["target_resolved"]
+    },
+    "collect_sources": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": "workspace_inspected",
+      "add": ["sources_collected"]
+    },
+    "capture_iteration_examples": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "workspace_inspected",
+      "add": ["examples_captured"]
+    },
+    "author_skill_files": {
+      "owner": "agent",
+      "via": "write",
+      "pre": {"and": ["workspace_inspected", "target_resolved"]},
+      "add": ["skill_authored"]
+    },
+    "optimize_description": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "skill_authored",
+      "add": ["description_optimized"]
+    },
+    "register_skill": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "skill_authored",
+      "add": ["skill_registered"]
+    },
+    "run_validation": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": "skill_registered",
+      "add": ["skill_validated"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_workspace", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "location_unclear": [
+        {"act": {"cap": "ask_target_location", "by": "agent"}}
+      ],
+      "location_clear": [
+        {"act": {"cap": "inspect_workspace", "by": "agent"}}
+      ]
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "synthesis": [
+        {"act": {"cap": "collect_sources", "by": "agent"}}
+      ],
+      "skip_synthesis": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "iterate": [
+        {"act": {"cap": "capture_iteration_examples", "by": "agent"}}
+      ],
+      "no_iteration": []
+    }}},
+    {"act": {"cap": "author_skill_files", "by": "agent"}},
+    {"act": {"cap": "optimize_description", "by": "agent"}},
+    {"act": {"cap": "register_skill", "by": "agent"}},
+    {"act": {"cap": "run_validation", "by": "agent"}}
+  ],
+  "goal": {"and": ["skill_authored", "description_optimized", "skill_registered", "skill_validated"]},
+  "init_true": [],
+  "init_constraints": []
+}

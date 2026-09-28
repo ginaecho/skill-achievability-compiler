@@ -1,0 +1,112 @@
+{
+  "name": "eval_driven_dev",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "setup_pixie_env": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": true,
+      "add": ["pixie_installed", "pixie_initialized", "web_server_running"]
+    },
+    "write_analysis_docs": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "pixie_initialized",
+      "add": ["project_analyzed", "entry_point_documented", "eval_criteria_defined"]
+    },
+    "instrument_app": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "eval_criteria_defined",
+      "add": ["app_instrumented"]
+    },
+    "write_runnable": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "app_instrumented",
+      "add": ["runnable_written"]
+    },
+    "capture_reference_trace": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["llm_api_key"],
+      "pre": "runnable_written",
+      "add": ["reference_trace_captured"]
+    },
+    "write_evaluators": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "reference_trace_captured",
+      "add": ["evaluators_defined"]
+    },
+    "build_dataset": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "evaluators_defined",
+      "add": ["dataset_built"]
+    },
+    "run_pixie_test": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["llm_api_key"],
+      "pre": {"and": ["dataset_built", "runnable_written", "evaluators_defined"]},
+      "nondet": {"tests_scored": true}
+    },
+    "fix_qa_components": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "dataset_built",
+      "add": []
+    },
+    "complete_pending_evaluations": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "tests_scored",
+      "add": ["pending_evaluations_completed"]
+    },
+    "write_analysis_and_action_plan": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "pending_evaluations_completed",
+      "add": ["analysis_written", "action_plan_written"]
+    },
+    "run_step6_verifier": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["analysis_written", "action_plan_written"]},
+      "add": ["analysis_verified"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "setup_pixie_env", "by": "agent"}},
+    {"act": {"cap": "write_analysis_docs", "by": "agent"}},
+    {"act": {"cap": "instrument_app", "by": "agent"}},
+    {"act": {"cap": "write_runnable", "by": "agent"}},
+    {"act": {"cap": "capture_reference_trace", "by": "agent"}},
+    {"act": {"cap": "write_evaluators", "by": "agent"}},
+    {"act": {"cap": "build_dataset", "by": "agent"}},
+    {"rec": {
+      "name": "TestLoop",
+      "body": [
+        {"act": {"cap": "run_pixie_test", "by": "agent"}},
+        {"choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "scored": [],
+            "mechanical_error": [
+              {"act": {"cap": "fix_qa_components", "by": "agent"}},
+              {"continue": "TestLoop"}
+            ]
+          }
+        }}
+      ]
+    }},
+    {"act": {"cap": "complete_pending_evaluations", "by": "agent"}},
+    {"act": {"cap": "write_analysis_and_action_plan", "by": "agent"}},
+    {"act": {"cap": "run_step6_verifier", "by": "agent"}}
+  ],
+  "goal": {"and": ["app_instrumented", "runnable_written", "evaluators_defined", "dataset_built", "tests_scored", "pending_evaluations_completed", "analysis_written", "action_plan_written", "analysis_verified"]},
+  "init_true": [],
+  "init_constraints": []
+}

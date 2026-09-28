@@ -1,0 +1,76 @@
+{
+  "name": "call-prep",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "calendar_lookup": {
+      "owner": "agent",
+      "via": "calendar_connector",
+      "needs": ["calendar_account"],
+      "pre": true,
+      "add": ["attendees_known"]
+    },
+    "ask_attendees": {
+      "owner": "agent",
+      "via": "ask_user",
+      "needs": ["user_conversation"],
+      "pre": true,
+      "add": ["attendees_known"]
+    },
+    "research_account_common_room": {
+      "owner": "agent",
+      "via": "common_room_connector",
+      "needs": ["common_room_account"],
+      "pre": true,
+      "add": ["account_researched"]
+    },
+    "research_contacts_common_room": {
+      "owner": "agent",
+      "via": "common_room_connector",
+      "needs": ["common_room_account"],
+      "pre": "attendees_known",
+      "add": ["contacts_researched"]
+    },
+    "read_company_context": {
+      "owner": "agent",
+      "via": "read",
+      "needs": ["local_filesystem"],
+      "pre": true,
+      "add": ["company_context_loaded"]
+    },
+    "web_recency_check": {
+      "owner": "agent",
+      "via": "web_search",
+      "needs": ["public_internet"],
+      "pre": "account_researched",
+      "add": ["recency_checked"]
+    }
+  },
+  "protocol": [
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "calendar_available": [
+        {"act": {"cap": "calendar_lookup", "by": "agent"}}
+      ],
+      "attendees_given": [],
+      "ask": [
+        {"act": {"cap": "ask_attendees", "by": "agent"}}
+      ]
+    }}},
+    {"act": {"cap": "research_account_common_room", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "has_attendees": [
+        {"act": {"cap": "research_contacts_common_room", "by": "agent"}}
+      ],
+      "no_attendees": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "context_file_present": [
+        {"act": {"cap": "read_company_context", "by": "agent"}}
+      ],
+      "no_context": []
+    }}},
+    {"act": {"cap": "web_recency_check", "by": "agent"}}
+  ],
+  "goal": {"and": ["account_researched", "recency_checked"]},
+  "init_true": [],
+  "init_constraints": []
+}

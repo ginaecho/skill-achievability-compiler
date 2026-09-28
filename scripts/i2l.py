@@ -204,11 +204,15 @@ def blocks() -> None:
             if not (run / "frozen.json").exists():
                 continue
             fb = final_blocks(run, method)
-            # consistency: the replayed bound pack is the one score_all wrote
+            # consistency: the replayed bound pack gives the verdict score_all recorded
+            # (before ce_gr's grounding step, which only relabels IMPOSSIBLE as UNKNOWN)
+            rec = {r["case"]: r for r in json.loads((run / "results.json").read_text())} \
+                if (run / "results.json").exists() else {}
             for cid, b in fb.items():
-                saved = run / "packs" / method / f"{cid}.json"
-                if b["valid"] and saved.exists():
-                    assert json.loads(saved.read_text()) == b["bound_pack"], (arm, cid)
+                r = rec.get(cid)
+                if b["valid"] and r is not None:
+                    want = r.get("verdict_before_grounding") or r.get("verdict")
+                    assert check(b["bound_pack"]).label == want, (arm, cid)
                 b.pop("bound_pack", None)
                 res.setdefault(arm, {})[cid] = b
         if arm not in res:

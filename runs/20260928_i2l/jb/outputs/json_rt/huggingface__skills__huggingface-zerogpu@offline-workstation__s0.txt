@@ -1,0 +1,69 @@
+{
+  "name": "huggingface-zerogpu",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "read_existing_code": {
+      "owner": "agent",
+      "via": "read",
+      "pre": true,
+      "add": ["code_reviewed"]
+    },
+    "write_zerogpu_app": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "code_reviewed",
+      "add": ["app_written", "gpu_decorated", "duration_set", "cpu_returns"]
+    },
+    "write_requirements": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "app_written",
+      "add": ["requirements_written"]
+    },
+    "pin_python_version": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "app_written",
+      "add": ["python_version_pinned"]
+    },
+    "local_smoke_test": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["preinstalled_software"],
+      "pre": {"and": ["app_written", "requirements_written"]},
+      "add": ["local_test_run"]
+    },
+    "push_to_space": {
+      "owner": "agent",
+      "via": "huggingface_hub",
+      "needs": ["huggingface_account", "network"],
+      "pre": {"and": ["app_written", "requirements_written", "python_version_pinned"]},
+      "add": ["space_deployed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "read_existing_code", "by": "agent"}},
+    {"act": {"cap": "write_zerogpu_app", "by": "agent"}},
+    {"act": {"cap": "write_requirements", "by": "agent"}},
+    {"act": {"cap": "pin_python_version", "by": "agent"}},
+    {"choice": {
+      "by": "agent",
+      "observed": true,
+      "branches": {
+        "smoke_test": [{"act": {"cap": "local_smoke_test", "by": "agent"}}],
+        "skip_test": []
+      }
+    }},
+    {"choice": {
+      "by": "user",
+      "observed": true,
+      "branches": {
+        "deploy": [{"act": {"cap": "push_to_space", "by": "agent"}}],
+        "no_deploy": []
+      }
+    }}
+  ],
+  "goal": {"and": ["app_written", "gpu_decorated", "duration_set", "cpu_returns", "requirements_written", "python_version_pinned"]},
+  "init_true": [],
+  "init_constraints": []
+}

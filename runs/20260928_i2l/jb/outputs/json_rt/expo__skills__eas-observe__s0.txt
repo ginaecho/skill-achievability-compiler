@@ -1,0 +1,77 @@
+{
+  "name": "eas-observe",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "fetch_docs": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "add": ["docs_consulted"]
+    },
+    "inspect_project": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["sdk_version_known"]
+    },
+    "install_expo_observe": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "sdk_version_known",
+      "add": ["observe_installed"]
+    },
+    "wrap_root_and_mark_interactive": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": {"and": ["observe_installed", "sdk_version_known", "docs_consulted"]},
+      "add": ["root_wrapped", "interactive_marked"]
+    },
+    "add_navigation_integration": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "root_wrapped",
+      "add": ["nav_metrics_enabled"]
+    },
+    "typecheck": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["root_wrapped", "interactive_marked"]},
+      "add": ["integration_checked"]
+    },
+    "query_metrics": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["expo_account", "eas_observe_subscription"],
+      "pre": "integration_checked",
+      "add": ["metrics_retrieved"]
+    },
+    "submit_feedback": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["public_internet"],
+      "add": ["feedback_submitted"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "fetch_docs", "by": "agent"}},
+    {"act": {"cap": "inspect_project", "by": "agent"}},
+    {"act": {"cap": "install_expo_observe", "by": "agent"}},
+    {"act": {"cap": "wrap_root_and_mark_interactive", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "nav_metrics": [{"act": {"cap": "add_navigation_integration", "by": "agent"}}],
+      "skip": []
+    }}},
+    {"act": {"cap": "typecheck", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "query": [{"act": {"cap": "query_metrics", "by": "agent"}}],
+      "skip": []
+    }}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "feedback": [{"act": {"cap": "submit_feedback", "by": "agent"}}],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["observe_installed", "root_wrapped", "interactive_marked", "integration_checked"]},
+  "init_true": [],
+  "init_constraints": []
+}

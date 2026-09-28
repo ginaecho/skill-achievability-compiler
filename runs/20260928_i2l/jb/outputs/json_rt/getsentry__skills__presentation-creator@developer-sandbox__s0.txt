@@ -1,0 +1,76 @@
+{
+  "name": "presentation-creator",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "gather_requirements": {
+      "owner": "agent",
+      "via": "ask_user",
+      "add": ["requirements_known"]
+    },
+    "read_references": {
+      "owner": "agent",
+      "via": "read",
+      "add": ["design_system_loaded"]
+    },
+    "scaffold_project": {
+      "owner": "agent",
+      "via": "write",
+      "pre": "requirements_known",
+      "add": ["project_scaffolded"]
+    },
+    "write_slides": {
+      "owner": "agent",
+      "via": "write",
+      "pre": {"and": ["project_scaffolded", "design_system_loaded"]},
+      "add": ["slides_written", "styled"]
+    },
+    "write_charts": {
+      "owner": "agent",
+      "via": "write",
+      "pre": {"and": ["project_scaffolded", "has_real_data"]},
+      "add": ["charts_written"]
+    },
+    "install_deps": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": "project_scaffolded",
+      "add": ["deps_installed"]
+    },
+    "run_dev_and_refine": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["deps_installed", "slides_written"]},
+      "add": ["refined"]
+    },
+    "build_single_file": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["deps_installed", "slides_written", "styled"]},
+      "add": ["single_html_built"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "gather_requirements", "by": "agent"}},
+    {"act": {"cap": "read_references", "by": "agent"}},
+    {"act": {"cap": "scaffold_project", "by": "agent"}},
+    {"act": {"cap": "write_slides", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "real_data": [
+        {"act": {"cap": "write_charts", "by": "agent"}}
+      ],
+      "no_data": []
+    }}},
+    {"act": {"cap": "install_deps", "by": "agent"}},
+    {"choice": {"by": "agent", "observed": true, "branches": {
+      "iterate": [
+        {"act": {"cap": "run_dev_and_refine", "by": "agent"}}
+      ],
+      "skip": []
+    }}},
+    {"act": {"cap": "build_single_file", "by": "agent"}}
+  ],
+  "goal": {"and": ["project_scaffolded", "slides_written", "styled", "single_html_built", {"or": ["charts_written", {"not": "has_real_data"}]}]},
+  "init_true": [],
+  "init_constraints": []
+}

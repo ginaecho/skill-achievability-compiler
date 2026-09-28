@@ -1,0 +1,68 @@
+{
+  "name": "sandbox-stable",
+  "roles": ["agent", "user"],
+  "capabilities": {
+    "inspect_app_package_line": {
+      "owner": "agent",
+      "via": "read",
+      "pre": true,
+      "add": ["package_line_inspected"]
+    },
+    "fetch_sandbox_docs": {
+      "owner": "agent",
+      "via": "web_fetch",
+      "needs": ["public_internet"],
+      "pre": true,
+      "add": ["docs_retrieved"]
+    },
+    "install_stable_package": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["package_registries"],
+      "pre": {"and": ["package_line_inspected", "is_stable_line"]},
+      "add": ["stable_types_installed"]
+    },
+    "implement_worker_code": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": {"and": ["is_stable_line", "docs_retrieved", "stable_types_installed"]},
+      "add": ["worker_code_written"]
+    },
+    "align_container_image": {
+      "owner": "agent",
+      "via": "edit",
+      "pre": "is_stable_line",
+      "add": ["image_on_stable_line"]
+    },
+    "typecheck": {
+      "owner": "agent",
+      "via": "bash",
+      "pre": {"and": ["worker_code_written", "stable_types_installed"]},
+      "add": ["typecheck_passed"]
+    },
+    "deploy_worker": {
+      "owner": "agent",
+      "via": "bash",
+      "needs": ["cloudflare_account"],
+      "pre": {"and": ["typecheck_passed", "image_on_stable_line"]},
+      "add": ["deployed"]
+    }
+  },
+  "protocol": [
+    {"act": {"cap": "inspect_app_package_line", "by": "agent"}},
+    {"act": {"cap": "fetch_sandbox_docs", "by": "agent"}},
+    {"act": {"cap": "install_stable_package", "by": "agent"}},
+    {"act": {"cap": "align_container_image", "by": "agent"}},
+    {"act": {"cap": "implement_worker_code", "by": "agent"}},
+    {"act": {"cap": "typecheck", "by": "agent"}},
+    {"choice": {"by": "user", "observed": true, "branches": {
+      "deploy": [
+        {"act": {"cap": "deploy_worker", "by": "agent"}}
+      ],
+      "skip": []
+    }}}
+  ],
+  "goal": {"and": ["worker_code_written", "image_on_stable_line", "typecheck_passed"]},
+  "init_true": ["is_stable_line"],
+  "init_constraints": []
+}
