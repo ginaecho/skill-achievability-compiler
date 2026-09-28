@@ -10,7 +10,8 @@ Method and results: docs/P2G_RUNTIME_BINDING.md, docs/LIBRARY_TEST.md.
 
 --method: ce_rt (P1/P2: runtime-bound CE), ce_lv (P3: runtime-bound CE with
 two goal levels; the binder prunes the agent's unrunnable branches) or json
-(the original JSON compaction, as a baseline on the held-out set).
+(the original JSON compaction, as a baseline on the held-out set) or json_rt
+(JB, runs/20260928_i2l/PLAN.md: P2g with the pack written as JSON + via/needs).
 """
 from __future__ import annotations
 
@@ -33,7 +34,8 @@ from skillc import check  # noqa: E402
 from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E402
 from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
                                  _extract_json_object, ce_grounded_messages,
-                                 ce_index_messages,
+                                 ce_index_messages, json_runtime_messages,
+                                 JSON_RT_REPAIR_PROMPT, JSON_RT_RETRY, parse_json_rt,
                                  ce_runtime_messages, ce_tpl_messages,
                                  explain_refutation, render_index_facts)
 from skillc.frontend.policyindex import (CLASSES, Mention, PolicyIndex,  # noqa: E402
@@ -187,6 +189,8 @@ def _labelled() -> list[dict]:
 def _cases(case_set: str = "dev", method: str = "ce_rt") -> list[dict]:
     if case_set == "heldout":
         return _heldout()
+    if case_set == "i2l":      # runs/20260928_i2l/PLAN.md: held-out + fresh + gr
+        return _heldout() + _fresh() + _gr()
     if case_set == "fresh":
         return _fresh() + (_labelled() if method == "ce_tpl" else [])
     if case_set == "ext":
@@ -291,6 +295,9 @@ def prepare(out: Path, method: str, case_set: str = "dev") -> None:
                 case["obligations"] = [o.__dict__ for o in obligations]
                 system, user = ce_tpl_messages(text, rt_c, obligations)
                 prompt = {"system": system, "user": user}
+            elif method == "json_rt":
+                system, user = json_runtime_messages(text, rt_c)
+                prompt = {"system": system, "user": user}
             elif method == "ce_gr":
                 system, user = ce_grounded_messages(text, rt_c)
                 prompt = {"system": system, "user": user}
@@ -343,7 +350,8 @@ def parse_reply(case: dict, text: str, rt, method: str = "ce_rt",
             validate_pack(pack)
             return {"ok": True, "pack": pack, "withdrawn": {}, "blocked": {},
                     "pruned": [], "parsed": None, "live_goal": None}
-        parsed = parse_ce_detailed(extract_ce(text))
+        parsed = (parse_json_rt(text) if method == "json_rt"
+                  else parse_ce_detailed(extract_ce(text)))
         if case["set"] == "labelled":          # Gamma comes from the contract
             validate_pack(parsed.pack)
             return {"ok": True, "pack": parsed.pack, "withdrawn": {}, "blocked": {},
@@ -381,6 +389,8 @@ def retry(out: Path) -> None:
         rel = job["prompt"].replace(".json", "__r2.json")
         tail = (JSON_RETRY.format(text=reply.strip(), error=parsed["error"])
                 if method == "json" else
+                JSON_RT_RETRY.format(error=parsed["error"], text=reply.strip())
+                if method == "json_rt" else
                 CE_RETRY_PROMPT.format(error=parsed["error"], text=reply.strip()))
         write_json(out / rel, {"system": prompt["system"], "user": prompt["user"] + tail})
         new.append({**job, "round": 2, "prompt": rel,
@@ -422,11 +432,12 @@ def repair(out: Path) -> None:
             continue
         base = json.loads((out / f"prompts/{frozen['method']}/{cid}__s0.json").read_text())
         rel = f"prompts/{frozen['method']}/{cid}__s0__r3.json"
-        write_json(out / rel, {"system": base["system"], "user": base["user"]
-                               + CE_REPAIR_PROMPT.format(
-                                   explanation=explain_refutation(
-                                       v, _B(parsed["withdrawn"], parsed["blocked"])),
-                                   text=extract_ce(reply).strip())})
+        expl = explain_refutation(v, _B(parsed["withdrawn"], parsed["blocked"]))
+        tail = (JSON_RT_REPAIR_PROMPT.format(
+                    explanation=expl, text=json.dumps(_extract_json_object(reply), indent=1))
+                if frozen["method"] == "json_rt" else
+                CE_REPAIR_PROMPT.format(explanation=expl, text=extract_ce(reply).strip()))
+        write_json(out / rel, {"system": base["system"], "user": base["user"] + tail})
         new.append({**job, "round": 3, "prompt": rel,
                     "output": f"outputs/{frozen['method']}/{cid}__s0__r3.txt",
                     "prompt_sha256": sha((out / rel).read_bytes())})
@@ -632,8 +643,10 @@ def main() -> None:
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("prepare")
     p.add_argument("out", type=Path)
-    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl", "ce_idx", "ce_gr"))
-    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext", "div", "gr"))
+    p.add_argument("--method", default="ce_rt", choices=("ce_rt", "ce_lv", "json", "ce_tpl", "ce_idx", "ce_gr",
+                                                     "json_rt"))
+    p.add_argument("--cases", default="dev", choices=("dev", "heldout", "fresh", "ext", "div", "gr",
+                                                          "i2l"))
     for name in ("retry", "repair", "score"):
         sub.add_parser(name).add_argument("out", type=Path)
     sc = sub.choices["score"]

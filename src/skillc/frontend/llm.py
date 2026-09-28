@@ -449,6 +449,142 @@ def ce_grounded_messages(nl: str, runtime) -> tuple[str, str]:
     return system + SOFTWARE_NOTE.get(runtime.software, ""), user
 
 
+# JB (runs/20260928_i2l/PLAN.md): P2g's rules, RUNTIME section, binder, retry and
+# guarded repair, with the pack written as JSON instead of CE.  Each capability also
+# carries "via" and "needs"; parse_json_rt splits them off into the same
+# ParseResult the CE parser returns, so everything after parsing is shared.
+JSON_RT_RULE_1 = (
+    "1. Declare a capability for every operation in the plan that changes the "
+    "world or reaches beyond the conversation (running commands, writing files, "
+    "calling services, deploying), and bind it with \"via\" to the RUNTIME tool "
+    "that performs it. Most developer operations -- installing a CLI or "
+    "package, building, running tests or scripts, generating or converting "
+    "files, rendering media, querying a local tool or database, git -- are "
+    "via \"bash\" or a file tool. If no RUNTIME tool can perform the operation "
+    "(another operating system, a device, a hosted service's own console), "
+    "still declare it and set \"via\" to a short name of what it would take "
+    "(e.g. \"via\": \"windows_desktop\"); the checker withdraws such "
+    "capabilities. If the operation can only succeed with an account, "
+    "credential, API key, paid service or publishing right, add \"needs\" with "
+    "a short resource name (e.g. \"needs\": [\"aws_account\"]); the checker "
+    "blocks it unless the RUNTIME grants that resource. Never bind an operation "
+    "to a RUNTIME tool that cannot really perform it. This is the single most "
+    "important rule.\n")
+
+JSON_RT_EXTRA_RULES = (
+    "9. Thinking is not a capability. Reasoning, deciding, planning, reading "
+    "these instructions or reference text you already have, following a "
+    "procedure, and writing text in your reply are done by the agent itself: "
+    "do not declare them as capabilities and do not write them as protocol "
+    "steps.\n"
+    "10. The goal is the skill's core deliverable for one representative "
+    "request. Optional, conditional or follow-up work (extra diagnostics, "
+    "notifications, clean-up extras, publishing or production deploys the "
+    "core request does not require) goes in a 'choice' with \"observed\": "
+    "true and a branch that skips it (an empty step list), or is left out. If "
+    "the core deliverable itself is a deployment or publication, it stays on "
+    "the mandatory path.\n")
+
+JSON_RT_DOC = (
+    "\nRuntime bindings (capability fields; \"via\" is required on every "
+    "capability):\n"
+    "  \"via\": \"T\"            -- T is the RUNTIME tool that performs this capability\n"
+    "  \"needs\": [\"R\", ...]   -- resources outside the conversation it needs\n"
+    "Example: \"run_tests\": {\"owner\": \"agent\", \"via\": \"bash\", "
+    "\"pre\": \"code_written\", \"add\": [\"tests_pass\"]}\n"
+    "Example: \"deploy_prod\": {\"owner\": \"agent\", \"via\": \"bash\", "
+    "\"needs\": [\"cloud_account\"], \"add\": [\"deployed\"]}\n")
+
+JSON_RT_RETRY = (
+    "\n\nYour previous JSON pack was rejected by the deterministic schema gate "
+    "or binder:\n  {error}\n\nPrevious pack:\n```json\n{text}\n```\n"
+    "Output the corrected JSON pack only. Do not weaken the goal or add "
+    "tools the prose does not grant.")
+
+
+def json_runtime_messages(nl: str, runtime) -> tuple[str, str]:
+    """(system, user) for JB: P2g's rules and RUNTIME section, JSON syntax.
+
+    Rules 2-8 are the original JSON prompt's (they are the JSON wording of CE
+    rules 2-8); rule 1 and rules 9-10 are P2g's, reworded for JSON."""
+    from .runtime import runtime_note
+    head, rest = SYSTEM.split("\n1. ", 1)
+    rules_2_8 = "2. " + rest.split("\n2. ", 1)[1].split(SCHEMA_DOC, 1)[0]
+    system = (head + "\n" + JSON_RT_RULE_1 + rules_2_8.rstrip("\n") + "\n"
+              + JSON_RT_EXTRA_RULES + SCHEMA_DOC + JSON_RT_DOC + runtime_note(runtime))
+    user = f"Natural-language skill:\n```\n{nl}\n```\nJSON pack:"
+    return system, user
+
+
+def parse_json_rt(text: str):
+    """JB reply -> ParseResult (pack without bindings, bindings per capability)."""
+    from .ce import CEError, ParseResult
+    obj = _extract_json_object(text)
+    caps = obj.get("capabilities")
+    if not isinstance(caps, dict):
+        raise CEError("the pack has no \"capabilities\" object")
+    bindings = {}
+    for name, cap in caps.items():
+        if not isinstance(cap, dict):
+            raise CEError(f"capability `{name}` is not an object")
+        via, needs = cap.pop("via", None), cap.pop("needs", None) or []
+        if not isinstance(needs, list) or not all(isinstance(x, str) for x in needs):
+            raise CEError(f"capability `{name}`: \"needs\" must be a list of names")
+        if via is not None and not isinstance(via, str):
+            raise CEError(f"capability `{name}`: \"via\" must be a string")
+        bindings[name] = {"via": via, "needs": needs}
+    obj.setdefault("init_true", [])
+    obj.setdefault("init_constraints", [])
+    validate_pack(obj)
+    return ParseResult(obj, {}, bindings, None)
+
+
+JSON_RT_REPAIR_PROMPT = (
+    "\n\nThe deterministic checker judged your JSON pack IMPOSSIBLE:\n"
+    "{explanation}\n\n"
+    "Your pack:\n```json\n{text}\n```\n\n"
+    "Check that counterexample against the skill text. A refutation is often "
+    "a compaction slip, but it may also be the truth. You may ONLY:\n"
+    "  (a) bind an operation to a RUNTIME tool that really performs it "
+    "(fix its \"via\");\n"
+    "  (b) make optional, conditional or follow-up work skippable (a "
+    "'choice' with \"observed\": true and an empty branch), or remove it if "
+    "the core deliverable does not need it;\n"
+    "  (c) add a missing effect to the step that really produces it, or "
+    "remove a thinking step that is not a capability;\n"
+    "  (d) mark a choice resolved inside the conversation as observed.\n"
+    "You may NOT bind an operation to a RUNTIME tool that cannot really "
+    "perform it, drop a \"needs\" for an account or credential the skill really "
+    "requires, add RUNTIME tools, or change the goal. If none of (a)-(d) "
+    "applies, output the pack unchanged: the refutation stands.\n"
+    "Output the complete JSON pack only.")
+
+
+# D (runs/20260928_i2l/PLAN.md): intent -> verdict directly, no logical block.
+DIRECT_SYSTEM = (
+    "You judge whether an AI agent working in the RUNTIME described below can "
+    "deliver what a natural-language agent skill is for. Judge the skill's "
+    "core deliverable for one representative request. Optional, conditional or "
+    "follow-up work (extra diagnostics, notifications, clean-up extras, "
+    "publishing or production deploys the core request does not require) does "
+    "not count; if the core deliverable itself is a deployment or publication, "
+    "it counts. Reasoning, planning and writing text are done by the agent "
+    "itself. An operation that no RUNTIME tool can really perform, or that can "
+    "only succeed with an account, credential, API key, paid service or "
+    "publishing right the RUNTIME does not grant, cannot be done.\n"
+    "Answer IMPOSSIBLE when a step the core deliverable cannot do without "
+    "cannot be done in this RUNTIME; ACHIEVABLE when every such step can; "
+    "UNKNOWN when you cannot tell. Output ONLY one JSON object:\n"
+    "{\"verdict\": \"ACHIEVABLE\" | \"IMPOSSIBLE\" | \"UNKNOWN\", "
+    "\"missing\": [\"what the runtime lacks, for IMPOSSIBLE\", ...]}\n")
+
+
+def direct_messages(nl: str, runtime) -> tuple[str, str]:
+    from .runtime import runtime_note
+    return (DIRECT_SYSTEM + runtime_note(runtime),
+            f"Natural-language skill:\n```\n{nl}\n```\nJSON verdict:")
+
+
 CE_REPAIR_PROMPT = (
     "\n\nThe deterministic checker judged your CE document IMPOSSIBLE:\n"
     "{explanation}\n\n"
