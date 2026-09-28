@@ -1,0 +1,189 @@
+{
+ "name": "huggingface-gradio",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "fetch_guides": {
+   "owner": "agent",
+   "via": "web_fetch",
+   "needs": [
+    "public_internet"
+   ],
+   "add": [
+    "guides_read"
+   ]
+  },
+  "install_gradio": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "add": [
+    "gradio_installed"
+   ]
+  },
+  "write_app": {
+   "owner": "agent",
+   "via": "write",
+   "add": [
+    "app_written"
+   ]
+  },
+  "launch_app_locally": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "local_servers"
+   ],
+   "pre": {
+    "and": [
+     "gradio_installed",
+     "app_written"
+    ]
+   },
+   "add": [
+    "app_running"
+   ]
+  },
+  "fix_app": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": "app_written",
+   "add": [
+    "app_written"
+   ],
+   "del": [
+    "app_running"
+   ]
+  },
+  "check_ui_in_browser": {
+   "owner": "agent",
+   "via": "browser",
+   "pre": "app_running",
+   "add": [
+    "ui_verified"
+   ]
+  },
+  "query_public_space": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "pre": "gradio_installed",
+   "add": [
+    "space_queried"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "read_guides": [
+      {
+       "act": {
+        "cap": "fetch_guides",
+        "by": "agent"
+       }
+      }
+     ],
+     "skip_guides": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "install_gradio",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_app",
+    "by": "agent"
+   }
+  },
+  {
+   "rec": {
+    "name": "RUN",
+    "body": [
+     {
+      "act": {
+       "cap": "launch_app_locally",
+       "by": "agent"
+      }
+     },
+     {
+      "choice": {
+       "by": "agent",
+       "observed": true,
+       "external": true,
+       "branches": {
+        "running": [],
+        "error": [
+         {
+          "act": {
+           "cap": "fix_app",
+           "by": "agent"
+          }
+         },
+         {
+          "continue": "RUN"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "verify_ui": [
+      {
+       "act": {
+        "cap": "check_ui_in_browser",
+        "by": "agent"
+       }
+      }
+     ],
+     "skip_verify": []
+    }
+   }
+  },
+  {
+   "choice": {
+    "by": "user",
+    "observed": true,
+    "branches": {
+     "use_space_cli": [
+      {
+       "act": {
+        "cap": "query_public_space",
+        "by": "agent"
+       }
+      }
+     ],
+     "no_space": []
+    }
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "app_written",
+   "app_running"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

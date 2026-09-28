@@ -1,0 +1,184 @@
+{
+ "name": "neon-postgres",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "read_existing_config": {
+   "owner": "agent",
+   "via": "read",
+   "add": [
+    "config_inspected"
+   ]
+  },
+  "select_or_create_project": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "neon_account"
+   ],
+   "pre": "config_inspected",
+   "add": [
+    "project_selected"
+   ]
+  },
+  "fetch_connection_string": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "neon_account"
+   ],
+   "pre": "project_selected",
+   "add": [
+    "connection_string_available"
+   ]
+  },
+  "write_env_file": {
+   "owner": "agent",
+   "via": "edit",
+   "pre": {
+    "and": [
+     "config_inspected",
+     "connection_string_available"
+    ]
+   },
+   "add": [
+    "database_url_stored"
+   ]
+  },
+  "fetch_neon_docs": {
+   "owner": "agent",
+   "via": "web_fetch",
+   "needs": [
+    "public_internet"
+   ],
+   "add": [
+    "docs_checked"
+   ]
+  },
+  "write_schema_code": {
+   "owner": "agent",
+   "via": "write",
+   "pre": "database_url_stored",
+   "add": [
+    "schema_as_code_written"
+   ]
+  },
+  "create_test_branch": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "neon_account"
+   ],
+   "pre": "database_url_stored",
+   "add": [
+    "test_branch_created"
+   ]
+  },
+  "run_migration": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "database_credentials"
+   ],
+   "pre": {
+    "and": [
+     "schema_as_code_written",
+     "database_url_stored"
+    ]
+   },
+   "add": [
+    "migration_applied"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "act": {
+    "cap": "read_existing_config",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "database_url_supplied": [
+      {
+       "act": {
+        "cap": "write_env_file",
+        "by": "agent"
+       }
+      }
+     ],
+     "no_database_url": [
+      {
+       "act": {
+        "cap": "select_or_create_project",
+        "by": "agent"
+       }
+      },
+      {
+       "act": {
+        "cap": "fetch_connection_string",
+        "by": "agent"
+       }
+      },
+      {
+       "act": {
+        "cap": "write_env_file",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "fetch_neon_docs",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_schema_code",
+    "by": "agent"
+   }
+  },
+  {
+   "choice": {
+    "by": "agent",
+    "observed": true,
+    "branches": {
+     "test_on_branch": [
+      {
+       "act": {
+        "cap": "create_test_branch",
+        "by": "agent"
+       }
+      }
+     ],
+     "skip_branch": []
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "run_migration",
+    "by": "agent"
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "database_url_stored",
+   "schema_as_code_written",
+   "migration_applied"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

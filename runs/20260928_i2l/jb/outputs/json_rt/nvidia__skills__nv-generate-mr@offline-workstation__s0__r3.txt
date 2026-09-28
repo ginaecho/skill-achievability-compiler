@@ -1,0 +1,123 @@
+{
+ "name": "nv-generate-mr",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "clone_upstream": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet"
+   ],
+   "add": [
+    "upstream_checkout"
+   ]
+  },
+  "download_mr_weights": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "public_internet",
+    "model_hub"
+   ],
+   "pre": "upstream_checkout",
+   "add": [
+    "weights_available"
+   ]
+  },
+  "pip_install_requirements": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "package_registries"
+   ],
+   "pre": "upstream_checkout",
+   "add": [
+    "deps_installed"
+   ]
+  },
+  "run_mr_wrapper": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "nvidia_gpu"
+   ],
+   "pre": {
+    "and": [
+     "upstream_checkout",
+     "weights_available",
+     "deps_installed",
+     "config_provided"
+    ]
+   },
+   "add": [
+    "synthetic_mr_volumes",
+    "result_json"
+   ]
+  },
+  "check_result_json": {
+   "owner": "agent",
+   "via": "read",
+   "pre": "result_json",
+   "add": [
+    "result_validated"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "agent",
+    "external": true,
+    "branches": {
+     "cache_present": [],
+     "cache_missing": [
+      {
+       "act": {
+        "cap": "clone_upstream",
+        "by": "agent"
+       }
+      },
+      {
+       "act": {
+        "cap": "download_mr_weights",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "pip_install_requirements",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "run_mr_wrapper",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "check_result_json",
+    "by": "agent"
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "synthetic_mr_volumes",
+   "result_json",
+   "result_validated"
+  ]
+ },
+ "init_true": [
+  "config_provided"
+ ],
+ "init_constraints": []
+}
