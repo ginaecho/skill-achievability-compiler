@@ -1,0 +1,102 @@
+{
+  "name": "view-pdf",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "propose_annotations": {
+      "owner": "agent",
+      "pre": "content_understood",
+      "add": [
+        "annotations_proposed",
+        "annotations_approved"
+      ]
+    },
+    "ask_for_edits": {
+      "owner": "agent",
+      "pre": "annotations_shown",
+      "add": [
+        "edit_feedback_received"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "display_pdf",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "get_pdf_text",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "Iterate",
+        "body": [
+          {
+            "act": {
+              "cap": "propose_annotations",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "user",
+              "observed": true,
+              "branches": {
+                "approve": [
+                  {
+                    "act": {
+                      "cap": "add_annotations_and_screenshot",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "ask_for_edits",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "user",
+                      "observed": true,
+                      "branches": {
+                        "more_edits": [
+                          {
+                            "continue": "Iterate"
+                          }
+                        ],
+                        "done": []
+                      }
+                    }
+                  }
+                ],
+                "revise_proposal": [
+                  {
+                    "continue": "Iterate"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "pdf_displayed",
+      "annotations_applied"
+    ]
+  },
+  "init_true": [
+    "pdf_file_exists"
+  ],
+  "init_constraints": []
+}

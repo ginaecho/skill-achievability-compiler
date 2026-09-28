@@ -1,0 +1,107 @@
+{
+  "name": "c-review",
+  "roles": [
+    "agent",
+    "user",
+    "reviewer"
+  ],
+  "capabilities": {
+    "ask_parameters": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      },
+      "add": [
+        "params_resolved"
+      ]
+    },
+    "read_report": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "report_md_exists"
+        ]
+      },
+      "add": [
+        "report_returned"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "ask_parameters",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "resolve_paths_and_output_dir",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_uv_available",
+        "by": "agent"
+      }
+    },
+    {
+      "spawn": {
+        "role": "reviewer"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_review_workflow",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "observed": true,
+        "branches": {
+          "artifacts_written": [
+            {
+              "act": {
+                "cap": "reassemble_findings",
+                "by": "agent"
+              }
+            }
+          ],
+          "artifacts_missing": [
+            {
+              "act": {
+                "cap": "reassemble_findings",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "read_report",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "workflow_ran",
+      "report_md_exists",
+      "report_returned"
+    ]
+  },
+  "init_true": [
+    "needs:user_conversation",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

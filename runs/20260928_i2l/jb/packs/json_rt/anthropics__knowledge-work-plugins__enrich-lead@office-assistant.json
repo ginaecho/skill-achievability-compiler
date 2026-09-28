@@ -1,0 +1,146 @@
+{
+  "name": "enrich-lead",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "confirm_credit_use": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      },
+      "add": [
+        "credit_warned"
+      ]
+    },
+    "pick_candidate": {
+      "owner": "user",
+      "pre": {
+        "and": [
+          "needs:user_conversation",
+          "person_identified"
+        ]
+      },
+      "add": [
+        "candidate_picked"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "ambiguous_input": [
+            {
+              "act": {
+                "cap": "apollo_people_search",
+                "by": "agent"
+              }
+            }
+          ],
+          "clear_identifiers": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "confirm_credit_use",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "Match",
+        "body": [
+          {
+            "act": {
+              "cap": "apollo_people_match",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "matched": [],
+                "no_match": [
+                  {
+                    "act": {
+                      "cap": "apollo_people_search",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "pick_candidate",
+                      "by": "user"
+                    }
+                  },
+                  {
+                    "continue": "Match"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "apollo_org_enrich",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "save_contact": [
+            {
+              "act": {
+                "cap": "apollo_create_contact",
+                "by": "agent"
+              }
+            }
+          ],
+          "add_to_sequence": [
+            {
+              "act": {
+                "cap": "apollo_add_to_sequence",
+                "by": "agent"
+              }
+            }
+          ],
+          "find_colleagues_or_similar": [
+            {
+              "act": {
+                "cap": "apollo_find_more_people",
+                "by": "agent"
+              }
+            }
+          ],
+          "none": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "person_enriched",
+      "company_enriched"
+    ]
+  },
+  "init_true": [
+    "person_identified",
+    "needs:user_conversation"
+  ],
+  "init_constraints": []
+}

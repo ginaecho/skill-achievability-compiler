@@ -1,0 +1,229 @@
+{
+  "name": "huggingface-spaces",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "install_hf_cli": {
+      "owner": "agent",
+      "add": [
+        "hf_cli_installed"
+      ],
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      }
+    },
+    "hf_login": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:huggingface_account",
+          "hf_cli_installed"
+        ]
+      },
+      "add": [
+        "logged_in"
+      ]
+    },
+    "search_existing_spaces": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          "hf_cli_installed"
+        ]
+      },
+      "add": [
+        "prior_art_checked"
+      ]
+    },
+    "create_space": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:huggingface_account",
+          "logged_in"
+        ]
+      },
+      "add": [
+        "space_created"
+      ]
+    },
+    "write_app_files": {
+      "owner": "agent",
+      "add": [
+        "app_written"
+      ]
+    },
+    "local_compile_check": {
+      "owner": "agent",
+      "pre": "app_written",
+      "add": [
+        "compiles"
+      ]
+    },
+    "upload_to_space": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:huggingface_account",
+          {
+            "and": [
+              "space_created",
+              "app_written",
+              "logged_in"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "space_deployed"
+      ],
+      "del": [
+        "space_verified"
+      ]
+    },
+    "verify_space": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:huggingface_account",
+          "space_deployed"
+        ]
+      },
+      "nondet": {
+        "space_verified": true
+      }
+    },
+    "fix_app": {
+      "owner": "agent",
+      "pre": "app_written",
+      "add": [
+        "app_written"
+      ]
+    },
+    "mount_bucket": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:huggingface_account",
+          "needs:paid_plan",
+          "space_created"
+        ]
+      },
+      "add": [
+        "bucket_mounted"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_hf_cli",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "hf_login",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "search_existing_spaces",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "create_space",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_app_files",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "local_compile_check",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "Iterate",
+        "body": [
+          {
+            "act": {
+              "cap": "upload_to_space",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "verify_space",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "working": [],
+                "broken": [
+                  {
+                    "act": {
+                      "cap": "fix_app",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "Iterate"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "persist_storage": [
+            {
+              "act": {
+                "cap": "mount_bucket",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "space_created",
+      "app_written",
+      "space_deployed",
+      "space_verified"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries",
+    "needs:public_internet"
+  ],
+  "init_constraints": []
+}

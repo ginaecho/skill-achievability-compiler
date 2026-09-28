@@ -1,0 +1,110 @@
+{
+  "name": "ad-campaign-analyzer",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "intake_questions": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      },
+      "add": [
+        "intake_complete"
+      ]
+    },
+    "read_campaign_export": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "campaign_file_provided"
+        ]
+      },
+      "add": [
+        "data_loaded"
+      ]
+    },
+    "receive_pasted_data": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      },
+      "add": [
+        "data_loaded"
+      ]
+    },
+    "save_analysis_report": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          {
+            "and": [
+              "data_loaded",
+              "intake_complete"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "report_saved"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "intake_questions",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "csv_file": [
+            {
+              "act": {
+                "cap": "read_campaign_export",
+                "by": "agent"
+              }
+            }
+          ],
+          "pasted_table": [
+            {
+              "act": {
+                "cap": "receive_pasted_data",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "save_analysis_report",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "data_loaded",
+      "report_saved"
+    ]
+  },
+  "init_true": [
+    "campaign_file_provided",
+    "needs:user_conversation",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

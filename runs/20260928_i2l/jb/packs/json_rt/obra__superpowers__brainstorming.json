@@ -1,0 +1,296 @@
+{
+  "name": "brainstorming_to_design",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "explore_project_context": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "context_explored"
+      ]
+    },
+    "ask_clarifying_questions": {
+      "owner": "agent",
+      "pre": "context_explored",
+      "add": [
+        "intent_understood"
+      ]
+    },
+    "get_probe_approval": {
+      "owner": "agent",
+      "pre": "intent_understood",
+      "add": [
+        "probe_approved"
+      ]
+    },
+    "investigate_spike": {
+      "owner": "agent",
+      "pre": "probe_approved",
+      "add": [
+        "spike_findings"
+      ]
+    },
+    "get_design_approval": {
+      "owner": "agent",
+      "pre": "intent_understood",
+      "add": [
+        "design_approved"
+      ]
+    },
+    "implement_bounded_change": {
+      "owner": "agent",
+      "pre": "design_approved",
+      "add": [
+        "bounded_change_implemented"
+      ]
+    },
+    "start_visual_companion": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_servers",
+          "context_explored"
+        ]
+      },
+      "add": [
+        "visual_companion_running"
+      ]
+    },
+    "write_spec_doc": {
+      "owner": "agent",
+      "pre": "design_approved",
+      "add": [
+        "spec_written"
+      ]
+    },
+    "commit_spec": {
+      "owner": "agent",
+      "pre": "spec_written",
+      "add": [
+        "spec_committed"
+      ]
+    },
+    "get_spec_review": {
+      "owner": "agent",
+      "pre": "spec_committed",
+      "add": [
+        "spec_approved"
+      ]
+    },
+    "revise_spec": {
+      "owner": "agent",
+      "pre": "spec_written",
+      "add": []
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "explore_project_context",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "spike": [
+            {
+              "act": {
+                "cap": "ask_clarifying_questions",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "get_probe_approval",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "investigate_spike",
+                "by": "agent"
+              }
+            }
+          ],
+          "bounded": [
+            {
+              "act": {
+                "cap": "ask_clarifying_questions",
+                "by": "agent"
+              }
+            },
+            {
+              "rec": {
+                "name": "BoundedDesign",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "get_design_approval",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "user",
+                      "observed": true,
+                      "branches": {
+                        "approved": [],
+                        "revise": [
+                          {
+                            "continue": "BoundedDesign"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "act": {
+                "cap": "implement_bounded_change",
+                "by": "agent"
+              }
+            }
+          ],
+          "architectural": [
+            {
+              "choice": {
+                "by": "user",
+                "observed": true,
+                "branches": {
+                  "accept_visual_companion": [
+                    {
+                      "act": {
+                        "cap": "start_visual_companion",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "text_only": []
+                }
+              }
+            },
+            {
+              "act": {
+                "cap": "ask_clarifying_questions",
+                "by": "agent"
+              }
+            },
+            {
+              "rec": {
+                "name": "DesignSections",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "get_design_approval",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "user",
+                      "observed": true,
+                      "branches": {
+                        "approved": [],
+                        "revise": [
+                          {
+                            "continue": "DesignSections"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "act": {
+                "cap": "write_spec_doc",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "commit_spec",
+                "by": "agent"
+              }
+            },
+            {
+              "rec": {
+                "name": "SpecReview",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "get_spec_review",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "user",
+                      "observed": true,
+                      "branches": {
+                        "approved": [],
+                        "changes_requested": [
+                          {
+                            "act": {
+                              "cap": "revise_spec",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "commit_spec",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "continue": "SpecReview"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "intent_understood",
+      {
+        "or": [
+          "spike_findings",
+          {
+            "and": [
+              "design_approved",
+              "bounded_change_implemented"
+            ]
+          },
+          {
+            "and": [
+              "design_approved",
+              "spec_committed",
+              "spec_approved"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "init_true": [
+    "needs:local_servers"
+  ],
+  "init_constraints": []
+}

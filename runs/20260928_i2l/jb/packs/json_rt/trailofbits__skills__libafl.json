@@ -1,0 +1,204 @@
+{
+  "name": "libafl",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "install_toolchain": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "needs:public_internet"
+        ]
+      },
+      "add": [
+        "clang_installed",
+        "rust_installed"
+      ]
+    },
+    "clone_and_build_libfuzzer_runtime": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          {
+            "and": [
+              "clang_installed",
+              "rust_installed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "libfuzzer_runtime_built"
+      ]
+    },
+    "write_harness": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "harness_written"
+      ]
+    },
+    "create_rust_fuzzer_project": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "rust_installed"
+        ]
+      },
+      "add": [
+        "fuzzer_project_created"
+      ]
+    },
+    "write_fuzzer_components": {
+      "owner": "agent",
+      "pre": "fuzzer_project_created",
+      "add": [
+        "fuzzer_components_written"
+      ]
+    },
+    "build_fuzzer_library": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "fuzzer_components_written",
+          "clang_installed"
+        ]
+      },
+      "add": [
+        "fuzzer_library_built"
+      ]
+    },
+    "compile_fuzz_binary_dropin": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "libfuzzer_runtime_built",
+          "harness_written"
+        ]
+      },
+      "add": [
+        "fuzz_binary_built"
+      ]
+    },
+    "compile_fuzz_binary_custom": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "fuzzer_library_built",
+          "harness_written"
+        ]
+      },
+      "add": [
+        "fuzz_binary_built"
+      ]
+    },
+    "prepare_seed_corpus": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "seeds_ready"
+      ]
+    },
+    "run_fuzz_campaign": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "fuzz_binary_built",
+          "seeds_ready"
+        ]
+      },
+      "add": [
+        "campaign_run"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_toolchain",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_harness",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "dropin_libfuzzer": [
+            {
+              "act": {
+                "cap": "clone_and_build_libfuzzer_runtime",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "compile_fuzz_binary_dropin",
+                "by": "agent"
+              }
+            }
+          ],
+          "custom_fuzzer": [
+            {
+              "act": {
+                "cap": "create_rust_fuzzer_project",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "write_fuzzer_components",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "build_fuzzer_library",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "compile_fuzz_binary_custom",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "prepare_seed_corpus",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_fuzz_campaign",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "fuzz_binary_built",
+      "campaign_run"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries",
+    "needs:public_internet"
+  ],
+  "init_constraints": []
+}

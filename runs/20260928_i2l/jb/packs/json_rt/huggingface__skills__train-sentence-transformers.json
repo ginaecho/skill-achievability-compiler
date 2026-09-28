@@ -1,0 +1,181 @@
+{
+  "name": "train-sentence-transformers",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "clarify_model_type": {
+      "owner": "agent",
+      "add": [
+        "model_type_known"
+      ]
+    },
+    "install_deps": {
+      "owner": "agent",
+      "add": [
+        "deps_installed"
+      ],
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      }
+    },
+    "read_references": {
+      "owner": "agent",
+      "pre": "model_type_known",
+      "add": [
+        "references_read"
+      ]
+    },
+    "write_training_script": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "model_type_known",
+          "references_read"
+        ]
+      },
+      "add": [
+        "script_written"
+      ]
+    },
+    "smoke_test": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          {
+            "and": [
+              "script_written",
+              "deps_installed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "smoke_test_passed"
+      ]
+    },
+    "run_training": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:gpu",
+          "needs:public_internet",
+          "smoke_test_passed"
+        ]
+      },
+      "add": [
+        "model_trained",
+        "verdict_emitted"
+      ]
+    },
+    "log_experiment": {
+      "owner": "agent",
+      "pre": "verdict_emitted",
+      "add": [
+        "experiment_logged"
+      ]
+    },
+    "push_to_hub": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:huggingface_write_token",
+          "model_trained"
+        ]
+      },
+      "add": [
+        "model_published"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "type_ambiguous": [
+            {
+              "act": {
+                "cap": "clarify_model_type",
+                "by": "agent"
+              }
+            }
+          ],
+          "type_clear": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "install_deps",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "read_references",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_training_script",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "smoke_test",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_training",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "push": [
+            {
+              "act": {
+                "cap": "push_to_hub",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_push": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "log_experiment",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "script_written",
+      "smoke_test_passed",
+      "model_trained",
+      "verdict_emitted",
+      "experiment_logged"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries",
+    "needs:public_internet"
+  ],
+  "init_constraints": []
+}

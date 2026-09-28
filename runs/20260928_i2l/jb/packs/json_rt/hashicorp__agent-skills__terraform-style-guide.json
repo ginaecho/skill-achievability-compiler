@@ -1,0 +1,165 @@
+{
+  "name": "terraform-style-guide",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "install_terraform": {
+      "owner": "agent",
+      "add": [
+        "terraform_installed"
+      ],
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      }
+    },
+    "write_tf_files": {
+      "owner": "agent",
+      "add": [
+        "config_written",
+        "files_organized",
+        "variables_typed_described",
+        "outputs_described",
+        "versions_pinned"
+      ]
+    },
+    "terraform_fmt": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "terraform_installed",
+          "config_written"
+        ]
+      },
+      "add": [
+        "formatted"
+      ]
+    },
+    "terraform_init_validate": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          {
+            "and": [
+              "terraform_installed",
+              "config_written"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "validated"
+      ]
+    },
+    "run_linters": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "config_written"
+        ]
+      },
+      "add": [
+        "linted"
+      ]
+    },
+    "fix_issues": {
+      "owner": "agent",
+      "pre": "config_written",
+      "del": [
+        "formatted",
+        "validated"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_terraform",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_tf_files",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "Check",
+        "body": [
+          {
+            "act": {
+              "cap": "terraform_fmt",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "terraform_init_validate",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "ok": [],
+                "errors": [
+                  {
+                    "act": {
+                      "cap": "fix_issues",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "Check"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "lint": [
+            {
+              "act": {
+                "cap": "run_linters",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "config_written",
+      "files_organized",
+      "variables_typed_described",
+      "outputs_described",
+      "versions_pinned",
+      "formatted",
+      "validated"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries",
+    "needs:public_internet"
+  ],
+  "init_constraints": []
+}

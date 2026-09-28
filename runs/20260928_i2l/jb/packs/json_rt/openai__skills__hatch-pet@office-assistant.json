@@ -1,0 +1,189 @@
+{
+  "name": "hatch-pet",
+  "roles": [
+    "agent",
+    "user",
+    "worker"
+  ],
+  "capabilities": {
+    "ask_subagent_permission": {
+      "owner": "agent",
+      "add": [
+        "subagents_allowed"
+      ]
+    },
+    "brand_discovery": {
+      "owner": "worker",
+      "add": [
+        "brand_brief_saved"
+      ],
+      "pre": {
+        "and": [
+          "needs:public_internet"
+        ]
+      }
+    }
+  },
+  "protocol": [
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "permission_unclear": [
+            {
+              "act": {
+                "cap": "ask_subagent_permission",
+                "by": "agent"
+              }
+            }
+          ],
+          "already_allowed": []
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "bare_brand": [
+            {
+              "spawn": {
+                "role": "worker"
+              }
+            },
+            {
+              "act": {
+                "cap": "brand_discovery",
+                "by": "worker"
+              }
+            }
+          ],
+          "concrete_description": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "prepare_pet_run",
+        "by": "agent"
+      }
+    },
+    {
+      "spawn": {
+        "role": "worker"
+      }
+    },
+    {
+      "act": {
+        "cap": "generate_base_image",
+        "by": "worker"
+      }
+    },
+    {
+      "act": {
+        "cap": "record_job_output",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "generate_row_strips",
+        "by": "worker"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "mirror_safe": [
+            {
+              "act": {
+                "cap": "mirror_running_left",
+                "by": "agent"
+              }
+            }
+          ],
+          "generate_normally": []
+        }
+      }
+    },
+    {
+      "rec": {
+        "name": "QA",
+        "body": [
+          {
+            "act": {
+              "cap": "process_and_validate_atlas",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "visual_qa",
+              "by": "worker"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "observed": true,
+              "branches": {
+                "pass": [],
+                "fail": [
+                  {
+                    "act": {
+                      "cap": "generate_row_strips",
+                      "by": "worker"
+                    }
+                  },
+                  {
+                    "continue": "QA"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "package_pet",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "cleanup": [
+            {
+              "act": {
+                "cap": "cleanup_artifacts",
+                "by": "agent"
+              }
+            }
+          ],
+          "keep_debug": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "atlas_validated",
+      "visual_qa_passed",
+      "pet_packaged"
+    ]
+  },
+  "init_true": [
+    "subagents_allowed",
+    "needs:public_internet"
+  ],
+  "init_constraints": []
+}

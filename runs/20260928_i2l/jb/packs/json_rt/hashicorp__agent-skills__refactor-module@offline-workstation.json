@@ -1,0 +1,232 @@
+{
+  "name": "refactor-module",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "read_source_config": {
+      "owner": "agent",
+      "add": [
+        "config_analyzed"
+      ],
+      "pre": {
+        "and": [
+          "needs:local_filesystem"
+        ]
+      }
+    },
+    "inspect_state": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:terraform_cli",
+          "needs:terraform_state_backend",
+          "config_analyzed"
+        ]
+      },
+      "add": [
+        "state_addresses_mapped"
+      ]
+    },
+    "write_module_files": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "config_analyzed"
+        ]
+      },
+      "add": [
+        "module_written",
+        "interface_defined"
+      ]
+    },
+    "update_root_to_use_module": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "module_written"
+        ]
+      },
+      "add": [
+        "root_refactored"
+      ]
+    },
+    "write_moved_blocks": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          {
+            "and": [
+              "state_addresses_mapped",
+              "root_refactored"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "migration_written"
+      ]
+    },
+    "write_module_docs": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "module_written"
+        ]
+      },
+      "add": [
+        "docs_written"
+      ]
+    },
+    "write_module_tests": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "module_written"
+        ]
+      },
+      "add": [
+        "tests_written"
+      ]
+    },
+    "init_and_run_tests": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:terraform_cli",
+          "needs:package_registries",
+          "tests_written"
+        ]
+      },
+      "add": [
+        "tests_pass"
+      ]
+    },
+    "plan_verify_no_changes": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:terraform_cli",
+          "needs:package_registries",
+          "needs:cloud_account",
+          {
+            "and": [
+              "migration_written",
+              "root_refactored"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "no_plan_diff"
+      ]
+    },
+    "apply_migration": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:terraform_cli",
+          "needs:cloud_account",
+          "no_plan_diff"
+        ]
+      },
+      "add": [
+        "state_migrated"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "read_source_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "inspect_state",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_module_files",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "update_root_to_use_module",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_moved_blocks",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_module_docs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_module_tests",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "init_and_run_tests",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "plan_verify_no_changes",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "apply": [
+            {
+              "act": {
+                "cap": "apply_migration",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_apply": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "module_written",
+      "interface_defined",
+      "root_refactored",
+      "migration_written",
+      "docs_written",
+      "tests_pass",
+      "no_plan_diff"
+    ]
+  },
+  "init_true": [
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

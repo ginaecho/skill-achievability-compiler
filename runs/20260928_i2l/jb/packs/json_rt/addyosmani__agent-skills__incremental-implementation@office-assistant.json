@@ -1,0 +1,102 @@
+{
+  "name": "incremental-implementation",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "read_codebase": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem"
+        ]
+      },
+      "add": [
+        "codebase_read"
+      ]
+    },
+    "implement_slice": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "codebase_read"
+        ]
+      },
+      "add": [
+        "slice_implemented"
+      ],
+      "del": [
+        "slice_verified",
+        "slice_committed"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "read_codebase",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "Slice",
+        "body": [
+          {
+            "act": {
+              "cap": "implement_slice",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "run_tests_build_lint",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "commit_slice",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "next_slice": [
+                  {
+                    "continue": "Slice"
+                  }
+                ],
+                "all_done": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "run_full_verification",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "slice_implemented",
+      "slice_verified",
+      "slice_committed",
+      "full_suite_pass",
+      "build_clean"
+    ]
+  },
+  "init_true": [
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

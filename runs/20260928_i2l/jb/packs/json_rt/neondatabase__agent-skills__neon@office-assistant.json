@@ -1,0 +1,179 @@
+{
+  "name": "neon",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "inspect_repo": {
+      "owner": "agent",
+      "add": [
+        "repo_inspected"
+      ]
+    },
+    "fetch_neon_docs": {
+      "owner": "agent",
+      "add": [
+        "docs_checked"
+      ],
+      "pre": {
+        "and": [
+          "needs:public_internet"
+        ]
+      }
+    },
+    "ask_user_sign_in": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation",
+          "credentials_checked"
+        ]
+      },
+      "add": [
+        "user_signed_in"
+      ]
+    },
+    "write_neon_config": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "repo_inspected",
+          "project_linked"
+        ]
+      },
+      "add": [
+        "neon_ts_written"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inspect_repo",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "fetch_neon_docs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_cli",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_credentials",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "has_account": [
+            {
+              "act": {
+                "cap": "link_project",
+                "by": "agent"
+              }
+            }
+          ],
+          "needs_sign_in": [
+            {
+              "act": {
+                "cap": "ask_user_sign_in",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "link_project",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_account": [
+            {
+              "act": {
+                "cap": "create_claimable_project",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "install_skills": [
+            {
+              "act": {
+                "cap": "install_neon_skills",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_skills": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_neon_config",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "branch_first": [
+            {
+              "act": {
+                "cap": "create_dev_branch",
+                "by": "agent"
+              }
+            }
+          ],
+          "default_branch": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "deploy_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_app_flow",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "project_linked",
+      "neon_ts_written",
+      "services_provisioned",
+      "app_flow_verified"
+    ]
+  },
+  "init_true": [
+    "needs:public_internet",
+    "needs:user_conversation"
+  ],
+  "init_constraints": []
+}

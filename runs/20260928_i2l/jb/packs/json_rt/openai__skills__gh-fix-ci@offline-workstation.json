@@ -1,0 +1,174 @@
+{
+  "name": "gh-fix-ci",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "verify_gh_auth": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:github_account",
+          "needs:network"
+        ]
+      },
+      "add": [
+        "gh_authenticated"
+      ]
+    },
+    "resolve_pr": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:github_account",
+          "needs:network",
+          "gh_authenticated"
+        ]
+      },
+      "add": [
+        "pr_resolved"
+      ]
+    },
+    "fetch_failing_check_logs": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:github_account",
+          "needs:network",
+          "pr_resolved"
+        ]
+      },
+      "add": [
+        "failure_logs_fetched"
+      ]
+    },
+    "request_plan_approval": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation",
+          "failure_logs_fetched"
+        ]
+      },
+      "add": [
+        "plan_approved"
+      ]
+    },
+    "implement_fix": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "plan_approved",
+          "failure_logs_fetched"
+        ]
+      },
+      "add": [
+        "fix_implemented"
+      ]
+    },
+    "run_local_tests": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:preinstalled_software",
+          "fix_implemented"
+        ]
+      },
+      "nondet": {
+        "local_tests_pass": true
+      }
+    },
+    "recheck_pr_checks": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:github_account",
+          "needs:network",
+          "fix_implemented"
+        ]
+      },
+      "add": [
+        "checks_rechecked"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "verify_gh_auth",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "resolve_pr",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "fetch_failing_check_logs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "request_plan_approval",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "implement_fix",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "run_tests": [
+            {
+              "act": {
+                "cap": "run_local_tests",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_tests": []
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "recheck": [
+            {
+              "act": {
+                "cap": "recheck_pr_checks",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_recheck": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "failure_logs_fetched",
+      "plan_approved",
+      "fix_implemented"
+    ]
+  },
+  "init_true": [
+    "needs:user_conversation",
+    "needs:preinstalled_software"
+  ],
+  "init_constraints": []
+}

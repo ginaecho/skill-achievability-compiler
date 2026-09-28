@@ -1,0 +1,190 @@
+{
+  "name": "supabase-schema-change",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "inspect_project_layout": {
+      "owner": "agent",
+      "add": [
+        "workflow_known"
+      ],
+      "pre": {
+        "and": [
+          "needs:local_filesystem"
+        ]
+      }
+    },
+    "edit_declarative_schema": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          {
+            "and": [
+              "workflow_known",
+              "docs_checked"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "schema_changed",
+        "rls_configured"
+      ]
+    },
+    "run_sql_on_local_db": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:supabase_cli",
+          "needs:local_supabase_stack",
+          {
+            "and": [
+              "workflow_known",
+              "docs_checked"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "schema_changed",
+        "rls_configured"
+      ]
+    },
+    "run_advisors": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:supabase_cli",
+          "needs:local_supabase_stack",
+          "schema_changed"
+        ]
+      },
+      "add": [
+        "advisors_clean"
+      ]
+    },
+    "generate_migration": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:supabase_cli",
+          "needs:local_supabase_stack",
+          {
+            "and": [
+              "schema_changed",
+              "advisors_clean"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "migration_generated"
+      ]
+    },
+    "verify_migration_list": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:supabase_cli",
+          "needs:local_supabase_stack",
+          "migration_generated"
+        ]
+      },
+      "add": [
+        "migration_verified"
+      ]
+    },
+    "run_test_query": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:supabase_cli",
+          "needs:local_supabase_stack",
+          "schema_changed"
+        ]
+      },
+      "add": [
+        "change_verified"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "fetch_changelog_and_docs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "inspect_project_layout",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "declarative": [
+            {
+              "act": {
+                "cap": "edit_declarative_schema",
+                "by": "agent"
+              }
+            }
+          ],
+          "imperative": [
+            {
+              "act": {
+                "cap": "run_sql_on_local_db",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "run_advisors",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "generate_migration",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_migration_list",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_test_query",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "schema_changed",
+      "rls_configured",
+      "advisors_clean",
+      "migration_generated",
+      "migration_verified",
+      "change_verified"
+    ]
+  },
+  "init_true": [
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

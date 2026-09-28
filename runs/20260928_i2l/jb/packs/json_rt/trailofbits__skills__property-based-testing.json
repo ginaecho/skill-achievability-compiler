@@ -1,0 +1,165 @@
+{
+  "name": "property-based-testing",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "inspect_code": {
+      "owner": "agent",
+      "pre": "code_present",
+      "add": [
+        "code_understood"
+      ]
+    },
+    "load_reference": {
+      "owner": "agent",
+      "add": [
+        "reference_loaded"
+      ]
+    },
+    "detect_existing_pbt_library": {
+      "owner": "agent",
+      "pre": "code_understood",
+      "add": [
+        "pbt_available"
+      ]
+    },
+    "offer_pbt_dependency": {
+      "owner": "agent",
+      "pre": "code_understood",
+      "add": [
+        "dependency_offered"
+      ]
+    },
+    "install_pbt_library": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "dependency_offered"
+        ]
+      },
+      "add": [
+        "pbt_available"
+      ]
+    },
+    "write_property_tests": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "code_understood",
+          "pbt_available"
+        ]
+      },
+      "add": [
+        "tests_written"
+      ]
+    },
+    "write_example_tests": {
+      "owner": "agent",
+      "pre": "code_understood",
+      "add": [
+        "tests_written"
+      ]
+    },
+    "run_tests": {
+      "owner": "agent",
+      "pre": "tests_written",
+      "add": [
+        "tests_run"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inspect_code",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "load_reference",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "library_present": [
+            {
+              "act": {
+                "cap": "detect_existing_pbt_library",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "write_property_tests",
+                "by": "agent"
+              }
+            }
+          ],
+          "library_absent": [
+            {
+              "act": {
+                "cap": "offer_pbt_dependency",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "user",
+                "observed": true,
+                "branches": {
+                  "accept": [
+                    {
+                      "act": {
+                        "cap": "install_pbt_library",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "write_property_tests",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "decline": [
+                    {
+                      "act": {
+                        "cap": "write_example_tests",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "run_tests",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "tests_written",
+      "tests_run"
+    ]
+  },
+  "init_true": [
+    "code_present",
+    "needs:package_registries"
+  ],
+  "init_constraints": []
+}

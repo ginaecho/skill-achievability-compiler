@@ -1,0 +1,164 @@
+{
+  "name": "build-agent",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "read_references": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "references_read"
+      ]
+    },
+    "capture_task_description": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation",
+          {
+            "not": "task_captured"
+          }
+        ]
+      },
+      "add": [
+        "task_captured"
+      ]
+    },
+    "write_skill_files": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          {
+            "and": [
+              "task_captured",
+              "references_read"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "skill_written"
+      ]
+    },
+    "fix_skill": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          {
+            "and": [
+              "skill_written",
+              "test_run_done"
+            ]
+          }
+        ]
+      },
+      "del": [
+        "test_run_done"
+      ]
+    },
+    "register_with_router": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          {
+            "and": [
+              "skill_written",
+              "test_matches"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "registered"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "read_references",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "walked_through_in_conversation": [],
+          "needs_description": [
+            {
+              "act": {
+                "cap": "capture_task_description",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_skill_files",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "TestLoop",
+        "body": [
+          {
+            "act": {
+              "cap": "test_run_skill",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "matches": [],
+                "mismatch": [
+                  {
+                    "act": {
+                      "cap": "fix_skill",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "TestLoop"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "register_with_router",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "skill_written",
+      "test_matches",
+      "registered"
+    ]
+  },
+  "init_true": [
+    "task_captured",
+    "needs:user_conversation",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

@@ -1,0 +1,210 @@
+{
+ "name": "review-walkthrough",
+ "roles": [
+  "agent",
+  "user"
+ ],
+ "capabilities": {
+  "discover_default_base": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "shell"
+   ],
+   "add": [
+    "base_known"
+   ]
+  },
+  "ask_base": {
+   "owner": "agent",
+   "via": "ask_user",
+   "needs": [
+    "user_conversation"
+   ],
+   "add": [
+    "base_known"
+   ]
+  },
+  "capture_patch": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "shell",
+    "local_filesystem"
+   ],
+   "pre": "base_known",
+   "add": [
+    "patch_captured"
+   ]
+  },
+  "read_changed_sources": {
+   "owner": "agent",
+   "via": "read",
+   "needs": [
+    "local_filesystem"
+   ],
+   "pre": "patch_captured",
+   "add": [
+    "sources_reviewed"
+   ]
+  },
+  "write_walkthrough_json": {
+   "owner": "agent",
+   "via": "write",
+   "needs": [
+    "local_filesystem"
+   ],
+   "pre": {
+    "and": [
+     "patch_captured",
+     "sources_reviewed"
+    ]
+   },
+   "add": [
+    "data_json_written"
+   ]
+  },
+  "fix_walkthrough_json": {
+   "owner": "agent",
+   "via": "edit",
+   "needs": [
+    "local_filesystem"
+   ],
+   "pre": "data_json_written",
+   "add": [
+    "data_json_written"
+   ]
+  },
+  "run_renderer": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "shell",
+    "package_registries"
+   ],
+   "pre": {
+    "and": [
+     "data_json_written",
+     "patch_captured"
+    ]
+   },
+   "add": [
+    "renderer_ran"
+   ]
+  },
+  "confirm_rendered": {
+   "owner": "agent",
+   "via": "bash",
+   "needs": [
+    "shell"
+   ],
+   "pre": "renderer_ran",
+   "add": [
+    "walkthrough_rendered"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "choice": {
+    "by": "agent",
+    "external": true,
+    "observed": true,
+    "branches": {
+     "user_supplied_base": [
+      {
+       "act": {
+        "cap": "ask_base",
+        "by": "agent"
+       }
+      }
+     ],
+     "default_branch": [
+      {
+       "act": {
+        "cap": "discover_default_base",
+        "by": "agent"
+       }
+      }
+     ],
+     "ambiguous": [
+      {
+       "act": {
+        "cap": "ask_base",
+        "by": "agent"
+       }
+      }
+     ]
+    }
+   }
+  },
+  {
+   "act": {
+    "cap": "capture_patch",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "read_changed_sources",
+    "by": "agent"
+   }
+  },
+  {
+   "act": {
+    "cap": "write_walkthrough_json",
+    "by": "agent"
+   }
+  },
+  {
+   "rec": {
+    "name": "RENDER",
+    "body": [
+     {
+      "act": {
+       "cap": "run_renderer",
+       "by": "agent"
+      }
+     },
+     {
+      "choice": {
+       "by": "agent",
+       "external": true,
+       "observed": true,
+       "branches": {
+        "valid": [
+         {
+          "act": {
+           "cap": "confirm_rendered",
+           "by": "agent"
+          }
+         }
+        ],
+        "input_errors": [
+         {
+          "act": {
+           "cap": "fix_walkthrough_json",
+           "by": "agent"
+          }
+         },
+         {
+          "continue": "RENDER"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "patch_captured",
+   "data_json_written",
+   "walkthrough_rendered"
+  ]
+ },
+ "init_true": [],
+ "init_constraints": []
+}

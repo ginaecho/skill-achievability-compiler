@@ -1,0 +1,291 @@
+{
+  "name": "subagent-driven-development",
+  "roles": [
+    "controller",
+    "implementer",
+    "reviewer",
+    "user"
+  ],
+  "capabilities": {
+    "setup_workspace_ledger": {
+      "owner": "controller",
+      "add": [
+        "workspace_ready",
+        "ledger_created"
+      ],
+      "pre": {
+        "and": [
+          "needs:shell",
+          "needs:local_filesystem"
+        ]
+      }
+    },
+    "write_preflight_scan": {
+      "owner": "controller",
+      "pre": "ledger_created",
+      "add": [
+        "preflight_done"
+      ]
+    },
+    "extract_task_brief": {
+      "owner": "controller",
+      "pre": "preflight_done",
+      "add": [
+        "brief_ready"
+      ]
+    },
+    "implement_test_commit": {
+      "owner": "implementer",
+      "pre": "brief_ready",
+      "add": [
+        "task_implemented",
+        "report_written"
+      ]
+    },
+    "build_review_package": {
+      "owner": "controller",
+      "pre": "task_implemented",
+      "add": [
+        "review_package_ready"
+      ]
+    },
+    "review_task": {
+      "owner": "reviewer",
+      "pre": "review_package_ready",
+      "add": [
+        "task_reviewed"
+      ]
+    },
+    "fix_findings": {
+      "owner": "implementer",
+      "pre": "task_reviewed",
+      "add": [
+        "task_implemented"
+      ]
+    },
+    "ledger_task_complete": {
+      "owner": "controller",
+      "pre": "task_reviewed",
+      "add": [
+        "tasks_complete"
+      ]
+    },
+    "final_branch_review": {
+      "owner": "reviewer",
+      "pre": "tasks_complete",
+      "add": [
+        "final_review_done"
+      ]
+    },
+    "delete_workspace": {
+      "owner": "controller",
+      "pre": "final_review_done",
+      "del": [
+        "workspace_ready"
+      ],
+      "add": [
+        "workspace_cleaned"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "setup_workspace_ledger",
+        "by": "controller"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_preflight_scan",
+        "by": "controller"
+      }
+    },
+    {
+      "rec": {
+        "name": "TASKS",
+        "body": [
+          {
+            "act": {
+              "cap": "extract_task_brief",
+              "by": "controller"
+            }
+          },
+          {
+            "spawn": {
+              "role": "implementer"
+            }
+          },
+          {
+            "msg": {
+              "from": "controller",
+              "to": "implementer",
+              "label": "dispatch_brief"
+            }
+          },
+          {
+            "act": {
+              "cap": "implement_test_commit",
+              "by": "implementer"
+            }
+          },
+          {
+            "msg": {
+              "from": "implementer",
+              "to": "controller",
+              "label": "status_report"
+            }
+          },
+          {
+            "rec": {
+              "name": "FIX",
+              "body": [
+                {
+                  "act": {
+                    "cap": "build_review_package",
+                    "by": "controller"
+                  }
+                },
+                {
+                  "spawn": {
+                    "role": "reviewer"
+                  }
+                },
+                {
+                  "msg": {
+                    "from": "controller",
+                    "to": "reviewer",
+                    "label": "review_request"
+                  }
+                },
+                {
+                  "act": {
+                    "cap": "review_task",
+                    "by": "reviewer"
+                  }
+                },
+                {
+                  "choice": {
+                    "by": "reviewer",
+                    "branches": {
+                      "approved": [
+                        {
+                          "msg": {
+                            "from": "reviewer",
+                            "to": "controller",
+                            "label": "approved"
+                          }
+                        },
+                        {
+                          "msg": {
+                            "from": "controller",
+                            "to": "implementer",
+                            "label": "done"
+                          }
+                        }
+                      ],
+                      "findings": [
+                        {
+                          "msg": {
+                            "from": "reviewer",
+                            "to": "controller",
+                            "label": "findings"
+                          }
+                        },
+                        {
+                          "msg": {
+                            "from": "controller",
+                            "to": "implementer",
+                            "label": "fix_findings"
+                          }
+                        },
+                        {
+                          "act": {
+                            "cap": "fix_findings",
+                            "by": "implementer"
+                          }
+                        },
+                        {
+                          "msg": {
+                            "from": "implementer",
+                            "to": "controller",
+                            "label": "fix_report"
+                          }
+                        },
+                        {
+                          "continue": "FIX"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "act": {
+              "cap": "ledger_task_complete",
+              "by": "controller"
+            }
+          },
+          {
+            "choice": {
+              "by": "controller",
+              "observed": true,
+              "branches": {
+                "more_tasks": [
+                  {
+                    "continue": "TASKS"
+                  }
+                ],
+                "all_done": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "spawn": {
+        "role": "reviewer"
+      }
+    },
+    {
+      "msg": {
+        "from": "controller",
+        "to": "reviewer",
+        "label": "final_review_request"
+      }
+    },
+    {
+      "act": {
+        "cap": "final_branch_review",
+        "by": "reviewer"
+      }
+    },
+    {
+      "msg": {
+        "from": "reviewer",
+        "to": "controller",
+        "label": "final_verdict"
+      }
+    },
+    {
+      "act": {
+        "cap": "delete_workspace",
+        "by": "controller"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "tasks_complete",
+      "final_review_done"
+    ]
+  },
+  "init_true": [
+    "needs:shell",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

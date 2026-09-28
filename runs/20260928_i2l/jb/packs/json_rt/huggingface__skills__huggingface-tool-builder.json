@@ -1,0 +1,170 @@
+{
+  "name": "huggingface-tool-builder",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "confirm_preferences": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      },
+      "add": [
+        "preferences_confirmed"
+      ]
+    },
+    "explore_api_shape": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet"
+        ]
+      },
+      "add": [
+        "api_shape_known"
+      ]
+    },
+    "install_hf_cli": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      },
+      "add": [
+        "hf_cli_installed"
+      ]
+    },
+    "write_script": {
+      "owner": "agent",
+      "pre": "api_shape_known",
+      "add": [
+        "script_written",
+        "script_has_help"
+      ],
+      "del": [
+        "script_tested"
+      ]
+    },
+    "test_script": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          "script_written"
+        ]
+      },
+      "add": [
+        "script_tested"
+      ]
+    },
+    "fix_script": {
+      "owner": "agent",
+      "pre": "script_written",
+      "add": [
+        "script_has_help"
+      ],
+      "del": [
+        "script_tested"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "clarify": [
+            {
+              "act": {
+                "cap": "confirm_preferences",
+                "by": "agent"
+              }
+            }
+          ],
+          "clear": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "explore_api_shape",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "use_hf_cli": [
+            {
+              "act": {
+                "cap": "install_hf_cli",
+                "by": "agent"
+              }
+            }
+          ],
+          "api_only": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_script",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "TestLoop",
+        "body": [
+          {
+            "act": {
+              "cap": "test_script",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "observed": true,
+              "branches": {
+                "pass": [],
+                "fail": [
+                  {
+                    "act": {
+                      "cap": "fix_script",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "TestLoop"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "script_written",
+      "script_has_help",
+      "script_tested"
+    ]
+  },
+  "init_true": [
+    "needs:user_conversation",
+    "needs:public_internet",
+    "needs:package_registries"
+  ],
+  "init_constraints": []
+}

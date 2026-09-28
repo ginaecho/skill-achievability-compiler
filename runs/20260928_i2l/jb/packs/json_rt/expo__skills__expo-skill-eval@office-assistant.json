@@ -1,0 +1,177 @@
+{
+  "name": "expo-skill-eval",
+  "roles": [
+    "agent",
+    "user",
+    "grader"
+  ],
+  "capabilities": {
+    "clarify_scope": {
+      "owner": "agent",
+      "add": [
+        "scope_confirmed"
+      ],
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      }
+    },
+    "write_eval_cases": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "workspace_ready"
+        ]
+      },
+      "add": [
+        "evals_written"
+      ]
+    },
+    "confirm_plugin_disabled": {
+      "owner": "user",
+      "add": [
+        "published_plugin_disabled"
+      ],
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      }
+    },
+    "grade_outputs": {
+      "owner": "grader",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "static_results"
+        ]
+      },
+      "add": [
+        "graded"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "clarify_scope",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "make_workspace",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_eval_cases",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "trigger_eval": [
+            {
+              "act": {
+                "cap": "confirm_plugin_disabled",
+                "by": "user"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_trigger_eval",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_trigger_eval": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "build_fixtures_and_run_executors",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_static_gate",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "runtime_screenshots": [
+            {
+              "act": {
+                "cap": "run_snapshots",
+                "by": "agent"
+              }
+            }
+          ],
+          "code_checks_only": []
+        }
+      }
+    },
+    {
+      "spawn": {
+        "role": "grader"
+      }
+    },
+    {
+      "act": {
+        "cap": "grade_outputs",
+        "by": "grader"
+      }
+    },
+    {
+      "act": {
+        "cap": "generate_viewer",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "publish": [
+            {
+              "act": {
+                "cap": "publish_viewer_artifact",
+                "by": "agent"
+              }
+            }
+          ],
+          "local_only": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "scope_confirmed",
+      "evals_written",
+      "executor_outputs",
+      "static_results",
+      "graded",
+      "viewer_generated"
+    ]
+  },
+  "init_true": [
+    "needs:user_conversation",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

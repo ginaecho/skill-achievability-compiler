@@ -1,0 +1,95 @@
+{
+  "name": "address-sanitizer",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "install_toolchain": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      },
+      "add": [
+        "compiler_available"
+      ]
+    },
+    "compile_with_asan": {
+      "owner": "agent",
+      "pre": "compiler_available",
+      "add": [
+        "asan_binary_built"
+      ]
+    },
+    "run_instrumented_binary": {
+      "owner": "agent",
+      "pre": "asan_binary_built",
+      "add": [
+        "asan_run_completed"
+      ],
+      "nondet": {
+        "memory_error_found": true
+      }
+    },
+    "run_fuzzer_with_asan": {
+      "owner": "agent",
+      "pre": "asan_binary_built",
+      "add": [
+        "asan_run_completed"
+      ],
+      "nondet": {
+        "memory_error_found": true
+      }
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_toolchain",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "compile_with_asan",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "tests": [
+            {
+              "act": {
+                "cap": "run_instrumented_binary",
+                "by": "agent"
+              }
+            }
+          ],
+          "fuzzing": [
+            {
+              "act": {
+                "cap": "run_fuzzer_with_asan",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "asan_binary_built",
+      "asan_run_completed"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries"
+  ],
+  "init_constraints": []
+}

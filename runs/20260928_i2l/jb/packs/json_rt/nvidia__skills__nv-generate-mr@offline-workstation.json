@@ -1,0 +1,126 @@
+{
+  "name": "nv-generate-mr",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "clone_upstream": {
+      "owner": "agent",
+      "add": [
+        "upstream_checkout"
+      ],
+      "pre": {
+        "and": [
+          "needs:public_internet"
+        ]
+      }
+    },
+    "download_mr_weights": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          "needs:model_hub",
+          "upstream_checkout"
+        ]
+      },
+      "add": [
+        "weights_available"
+      ]
+    },
+    "pip_install_requirements": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "upstream_checkout"
+        ]
+      },
+      "add": [
+        "deps_installed"
+      ]
+    },
+    "run_mr_wrapper": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:nvidia_gpu",
+          {
+            "and": [
+              "upstream_checkout",
+              "weights_available",
+              "deps_installed",
+              "config_provided"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "synthetic_mr_volumes",
+        "result_json"
+      ]
+    },
+    "check_result_json": {
+      "owner": "agent",
+      "pre": "result_json",
+      "add": [
+        "result_validated"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "cache_present": [],
+          "cache_missing": [
+            {
+              "act": {
+                "cap": "clone_upstream",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "download_mr_weights",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "pip_install_requirements",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_mr_wrapper",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_result_json",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "synthetic_mr_volumes",
+      "result_json",
+      "result_validated"
+    ]
+  },
+  "init_true": [
+    "config_provided"
+  ],
+  "init_constraints": []
+}

@@ -1,0 +1,172 @@
+{
+  "name": "cli-exercise-run",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "verify_checksum": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "preflight_receipt_ready",
+          "contract_approved"
+        ]
+      },
+      "add": [
+        "checksum_verified"
+      ]
+    },
+    "start_run": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "checksum_verified",
+          "preflight_receipt_ready",
+          "contract_approved"
+        ]
+      },
+      "add": [
+        "host_running"
+      ]
+    },
+    "run_setup": {
+      "owner": "agent",
+      "pre": "host_running",
+      "add": [
+        "setup_done"
+      ]
+    },
+    "run_exercise": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "host_running",
+          "setup_done"
+        ]
+      },
+      "add": [
+        "case_exercised"
+      ]
+    },
+    "run_validation": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "host_running",
+          "case_exercised"
+        ]
+      },
+      "add": [
+        "case_validated"
+      ]
+    },
+    "run_cleanup": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "host_running",
+          "case_validated"
+        ]
+      },
+      "add": [
+        "cleanup_done"
+      ]
+    },
+    "finish_and_shutdown": {
+      "owner": "agent",
+      "pre": "host_running",
+      "add": [
+        "exit_status_captured",
+        "host_shutdown"
+      ],
+      "del": [
+        "host_running"
+      ]
+    },
+    "write_manifest": {
+      "owner": "agent",
+      "pre": "exit_status_captured",
+      "add": [
+        "manifest_recorded"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "verify_checksum",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "start_run",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_setup",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_exercise",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_validation",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "cleanup": [
+            {
+              "act": {
+                "cap": "run_cleanup",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_cleanup": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "finish_and_shutdown",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_manifest",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "case_exercised",
+      "case_validated",
+      "exit_status_captured",
+      "host_shutdown",
+      {
+        "not": "host_running"
+      },
+      "manifest_recorded"
+    ]
+  },
+  "init_true": [
+    "preflight_receipt_ready",
+    "contract_approved"
+  ],
+  "init_constraints": []
+}

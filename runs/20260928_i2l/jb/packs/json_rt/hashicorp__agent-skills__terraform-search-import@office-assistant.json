@@ -1,0 +1,118 @@
+{
+  "name": "terraform-search-import",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "write_provider_config": {
+      "owner": "agent",
+      "add": [
+        "provider_config_written"
+      ],
+      "pre": {
+        "and": [
+          "needs:local_filesystem"
+        ]
+      }
+    },
+    "write_query_file": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "support_checked"
+        ]
+      },
+      "add": [
+        "query_file_written"
+      ]
+    },
+    "clean_generated_config": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "config_generated"
+        ]
+      },
+      "add": [
+        "config_cleaned"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "write_provider_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "terraform_init_and_check_support",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "search_supported": [
+            {
+              "act": {
+                "cap": "write_query_file",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_query_generate_config",
+                "by": "agent"
+              }
+            }
+          ],
+          "manual": [
+            {
+              "act": {
+                "cap": "manual_discovery_write_imports",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "clean_generated_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "terraform_plan_apply_import",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_state",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "resources_discovered",
+      "config_cleaned",
+      "resources_imported",
+      "import_verified"
+    ]
+  },
+  "init_true": [
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

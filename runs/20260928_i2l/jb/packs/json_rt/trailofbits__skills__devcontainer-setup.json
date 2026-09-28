@@ -1,0 +1,114 @@
+{
+  "name": "devcontainer-setup",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "inspect_project": {
+      "owner": "agent",
+      "add": [
+        "project_name_inferred",
+        "languages_detected"
+      ]
+    },
+    "read_templates": {
+      "owner": "agent",
+      "add": [
+        "templates_loaded"
+      ]
+    },
+    "write_devcontainer_files": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "project_name_inferred",
+          "languages_detected",
+          "templates_loaded"
+        ]
+      },
+      "add": [
+        "devcontainer_files_written",
+        "placeholders_replaced",
+        "language_config_added"
+      ]
+    },
+    "validate_json": {
+      "owner": "agent",
+      "pre": "devcontainer_files_written",
+      "add": [
+        "json_valid"
+      ]
+    },
+    "fix_config": {
+      "owner": "agent",
+      "pre": "devcontainer_files_written",
+      "add": [
+        "devcontainer_files_written"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inspect_project",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "read_templates",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_devcontainer_files",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "Validate",
+        "body": [
+          {
+            "act": {
+              "cap": "validate_json",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "valid": [],
+                "invalid": [
+                  {
+                    "act": {
+                      "cap": "fix_config",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "Validate"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "devcontainer_files_written",
+      "placeholders_replaced",
+      "language_config_added",
+      "json_valid"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

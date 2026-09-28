@@ -1,0 +1,114 @@
+{
+  "name": "skill-scanner",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "discover_target": {
+      "owner": "agent",
+      "add": [
+        "target_located"
+      ]
+    },
+    "install_uv": {
+      "owner": "agent",
+      "add": [
+        "uv_available"
+      ],
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      }
+    },
+    "run_static_scan": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          {
+            "and": [
+              "target_located",
+              "uv_available"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "automated_scan_done"
+      ]
+    },
+    "manual_grep_scan": {
+      "owner": "agent",
+      "pre": "target_located",
+      "add": [
+        "automated_scan_done"
+      ]
+    },
+    "read_skill_files": {
+      "owner": "agent",
+      "pre": "target_located",
+      "add": [
+        "skill_files_reviewed",
+        "references_loaded"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "discover_target",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "observed": true,
+        "branches": {
+          "script_works": [
+            {
+              "act": {
+                "cap": "install_uv",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_static_scan",
+                "by": "agent"
+              }
+            }
+          ],
+          "script_fails": [
+            {
+              "act": {
+                "cap": "manual_grep_scan",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "read_skill_files",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "target_located",
+      "automated_scan_done",
+      "skill_files_reviewed"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries"
+  ],
+  "init_constraints": []
+}

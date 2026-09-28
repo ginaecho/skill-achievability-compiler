@@ -1,0 +1,203 @@
+{
+  "name": "entra_app_registration",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "gather_requirements": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "requirements_known"
+      ]
+    },
+    "install_azure_cli": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "az_cli_installed"
+      ]
+    },
+    "register_app_cli": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:azure_entra_tenant",
+          {
+            "and": [
+              "requirements_known",
+              "az_cli_installed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "app_registered",
+        "service_principal_created"
+      ]
+    },
+    "write_bicep_template": {
+      "owner": "agent",
+      "pre": "requirements_known",
+      "add": [
+        "iac_written"
+      ]
+    },
+    "deploy_bicep_template": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:azure_entra_tenant",
+          {
+            "and": [
+              "iac_written",
+              "az_cli_installed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "app_registered",
+        "service_principal_created"
+      ]
+    },
+    "configure_auth_and_permissions": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:azure_entra_tenant",
+          "app_registered"
+        ]
+      },
+      "add": [
+        "auth_configured",
+        "permissions_configured"
+      ]
+    },
+    "create_client_credential": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:azure_entra_tenant",
+          "app_registered"
+        ]
+      },
+      "add": [
+        "client_credential_created"
+      ]
+    },
+    "implement_msal_oauth_code": {
+      "owner": "agent",
+      "pre": "requirements_known",
+      "add": [
+        "oauth_code_implemented"
+      ]
+    },
+    "install_msal_and_build": {
+      "owner": "agent",
+      "pre": "oauth_code_implemented",
+      "add": [
+        "app_builds"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "gather_requirements",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_azure_cli",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "cli": [
+            {
+              "act": {
+                "cap": "register_app_cli",
+                "by": "agent"
+              }
+            }
+          ],
+          "portal": [
+            {
+              "act": {
+                "cap": "register_app_portal",
+                "by": "user"
+              }
+            }
+          ],
+          "iac": [
+            {
+              "act": {
+                "cap": "write_bicep_template",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "deploy_bicep_template",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "configure_auth_and_permissions",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "confidential_client": [
+            {
+              "act": {
+                "cap": "create_client_credential",
+                "by": "agent"
+              }
+            }
+          ],
+          "public_client": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "implement_msal_oauth_code",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_msal_and_build",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "app_registered",
+      "auth_configured",
+      "permissions_configured",
+      "oauth_code_implemented",
+      "app_builds"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

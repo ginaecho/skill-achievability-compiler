@@ -1,0 +1,190 @@
+{
+  "name": "product-skills",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "ask_forcing_question": {
+      "owner": "agent",
+      "add": [
+        "lane_decision_locked"
+      ],
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      }
+    },
+    "run_goal_router": {
+      "owner": "agent",
+      "add": [
+        "router_run"
+      ],
+      "del": [
+        "goal_clarified"
+      ],
+      "pre": {
+        "and": [
+          "needs:shell"
+        ]
+      }
+    },
+    "ask_clarifying_question": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation",
+          "router_run"
+        ]
+      },
+      "add": [
+        "goal_clarified"
+      ]
+    },
+    "load_subskill": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "router_run"
+        ]
+      },
+      "add": [
+        "subskill_loaded"
+      ]
+    },
+    "run_subskill_tools": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:shell",
+          {
+            "and": [
+              "subskill_loaded",
+              "lane_decision_locked"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "subskill_artifact_produced"
+      ]
+    },
+    "run_discovery_gates": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:shell",
+          "subskill_artifact_produced"
+        ]
+      },
+      "add": [
+        "cadence_scored",
+        "ost_linted"
+      ]
+    },
+    "update_discovery_log": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "cadence_scored"
+        ]
+      },
+      "add": [
+        "discovery_log_updated"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "rec": {
+        "name": "ROUTE",
+        "body": [
+          {
+            "act": {
+              "cap": "run_goal_router",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "observed": true,
+              "branches": {
+                "routed": [
+                  {
+                    "act": {
+                      "cap": "load_subskill",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "ambiguous_or_no_signal": [
+                  {
+                    "act": {
+                      "cap": "ask_clarifying_question",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "ROUTE"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "ask_forcing_question",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_subskill_tools",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "discovery_loop": [
+            {
+              "act": {
+                "cap": "run_discovery_gates",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "update_discovery_log",
+                "by": "agent"
+              }
+            }
+          ],
+          "route_only": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "subskill_loaded",
+      "subskill_artifact_produced"
+    ]
+  },
+  "init_true": [
+    "needs:user_conversation",
+    "needs:shell",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

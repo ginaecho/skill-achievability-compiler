@@ -1,0 +1,171 @@
+{
+  "name": "ruzzy",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "install_toolchain": {
+      "owner": "agent",
+      "add": [
+        "clang_ruby_ready"
+      ],
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "needs:linux"
+        ]
+      }
+    },
+    "install_ruzzy": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "clang_ruby_ready"
+        ]
+      },
+      "add": [
+        "ruzzy_installed"
+      ]
+    },
+    "verify_dummy": {
+      "owner": "agent",
+      "pre": "ruzzy_installed",
+      "add": [
+        "ruzzy_verified"
+      ]
+    },
+    "install_target_gem_sanitized": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "clang_ruby_ready"
+        ]
+      },
+      "add": [
+        "target_instrumented"
+      ]
+    },
+    "write_c_ext_harness": {
+      "owner": "agent",
+      "add": [
+        "harness_written"
+      ]
+    },
+    "write_pure_ruby_harness_and_tracer": {
+      "owner": "agent",
+      "add": [
+        "harness_written",
+        "tracer_written",
+        "target_instrumented"
+      ]
+    },
+    "run_fuzz_campaign": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "ruzzy_installed",
+          "harness_written",
+          "target_instrumented"
+        ]
+      },
+      "add": [
+        "campaign_run"
+      ]
+    },
+    "reproduce_crash": {
+      "owner": "agent",
+      "pre": "campaign_run",
+      "add": [
+        "crash_reproduced"
+      ]
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_toolchain",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_ruzzy",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_dummy",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "c_extension": [
+            {
+              "act": {
+                "cap": "install_target_gem_sanitized",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "write_c_ext_harness",
+                "by": "agent"
+              }
+            }
+          ],
+          "pure_ruby": [
+            {
+              "act": {
+                "cap": "write_pure_ruby_harness_and_tracer",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "run_fuzz_campaign",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "crash_found": [
+            {
+              "act": {
+                "cap": "reproduce_crash",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_crash": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "ruzzy_installed",
+      "harness_written",
+      "campaign_run"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries",
+    "needs:linux"
+  ],
+  "init_constraints": []
+}
