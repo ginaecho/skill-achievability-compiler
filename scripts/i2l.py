@@ -371,13 +371,17 @@ def rates(items: list) -> dict:
     blk = [i for i in items if i["blocked"]]
     f = lambda xs, k: {"k": sum(i[k] for i in xs), "n": len(xs),
                        "value": round(sum(i[k] for i in xs) / len(xs), 4) if xs else None}
+    # SW is exploratory (added after the construct-validity check failed; not in the
+    # plan): optional terms on a necessary Tool the runtime withdrew or blocked
     return {"CR": f(core, "nec"), "SC": f(opt, "nec"), "BC": f(blk, "wit"),
+            "SW_exploratory": f(opt, "wit"),
             "REP": f(items, "rep"), "unjudged": sum(not i["judged"] for i in items)}
 
 
 def boot_diff(ia: list, ib: list, metric: str, n: int = 10000) -> dict:
     """Paired bootstrap over pairs of rate(a) - rate(b)."""
-    key = {"CR": ("core", "nec"), "SC": ("opt", "nec"), "BC": ("blocked", "wit")}[metric]
+    key = {"CR": ("core", "nec"), "SC": ("opt", "nec"), "BC": ("blocked", "wit"),
+           "SW_exploratory": ("opt", "wit")}[metric]
     sel = (lambda i: i["core"]) if key[0] == "core" else (
         (lambda i: not i["core"]) if key[0] == "opt" else (lambda i: i["blocked"]))
     per = {}
@@ -452,7 +456,8 @@ def score() -> None:
             for a, b in (("P2g", "JB"), ("JB", "J"), ("P2g", "J"), ("ce_gr", "P2g")):
                 if sub.get(a) and sub.get(b):
                     m["block_paired"].setdefault(s, {})[f"{a} - {b}"] = {
-                        k: boot_diff(sub[a], sub[b], k) for k in ("CR", "SC", "BC")}
+                        k: boot_diff(sub[a], sub[b], k)
+                        for k in ("CR", "SC", "BC", "SW_exploratory")}
         for a in BLOCK_ARMS:
             v = blk[a].values()
             m["validity"][a] = {"blocks": len(blk[a]), "valid": sum(b["valid"] for b in v),
