@@ -82,6 +82,12 @@ describes runtime-bound compaction (P2g), tested on 200 blindly executed
 skills, and [`docs/LIBRARY_TEST.md`](docs/LIBRARY_TEST.md) the tool-policy
 library tests.
 
+All of this is **optional**: the default `skillc check` / `compile` path and the
+original JSON LLM front-end (`--llm`) are unchanged. CE is used only for `.ce`
+inputs, `skillc ce`, `--via-ce` or `--runtime`; the runtime monitor
+(`skillc monitor`, [`docs/RUNTIME_MONITOR.md`](docs/RUNTIME_MONITOR.md)) is active
+only in a project that runs `skillc monitor init` and installs its hooks.
+
 ### Protocol checks versus goal-only checks
 
 The default check judges the **declared protocol**, not every alternative plan.
