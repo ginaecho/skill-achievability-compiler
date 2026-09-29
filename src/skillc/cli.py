@@ -5,6 +5,7 @@
   skillc scan    DIR      [--profile P] [--json|--md]    batch-check a skill tree
   skillc audit   PATH     [--json]                       bundle security pre-pass
   skillc cost    FILE|DIR [--llm] [--json]                token economics of checking
+  skillc ce      FILE     [--to ce|json]                  controlled English <-> pack
   skillc eval                                            corpus evaluation
   skillc profiles                                        list capability profiles
 
@@ -22,6 +23,7 @@ from pathlib import Path
 from . import __version__
 from .checker import Verdict, check
 from .evaluate import evaluate, format_report, load_corpus
+from .frontend.ce import CEError
 from .frontend.markdown import CompileResult, compile_file
 from .pack import Pack, PackError, pack_digest
 from .profiles import builtin_profiles, load_profile
@@ -32,17 +34,26 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
     res = None
     if path.suffix == ".json":
         pack = json.loads(path.read_text(encoding="utf-8"))
+    elif path.suffix == ".ce":
+        from .frontend.ce import compile_ce
+        pack = compile_ce(path.read_text(encoding="utf-8"))
     else:
         profile = load_profile(args.profile)
         if getattr(args, "tool", None):
             profile = profile.with_tools(args.tool)
         if getattr(args, "llm", False):
-            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact
+            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact, compact_ce
             abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
             abilities.extend(args.runtime_ability or [])
-            pack = compact(path.read_text(encoding="utf-8"), model=args.model,
-                           provider=args.llm_provider,
-                           runtime_abilities=abilities or None)
+            kwargs = {}
+            if getattr(args, "runtime", None):
+                from .frontend.runtime import load_runtime
+                front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
+            else:
+                front = compact_ce if getattr(args, "via_ce", False) else compact
+            pack = front(path.read_text(encoding="utf-8"), model=args.model,
+                         provider=args.llm_provider,
+                         runtime_abilities=abilities or None, **kwargs)
         else:
             res = compile_file(path, profile)
             pack = res.pack
@@ -328,6 +339,58 @@ def cmd_eval(args) -> int:
     return 0 if ok else 1
 
 
+def cmd_ce(args) -> int:
+    """Render a pack (or any compiled input) as CE, or a .ce file as JSON."""
+    from .frontend.ce import render_ce
+    path = Path(args.file)
+    if args.to == "json" or (args.to is None and path.suffix == ".ce"):
+        pack, _ = _load_result(path, args)
+        print(json.dumps(pack, indent=2))
+    else:
+        pack, _ = _load_result(path, args)
+        sys.stdout.write(render_ce(pack))
+    return 0
+
+
+HOOKS_SNIPPET = {"hooks": {
+    "UserPromptSubmit": [{"hooks": [{"type": "command",
+                                     "command": "skillc monitor hook prompt"}]}],
+    "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command",
+                                               "command": "skillc monitor hook pre"}]}],
+    "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command",
+                                                "command": "skillc monitor hook post"}]}]}}
+
+
+def cmd_monitor(args) -> int:
+    from .monitor import Config, Monitor
+    root = Path(args.root)
+    cfg_path = root / ".skillc" / "monitor.json"
+    if args.action == "init":
+        cfg = Config(runtime=args.runtime, thinking=args.thinking)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        cfg_path.write_text(json.dumps(cfg.dump(), indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {cfg_path}")
+        print("add to .claude/settings.json:")
+        print(json.dumps(HOOKS_SNIPPET, indent=1))
+        return 0
+    if args.action == "hook":
+        from .monitor_hook import main as hook_main
+        return hook_main(args.arg)
+    mon = Monitor(Config.load(cfg_path), root)
+    if args.action == "plan":
+        d, info = mon.check_plan(Path(args.arg).read_text(encoding="utf-8"))
+        print(json.dumps({**d.to_dict(), **info}, indent=1))
+        return 0 if d.action == "allow" else 1
+    if args.action == "status":
+        print(json.dumps({k: v for k, v in mon.state.__dict__.items() if k != "log"}
+                         | {"log": mon.state.log[-10:]}, indent=1))
+        return 0
+    if args.action == "reset":
+        mon.state_path.unlink(missing_ok=True)
+        return 0
+    raise KeyError(f"unknown monitor action {args.action!r}")
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -353,6 +416,13 @@ def _add_compile_opts(sp) -> None:
                     help="runtime abilities supplied to semantic compaction")
     sp.add_argument("--runtime-ability", action="append", metavar="TEXT",
                     help="additional granted runtime ability (repeatable)")
+    sp.add_argument("--runtime", metavar="NAME|JSON",
+                    help="with --llm: compact via Controlled English bound to a "
+                         "runtime manifest (e.g. developer-sandbox); tools are "
+                         "granted only through the manifest")
+    sp.add_argument("--via-ce", action="store_true",
+                    help="with --llm: the model writes Controlled English, "
+                         "which is parsed into the pack deterministically")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -422,8 +492,27 @@ def main(argv: list[str] | None = None) -> int:
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_cost)
 
+    sp = sub.add_parser("ce", help="Controlled English: render a pack as CE, "
+                                   "or parse a .ce file to a JSON pack")
+    sp.add_argument("file")
+    sp.add_argument("--to", choices=("ce", "json"),
+                    help="output form (default: json for .ce input, else ce)")
+    _add_compile_opts(sp)
+    sp.set_defaults(fn=cmd_ce)
+
     sp = sub.add_parser("eval", help="run the corpus evaluation")
     sp.set_defaults(fn=cmd_eval)
+
+    sp = sub.add_parser("monitor", help="runtime monitor: gate an agent's plan, "
+                                        "reasoning and actions (docs/RUNTIME_MONITOR.md)")
+    sp.add_argument("action", choices=("init", "hook", "plan", "status", "reset"))
+    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post) or plan file")
+    sp.add_argument("--root", default=".", help="project directory (default: .)")
+    sp.add_argument("--runtime", default="developer-sandbox",
+                    help="init: runtime manifest name or JSON path")
+    sp.add_argument("--thinking", choices=("stop", "warn", "off"), default="stop",
+                    help="init: what reasoning that heads to the impossible does")
+    sp.set_defaults(fn=cmd_monitor)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)
@@ -431,8 +520,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return args.fn(args)
-    except (PackError, KeyError, FileNotFoundError, json.JSONDecodeError,
-            RuntimeError) as e:
+    except (PackError, CEError, KeyError, FileNotFoundError,
+            json.JSONDecodeError, RuntimeError) as e:
         print(f"skillc: error: {e}", file=sys.stderr)
         return 2
 

@@ -117,7 +117,7 @@ in favor of this direct-typing core; that material remains in git history and
 is not part of this revision's claims.
 
 The 2025--2026 related-work entries were verified against primary sources in
-`../docs/PILLAR3_PRIMARY_SOURCE_REVIEW.md`. **Not yet covered by that review:**
+`../docs/archive/PILLAR3_PRIMARY_SOURCE_REVIEW.md`. **Not yet covered by that review:**
 the six entries added with the harness-framed introduction (`harnesssurvey`,
 `harnessfix`, `agentskills`, `adas`, `aflow`, `cemri`) and the figures quoted
 from them in Section 1 (the 41--86.7% failure range, the 15.6% task-success
@@ -151,7 +151,7 @@ the LLM-compaction overhead and the direct executor's failed payload, rather
 than presenting either as an unqualified saving.
 
 Evidence comes from `../docs/LIVE_BACKEND_BENCHMARK_20260921.md`,
-`../docs/COMPACTION_PRECISION_ASSESSMENT_20260921.md`, the real-skill and semantic
+`../docs/archive/COMPACTION_PRECISION_ASSESSMENT_20260921.md`, the real-skill and semantic
 validation reports, and their saved run artifacts. The 36-skill snapshot,
 semantic mutation study, 15-pack corpus, and 32-contract planning replay remain
 separate evidence sets. The proposal distinguishes measured provider usage from
@@ -201,7 +201,7 @@ to the main bibliography rather than maintaining a second reference list.
 Microsoft Agent Framework integration is **proposed, not implemented or
 benchmarked in this repository**. The design uses official middleware,
 workflow, MCP, and observability documentation, with references and API-version
-caveats in `../docs/MICROSOFT_AGENT_FRAMEWORK_INTEGRATION_RESEARCH.md`.
+caveats in `../docs/archive/MICROSOFT_AGENT_FRAMEWORK_INTEGRATION_RESEARCH.md`.
 The existing Azure OpenAI/MCP experiments are not labeled as framework tests.
 
 Figures are retained in `figures/mlads_*.png`, with editable SVG versions of

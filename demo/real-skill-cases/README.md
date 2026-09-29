@@ -41,4 +41,4 @@ Generated artifacts:
   transcript.
 
 Source research and license notes are in
-[`docs/REAL_SKILL_DEMO_SOURCES.md`](../../docs/REAL_SKILL_DEMO_SOURCES.md).
+[`docs/archive/REAL_SKILL_DEMO_SOURCES.md`](../../docs/archive/REAL_SKILL_DEMO_SOURCES.md).

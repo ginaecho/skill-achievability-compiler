@@ -56,6 +56,41 @@ Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (an
 abstention, including outside the decidable fragment) — so `skillc check` can
 gate CI for skill repositories.
 
+### Controlled English (CE)
+
+A pack can also be written, reviewed or generated in SkillC Controlled
+English, a small formal language that reads as English. Every sentence form
+denotes exactly one pack construct, so parsing is deterministic and errors
+name the line and column:
+
+```text
+Skill `book-flight`.
+Tool `book_flight` (owner `agent`): requires `flight_selected`; adds `booked`.
+Goal: `booked` and `confirmation_sent`.
+Protocol:
+  - `agent` uses `book_flight`.
+  - `agent` uses `send_email`.
+```
+
+`skillc check skill.ce` checks a CE file, `skillc ce pack.json` renders any
+pack as CE for review, and `skillc check SKILL.md --llm --via-ce` has the
+model write CE instead of JSON. See `src/skillc/frontend/ce.py` for the
+grammar, `examples/controlled-english/` for a worked example, and
+[`docs/CONTROLLED_ENGLISH.md`](docs/CONTROLLED_ENGLISH.md) for the language and
+an A/B against JSON compaction. [`docs/P2G_RUNTIME_BINDING.md`](docs/P2G_RUNTIME_BINDING.md)
+describes runtime-bound compaction (P2g), tested on 200 blindly executed
+skills, and [`docs/LIBRARY_TEST.md`](docs/LIBRARY_TEST.md) the tool-policy
+library tests.
+
+All of this is **optional**: the default `skillc check` / `compile` path and the
+original JSON LLM front-end (`--llm`) are unchanged. CE is used only for `.ce`
+inputs, `skillc ce`, `--via-ce` or `--runtime`; the runtime monitor
+(`skillc monitor`, [`docs/RUNTIME_MONITOR.md`](docs/RUNTIME_MONITOR.md)) is active
+only in a project that runs `skillc monitor init` and installs its hooks.
+The experiment data behind these documents (`runs/`, `benchmark/` corpora)
+lives on the branch `gc/data_train_test`; the scripts under `scripts/` that
+reproduce the experiments expect that branch.
+
 ### Protocol checks versus goal-only checks
 
 The default check judges the **declared protocol**, not every alternative plan.
@@ -77,7 +112,7 @@ For a trusted single-role Boolean contract,
 alternative protocol without an LLM. It does not certify the source's original
 protocol; unsupported inputs and search limits produce abstentions.
 
-Details: [compaction and goal-only policy](docs/COMPACTION_PRECISION_ASSESSMENT_20260921.md).
+Details: [compaction and goal-only policy](docs/archive/COMPACTION_PRECISION_ASSESSMENT_20260921.md).
 
 ## What the checker decides
 

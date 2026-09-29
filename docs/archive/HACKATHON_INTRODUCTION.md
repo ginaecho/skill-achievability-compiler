@@ -30,19 +30,19 @@ Today's loop is expensive:
 write -> run -> fail -> inspect traces -> patch -> retry
 ```
 
-Watch the [10-second runtime-cost animation](./videos/agent-runtime-cost_save.mp4),
+Watch the [10-second runtime-cost animation](../videos/agent-runtime-cost_save.mp4),
 timed for the 0:08-0:18 narration, or open the
-[editable browser version](./videos/agent-runtime-cost.html).
+[editable browser version](../videos/agent-runtime-cost.html).
 This original illustration uses fictional token counts, not recorded benchmark
 data. The silent MP4 is 1920x1080 at 30 fps, ready for voiceover.
 
-The [game-style version](./videos/agents-game.mp4) shows six robot agents
+The [game-style version](../videos/agents-game.mp4) shows six robot agents
 running between workstations, retrying, waiting, and rerouting before all six
 discover the missing email tool and fail. It uses the same 10-second timing,
 1080p format, and fictional token counts. Bottom narration captions and the
 in-video progress bar are omitted;
 the robot animation, token counter, and failure labels remain. Open the
-[game preview](./videos/agents-game.html) to play or scrub the scene.
+[game preview](../videos/agents-game.html) to play or scrub the scene.
 Regenerate it with `npm run render:game --prefix docs\videos` after installing
 the video package's dependencies; rendering requires Microsoft Edge and FFmpeg.
 
@@ -52,24 +52,24 @@ SkillC moves failure discovery to compile time:
 author -> compile -> check -> reject impossible work -> run what remains
 ```
 
-The [meeting-goal animation](./videos/skillc-meeting-proof.mp4) illustrates
+The [meeting-goal animation](../videos/skillc-meeting-proof.mp4) illustrates
 that check with logical blocks: `scheduled AND invited_all`. The declared
 mailbox can schedule, but no available action can establish `invited_all`.
 The checker finds the conjunction unreachable and stops execution with
 `IMPOSSIBLE`. This is a simplified illustrative model, not a live mailbox
 check or a recording of SkillC output.
-The [interactive preview](./videos/skillc-meeting-proof.html) supports scrubbing.
+The [interactive preview](../videos/skillc-meeting-proof.html) supports scrubbing.
 The silent MP4 is 14 seconds at 1920x1080 and 30 fps.
 Regenerate it with `npm run render:meeting --prefix docs\videos`.
 
-The [code-and-terminal version](./videos/skillc-meeting-terminal.mp4) shows
-the [actual input pack](./videos/meeting-mailbox.pack.json), excerpts from the
-Python checker, and [captured CLI output](./videos/meeting-mailbox.verdict.json).
+The [code-and-terminal version](../videos/skillc-meeting-terminal.mp4) shows
+the [actual input pack](../videos/meeting-mailbox.pack.json), excerpts from the
+Python checker, and [captured CLI output](../videos/meeting-mailbox.verdict.json).
 The local checker returns `IMPOSSIBLE [GOAL_UNSAT]` with frontier `invited_all`
 and exit code 1. The input is a hand-authored example, not a live mailbox
 probe; the 18-second animation edits timing for readability. Narration captions
 are omitted; code, terminal output, explanations, and verdict labels remain.
-Use the [terminal preview](./videos/skillc-meeting-terminal.html) to scrub it.
+Use the [terminal preview](../videos/skillc-meeting-terminal.html) to scrub it.
 Capture fresh evidence with `npm run capture:terminal --prefix docs\videos --`
 followed by the absolute path to the configured Python interpreter, then run
 `npm run render:terminal --prefix docs\videos`. Capture checks that scheduling
@@ -84,7 +84,7 @@ gate for agent development, CI/CD, frameworks, and skill marketplaces.
 
 ## 🧭 Method at a glance
 
-![SkillC method: untrusted semantic compaction above the trust boundary and deterministic achievability checking below it](./images/skillc-method.svg)
+![SkillC method: untrusted semantic compaction above the trust boundary and deterministic achievability checking below it](../images/skillc-method.svg)
 
 The semantic front end translates prose into an inspectable pack. The trusted
 core validates capabilities, protocol realizability, role conformance, and
@@ -137,17 +137,17 @@ The guarantee is deliberately precise:
 This is the differentiator: not a prediction, not an AI opinion, but a
 machine-checked refutation theorem. The theorem is relative to the declared
 model and its simulation assumptions; the exact Python checker is not
-mechanized in Coq. See the [paper scope](../paper/README.md).
+mechanized in Coq. See the [paper scope](../../paper/README.md).
 
 ## 🧮 It is a theorem, not a prediction
 
-![SkillC refutation soundness theorem, from concrete execution through the abstract checker model to a proof-backed impossible verdict](./images/skillc-theorem-proof.svg)
+![SkillC refutation soundness theorem, from concrete execution through the abstract checker model to a proof-backed impossible verdict](../images/skillc-theorem-proof.svg)
 
 The central Coq theorem proves a contrapositive. If SkillC's permissive
 abstract model still cannot reach the goal, no concrete execution represented
 by that model can reach it either. The proof audit reports zero axioms.
 
-![Animated SkillC theorem proof showing a formal pack, abstract reachability analysis, Coq certification, and the final impossible verdict](./images/skillc-theorem-proof-animated.svg)
+![Animated SkillC theorem proof showing a formal pack, abstract reachability analysis, Coq certification, and the final impossible verdict](../images/skillc-theorem-proof-animated.svg)
 
 The animated version reveals the argument in four steps: validate the formal
 pack, explore admitted paths, establish that the abstract goal is unreachable,
@@ -155,7 +155,7 @@ then transport that refutation to every represented concrete run.
 
 ### SkillC verification components
 
-![SkillC verification stack showing the compiler front end, formal pack, protocol analysis, Z3 reachability engine, Coq assurance layer, and evidence-carrying verdicts](./images/skillc-verification-components.svg)
+![SkillC verification stack showing the compiler front end, formal pack, protocol analysis, Z3 reachability engine, Coq assurance layer, and evidence-carrying verdicts](../images/skillc-verification-components.svg)
 
 The implementation keeps three responsibilities distinct. MPST-style protocol
 analysis checks projection and role conformance. Z3 decides guarded symbolic
@@ -167,7 +167,7 @@ implementation against that specification.
 
 ## 📊 Measured impact
 
-The [six-second V1 impact cover](./videos/skillc-impact_v1.mp4) highlights the
+The [six-second V1 impact cover](../videos/skillc-impact_v1.mp4) highlights the
 full-set token reduction as "98.7% TOKENS SAVED WITH SkillC" across 46 real
 agent runs, with token counts and large same-scale bars for checking on and off.
 The sample counts runs, not distinct use cases. There is no small text.
@@ -176,12 +176,12 @@ the failure set below; the measured/estimated qualification remains here rather
 than on the cover.
 Regenerate it with `npm run render:impact --prefix docs\videos`.
 
-The [12-second V2 per-skill comparison](./videos/skillc-impact_v2.mp4) uses the
+The [12-second V2 per-skill comparison](../videos/skillc-impact_v2.mp4) uses the
 separate 30-run table supplied for this presentation revision. It shows eight
 skill categories, run counts, runtime versus compaction tokens, and percentage
 savings. It does not replace the 46-run evidence set discussed below or claim
 that these are 30 distinct use cases. Open the
-[V2 preview](./videos/skillc-impact_v2.html) or regenerate it with
+[V2 preview](../videos/skillc-impact_v2.html) or regenerate it with
 `npm run render:impact-v2 --prefix docs\videos`. V1 is preserved.
 
 ### V2 per-skill savings
@@ -256,7 +256,7 @@ enterprise governance layer.
 
 ### Microsoft developer tooling opportunity
 
-![SkillC integration opportunities for a VS Code extension and Microsoft Agent Framework middleware](./images/skillc-microsoft-integration.png)
+![SkillC integration opportunities for a VS Code extension and Microsoft Agent Framework middleware](../images/skillc-microsoft-integration.png)
 
 One SkillC engine can support two complementary product surfaces. A VS Code
 extension can compile skills on save and provide source-level diagnostics.
@@ -268,7 +268,7 @@ For a source-cited comparison with runtime typed-decision models, see the
 
 ## 🏗️ Project architecture
 
-![SkillC reference architecture from integration surfaces through the compiler, trusted checker, and evidence outputs](./images/skillc-architecture.svg)
+![SkillC reference architecture from integration surfaces through the compiler, trusted checker, and evidence outputs](../images/skillc-architecture.svg)
 
 SkillC exposes one CLI and automation contract across local development,
 CI/CD, registries, agent frameworks, and governance systems. The front end
