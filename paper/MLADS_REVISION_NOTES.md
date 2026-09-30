@@ -69,6 +69,43 @@ below.
 - F.4 and Appendix G updated; "Before upload" now also asks for the exact
   Claude model version of the benchmark sub-agents.
 
+## Lemma 3: the argument was wrong in shape, and is now mechanized
+
+The reviews said Lemma 3 (the link between Theorem 1 and the checker's
+symbolic state) was on paper only. Checking it against `proof/SkillAchievability.v`
+showed a sharper problem: the mechanized schema took the abstraction as a
+*function* `abs : W -> A`, while Lemma 3 represents a world ⟨B,N⟩ by (B,ψ) for
+*every* accumulated constraint ψ that N satisfies, where ψ depends on the search
+path. That is a relation, so the lemma as written did not instantiate the
+schema it claimed to instantiate.
+
+What changed (all checked with Coq 8.18.0, the CI pin; `Print Assumptions`
+reports every result closed under the global context):
+
+- `refutation_sound_rel`: Theorem 1 restated with a simulation relation
+  `R : W -> A -> Prop` (step-sim: a related abstract successor exists;
+  goal-sim: relation preserves the goal). `refutation_sound_fun_is_rel` shows
+  the original functional theorem is the special case `R w a := (a = abs w)`.
+- `SymbolicInstance.symbolic_refutation_sound`: Lemma 3 mechanized for a
+  shallow embedding of the state logic. Constraints are predicates on numeric
+  worlds; guards and effects are relations; the strongest postcondition is the
+  image; the widening is an arbitrary edge policy (so the back-edge policy of
+  the implementation is covered); the abstraction is the relation N ⊨ ψ.
+- `tests/test_proof.py` now expects eight axiom-free results from
+  `check_assumptions.v`.
+
+What still remains on paper, and is now stated as such in every place that
+mentions Lemma 3: that the checker's QF-LIA formulas denote those predicates,
+and that Z3 decides their satisfiability correctly. The text no longer says
+"Lemma 3 is on paper"; it says exactly which refinement is.
+
+Where the text changed: `paper/skillachievability.tex` (limitations paragraph,
+Appendix D intro, the abstraction relation and Transport lemma, Lemma 3
+statement and proof; all inside blue-marked `\bgc...\egc` regions, PDF not
+rebuilt here because no TeX toolchain is installed), the supplement (D intro,
+Lemma 3 proof tail, a new remark after it, the D.8 row, Section 6.1), the main
+proposal ("Why the check is credible"), and `paper/README.md`.
+
 ## Things the authors must still confirm before upload
 
 1. The exact Claude model version used by the compaction, execution and

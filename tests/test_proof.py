@@ -38,7 +38,7 @@ def test_soundness_proof_typechecks(tmp_path):
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     # the axiom audit prints "Closed under the global context" for each theorem
-    assert r.stdout.count("Closed under the global context") >= 3, r.stdout
+    assert r.stdout.count("Closed under the global context") >= 8, r.stdout
 
 
 def test_direct_typing_proof_typechecks(tmp_path):
