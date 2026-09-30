@@ -250,6 +250,18 @@ Assumptions`):
 - `SkillAchievability.v` — the reachability soundness core: refutation
   soundness (T1), tolerance soundness (T2), capability monotonicity (T3), and
   the `FlightInstance` concrete instance (main-text overview and Appendix D).
+  Since 30 September 2026 it also holds the schema in **relational** form
+  (`refutation_sound_rel`; the functional form is the special case
+  `refutation_sound_fun_is_rel`) and `SymbolicInstance`, which mechanizes
+  Lemma 3 (the checker's symbolic abstraction satisfies step-sim and goal-sim)
+  for a shallow embedding of the state logic: constraints as predicates on
+  numeric worlds, guards and effects as relations, the strongest postcondition
+  as the image, the widening as an arbitrary edge policy. The relational form
+  was needed because the accumulated constraint depends on the search path, so
+  the abstraction is not a function of the concrete world and the earlier
+  paper-level Lemma 3 did not instantiate the functional schema as written.
+  What remains on paper is that the checker's QF-LIA formulas denote those
+  predicates and that Z3 decides them correctly.
 - `DirectTyping.v` — the direct-typing safety core: `type_directed_safety` /
   `progress` (Appendix D.3), and `HandoffInstance`, the mechanized
   planner/worker example.

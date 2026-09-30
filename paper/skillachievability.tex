@@ -554,8 +554,10 @@ refutation-sound abstraction theorem and concrete examples, head-move action
 safety, and subject reduction/session fidelity with full bystander interleaving
 for the single-label communication model, all axiom-free. The executable checker
 is schema-gated and tested against the formal specification, but its exact
-symbolic state is not yet fully mechanized\bgc\ (Lemma~\ref{lem:inst} is on
-paper)\egc. The Coq model also does not yet
+symbolic state is mechanized only as a \emph{shallow embedding}\bgc\ (Lemma~\ref{lem:inst}:
+constraints as predicates on numeric worlds; that the checker's QF-LIA formulas
+denote those predicates and that the SMT solver decides them correctly is
+trusted, not proved)\egc. The Coq model also does not yet
 combine \bgc participant matching, multi-branch choice, and
 world-changing interleaving\egc\ in one development. Future work includes completing
 this mechanization, connecting interleaved session runs to the reachability
@@ -1068,28 +1070,40 @@ way.\egc
 We separate what is \emph{mechanized in Coq} (Theorems~\ref{thm:ref}--\ref{thm:cap};
 Theorems~\ref{thm:sr}--\ref{thm:sf} for the single-label communication fragment with full
 interleaving; the head-move action case; and the concrete instances, all
-axiom-free) from what is \emph{proved on paper} (the action-interleaving cases,
-\bgc Lemma~\ref{lem:inst}, termination\egc, and the undecidability boundary).
+axiom-free\bgc; and Lemma~\ref{lem:inst} for a shallow embedding of the state
+logic\egc) from what is \emph{proved on paper} (the action-interleaving cases,
+\bgc the refinement of that embedding to the checker's formulas and solver,
+termination\egc, and the undecidability boundary).
 
 \subsection{Soundness of the abstraction}
 Let $\mathcal C$ be the concrete configuration space of protocol/world pairs,
 $\mathcal A$ the abstract configuration space the checker explores, and
-$\mathit{abs}:\mathcal C\to\mathcal A$ the abstraction. We require:
+\bgc$\mathit{abs}\subseteq\mathcal C\times\mathcal A$ the abstraction
+\emph{relation}: a concrete configuration may be represented by several
+abstract ones, because the accumulated constraint of Lemma~\ref{lem:inst}
+depends on the path the search took, not on the world alone. We write
+$\mathit{abs}(C,A)$ for ``$A$ represents $C$'' and require:
 \[
-\textbf{(step-sim)}\ \ C\reach C'\Rightarrow \mathit{abs}(C)\,\hat\reach\,\mathit{abs}(C'),
+\textbf{(step-sim)}\ \ C\reach C'\wedge\mathit{abs}(C,A)\Rightarrow
+\exists A'.\ A\,\hat\reach\,A'\wedge\mathit{abs}(C',A'),
 \qquad
-\textbf{(goal-sim)}\ \ \goal_{\gphi}(C)\Rightarrow\hat\goal(\mathit{abs}(C)).
+\textbf{(goal-sim)}\ \ \goal_{\gphi}(C)\wedge\mathit{abs}(C,A)\Rightarrow\hat\goal(A).
 \]
+When $\mathit{abs}$ is the graph of a function the two conditions reduce to
+the familiar functional form, mechanized as the special case
+\id{refutation\_sound\_fun\_is\_rel}.\egc
 \begin{lemma}[Transport]\label{lem:transport}
-If $C_0\reachs C$ then
-$\mathit{abs}(C_0)\,\hat\reach^{*}\,\mathit{abs}(C)$.
+If $C_0\reachs C$ \bgc and $\mathit{abs}(C_0,A_0)$, then there is an $A$ with
+$A_0\,\hat\reach^{*}\,A$ and $\mathit{abs}(C,A)$\egc.
 \end{lemma}
 \begin{proof}
-By induction on the reflexive-transitive closure. The empty run is reflexivity.
-For $C_0\reachs C'\reach C$, the induction hypothesis gives
-$\mathit{abs}(C_0)\hat\reach^{*}\mathit{abs}(C')$ and \textsc{step-sim} gives
-$\mathit{abs}(C')\hat\reach\mathit{abs}(C)$; compose them. Mechanized as
-\id{reach\_abs}, parameterized by \textsc{step-sim}.
+By induction on the reflexive-transitive closure. The empty run is reflexivity
+\bgc with $A=A_0$\egc.
+For $C_0\reachs C'\reach C$, the induction hypothesis gives \bgc an $A'$ with
+$A_0\hat\reach^{*}A'$ and $\mathit{abs}(C',A')$, and \textsc{step-sim} gives an
+$A$ with $A'\hat\reach A$ and $\mathit{abs}(C,A)$\egc; compose them. Mechanized as
+\id{reach\_abs\_rel}, parameterized by \textsc{step-sim}\bgc\ (\id{reach\_abs} is
+the functional special case)\egc.
 \end{proof}
 
 \begin{lemma}[Reachability monotonicity]\label{lem:mono}
@@ -1132,8 +1146,8 @@ Theorem refutation\_sound : forall s0,\\
 
 \bgc
 \begin{lemma}[The symbolic abstraction satisfies the hypotheses]\label{lem:inst}
-Let $\mathit{abs}(G,\langle B,N\rangle)=(G,\langle B,\psi\rangle)$ for any
-accumulated constraint $\psi\in\mathcal L$ with $N\vDash\psi$. Let an abstract
+Let $\mathit{abs}$ relate $(G,\langle B,N\rangle)$ to $(G,\langle B,\psi\rangle)$
+for every accumulated constraint $\psi\in\mathcal L$ with $N\vDash\psi$. Let an abstract
 step apply the same $\Add/\Del$ update to $B$ and replace $\psi$ by the
 strongest postcondition of the numeric effect, and let
 $\hat\goal(G,\langle B,\psi\rangle)$ hold when $\goal$ holds at control $G$ and
@@ -1146,11 +1160,19 @@ $N$ itself witnesses satisfiability of $\psi\wedge\gphi$ under $B$.
 \textsc{step-sim}: a concrete firing needs $\langle B,N\rangle\vDash\pre_a$, so
 $\psi\wedge\pre_a$ is satisfiable ($N$ witnesses it) and the symbolic edge
 exists; the boolean update is identical on both sides, and the concrete
-successor satisfies the strongest postcondition by definition. Widening weakens
-$\psi$, which only adds abstract states and edges, so both properties are
-preserved (Theorem~\ref{thm:tol}). Hence Theorem~\ref{thm:ref} applies to the
-search the implementation runs. This lemma is on paper; mechanizing the
-symbolic state is future work (Section~\ref{sec:limitations}).
+successor satisfies the strongest postcondition by definition, so it is
+related to the abstract successor. Widening replaces $\psi$ by $\top$ on the
+edges the implementation chooses; $N'\vDash\top$ trivially, so \textsc{step-sim}
+holds for every widening policy, and by Theorem~\ref{thm:tol} widening can only
+enlarge the reachable set. Hence Theorem~\ref{thm:ref} applies to the
+search the implementation runs. Mechanized as
+\id{SymbolicInstance.symbolic\_refutation\_sound} for a shallow embedding of
+the state logic: constraints are predicates on numeric worlds, guards and
+effects are relations, the strongest postcondition is the image, the widening
+is an arbitrary policy on edges, and the abstraction is the relation $N\vDash\psi$.
+What remains on paper is the refinement of that embedding to the checker: that
+its QF-LIA formulas denote those predicates and that the SMT solver decides
+their satisfiability correctly (Section~\ref{sec:limitations}).
 \end{proof}
 \egc
 
