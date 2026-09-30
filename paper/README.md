@@ -126,6 +126,17 @@ primary-source pass before submission.
 
 ## MLADS+ Agents adaptation
 
+**Revised 30 September 2026** after the NeurIPS 2026 VerifyAgents reviews of the
+earlier manuscript: the main proposal and the supplement now report the
+real-skill benchmark with blind-execution ground truth (490 skill–runtime
+pairs), the direct-model-verdict baseline, Controlled English with
+runtime-bound compaction (P2g), the runtime monitor and pre-session hook, and
+a table of which formal result covers each verdict. `MLADS_REVISION_NOTES.md`
+lists every change, the evidence behind each number, and what the authors must
+still confirm before upload. Where the description below conflicts with the
+revised documents (figure numbering, Table 1, the workflow figure), the
+documents and the revision notes are current.
+
 `MLADS_AGENT_Submission.docx` is the canonical implementation-focused technical-talk
 proposal adapted from `main_submission.pdf` and repository evidence using the
 supplied December 2026 MLADS Word template.
