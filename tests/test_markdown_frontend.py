@@ -191,3 +191,26 @@ def test_no_invocations_warns_and_is_trivially_achievable():
     res = compile_markdown("# pure prose skill\nBe kind.", CLAUDE_AI)
     assert res.warnings
     assert check(res.pack).achievable
+
+
+def test_api_values_are_not_read_as_tool_calls():
+    from skillc.frontend.markdown import extract
+    body = ("Computer use only through `computer_toolset_20260801`.\n"
+            "Set `display`, or use `between_tools` (`thinking: {type: \"between_tools\"}`).\n"
+            "Pre-4.6 models still use `budget_tokens` "
+            "(`thinking: {type: \"enabled\", budget_tokens: N}`).\n"
+            "Then use `web_search` to look it up.\n")
+    assert [i.tool for i in extract(body, set())] == ["web_search"]
+
+
+def test_a_declared_tool_is_kept_even_when_it_looks_like_a_value():
+    from skillc.frontend.markdown import extract
+    body = "Call `computer_20251124` to click.\n"
+    assert [i.tool for i in extract(body, {"computer_20251124"})] == ["computer_20251124"]
+
+
+def test_claude_ai_grants_the_browser_tools_but_no_api_parameters():
+    from skillc import load_profile
+    tools = load_profile("claude-ai").tools
+    assert {"tabs_context", "tabs_context_mcp", "navigate", "get_page_text"} <= tools
+    assert not {"budget_tokens", "count_tokens"} & tools

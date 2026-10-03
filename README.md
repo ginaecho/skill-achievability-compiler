@@ -44,7 +44,7 @@ verify actual runtime grants.
 Batch-scan a skill tree, compile a pack, or run the evaluation corpus:
 
 ```console
-$ skillc scan /mnt/skills --profile claude-ai      # 36/36 achievable
+$ skillc scan /mnt/skills --profile claude-ai      # every skill achievable (42/42)
 $ skillc compile SKILL.md -o pack.json             # inspect the formal object
 $ skillc check pack.json --json                    # machine-readable verdict
 $ skillc eval                                      # corpus + soundness audit
@@ -191,23 +191,26 @@ for the complete skill, repair, benchmark cases, and evidence boundary.
 ## Results on real, public skills
 
 Validated against Anthropic's public skills corpus
-([anthropics/skills](https://github.com/anthropics/skills), 36 `SKILL.md`
-files mounted at `/mnt/skills`, or fetched with
+([anthropics/skills](https://github.com/anthropics/skills), 42 `SKILL.md`
+files at the time of writing, mounted at `/mnt/skills`, or fetched with
 `python3 scripts/fetch_skills.py`):
 
-* **36/36 achievable under the `claude-ai` profile** — their home runtime.
+* **42/42 achievable under the `claude-ai` profile** — their home runtime.
   Zero false refutations on deployed skills.
-* **16/36 refuted under the `claude-code` profile**, each with the exact
+* **18/42 refuted under the `claude-code` profile**, each with the exact
   missing tool named (`ask_user_input_v0`, `read_page`, `upload_file`,
-  `create_file`, `str_replace`, `show_widget`, `search_mcp_registry`, …) and
-  the source line.  Granting the named tools flips every one of them back to
+  `create_file`, `str_replace`, `show_widget`, `search_mcp_registry`,
+  `tabs_context`, …) and the source line: consumer-app skills, plus the two
+  browser skills, whose tools the default Claude Code toolset does not
+  include.  Granting the named tools flips every one of them back to
   achievable.
 
 These are snapshot results, not a guarantee of concrete success.
 Full table: [real-skills report](docs/REAL_SKILLS_REPORT.md).
 
 **Semantic level** ([`docs/SEMANTIC_VALIDATION.md`](docs/SEMANTIC_VALIDATION.md),
-`scripts/semantic_validation.py`): four representative consumer skills were
+`scripts/semantic_validation.py`; recorded with `skillc 0.2.0` and not yet
+re-run on 0.3.0, which needs an LLM API key): four representative consumer skills were
 LLM-compacted into semantic packs (goals like *booked ∧ calendar-updated ∧
 user-informed* with per-step guards), through the schema gate and at most one
 repair round — **4/4 check ACHIEVABLE** (no false alarms on deployed skills).
@@ -244,10 +247,10 @@ Modeled estimates for a median real skill (leverage = wasted per prevented run
 
 | reason | turns before it stops the agent | leverage |
 |---|---|---|
-| `MISSING_CAPABILITY` | 3–8–14, one agent | 18× |
-| `GOAL_UNSAT` | 8–18–30, and the run may *believe it succeeded* | 63× |
-| `NON_PROJECTABLE` / `NON_CONFORMANT` | 6–15–30, **two** agents billed | 94× |
-| `BLOCKED_GUARD` | 12–25–50 — retry-forever runs to the turn cap | 110× |
+| `MISSING_CAPABILITY` | 3–8–14, one agent | 17× |
+| `GOAL_UNSAT` | 8–18–30, and the run may *believe it succeeded* | 61× |
+| `NON_PROJECTABLE` / `NON_CONFORMANT` | 6–15–30, **two** agents billed | 91× |
+| `BLOCKED_GUARD` | 12–25–50 — retry-forever runs to the turn cap | 106× |
 
 `UNKNOWN` deliberately claims no savings: an abstention prevents nothing.
 
