@@ -69,17 +69,17 @@ not move.
 Each verdict reason maps to a distinct flailing profile — how long an agent
 runs before that particular structural failure stops it, and how many agents
 are billed for it. Numbers below are for `call-to-book`, a median-sized real
-consumer skill (≈1.7K tokens), priced against the LLM front-end with the
+consumer skill (≈1.1K tokens), priced against the LLM front-end with the
 *modelled* compaction cost (`skillc cost --price-llm`; the figure moves with
-the prompt and the skill text, so a current run may differ by a few percent).
+the prompt and the skill text, so re-run it after either changes).
 
 | reason | turns (lo–typ–hi) | agents | wasted per run (typical) | check | leverage |
 |---|---|---|---|---|---|
-| `MISSING_CAPABILITY` | 3–8–14 | 1 | 50,240 | 2,778 | **18×** |
-| `GOAL_UNSAT` | 8–18–30 | 1 | 176,040 | 2,778 | **63×** |
-| `NON_CONFORMANT` | 6–15–30 | 2 | 261,900 | 2,778 | **94×** |
-| `NON_PROJECTABLE` | 6–15–30 | 2 | 261,900 | 2,778 | **94×** |
-| `BLOCKED_GUARD` | 12–25–50 | 1 | 305,750 | 2,778 | **110×** |
+| `MISSING_CAPABILITY` | 3–8–14 | 1 | 50,240 | 2,889 | **17×** |
+| `GOAL_UNSAT` | 8–18–30 | 1 | 176,040 | 2,889 | **61×** |
+| `NON_CONFORMANT` | 6–15–30 | 2 | 261,900 | 2,889 | **91×** |
+| `NON_PROJECTABLE` | 6–15–30 | 2 | 261,900 | 2,889 | **91×** |
+| `BLOCKED_GUARD` | 12–25–50 | 1 | 305,750 | 2,889 | **106×** |
 
 The ordering is the robust part, and it is not arbitrary:
 
@@ -110,7 +110,7 @@ check pay for itself?" but "how far into the *first* prevented run?"
 | front-end | tokens per skill | break-even |
 |---|---|---|
 | deterministic | 0 | immediate — there is nothing to repay |
-| LLM compaction | ~2,800 | **0.9%–5.5% of one prevented run** |
+| LLM compaction | ~2,900 (modelled) | **0.9%–5.8% of one prevented run** |
 
 Even in the cheapest failure mode (`MISSING_CAPABILITY`), the check has repaid
 itself before 6% of the first doomed run has elapsed. In the retry-forever
@@ -121,10 +121,10 @@ case it repays in under 1%.
 The honest denominator. Most skills are *not* broken, and for those the check
 buys nothing and still costs something. So: **how much is that?**
 
-For a median real skill, LLM compaction is ≈2,800 tokens against a modelled
-10-turn successful run of ≈69,800 — **the check is 4.0% of running the skill
-once.** Over the 15-spec corpus (whose natural-language sources are short) the
-same figure is **2.9%**.
+For a median real skill, LLM compaction is ≈2,900 tokens (modelled) against a
+modelled 10-turn successful run of ≈69,800 — **the check is 4.1% of running
+the skill once.** Over the 15-spec corpus (whose natural-language sources are
+short) the same figure is **3.1%**.
 
 With the deterministic front-end it is **0.0%**, exactly.
 
@@ -138,29 +138,33 @@ surcharge at all if you use the deterministic front-end.
 
 ```
 refuted 7 skill(s) before execution
-  tokens spent checking : 12,239        ($0.09)
-  tokens NOT wasted     : 1,067,913 typical ($3.58), band 281,547–3,146,804
-  leverage (typical)    : 87×, per invocation avoided
+  tokens spent checking : 13,016 ($0.0936)
+  tokens NOT wasted     : 1,067,913 typical ($3.5787), band 281,547-3,146,804
+  leverage (typical)    : 82.0x, per invocation avoided
 
-8 skill(s) not refuted — the check bought no savings, so this is what it cost:
-  tokens spent checking : 14,012
+8 skill(s) not refuted -- the check bought no savings, so this is what it cost them:
+  tokens spent checking : 14,900
   one successful run    : 476,280 (modelled)
-  checking is 2.9% of running each skill once
+  checking is 3.1% of running each skill once
 ```
 
 With the deterministic front-end the same seven refutations cost **0 tokens**.
 
-### 36 real public skills under `claude-code` (`skillc cost /mnt/skills --profile claude-code`)
+### 42 real public skills under `claude-code` (`skillc cost /mnt/skills --profile claude-code`)
+
+The public skills repository grows, so these counts are a snapshot (42 skills
+at the time of writing).
 
 ```
-refuted 16 skill(s) before execution
-  tokens spent checking : 0
-  tokens NOT wasted     : 930,384 typical, band 264,894–2,098,572
-  leverage (typical)    : unbounded — the check spends no tokens at all
+refuted 18 skill(s) before execution
+  tokens spent checking : 0 ($0.0000)
+  tokens NOT wasted     : 1,039,720 typical ($3.5512), band 295,395-2,348,710
+  leverage (typical)    : unbounded -- the check spends no tokens at all
 ```
 
-Those sixteen are the consumer-app skills that invoke tools Claude Code does
-not grant. Each would fail on its first invocation under that profile; the
+Those eighteen are the skills that invoke tools the default Claude Code
+toolset does not grant (consumer-app tools, and the browser tools of the two
+browser skills). Each would fail on its first invocation under that profile; the
 deterministic front-end names the missing tool and the source line for free.
 
 ## 7. What is measured and what is modelled
