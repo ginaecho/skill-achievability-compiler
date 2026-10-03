@@ -1,0 +1,39 @@
+intent: building-topology -- Model a building's topology (building, floors, rooms) as a queryable Azure Digital Twins graph, built from floor plans in blob storage.
+target: resource group rg-building in westeurope
+environment captured 2026-10-03T12:00:00Z
+
+conditions (OK = achievable, OK* = achievable under assumptions, NO = blocked):
+  OK  dt_instance
+  OK  building_data
+  NO  dt_models
+  NO  topology_twins
+  NO  topology_relationships
+  NO  topology_queryable
+
+plan (ACHIEVABLE by the trusted checker):
+  1. Create the Azure Digital Twins instance
+       $ az dt create --dt-name bldg-twins --resource-group rg-building --location westeurope
+  2. Read the floor plans and space lists
+       $ az storage blob download-batch --auth-mode login --account-name bldgplans --source floorplans --destination ./building
+
+blocked, and what would unblock it:
+  - dt_data_writer: hold the permission to write models, twins and relationships and query the Azure Digital Twins graph
+      why: no role assigned to the principal grants the data actions Microsoft.DigitalTwins/models/write, Microsoft.DigitalTwins/digitaltwins/write, Microsoft.DigitalTwins/digitaltwins/relationships/write, Microsoft.DigitalTwins/query/action at resource group rg-building
+      fix: ask for one of 'Azure Digital Twins Data Owner' at resource group rg-building
+  - dt_data_writer: Assign yourself the Azure Digital Twins Data Owner role on the instance
+      why: no role assigned to the principal grants the action Microsoft.Authorization/roleAssignments/write at resource group rg-building
+      fix: ask for one of 'User Access Administrator', 'Role Based Access Control Administrator', 'Owner' at resource group rg-building
+  - dt_models: Upload the DTDL models (Building, Floor, Room, Sensor)
+      why: needs dt_data_writer first
+      fix: unblock dt_data_writer
+  - topology_twins: Create one twin per building, floor and room
+      why: needs dt_models first
+      fix: unblock dt_models
+  - topology_relationships: Connect the twins (building contains floors, floor contains rooms)
+      why: needs topology_twins first
+      fix: unblock topology_twins
+  - topology_queryable: Query the building graph
+      why: needs topology_relationships first
+      fix: unblock topology_relationships
+
+2/6 conditions achievable; blocked conditions are certified unreachable with the operations this environment allows (checker: GOAL_UNSAT)

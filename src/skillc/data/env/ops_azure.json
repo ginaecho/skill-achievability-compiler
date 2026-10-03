@@ -1,0 +1,126 @@
+{
+ "schema": "skillc.ops/1",
+ "provider": "azure",
+ "sources": [
+  "MicrosoftDocs/azure-docs articles/role-based-access-control/permissions/internet-of-things.md (Microsoft.DigitalTwins, Microsoft.Devices actions and data actions)",
+  "MicrosoftDocs/azure-docs articles/role-based-access-control/permissions/management-and-governance.md, identity.md, storage.md",
+  "MicrosoftDocs/azure-docs articles/role-based-access-control/built-in-roles/*.md (role definitions)",
+  "MicrosoftDocs/azure-docs articles/digital-twins/how-to-set-up-instance-cli.md (data-plane access needs the Azure Digital Twins Data Owner role)"
+ ],
+ "capabilities": [
+  {
+   "pred": "dt_data_writer",
+   "title": "write models, twins and relationships and query the Azure Digital Twins graph",
+   "data_actions": [
+    "Microsoft.DigitalTwins/models/write",
+    "Microsoft.DigitalTwins/digitaltwins/write",
+    "Microsoft.DigitalTwins/digitaltwins/relationships/write",
+    "Microsoft.DigitalTwins/query/action"
+   ],
+   "at": "target"
+  },
+  {
+   "pred": "building_data_access",
+   "title": "read the building data blobs",
+   "data_actions": ["Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"],
+   "at": "data:building_plans"
+  }
+ ],
+ "operations": [
+  {
+   "id": "create_resource_group",
+   "title": "Create the resource group",
+   "adds": ["rg_exists"],
+   "exists": {"scope": "target"},
+   "permission": {"action": "Microsoft.Resources/subscriptions/resourceGroups/write", "at": "subscription"},
+   "how": "az group create --name {rg} --location {location}"
+  },
+  {
+   "id": "register_digital_twins",
+   "title": "Register the Microsoft.DigitalTwins resource provider",
+   "adds": ["service:Microsoft.DigitalTwins"],
+   "permission": {"action": "Microsoft.DigitalTwins/register/action", "at": "subscription"},
+   "how": "az provider register --namespace Microsoft.DigitalTwins"
+  },
+  {
+   "id": "register_devices",
+   "title": "Register the Microsoft.Devices resource provider",
+   "adds": ["service:Microsoft.Devices"],
+   "permission": {"action": "Microsoft.Devices/register/action", "at": "subscription"},
+   "how": "az provider register --namespace Microsoft.Devices"
+  },
+  {
+   "id": "create_dt_instance",
+   "title": "Create the Azure Digital Twins instance",
+   "requires": ["rg_exists", "service:Microsoft.DigitalTwins"],
+   "adds": ["dt_instance"],
+   "exists": {"type": "Microsoft.DigitalTwins/digitalTwinsInstances"},
+   "creates": {"type": "Microsoft.DigitalTwins/digitalTwinsInstances"},
+   "permission": {"action": "Microsoft.DigitalTwins/digitalTwinsInstances/write", "at": "target"},
+   "how": "az dt create --dt-name {name} --resource-group {rg} --location {location}"
+  },
+  {
+   "id": "grant_dt_data_owner",
+   "title": "Assign yourself the Azure Digital Twins Data Owner role on the instance",
+   "requires": ["dt_instance"],
+   "adds": ["dt_data_writer"],
+   "permission": {"action": "Microsoft.Authorization/roleAssignments/write", "at": "target"},
+   "how": "az dt role-assignment create --dt-name {name} --assignee {you} --role \"Azure Digital Twins Data Owner\""
+  },
+  {
+   "id": "grant_blob_data_reader",
+   "title": "Assign yourself Storage Blob Data Reader on the building data",
+   "adds": ["building_data_access"],
+   "permission": {"action": "Microsoft.Authorization/roleAssignments/write", "at": "data:building_plans"},
+   "how": "az role assignment create --assignee {you} --role \"Storage Blob Data Reader\" --scope {data:building_plans}"
+  },
+  {
+   "id": "read_building_data",
+   "title": "Read the floor plans and space lists",
+   "requires": ["building_data_access"],
+   "adds": ["building_data"],
+   "uses_data": ["building_plans"],
+   "mcp": {"tools": ["(read|download|get).*(blob|file)", "(blob|file).*(read|download|get)"],
+           "replaces": ["building_data_access"]},
+   "how": "az storage blob download-batch --auth-mode login --account-name {data:building_plans:name} --source {data:building_plans:path} --destination ./building"
+  },
+  {
+   "id": "upload_models",
+   "title": "Upload the DTDL models (Building, Floor, Room, Sensor)",
+   "requires": ["dt_instance", "dt_data_writer"],
+   "adds": ["dt_models"],
+   "how": "az dt model create --dt-name {name} --from-directory ./models"
+  },
+  {
+   "id": "create_twins",
+   "title": "Create one twin per building, floor and room",
+   "requires": ["dt_models", "building_data"],
+   "adds": ["topology_twins"],
+   "how": "az dt twin create --dt-name {name} --dtmi <model> --twin-id <id>   (one per space)"
+  },
+  {
+   "id": "create_relationships",
+   "title": "Connect the twins (building contains floors, floor contains rooms)",
+   "requires": ["topology_twins"],
+   "adds": ["topology_relationships"],
+   "how": "az dt twin relationship create --dt-name {name} --twin-id <parent> --target <child> --relationship contains --relationship-id <id>"
+  },
+  {
+   "id": "query_topology",
+   "title": "Query the building graph",
+   "requires": ["topology_relationships"],
+   "adds": ["topology_queryable"],
+   "how": "az dt twin query --dt-name {name} --query-command \"SELECT * FROM digitaltwins\""
+  },
+  {
+   "id": "create_iot_hub",
+   "title": "Create an IoT Hub for the room sensors",
+   "requires": ["rg_exists", "service:Microsoft.Devices"],
+   "adds": ["iot_hub"],
+   "exists": {"type": "Microsoft.Devices/IotHubs"},
+   "creates": {"type": "Microsoft.Devices/IotHubs"},
+   "permission": {"action": "Microsoft.Devices/iotHubs/Write", "at": "target"},
+   "how": "az iot hub create --name {name}-hub --resource-group {rg} --location {location}"
+  }
+ ]
+}

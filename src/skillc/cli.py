@@ -421,6 +421,93 @@ def cmd_monitor(args) -> int:
     raise KeyError(f"unknown monitor action {args.action!r}")
 
 
+def _probe_env(args):
+    """Build an environment from the adapters the arguments name."""
+    from .env import azure, mcp
+    from .env.model import merge
+    envs = []
+    if args.from_raw:
+        envs.append(azure.probe(azure.replay_runner(args.from_raw), args.subscription,
+                                mode="replay"))
+    elif args.azure:
+        envs.append(azure.probe(azure.live_runner(args.save_raw), args.subscription))
+    if args.mcp_config:
+        envs.append(mcp.probe(args.mcp_config, list_tools=args.list_tools))
+    if not envs:
+        raise ValueError("say what to probe: --azure, --from-raw DIR and/or --mcp-config FILE")
+    return merge(*envs)
+
+
+def cmd_env(args) -> int:
+    from .env.model import Environment, diff, merge
+    from .env.report import env_summary, html_page
+    if args.action == "probe":
+        env = _probe_env(args)
+        env.save(args.output)
+        print(env_summary(env))
+        print(f"wrote {args.output}")
+        return 0
+    if args.action == "show":
+        env = Environment.load(args.file)
+        print(env_summary(env))
+        if args.html:
+            Path(args.html).write_text(html_page(env), encoding="utf-8")
+            print(f"wrote {args.html}")
+        return 0
+    if args.action == "diff":
+        changes = diff(Environment.load(args.old), Environment.load(args.new))
+        sign = {"added": "+", "removed": "-", "changed": "~"}
+        for kind, lines in changes.items():
+            for line in lines:
+                print(f"{sign[kind]} {line}")
+        return 0 if not any(changes.values()) else 1
+    if args.action == "merge":
+        merge(*(Environment.load(f) for f in args.files)).save(args.output)
+        print(f"wrote {args.output}")
+        return 0
+    from .env.reach import load_intent
+    from .env.watch import watch
+    intents = {Path(i).stem: load_intent(i) for i in args.intent or []}
+    watch(args.dir, lambda: _probe_env(args), intents, args.interval,
+          rounds=1 if args.once else None,
+          on_report=lambda r: print(json.dumps(r, indent=1), flush=True))
+    return 0
+
+
+def cmd_reach(args) -> int:
+    from .env.model import Environment
+    from .env.reach import as_json, load_catalog, load_intent, reach
+    from .env.report import english_plan, html_page, text_report
+    env = Environment.load(args.env)
+    result = reach(load_intent(args.intent), env,
+                   load_catalog(args.catalog) if args.catalog else None)
+    print(as_json(result) if args.json else text_report(result))
+    if args.plan:
+        Path(args.plan).write_text(english_plan(result), encoding="utf-8")
+        print(f"wrote {args.plan}", file=sys.stderr)
+    if args.html:
+        Path(args.html).write_text(html_page(env, result), encoding="utf-8")
+        print(f"wrote {args.html}", file=sys.stderr)
+    if result.blocked:
+        return 1
+    return 0 if result.complete else 3
+
+
+def _add_probe_opts(sp) -> None:
+    sp.add_argument("--azure", action="store_true",
+                    help="probe Azure live with your `az login` (read-only commands only)")
+    sp.add_argument("--subscription", help="Azure subscription id or name (default: current)")
+    sp.add_argument("--save-raw", metavar="DIR",
+                    help="also keep every raw az answer under DIR (replayable offline)")
+    sp.add_argument("--from-raw", metavar="DIR",
+                    help="replay a saved az export instead of calling Azure")
+    sp.add_argument("--mcp-config", action="append", metavar="FILE",
+                    help="MCP configuration to read (.mcp.json, claude_desktop_config.json, "
+                         ".vscode/mcp.json); repeatable")
+    sp.add_argument("--list-tools", action="store_true",
+                    help="start the configured stdio MCP servers to list their tools")
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -545,6 +632,40 @@ def main(argv: list[str] | None = None) -> int:
                     help="init: what reasoning that heads to the impossible does")
     sp.set_defaults(fn=cmd_monitor)
 
+    sp = sub.add_parser("env", help="environment topology: probe, show, diff, merge, watch "
+                                    "(docs/ENVIRONMENT.md)")
+    env_sub = sp.add_subparsers(dest="action", required=True)
+    e = env_sub.add_parser("probe", help="read the environment (Azure, MCP) into skillc.env/1")
+    _add_probe_opts(e)
+    e.add_argument("-o", "--output", default=".skillc/env/latest.json")
+    e = env_sub.add_parser("show", help="summarise an environment file")
+    e.add_argument("file")
+    e.add_argument("--html", metavar="FILE", help="also write the topology as a page")
+    e = env_sub.add_parser("diff", help="what changed between two snapshots")
+    e.add_argument("old")
+    e.add_argument("new")
+    e = env_sub.add_parser("merge", help="combine environment files (e.g. Azure + MCP)")
+    e.add_argument("files", nargs="+")
+    e.add_argument("-o", "--output", required=True)
+    e = env_sub.add_parser("watch", help="re-probe on a schedule; report what changed")
+    _add_probe_opts(e)
+    e.add_argument("--dir", default=".skillc/env", help="where snapshots are kept")
+    e.add_argument("--intent", action="append", metavar="FILE|NAME",
+                   help="intent to re-check after every probe; repeatable")
+    e.add_argument("--interval", type=float, default=3600.0, help="seconds between probes")
+    e.add_argument("--once", action="store_true", help="one round, then exit (cron, CI)")
+    sp.set_defaults(fn=cmd_env)
+
+    sp = sub.add_parser("reach", help="what an intent can achieve in an environment, "
+                                      "and what blocks the rest")
+    sp.add_argument("intent", help="skillc.intent/1 file, or a built-in intent name")
+    sp.add_argument("--env", required=True, help="skillc.env/1 file (from `skillc env probe`)")
+    sp.add_argument("--catalog", help="operation catalogue name or skillc.ops/1 file")
+    sp.add_argument("--json", action="store_true")
+    sp.add_argument("--plan", metavar="FILE", help="write the English + CE plan (Markdown)")
+    sp.add_argument("--html", metavar="FILE", help="write the visual report")
+    sp.set_defaults(fn=cmd_reach)
+
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)
 
@@ -552,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.fn(args)
     except (PackError, CEError, KeyError, FileNotFoundError,
-            json.JSONDecodeError, RuntimeError) as e:
+            json.JSONDecodeError, RuntimeError, ValueError) as e:
         print(f"skillc: error: {e}", file=sys.stderr)
         return 2
 
