@@ -44,8 +44,8 @@ from typing import Any, Callable
 
 import z3
 
-from .formula import CMP, atoms
-from .pack import Capability, Pack, normalize, pack_digest
+from .formula import CMP, atoms, compile_expr, compile_formula
+from .pack import Capability, Pack, iter_steps, normalize, pack_digest
 from .session import ProjectionError, conformance_report, participants, project
 
 REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
@@ -110,79 +110,16 @@ def _mk_typing_state(preds, values: dict[str, z3.ArithRef]) -> TypingState:
     return TypingState(frozenset(preds), tuple(sorted(values.items())))
 
 
-def eval_expr(e: Any, st: State) -> z3.ArithRef:
-    if isinstance(e, int):
-        return z3.IntVal(e)
-    if isinstance(e, str):
-        return st.cur(e)
-    if isinstance(e, dict):
-        if "+" in e:
-            return eval_expr(e["+"][0], st) + eval_expr(e["+"][1], st)
-        if "-" in e:
-            return eval_expr(e["-"][0], st) - eval_expr(e["-"][1], st)
-        if "*" in e:
-            return eval_expr(e["*"][0], st) * eval_expr(e["*"][1], st)
-    raise ValueError(f"bad expr: {e!r}")
+def eval_expr(e: Any, st: State | TypingState) -> z3.ArithRef:
+    return compile_expr(e, st.cur)
 
 
-def eval_typing_expr(e: Any, st: TypingState) -> z3.ArithRef:
-    if isinstance(e, int):
-        return z3.IntVal(e)
-    if isinstance(e, str):
-        return st.cur(e)
-    if isinstance(e, dict):
-        if "+" in e:
-            return (eval_typing_expr(e["+"][0], st)
-                    + eval_typing_expr(e["+"][1], st))
-        if "-" in e:
-            return (eval_typing_expr(e["-"][0], st)
-                    - eval_typing_expr(e["-"][1], st))
-        if "*" in e:
-            return (eval_typing_expr(e["*"][0], st)
-                    * eval_typing_expr(e["*"][1], st))
-    raise ValueError(f"bad expr: {e!r}")
-
-
-def eval_formula(f: Any, st: State) -> z3.BoolRef:
-    """Compile a formula against concrete predicate truth + SSA arith vars."""
-    if f is True:
-        return z3.BoolVal(True)
-    if f is False:
-        return z3.BoolVal(False)
-    if isinstance(f, str):
-        return z3.BoolVal(f in st.true_preds)
-    if isinstance(f, dict):
-        if "and" in f:
-            return z3.And([eval_formula(x, st) for x in f["and"]])
-        if "or" in f:
-            return z3.Or([eval_formula(x, st) for x in f["or"]])
-        if "not" in f:
-            return z3.Not(eval_formula(f["not"], st))
-        if "cmp" in f:
-            lhs, op, rhs = f["cmp"]
-            return CMP[op](eval_expr(lhs, st), eval_expr(rhs, st))
-    raise ValueError(f"bad formula: {f!r}")
-
-
-def eval_typing_formula(f: Any, st: TypingState) -> z3.BoolRef:
-    if f is True:
-        return z3.BoolVal(True)
-    if f is False:
-        return z3.BoolVal(False)
-    if isinstance(f, str):
-        return z3.BoolVal(f in st.true_preds)
-    if isinstance(f, dict):
-        if "and" in f:
-            return z3.And([eval_typing_formula(x, st) for x in f["and"]])
-        if "or" in f:
-            return z3.Or([eval_typing_formula(x, st) for x in f["or"]])
-        if "not" in f:
-            return z3.Not(eval_typing_formula(f["not"], st))
-        if "cmp" in f:
-            lhs, op, rhs = f["cmp"]
-            return CMP[op](eval_typing_expr(lhs, st),
-                           eval_typing_expr(rhs, st))
-    raise ValueError(f"bad formula: {f!r}")
+def eval_formula(f: Any, st: State | TypingState) -> z3.BoolRef:
+    """Compile a formula against concrete predicate truth + symbolic numerics."""
+    return compile_formula(
+        f,
+        pred=lambda name: z3.BoolVal(name in st.true_preds),
+        cmp=lambda lhs, op, rhs: CMP[op](eval_expr(lhs, st), eval_expr(rhs, st)))
 
 
 def _sat(constraints: list, on_unknown: Callable[[], None] | None = None) -> bool:
@@ -200,11 +137,6 @@ def _sat(constraints: list, on_unknown: Callable[[], None] | None = None) -> boo
     if res == z3.unknown and on_unknown is not None:
         on_unknown()
     return res != z3.unsat
-
-
-def guard_satisfiable(st: State, cap: Capability,
-                      on_unknown: Callable[[], None] | None = None) -> bool:
-    return _sat(list(st.arith) + [eval_formula(cap.pre, st)], on_unknown)
 
 
 def apply_effect(st: State, cap: Capability) -> State:
@@ -257,15 +189,7 @@ def roles_acting(steps: list[dict]) -> set[str]:
 
 def has_spawn(steps: list[dict]) -> bool:
     """Dynamic participant spawning: the autonomy boundary (thm:undec)."""
-    for s in steps:
-        if "spawn" in s:
-            return True
-        if "choice" in s:
-            if any(has_spawn(br) for br in s["choice"]["branches"].values()):
-                return True
-        if "rec" in s and has_spawn(s["rec"]["body"]):
-            return True
-    return False
+    return any("spawn" in s for s in iter_steps(steps))
 
 
 # --------------------------------------------------------------------------
@@ -372,6 +296,9 @@ class Checker:
     def _note_solver_unknown(self) -> None:
         self.solver_unknown = True
 
+    def _sat(self, constraints: list) -> bool:
+        return _sat(constraints, self._note_solver_unknown)
+
     def run(self) -> Verdict:
         """Decide the pack, then stamp the verdict with what decided it."""
         v = self._decide()
@@ -398,34 +325,25 @@ class Checker:
         fresh = iter(range(10 ** 9))
 
         def enc(f: Any) -> z3.BoolRef:
-            if f is True:
-                return z3.BoolVal(True)
-            if f is False:
-                return z3.BoolVal(False)
-            if isinstance(f, str):
-                return z3.Bool(f"__predicate_{f}") if f in can else z3.BoolVal(False)
-            if "and" in f:
-                return z3.And([enc(x) for x in f["and"]])
-            if "or" in f:
-                return z3.Or([enc(x) for x in f["or"]])
-            if "not" in f:
-                return z3.Not(enc(f["not"]))
-            if "cmp" in f:
-                return z3.Bool(f"__cmp_{next(fresh)}")   # arithmetic left free
-            raise ValueError(f"bad formula: {f!r}")
+            return compile_formula(
+                f,
+                # non-establishable atoms are pinned FALSE, the rest left free
+                pred=lambda name: (z3.Bool(f"__predicate_{name}") if name in can
+                                   else z3.BoolVal(False)),
+                # arithmetic left free
+                cmp=lambda *_: z3.Bool(f"__cmp_{next(fresh)}"))
 
         if guard_closure:
             remaining = list(self.p.capabilities.values())
             while remaining:
-                enabled = [
-                    cap for cap in remaining
-                    if _sat([enc(cap.pre)], self._note_solver_unknown)]
+                enabled = [cap for cap in remaining
+                           if self._sat([enc(cap.pre)])]
                 if not enabled:
                     break
                 for cap in enabled:
                     can.update(cap.add)
                     remaining.remove(cap)
-        if _sat([enc(self.p.goal)], self._note_solver_unknown):
+        if self._sat([enc(self.p.goal)]):
             return None
         dead = tuple(sorted(atoms(self.p.goal) - can))
         return Verdict(False, "GOAL_UNSAT",
@@ -523,7 +441,7 @@ class Checker:
         values = dict(old)
         constraints: list[z3.BoolRef] = []
         for var, expr in cap.assigns.items():
-            values[var] = eval_typing_expr(expr, st)
+            values[var] = eval_expr(expr, st)
         for var, formula in cap.nondet.items():
             if var in cap.assigns:
                 continue
@@ -531,7 +449,7 @@ class Checker:
             formula_values = dict(old)
             formula_values[var] = fresh
             formula_state = _mk_typing_state(st.true_preds, formula_values)
-            constraints.append(eval_typing_formula(formula, formula_state))
+            constraints.append(eval_formula(formula, formula_state))
             values[var] = fresh
         return _mk_typing_state(preds, values), constraints
 
@@ -543,7 +461,7 @@ class Checker:
         step, rest = steps[0], steps[1:]
         if "goal" in step:
             return z3.And(
-                eval_typing_formula(step["goal"], st),
+                eval_formula(step["goal"], st),
                 self._typing_condition(rest, st, recenv, seen))
         if "msg" in step:
             return self._typing_condition(rest, st, recenv, seen)
@@ -551,7 +469,7 @@ class Checker:
             cap = self.p.capabilities[step["act"]["cap"]]
             post, effect_constraints = self._typing_effect(st, cap)
             return z3.And(
-                eval_typing_formula(cap.pre, st),
+                eval_formula(cap.pre, st),
                 *effect_constraints,
                 self._typing_condition(rest, post, recenv, seen))
         if "choice" in step:
@@ -579,29 +497,21 @@ class Checker:
 
     def _direct_typing_condition(self) -> z3.BoolRef:
         st = _mk_typing_state(self.p.init_true, {})
-        initial = [eval_typing_formula(f, st)
+        initial = [eval_formula(f, st)
                    for f in self.p.init_constraints]
         condition = self._typing_condition(
             self.p.protocol, st, {}, frozenset())
         return z3.And(*initial, condition)
 
     def _missing_caps(self, steps: list[dict]) -> set[str]:
-        out: set[str] = set()
-        for s in steps:
-            if "act" in s and s["act"]["cap"] not in self.p.capabilities:
-                out.add(s["act"]["cap"])
-            if "choice" in s:
-                for br in s["choice"]["branches"].values():
-                    out |= self._missing_caps(br)
-            if "rec" in s:
-                out |= self._missing_caps(s["rec"]["body"])
-        return out
+        return {s["act"]["cap"] for s in iter_steps(steps)
+                if "act" in s and s["act"]["cap"] not in self.p.capabilities}
 
     def _goal_sat(self, st: State) -> bool:
         constraints = list(st.arith) + [eval_formula(self.p.goal, st)]
         if self.typing_condition is not None:
             constraints.append(self.typing_condition)
-        return _sat(constraints, self._note_solver_unknown)
+        return self._sat(constraints)
 
     def _widen(self, st: State, label: str) -> State:
         """Back-edge widening: havoc the numeric summary.  Dropping the
@@ -611,6 +521,25 @@ class Checker:
         bumped = {v: n + 1 for v, n in st.versions().items()}
         return _mk_state(st.true_preds, (), bumped,
                          st.path + (("continue", label),))
+
+    def _act(self, cur: State, cap: Capability) -> State | None:
+        """The successor of a mandatory action, or None (frontier recorded)
+        when its guard or its nondeterministic effect is unsatisfiable."""
+        guard = eval_formula(cap.pre, cur)
+        if not self._sat(list(cur.arith) + [guard]):
+            self.blocked.append(
+                f"capability '{cap.name}' guard never satisfiable on "
+                f"this path (pre={cap.pre!r})")
+            return None
+        guarded = _mk_state(cur.true_preds, list(cur.arith) + [guard],
+                            cur.versions(), cur.path)
+        successor = apply_effect(guarded, cap)
+        if not self._sat(list(successor.arith)):
+            self.blocked.append(
+                f"capability '{cap.name}' has no successor world "
+                f"satisfying its nondeterministic effect")
+            return None
+        return successor
 
     def _reach(self, steps: list[dict], st: State,
                recenv: dict) -> tuple[bool, State]:
@@ -625,23 +554,9 @@ class Checker:
                 cur = _mk_state(cur.true_preds, cur.arith, cur.versions(),
                                 cur.path + (("msg", s["msg"]["label"]),))
             elif "act" in s:
-                cap = self.p.capabilities[s["act"]["cap"]]
-                guard = eval_formula(cap.pre, cur)
-                if not _sat(list(cur.arith) + [guard],
-                            self._note_solver_unknown):
-                    self.blocked.append(
-                        f"capability '{cap.name}' guard never satisfiable on "
-                        f"this path (pre={cap.pre!r})")
+                successor = self._act(cur, self.p.capabilities[s["act"]["cap"]])
+                if successor is None:
                     return False, cur              # mandatory action blocked
-                guarded = _mk_state(
-                    cur.true_preds, list(cur.arith) + [guard],
-                    cur.versions(), cur.path)
-                successor = apply_effect(guarded, cap)
-                if not _sat(list(successor.arith), self._note_solver_unknown):
-                    self.blocked.append(
-                        f"capability '{cap.name}' has no successor world "
-                        f"satisfying its nondeterministic effect")
-                    return False, cur
                 cur = successor
             elif "rec" in s:
                 # mu X. body : the fall-through continuation folds into the

@@ -366,7 +366,7 @@ class Monitor:
 
 def plan_instructions(runtime: Runtime, plan_file: str) -> str:
     """What the agent is told once per session: the plan protocol and the CE grammar."""
-    from .frontend.llm import CE_DOC, CE_RUNTIME_DOC, CE_SOFTWARE_DOC
+    from .frontend.prompts import CE_DOC, CE_RUNTIME_DOC, CE_SOFTWARE_DOC
     from .frontend.runtime import runtime_note
     return (
         "SKILLC RUNTIME MONITOR is active. Before you implement anything (run commands, "

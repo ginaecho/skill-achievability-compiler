@@ -65,7 +65,8 @@ def fetch_sources() -> list[dict]:
 def compact_and_check(rows: list[dict], provider: str, model: str,
                       attempts: int) -> list[dict]:
     from skillc import check
-    from skillc.frontend.llm import DEVELOPER_ABILITIES, compact
+    from skillc.frontend.prompts import DEVELOPER_ABILITIES
+    from skillc.frontend.llm import compact
     from skillc.pack import PackError, pack_digest
 
     PACKS.mkdir(parents=True, exist_ok=True)

@@ -155,3 +155,29 @@ def test_azure_openai_uses_azure_cli_when_key_is_absent(monkeypatch):
 def test_unknown_provider_is_rejected():
     with pytest.raises(RuntimeError, match="unsupported LLM provider"):
         compact("# Skill", provider="other")
+
+
+def test_compact_with_repair_feeds_back_a_non_projectable_refutation(monkeypatch):
+    from skillc.frontend import providers
+    from skillc.frontend.llm import compact_with_repair
+
+    unobserved = {
+        "name": "handoff", "roles": ["a", "b"],
+        "capabilities": {"go": {"owner": "b", "add": ["done"]}},
+        "protocol": [{"choice": {"by": "a", "branches": {
+            "yes": [{"act": {"cap": "go", "by": "b"}}], "no": []}}}],
+        "goal": "done",
+    }
+    observed = json.loads(json.dumps(unobserved))
+    observed["protocol"][0]["choice"]["observed"] = True
+    replies, prompts = iter([unobserved, observed]), []
+
+    def fake(system, user, model, timeout):
+        prompts.append(user)
+        return json.dumps(next(replies))
+
+    monkeypatch.setattr(providers, "anthropic_complete", fake)
+    pack, log = compact_with_repair("# Skill", provider="anthropic")
+    assert pack == observed
+    assert len(log) == 1 and log[0].startswith("repair round: NON_PROJECTABLE")
+    assert "NON_PROJECTABLE" in prompts[1]

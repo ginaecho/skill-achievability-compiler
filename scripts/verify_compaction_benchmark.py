@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from scripts.benchmark_compaction import assess, score, sha, write_json
 from scripts.benchmark_semantics import World, audit_goal_reachability, holds
-from skillc.frontend.llm import _extract_json_object
+from skillc.frontend.providers import extract_json_object
 from skillc.frontend.markdown import compile_markdown
 from skillc.pack import PackError, validate_pack
 from skillc.profiles import Profile
@@ -81,7 +81,7 @@ def verify(directory: Path) -> dict:
             try:
                 if call["finish_reason"] != "stop":
                     raise ValueError(f"incomplete output: {call['finish_reason']}")
-                pack = _extract_json_object(call["output_text"])
+                pack = extract_json_object(call["output_text"])
                 validate_pack(pack)
             except (PackError, ValueError) as exc:
                 messages += [

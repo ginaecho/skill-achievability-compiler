@@ -23,9 +23,9 @@ import sys
 from pathlib import Path
 
 from skillc import __version__, check
-from skillc.frontend.llm import (CONSUMER_ABILITIES, DEFAULT_MODEL,
-                                 DEFAULT_PROVIDER,
-                                 compact_with_repair)
+from skillc.frontend.prompts import CONSUMER_ABILITIES
+from skillc.frontend.providers import DEFAULT_MODEL, DEFAULT_PROVIDER
+from skillc.frontend.llm import compact_with_repair
 from skillc.mutate import (drop_invoked_capability, is_conjunctive,
                            strip_goal_establisher)
 

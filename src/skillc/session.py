@@ -38,7 +38,8 @@ Local types are hashable tuples:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+
+from .pack import iter_steps
 
 END = ("end",)
 
@@ -76,21 +77,16 @@ def participants(steps: list[dict]) -> frozenset:
     step.
     """
     out: set[str] = set()
-    for s in steps:
+    for s in iter_steps(steps):
         if "act" in s:
             out.add(s["act"].get("by", "?"))
         elif "msg" in s:
-            out.add(s["msg"]["from"])
-            out.add(s["msg"]["to"])
+            out |= {s["msg"]["from"], s["msg"]["to"]}
         elif "choice" in s:
             out.add(s["choice"]["by"])
-            for br in s["choice"]["branches"].values():
-                out |= participants(br)
-        elif "rec" in s:
-            out |= participants(s["rec"]["body"])
         elif "spawn" in s:
             out.add(s["spawn"]["role"])
-        # "goal" and "continue" contribute no participants
+        # "goal", "continue" and the "rec" binder contribute no participants
     return frozenset(out)
 
 
@@ -122,10 +118,10 @@ def merge(a: tuple, b: tuple) -> tuple:
         return ("send", a[1], a[2], merge(a[3], b[3]))
     if a[0] == b[0] == "recv" and a[1:3] == b[1:3]:
         return ("recv", a[1], a[2], merge(a[3], b[3]))
-    if a[0] == b[0] == "select" and {l for l, _ in a[1]} == {l for l, _ in b[1]}:
+    if a[0] == b[0] == "select" and dict(a[1]).keys() == dict(b[1]).keys():
         da, db = dict(a[1]), dict(b[1])
         return ("select",
-                tuple(sorted((l, merge(da[l], db[l])) for l in da)))
+                tuple(sorted((lbl, merge(da[lbl], db[lbl])) for lbl in da)))
     raise ProjectionError(f"behaviours do not merge: {a[0]} vs {b[0]}")
 
 
@@ -221,20 +217,40 @@ def _has_behavior(t: tuple) -> bool:
     return False
 
 
+def _conts(t: tuple) -> tuple:
+    """The immediate continuations of a local type."""
+    kind = t[0]
+    if kind in ("act", "rec"):
+        return (t[2],)
+    if kind in ("send", "recv"):
+        return (t[3],)
+    if kind == "select":
+        return tuple(c for _, c in t[1])
+    if kind == "branch":
+        return tuple(c for _, c in t[2])
+    return ()
+
+
+def _map_conts(t: tuple, fn) -> tuple:
+    """`t` with `fn` applied to each immediate continuation."""
+    kind = t[0]
+    if kind in ("act", "rec"):
+        return (kind, t[1], fn(t[2]))
+    if kind in ("send", "recv"):
+        return (kind, t[1], t[2], fn(t[3]))
+    if kind == "select":
+        return ("select", tuple((lbl, fn(c)) for lbl, c in t[1]))
+    if kind == "branch":
+        return ("branch", t[1], tuple((lbl, fn(c)) for lbl, c in t[2]))
+    return t
+
+
 def _occurs(t: tuple, name: str) -> bool:
     if t[0] == "var":
         return t[1] == name
-    if t[0] == "rec":
-        return t[1] != name and _occurs(t[2], name)
-    if t[0] in ("act",):
-        return _occurs(t[2], name)
-    if t[0] in ("send", "recv"):
-        return _occurs(t[3], name)
-    if t[0] == "select":
-        return any(_occurs(c, name) for _, c in t[1])
-    if t[0] == "branch":
-        return any(_occurs(c, name) for _, c in t[2])
-    return False
+    if t[0] == "rec" and t[1] == name:
+        return False                      # shadowed
+    return any(_occurs(c, name) for c in _conts(t))
 
 
 # --------------------------------------------------------------------------
@@ -263,14 +279,11 @@ def parse_local(steps: list) -> tuple:
         return ("recv", body["from"], body["label"], parse_local(rest))
     if kind == "act":
         return ("act", body["cap"], parse_local(rest))
-    if kind == "select":
-        return ("select", tuple(sorted(
-            (l, parse_local(list(br) + rest))
-            for l, br in body["branches"].items())))
-    if kind == "branch":
-        return ("branch", body["from"], tuple(sorted(
-            (l, parse_local(list(br) + rest))
-            for l, br in body["branches"].items())))
+    if kind in ("select", "branch"):
+        arms = tuple(sorted((lbl, parse_local(list(br) + rest))
+                            for lbl, br in body["branches"].items()))
+        return (("select", arms) if kind == "select"
+                else ("branch", body["from"], arms))
     if kind == "rec":
         inner = parse_local(list(body["body"]) + rest)
         return ("rec", body["name"], inner) if _occurs(inner, body["name"]) else inner
@@ -286,17 +299,9 @@ def parse_local(steps: list) -> tuple:
 def _subst(t: tuple, name: str, rep: tuple) -> tuple:
     if t[0] == "var":
         return rep if t[1] == name else t
-    if t[0] == "rec":
-        return t if t[1] == name else ("rec", t[1], _subst(t[2], name, rep))
-    if t[0] == "act":
-        return ("act", t[1], _subst(t[2], name, rep))
-    if t[0] in ("send", "recv"):
-        return (t[0], t[1], t[2], _subst(t[3], name, rep))
-    if t[0] == "select":
-        return ("select", tuple((l, _subst(c, name, rep)) for l, c in t[1]))
-    if t[0] == "branch":
-        return ("branch", t[1], tuple((l, _subst(c, name, rep)) for l, c in t[2]))
-    return t
+    if t[0] == "rec" and t[1] == name:
+        return t                          # shadowed
+    return _map_conts(t, lambda c: _subst(c, name, rep))
 
 
 def _unfold(t: tuple) -> tuple:
@@ -311,33 +316,7 @@ def _unfold(t: tuple) -> tuple:
 
 def subtype(s: tuple, t: tuple) -> bool:
     """Decide S <= T coinductively (regular trees: memo on visited pairs)."""
-    return _sub(s, t, set())
-
-
-def _sub(s: tuple, t: tuple, seen: set) -> bool:
-    s, t = _unfold(s), _unfold(t)
-    if (s, t) in seen:
-        return True                       # coinductive hypothesis
-    seen = seen | {(s, t)}
-    if s == END and t == END:
-        return True
-    if s[0] == t[0] == "var":
-        return s[1] == t[1]
-    if s[0] == t[0] == "act":
-        return s[1] == t[1] and _sub(s[2], t[2], seen)
-    if s[0] == t[0] == "send" or s[0] == t[0] == "recv":
-        return s[1] == t[1] and s[2] == t[2] and _sub(s[3], t[3], seen)
-    if s[0] == t[0] == "branch":          # Sub-Ext: S offers MORE receives
-        if s[1] != t[1]:
-            return False
-        ds, dt = dict(s[2]), dict(t[2])
-        return set(ds) >= set(dt) and all(
-            _sub(ds[l], dt[l], seen) for l in dt)
-    if s[0] == t[0] == "select":          # Sub-Int: S makes FEWER selections
-        ds, dt = dict(s[1]), dict(t[1])
-        return set(ds) <= set(dt) and all(
-            _sub(ds[l], dt[l], seen) for l in ds)
-    return False
+    return _relate(s, t, set(), exact_select=False)
 
 
 # --------------------------------------------------------------------------
@@ -358,30 +337,39 @@ def conforms(s: tuple, t: tuple) -> bool:
       SUPERSET of the contract's -- unrequested branches are simply never
       triggered -- and every contract label must conform.
     """
-    return _conf(s, t, set())
+    return _relate(s, t, set(), exact_select=True)
 
 
-def _conf(s: tuple, t: tuple, seen: set) -> bool:
+def _relate(s: tuple, t: tuple, seen: set, exact_select: bool) -> bool:
+    """≤ (exact_select=False, Gay-Hole) or ⊑ (exact_select=True, direct)."""
     s, t = _unfold(s), _unfold(t)
     if (s, t) in seen:
         return True                       # coinductive hypothesis
     seen = seen | {(s, t)}
     if s == END and t == END:
         return True
-    if s[0] == t[0] == "act":
-        return s[1] == t[1] and _conf(s[2], t[2], seen)
-    if s[0] == t[0] == "send" or s[0] == t[0] == "recv":
-        return s[1] == t[1] and s[2] == t[2] and _conf(s[3], t[3], seen)
-    if s[0] == t[0] == "branch":          # receiver: superset of labels is safe
-        if s[1] != t[1]:
-            return False
+    kind = s[0]
+    if kind != t[0]:
+        return False
+
+    def rel(a: tuple, b: tuple) -> bool:
+        return _relate(a, b, seen, exact_select)
+
+    if kind == "var":                     # free variables: only ≤ compares them
+        return not exact_select and s[1] == t[1]
+    if kind == "act":
+        return s[1] == t[1] and rel(s[2], t[2])
+    if kind in ("send", "recv"):
+        return s[1:3] == t[1:3] and rel(s[3], t[3])
+    if kind == "branch":                  # Sub-Ext: S may offer MORE receives
         ds, dt = dict(s[2]), dict(t[2])
-        return set(ds) >= set(dt) and all(
-            _conf(ds[l], dt[l], seen) for l in dt)
-    if s[0] == t[0] == "select":          # sender: exactly the contract labels
+        return (s[1] == t[1] and ds.keys() >= dt.keys()
+                and all(rel(ds[lbl], dt[lbl]) for lbl in dt))
+    if kind == "select":                  # Sub-Int: FEWER sends; ⊑: exactly
         ds, dt = dict(s[1]), dict(t[1])
-        return set(ds) == set(dt) and all(
-            _conf(ds[l], dt[l], seen) for l in dt)
+        labels_ok = (ds.keys() == dt.keys() if exact_select
+                     else ds.keys() <= dt.keys())
+        return labels_ok and all(rel(ds[lbl], dt[lbl]) for lbl in ds)
     return False
 
 
@@ -399,7 +387,7 @@ class ConformanceReport:
     transporting the verdict to a deployment, so it is reported rather than
     left implicit.
     """
-    failure: Optional[str] = None
+    failure: str | None = None
     assumed: tuple = ()
 
     @property
@@ -439,7 +427,7 @@ def conformance_report(skills: dict[str, list],
 
 
 def conformance_failure(skills: dict[str, list],
-                        protocol: list[dict]) -> Optional[str]:
+                        protocol: list[dict]) -> str | None:
     """Check ∀p. S_p ⊑ G↾p (direct conformance).  Returns None if conformant,
     else a reason.
 
@@ -460,10 +448,11 @@ def _show(t: tuple, depth: int = 0) -> str:
         return f"{t[1]}!{t[2]}.{_show(t[3], depth + 1)}"
     if t[0] == "recv":
         return f"{t[1]}?{t[2]}.{_show(t[3], depth + 1)}"
-    if t[0] == "select":
-        return "+{" + ", ".join(f"{l}: {_show(c, depth + 1)}" for l, c in t[1]) + "}"
-    if t[0] == "branch":
-        return "&{" + ", ".join(f"{l}: {_show(c, depth + 1)}" for l, c in t[2]) + "}"
+    if t[0] in ("select", "branch"):
+        arms = t[1] if t[0] == "select" else t[2]
+        sigil = "+" if t[0] == "select" else "&"
+        return sigil + "{" + ", ".join(
+            f"{lbl}: {_show(c, depth + 1)}" for lbl, c in arms) + "}"
     if t[0] == "rec":
         return f"rec {t[1]}.{_show(t[2], depth + 1)}"
     if t[0] == "var":

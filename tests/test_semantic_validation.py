@@ -83,7 +83,8 @@ def test_live_semantic_loop_on_a_real_skill():
     """The full paper pipeline on a real deployed skill: prose -> untrusted
     LLM compaction -> schema gate -> trusted checker, then two seeded
     semantic faults that must be refuted with the wound named."""
-    from skillc.frontend.llm import CONSUMER_ABILITIES, compact_with_repair
+    from skillc.frontend.prompts import CONSUMER_ABILITIES
+    from skillc.frontend.llm import compact_with_repair
     text = (SKILLS_DIR / "examples/call-to-book/SKILL.md").read_text()
     pack, _ = compact_with_repair(text, runtime_abilities=CONSUMER_ABILITIES)
     assert check(pack).achievable          # deployed skill: no false alarm

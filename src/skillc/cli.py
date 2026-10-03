@@ -42,7 +42,8 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
         if getattr(args, "tool", None):
             profile = profile.with_tools(args.tool)
         if getattr(args, "llm", False):
-            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact, compact_ce
+            from .frontend.prompts import RUNTIME_ABILITY_PROFILES
+            from .frontend.llm import compact, compact_ce
             abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
             abilities.extend(args.runtime_ability or [])
             kwargs = {}

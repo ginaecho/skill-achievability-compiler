@@ -46,11 +46,11 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .formula import FormulaError, validate_expr, validate_formula
 
-STEP_KINDS = ("act", "msg", "choice", "goal")
+CAP_FIELDS = frozenset({"owner", "pre", "add", "del", "assigns", "nondet"})
 
 
 class PackError(ValueError):
@@ -66,6 +66,18 @@ class Capability:
     dele: list[str] = field(default_factory=list)         # predicates -> false
     assigns: dict[str, Any] = field(default_factory=dict)  # var := expr
     nondet: dict[str, Any] = field(default_factory=dict)   # var := * s.t. formula
+
+    @staticmethod
+    def from_dict(name: str, c: dict) -> Capability:
+        return Capability(
+            name=name,
+            owner=c.get("owner", "?"),
+            pre=c.get("pre", True),
+            add=list(c.get("add", [])),
+            dele=list(c.get("del", [])),
+            assigns=dict(c.get("assigns", {})),
+            nondet=dict(c.get("nondet", {})),
+        )
 
     def to_dict(self) -> dict:
         """The JSON shape this capability was loaded from ('del', not 'dele')."""
@@ -91,23 +103,13 @@ class Pack:
     skills: dict[str, list] = field(default_factory=dict)  # declared S_p
 
     @staticmethod
-    def load(d: dict) -> "Pack":
+    def load(d: dict) -> Pack:
         validate_pack(d)
-        caps = {}
-        for n, c in d.get("capabilities", {}).items():
-            caps[n] = Capability(
-                name=n,
-                owner=c.get("owner", "?"),
-                pre=c.get("pre", True),
-                add=list(c.get("add", [])),
-                dele=list(c.get("del", [])),
-                assigns=dict(c.get("assigns", {})),
-                nondet=dict(c.get("nondet", {})),
-            )
         return Pack(
             name=d["name"],
             roles=list(d.get("roles", [])),
-            capabilities=caps,
+            capabilities={n: Capability.from_dict(n, c)
+                          for n, c in d.get("capabilities", {}).items()},
             protocol=d.get("protocol", []),
             goal=d["goal"],
             init_true=list(d.get("init_true", [])),
@@ -116,7 +118,7 @@ class Pack:
         )
 
     @staticmethod
-    def load_file(path: str | Path) -> "Pack":
+    def load_file(path: str | Path) -> Pack:
         with open(path, encoding="utf-8") as fh:
             return Pack.load(json.load(fh))
 
@@ -146,7 +148,7 @@ class Pack:
         }
 
 
-def normalize(pack: "Pack | dict") -> "Pack":
+def normalize(pack: Pack | dict) -> Pack:
     """The schema-gated typed form of a pack, from either accepted shape.
 
     Both inputs (raw dict, Pack object) go through validate_pack, so nothing
@@ -156,7 +158,7 @@ def normalize(pack: "Pack | dict") -> "Pack":
     return Pack.load(pack.to_dict() if isinstance(pack, Pack) else pack)
 
 
-def pack_digest(pack: "Pack | dict") -> str:
+def pack_digest(pack: Pack | dict) -> str:
     """Deterministic identity of a pack: sha256 of its canonical JSON.
 
     Packs that differ only in omitted defaults or key order share a digest;
@@ -168,8 +170,38 @@ def pack_digest(pack: "Pack | dict") -> str:
     return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 
+def iter_steps(steps: list[dict]) -> Iterator[dict]:
+    """Every step of a protocol block, depth-first: nested choice branches and
+    rec bodies included."""
+    for s in steps:
+        yield s
+        if "choice" in s:
+            for branch in s["choice"]["branches"].values():
+                yield from iter_steps(branch)
+        elif "rec" in s:
+            yield from iter_steps(s["rec"]["body"])
+
+
 def _is_name(value: Any) -> bool:
     return isinstance(value, str) and bool(value)
+
+
+def _check_goal_marker(body: Any, p: str, goal: Any, what: str) -> None:
+    try:
+        validate_formula(body, p)
+    except FormulaError as e:
+        raise PackError(str(e)) from e
+    if body != goal:
+        raise PackError(f"{p}: goal {what} must equal the pack's declared goal")
+
+
+def _check_rec_head(body: Any, p: str, rec_names: set) -> None:
+    if not (isinstance(body, dict) and set(body) == {"name", "body"}
+            and _is_name(body.get("name"))
+            and isinstance(body.get("body"), list)):
+        raise PackError(f"{p}: rec needs name+body")
+    if body["name"] in rec_names:
+        raise PackError(f"{p}: duplicate rec name {body['name']!r}")
 
 
 def _check_steps(steps: Any, path: str, goal: Any,
@@ -217,20 +249,9 @@ def _check_steps(steps: Any, path: str, goal: Any,
                     raise PackError(f"{p}: choice labels must be non-empty strings")
                 _check_steps(br, f"{p}.{lbl}", goal, rec_scope, rec_names)
         elif kind == "goal":
-            try:
-                validate_formula(body, p)
-            except FormulaError as e:
-                raise PackError(str(e)) from e
-            if body != goal:
-                raise PackError(
-                    f"{p}: goal marker must equal the pack's declared goal")
+            _check_goal_marker(body, p, goal, "marker")
         elif kind == "rec":
-            if not (isinstance(body, dict) and set(body) == {"name", "body"}
-                    and _is_name(body.get("name"))
-                    and isinstance(body.get("body"), list)):
-                raise PackError(f"{p}: rec needs name+body")
-            if body["name"] in rec_names:
-                raise PackError(f"{p}: duplicate rec name {body['name']!r}")
+            _check_rec_head(body, p, rec_names)
             if (len(body["body"]) == 1
                     and body["body"][0] == {"continue": body["name"]}):
                 raise PackError(
@@ -252,10 +273,6 @@ def _check_steps(steps: Any, path: str, goal: Any,
                 raise PackError(f"{p}: spawn needs role")
         else:
             raise PackError(f"{p}: unknown step kind {kind!r}")
-
-
-LOCAL_KINDS = ("send", "recv", "act", "select", "branch", "rec", "continue",
-               "goal")
 
 
 def _check_local_steps(steps: Any, path: str,
@@ -297,14 +314,9 @@ def _check_local_steps(steps: Any, path: str,
                 _check_local_steps(br, f"{p}.{lbl}", goal,
                                    rec_scope, rec_names)
         elif kind == "rec":
-            if not (isinstance(body, dict) and set(body) == {"name", "body"}
-                    and _is_name(body.get("name"))
-                    and isinstance(body.get("body"), list)):
-                raise PackError(f"{p}: rec needs name+body")
-            if body["name"] in rec_names:
-                raise PackError(f"{p}: duplicate rec name {body['name']!r}")
+            _check_rec_head(body, p, rec_names)
             meaningful = [step for step in body["body"] if "goal" not in step]
-            if (meaningful == [{"continue": body["name"]}]):
+            if meaningful == [{"continue": body["name"]}]:
                 raise PackError(
                     f"{p}: recursion must be guarded by a local action")
             rec_names.add(body["name"])
@@ -316,13 +328,7 @@ def _check_local_steps(steps: Any, path: str,
             if i != len(steps) - 1:
                 raise PackError(f"{p}: continue must be in tail position")
         elif kind == "goal":
-            try:
-                validate_formula(body, p)
-            except FormulaError as e:
-                raise PackError(str(e)) from e
-            if body != goal:
-                raise PackError(
-                    f"{p}: goal annotation must equal the pack's declared goal")
+            _check_goal_marker(body, p, goal, "annotation")
         else:
             raise PackError(f"{p}: unknown local step kind {kind!r}")
 
@@ -355,7 +361,7 @@ def validate_pack(pack: Any) -> None:
                 raise PackError("capability names must be non-empty strings")
             if not isinstance(c, dict):
                 raise PackError(f"cap[{cn}] must be a dict")
-            if not set(c) <= {"owner", "pre", "add", "del", "assigns", "nondet"}:
+            if not set(c) <= CAP_FIELDS:
                 raise PackError(f"cap[{cn}] has unknown fields")
             if "owner" in c and not _is_name(c["owner"]):
                 raise PackError(f"cap[{cn}].owner must be a non-empty string")

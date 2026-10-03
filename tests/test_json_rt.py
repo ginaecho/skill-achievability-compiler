@@ -3,7 +3,8 @@ the ParseResult the CE parser yields for the same logical block."""
 import json
 
 from skillc.frontend.ce import parse_ce_detailed
-from skillc.frontend.llm import json_runtime_messages, parse_json_rt
+from skillc.frontend.prompts import json_runtime_messages
+from skillc.frontend.llm import parse_json_rt
 from skillc.frontend.runtime import bind_runtime, load_runtime
 
 CE = """Skill `demo`.

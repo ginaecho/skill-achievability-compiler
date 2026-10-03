@@ -219,7 +219,7 @@ def compaction_cost(skill_text: str, *, system_text: Optional[str] = None,
     """
     if repair_rounds < 0:
         raise ValueError("repair_rounds must be >= 0")
-    from .frontend.llm import SYSTEM
+    from .frontend.prompts import SYSTEM
     sys_tokens = estimate_tokens(system_text if system_text is not None
                                  else SYSTEM, chars_per_token)
     skill_tokens = estimate_tokens(skill_text, chars_per_token)

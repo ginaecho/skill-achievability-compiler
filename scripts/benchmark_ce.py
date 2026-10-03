@@ -44,9 +44,11 @@ from scripts.benchmark_compaction import SYSTEM_NOTE, VARIANTS, assess, score  #
 from skillc import check  # noqa: E402
 from skillc.formula import atoms  # noqa: E402
 from skillc.frontend.ce import CEError, compile_ce, extract_ce, render_ce, parse_ce, canonical_pack  # noqa: E402
-from skillc.frontend.llm import (CE_RETRY_PROMPT, RUNTIME_ABILITIES_NOTE,  # noqa: E402
-                                 RUNTIME_ABILITY_PROFILES, SYSTEM,
-                                 _extract_json_object, ce_messages, CE_SYSTEM)
+from skillc.frontend.prompts import (CE_RETRY_PROMPT, CE_SYSTEM,  # noqa: E402
+                                     RUNTIME_ABILITIES_NOTE,
+                                     RUNTIME_ABILITY_PROFILES, SYSTEM,
+                                     ce_messages)
+from skillc.frontend.providers import extract_json_object  # noqa: E402
 from skillc.frontend.markdown import compile_markdown  # noqa: E402
 from skillc.pack import PackError, validate_pack  # noqa: E402
 from skillc.profiles import load_profile  # noqa: E402
@@ -174,7 +176,7 @@ def prepare(out: Path, n_real: int, n_stable: int, samples: int) -> None:
 def parse_reply(arm: str, text: str) -> dict:
     try:
         if arm == "json":
-            pack = _extract_json_object(text)
+            pack = extract_json_object(text)
             validate_pack(pack)
         else:
             pack = compile_ce(extract_ce(text))
@@ -539,7 +541,7 @@ def posthoc(out: Path) -> None:
             first = parse_reply(arm, reply)["ok"]
             if arm == "json" and not first:
                 try:
-                    pack = _coerce_list_pre(_extract_json_object(reply))
+                    pack = _coerce_list_pre(extract_json_object(reply))
                     validate_pack(pack)
                     first = True
                 except (PackError, ValueError, KeyError, TypeError):

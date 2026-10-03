@@ -29,12 +29,9 @@ from scripts.benchmark_semantics import (  # noqa: E402
 )
 from skillc import check  # noqa: E402
 from skillc.evaluate import evaluate, refutation_metrics  # noqa: E402
-from skillc.frontend.llm import (  # noqa: E402
-    DEVELOPER_ABILITIES,
-    RUNTIME_ABILITIES_NOTE,
-    SYSTEM,
-    _extract_json_object,
-)
+from skillc.frontend.prompts import (DEVELOPER_ABILITIES,  # noqa: E402
+                                     RUNTIME_ABILITIES_NOTE, SYSTEM)
+from skillc.frontend.providers import extract_json_object  # noqa: E402
 from skillc.pack import PackError, validate_pack  # noqa: E402
 
 DEFAULT_ENDPOINT = "https://foundary-tzuc06.openai.azure.com/openai/v1"
@@ -292,7 +289,7 @@ def compact_case(
         )
         rows.append(row)
         try:
-            pack = _extract_json_object(row["output_text"])
+            pack = extract_json_object(row["output_text"])
             validate_pack(pack)
             return pack, rows
         except (PackError, ValueError, KeyError, TypeError) as exc:
@@ -639,7 +636,7 @@ def reuse_compaction(case: dict, directory: Path) -> tuple[dict, list[dict]]:
         if (row := json.loads(line))["phase"] == "compaction"
         and row["case_id"] == case["id"]
     ]
-    if not rows or _extract_json_object(rows[-1]["output_text"]) != pack:
+    if not rows or extract_json_object(rows[-1]["output_text"]) != pack:
         raise ValueError(f"{case['id']}: saved pack differs from recorded model output")
     if any(row.get("usage") is None for row in rows):
         raise ValueError(f"{case['id']}: reused compaction lacks measured usage")
