@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import re
 
-from .model import Environment, Fact, matches, norm_id
+from .model import Environment, Fact, all_of, matches, norm_id
 
 
 def _grants(perms: dict, action: str, data: bool) -> bool:
@@ -126,3 +126,110 @@ def tools_matching(env: Environment, patterns: list[str]) -> list[dict]:
     """Connected tools whose name matches any regular expression in `patterns`."""
     rx = [re.compile(p, re.IGNORECASE) for p in patterns]
     return [t for t in env.of_kind("tool") if any(r.search(t["name"]) for r in rx)]
+
+
+# --------------------------------------------------------------------------
+# Runtime needs: what an operation requires of the agent's runtime
+# --------------------------------------------------------------------------
+
+NEED_KINDS = ("program", "pymodule", "egress", "credential", "path", "tool",
+              "mcp_tool", "mcp_server", "platform", "daemon", "any", "all")
+
+
+def need(env: Environment, spec: dict) -> Fact:
+    """One runtime need, e.g. {"program": "az"}, {"egress": "pypi.org"},
+    {"credential": "GITHUB_TOKEN"}, {"path": "/workspace"},
+    {"tool": "WebFetch", "arg": "domain:example.com"}, {"mcp_tool": "search"},
+    {"mcp_server": "github"}."""
+    kind = next((k for k in NEED_KINDS if k in spec), None)
+    if kind is None:
+        raise ValueError(f"unknown need {spec!r}; kinds: {NEED_KINDS}")
+    value = spec[kind]
+    if kind == "all":
+        return all_of([need(env, s) for s in value])
+    if kind == "any":
+        facts = [need(env, s) for s in value]
+        hit = next((f for f in facts if f.value is True), None)
+        if hit is not None:
+            return hit
+        open_ = [f for f in facts if f.value is None]
+        if open_:
+            return Fact(None, tuple(r for f in open_ for r in f.reasons),
+                        tuple(dict.fromkeys(a for f in open_ for a in f.assuming())))
+        return Fact(False, (" and ".join(r for f in facts for r in f.reasons),))
+    if kind in ("program", "pymodule", "egress", "credential", "platform", "daemon"):
+        return _service_need(env, kind, value)
+    if kind == "path":
+        return _path_need(env, value)
+    if kind == "tool":
+        return _tool_need(env, value, spec.get("arg"))
+    return _mcp_need(env, kind, value)
+
+
+def _service_need(env: Environment, kind: str, value: str) -> Fact:
+    node = env.nodes.get(norm_id(f"{kind}/{value}"))
+    label = {"pymodule": "Python module", "egress": "network access to",
+             "platform": "platform", "daemon": "a running"}.get(kind, kind)
+    if node is None or (kind == "egress" and env.is_unknown("egress")):
+        return Fact(None, (f"{label} {value} was not probed",),
+                    (f"{label} {value} is available",))
+    why = node["attrs"].get("why")
+    detail = f" ({why})" if why else ""
+    if node["attrs"].get("available"):
+        assumptions = ((f"credential {value} is valid for this task",)
+                       if kind == "credential" else ())
+        return Fact(True, (f"{label} {value} is available{detail}",), assumptions)
+    return Fact(False, (f"{label} {value} is not available{detail}",))
+
+
+def _path_need(env: Environment, path: str) -> Fact:
+    probed = [n for n in env.of_kind("scope") if n["attrs"].get("level") == "path"
+              and (path == n["name"] or path.startswith(n["name"].rstrip("/") + "/"))]
+    if not probed:
+        return Fact(None, (f"path {path} was not probed",), (f"path {path} is writable",))
+    node = max(probed, key=lambda n: len(n["name"]))
+    if node["attrs"].get("writable"):
+        return Fact(True, (f"{node['name']} is writable",))
+    return Fact(False, (f"{node['name']} is not writable",))
+
+
+def _tool_need(env: Environment, tool: str, arg: str | None) -> Fact:
+    if norm_id(f"tool/{tool}") not in env.nodes:
+        return Fact(False, (f"the runtime has no {tool} tool",))
+    action = f"{tool}({arg})" if arg else tool
+    principal = env.principal()
+    for edge in env.out_edges(principal["id"], "denied") if principal else []:
+        if _grants(env.nodes[edge["dst"]]["attrs"], action, data=False):
+            return Fact(False, (f"a deny rule blocks {action}",))
+    for edge in env.out_edges(principal["id"], "assigned") if principal else []:
+        if not edge["attrs"].get("condition") and _grants(env.nodes[edge["dst"]]["attrs"],
+                                                         action, data=False):
+            return Fact(True, (f"an allow rule permits {action}",))
+    return Fact(None, (f"no rule allows {action}; the runtime asks before using it",),
+                (f"the user approves {action} when asked",))
+
+
+def _mcp_need(env: Environment, kind: str, value: str) -> Fact:
+    if kind == "mcp_server":
+        node = env.nodes.get(norm_id(f"mcp/{value}"))
+        if node is None:
+            return Fact(False, (f"no MCP server {value} is connected",))
+        if node["attrs"].get("needs_auth"):
+            return Fact(False, (f"MCP server {value} is waiting for sign-in",))
+        return Fact(True, (f"MCP server {value} is connected",))
+    servers = {n["id"]: n for n in env.of_kind("mcp_server")}
+    rx = re.compile(value, re.IGNORECASE)
+    found = []
+    for edge in env.edges:
+        server = servers.get(edge["src"])
+        if (edge["kind"] == "exposes" and server is not None
+                and not server["attrs"].get("needs_auth")
+                and rx.search(env.nodes[edge["dst"]]["name"])):
+            found.append(f"{server['name']}/{env.nodes[edge['dst']]['name']}")
+    if found:
+        return Fact(True, (f"MCP tool {found[0]} is connected",))
+    unlisted = [u["what"] for u in env.unknown if u["what"].startswith("mcp_tools:")]
+    if unlisted:
+        return Fact(None, (f"no listed MCP tool matches {value!r}",),
+                    (f"an unlisted MCP tool ({', '.join(unlisted)}) matches {value!r}",))
+    return Fact(False, (f"no connected MCP tool matches {value!r}",))

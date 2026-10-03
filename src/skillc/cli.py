@@ -433,9 +433,34 @@ def _probe_env(args):
         envs.append(azure.probe(azure.live_runner(args.save_raw), args.subscription))
     if args.mcp_config:
         envs.append(mcp.probe(args.mcp_config, list_tools=args.list_tools))
+    if args.claude:
+        envs.append(_probe_claude(args, args.needs_from or []))
     if not envs:
-        raise ValueError("say what to probe: --azure, --from-raw DIR and/or --mcp-config FILE")
+        raise ValueError("say what to probe: --azure, --from-raw DIR, --claude "
+                         "and/or --mcp-config FILE")
     return merge(*envs)
+
+
+def _probe_claude(args, intents):
+    """The Claude runtime, asking about everything the given intents need."""
+    from .env import claude
+    from .env.reach import intent_needs, load_intent
+    wanted = {"egress": list(args.host or []), "program": list(args.program or []),
+              "pymodule": list(args.module or []), "path": list(args.path or []),
+              "credential": []}
+    for intent in intents:
+        intent = load_intent(intent) if isinstance(intent, str) else intent
+        for kind, values in intent_needs(intent).items():
+            wanted.setdefault(kind, []).extend(values)
+    tools = (json.loads(Path(args.tools_file).read_text(encoding="utf-8"))
+             if args.tools_file else None)
+    connectors = (json.loads(Path(args.connectors_file).read_text(encoding="utf-8"))
+                  if args.connectors_file else None)
+    return claude.probe(hosts=wanted["egress"], programs=wanted["program"],
+                        modules=wanted["pymodule"], paths=wanted["path"],
+                        credentials=[*claude.CREDENTIALS, *wanted["credential"]],
+                        tools=tools, connectors=connectors,
+                        check_egress=not args.no_egress)
 
 
 def cmd_env(args) -> int:
@@ -478,9 +503,17 @@ def cmd_reach(args) -> int:
     from .env.model import Environment
     from .env.reach import as_json, load_catalog, load_intent, reach
     from .env.report import english_plan, html_page, text_report
-    env = Environment.load(args.env)
-    result = reach(load_intent(args.intent), env,
-                   load_catalog(args.catalog) if args.catalog else None)
+    intent = load_intent(args.intent)
+    if args.env:
+        env = Environment.load(args.env)
+    elif args.claude:
+        env = _probe_claude(args, [intent])
+        if args.save_env:
+            env.save(args.save_env)
+            print(f"wrote {args.save_env}", file=sys.stderr)
+    else:
+        raise ValueError("say where to look: --env FILE, or --claude to probe this runtime")
+    result = reach(intent, env, load_catalog(args.catalog) if args.catalog else None)
     print(as_json(result) if args.json else text_report(result))
     if args.plan:
         Path(args.plan).write_text(english_plan(result), encoding="utf-8")
@@ -491,6 +524,26 @@ def cmd_reach(args) -> int:
     if result.blocked:
         return 1
     return 0 if result.complete else 3
+
+
+def cmd_intent(args) -> int:
+    """What a SKILL.md / agent.md needs from its runtime, as a skillc.intent/1."""
+    from .env.nl import intent_from_text
+    intent = intent_from_text(Path(args.file).read_text(encoding="utf-8"), source=args.file)
+    if args.output:
+        Path(args.output).write_text(json.dumps(intent, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {args.output}", file=sys.stderr)
+        return 0
+    if args.json:
+        print(json.dumps(intent, indent=1))
+        return 0
+    print(f"{intent['name']}: {intent['description'][:200]}")
+    for kind, conds in (("needs", intent["goal"]), ("optional", intent["optional"])):
+        for cond in conds:
+            print(f"  {kind:<8} {cond}")
+            for line in intent["evidence"].get(cond, [])[:2]:
+                print(f"           {line}")
+    return 0
 
 
 def _add_probe_opts(sp) -> None:
@@ -506,6 +559,26 @@ def _add_probe_opts(sp) -> None:
                          ".vscode/mcp.json); repeatable")
     sp.add_argument("--list-tools", action="store_true",
                     help="start the configured stdio MCP servers to list their tools")
+    sp.add_argument("--needs-from", action="append", metavar="INTENT",
+                    help="with --claude: probe what these intents' operations need")
+    _add_claude_opts(sp)
+
+
+def _add_claude_opts(sp) -> None:
+    sp.add_argument("--claude", action="store_true",
+                    help="probe the Claude runtime: tools, permission rules, egress, "
+                         "programs, modules, credentials (names only), paths, connectors")
+    sp.add_argument("--host", action="append", help="with --claude: check egress to HOST")
+    sp.add_argument("--program", action="append", help="with --claude: look for PROGRAM")
+    sp.add_argument("--module", action="append", help="with --claude: look for a Python module")
+    sp.add_argument("--path", action="append", help="with --claude: check PATH is writable")
+    sp.add_argument("--tools-file", metavar="JSON",
+                    help="with --claude: the session's tool names (default: claude-code profile)")
+    sp.add_argument("--connectors-file", metavar="JSON",
+                    help="with --claude: {connector: [tool, ...]} for connected MCP servers "
+                         "not in any config file")
+    sp.add_argument("--no-egress", action="store_true",
+                    help="with --claude: do not send the egress requests")
 
 
 def cmd_profiles(args) -> int:
@@ -658,13 +731,23 @@ def main(argv: list[str] | None = None) -> int:
 
     sp = sub.add_parser("reach", help="what an intent can achieve in an environment, "
                                       "and what blocks the rest")
-    sp.add_argument("intent", help="skillc.intent/1 file, or a built-in intent name")
-    sp.add_argument("--env", required=True, help="skillc.env/1 file (from `skillc env probe`)")
+    sp.add_argument("intent", help="skillc.intent/1 file, a built-in intent name, "
+                                   "or a SKILL.md / agent.md")
+    sp.add_argument("--env", help="skillc.env/1 file (from `skillc env probe`)")
+    sp.add_argument("--save-env", metavar="FILE", help="with --claude: keep the probe")
+    _add_claude_opts(sp)
     sp.add_argument("--catalog", help="operation catalogue name or skillc.ops/1 file")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("--plan", metavar="FILE", help="write the English + CE plan (Markdown)")
     sp.add_argument("--html", metavar="FILE", help="write the visual report")
     sp.set_defaults(fn=cmd_reach)
+
+    sp = sub.add_parser("intent", help="what a SKILL.md / agent.md needs from its runtime "
+                                       "(natural-language front-end)")
+    sp.add_argument("file", help="SKILL.md or agent.md")
+    sp.add_argument("--json", action="store_true")
+    sp.add_argument("-o", "--output", help="write the skillc.intent/1 JSON here")
+    sp.set_defaults(fn=cmd_intent)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)

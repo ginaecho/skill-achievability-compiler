@@ -53,9 +53,12 @@ def env_summary(env: Environment) -> str:
 
 def text_report(result: ReachResult) -> str:
     intent = result.intent
-    lines = [f"intent: {intent.get('name')} -- {intent.get('description', '')}".rstrip(" -"),
-             f"target: {explain_scope(intent['target']['scope'])}"
-             f" in {intent['target'].get('location', '?')}",
+    description = intent.get("description", "")
+    description = description if len(description) <= 240 else description[:237] + "..."
+    target = intent["target"]
+    lines = [f"intent: {intent.get('name')} -- {description}".rstrip(" -"),
+             f"target: {explain_scope(target['scope'])}"
+             + (f" in {target['location']}" if target.get("location") else ""),
              f"environment captured {result.captured_at}", "",
              "conditions (OK = achievable, OK* = achievable under assumptions, NO = blocked):"]
     for cond, status in result.status.items():

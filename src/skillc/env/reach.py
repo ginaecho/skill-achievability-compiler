@@ -30,7 +30,7 @@ from pathlib import Path
 
 from ..checker import Verdict, check
 from .azure import builtin_roles
-from .facts import can, policy_allows, service_available, tools_matching
+from .facts import can, need, policy_allows, service_available, tools_matching
 from .model import Environment, Fact, all_of, matches, norm_id
 
 INTENT_SCHEMA = "skillc.intent/1"
@@ -57,7 +57,12 @@ def load_catalog(name_or_path: str) -> dict:
 
 
 def load_intent(path: str | Path) -> dict:
+    """A skillc.intent/1 file, a built-in intent name, or a SKILL.md / agent.md
+    (read by the natural-language front-end, `env.nl`)."""
     p = Path(path)
+    if p.suffix.lower() == ".md" and p.exists():
+        from .nl import intent_from_text
+        return intent_from_text(p.read_text(encoding="utf-8"), source=str(p))
     if not p.exists():
         p = Path(str(resources.files("skillc").joinpath(f"data/env/intents/{path}.json")))
     intent = json.loads(p.read_text(encoding="utf-8"))
@@ -177,6 +182,7 @@ def _availability(op: dict, env: Environment, intent: dict) -> Fact:
                                    intent["target"]["scope"]))
     for data_id in op.get("uses_data") or []:
         _data(intent, data_id)                      # must be declared
+    facts += [need(env, spec) for spec in op.get("needs") or []]
     return all_of(facts) if facts else Fact(True, ("it needs no permission beyond its "
                                                   "prerequisites",))
 
@@ -188,7 +194,8 @@ def _initial(catalog: dict, env: Environment, intent: dict,
     held: dict[str, list[str]] = {}
     for cap in catalog.get("capabilities") or []:
         fact = all_of([can(env, a, _scope_for(cap.get("at", "target"), intent), data=True)
-                       for a in cap["data_actions"]])
+                       for a in cap.get("data_actions") or []]
+                      + [need(env, spec) for spec in cap.get("needs") or []])
         if fact.possible:
             held[cap["pred"]] = list(fact.assuming())
             evidence[cap["pred"]] = list(dict.fromkeys(fact.reasons))
@@ -266,6 +273,11 @@ def _pack(name: str, ops: list[dict], held: set[str], plan: list[dict],
 def reach(intent: dict, env: Environment, catalog: dict | None = None) -> ReachResult:
     intent = _resolve(intent, env)
     catalog = catalog or load_catalog(intent.get("catalog", "azure"))
+    if intent.get("operations") or intent.get("capabilities"):
+        catalog = {**catalog,
+                   "operations": [*catalog["operations"], *(intent.get("operations") or [])],
+                   "capabilities": [*(catalog.get("capabilities") or []),
+                                    *(intent.get("capabilities") or [])]}
     evidence: dict[str, list[str]] = {}
     held_assumed = _initial(catalog, env, intent, evidence)
     held = set(held_assumed)
@@ -392,6 +404,11 @@ def _explain(blocked: list[str], catalog: dict, env: Environment, intent: dict,
 
 def _capability_blocker(cap: dict, env: Environment, intent: dict) -> Blocker:
     """A data-plane capability the principal does not hold, and who grants it."""
+    if cap.get("needs"):
+        facts = [need(env, spec) for spec in cap["needs"]]
+        return Blocker(cap["pred"], "-", cap.get("title", cap["pred"]),
+                       [r for f in facts if f.value is False for r in f.reasons],
+                       [cap["fix"]] if cap.get("fix") else ["provide it in the environment"])
     scope = _scope_for(cap.get("at", "target"), intent)
     facts = [can(env, a, scope, data=True) for a in cap["data_actions"]]
     roles = granting_roles(cap["data_actions"], data=True)
@@ -426,6 +443,25 @@ def _unblock(op: dict, fact: Fact, env: Environment, intent: dict) -> list[str]:
         tips.append("or connect an MCP server whose tools can do this "
                     f"(matching {op['mcp']['tools'][0]!r})")
     return tips or ["see the reasons above"]
+
+
+def intent_needs(intent: dict) -> dict[str, list[str]]:
+    """Every runtime need the intent's operations and capabilities name, by kind
+    (nested any/all needs included) -- what a probe has to look at."""
+    out: dict[str, list[str]] = {}
+
+    def walk(spec: dict) -> None:
+        for kind, value in spec.items():
+            if kind in ("any", "all"):
+                for inner in value:
+                    walk(inner)
+            elif kind != "arg":
+                out.setdefault(kind, []).append(value)
+
+    for item in [*(intent.get("operations") or []), *(intent.get("capabilities") or [])]:
+        for spec in item.get("needs") or []:
+            walk(spec)
+    return out
 
 
 def granting_roles(actions: list[str], data: bool = False) -> list[str]:
