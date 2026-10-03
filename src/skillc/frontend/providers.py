@@ -10,12 +10,52 @@ import os
 import shutil
 import subprocess
 import urllib.request
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib.parse import quote, urlencode, urlparse
 
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 PROVIDERS = ("anthropic", "azure-openai")
+
+
+# Usage blocks of the provider calls made inside `metered()` (None: not metering).
+_USAGE: ContextVar[list[dict] | None] = ContextVar("skillc_llm_usage", default=None)
+
+
+@contextmanager
+def metered() -> Iterator[list[dict]]:
+    """Collect the token usage every provider call inside the block reports.
+
+    Yields a list that fills with Anthropic-shaped usage blocks
+    (``input_tokens``, ``output_tokens``, ``cache_read_input_tokens``, ...);
+    `skillc.tokens.measured_cost` turns it into a measured `Cost`.
+    """
+    usage: list[dict] = []
+    token = _USAGE.set(usage)
+    try:
+        yield usage
+    finally:
+        _USAGE.reset(token)
+
+
+def _record_usage(usage: dict | None) -> None:
+    sink = _USAGE.get()
+    if sink is not None and usage:
+        sink.append(usage)
+
+
+def _azure_usage(usage: dict | None) -> dict | None:
+    """An OpenAI-style usage block in the Anthropic shape (prompt tokens
+    include the cached ones there; here they are separated)."""
+    if not usage:
+        return None
+    cached = int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+    return {"input_tokens": int(usage.get("prompt_tokens", 0)) - cached,
+            "output_tokens": int(usage.get("completion_tokens", 0)),
+            "cache_read_input_tokens": cached}
 
 
 def resolve_provider(provider: str | None = None) -> str:
@@ -54,6 +94,7 @@ def anthropic_complete(system: str, user: str, model: str,
                  "anthropic-version": "2023-06-01"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         out = json.load(r)
+    _record_usage(out.get("usage"))
     return "".join(b.get("text", "") for b in out.get("content", [])
                    if b.get("type") == "text").strip()
 
@@ -123,6 +164,7 @@ def azure_openai_complete(system: str, user: str, model: str | None,
     )
     with urllib.request.urlopen(req, timeout=timeout) as r:
         out = json.load(r)
+    _record_usage(_azure_usage(out.get("usage")))
     choices = out.get("choices", [])
     if not choices:
         raise ValueError("Azure OpenAI response contained no choices")

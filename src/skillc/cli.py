@@ -224,20 +224,24 @@ def cmd_cost(args) -> int:
     the honest denominator -- verification as a share of one successful run,
     which is what a healthy skill pays for the check that told it nothing.
     """
+    from .frontend.llm import metered
     from .tokens import (FAILURE_PROFILES, SUCCESSFUL_RUN_TURNS, CorpusEconomics,
-                         RuntimeModel, check_cost, economics, estimate_tokens)
+                         RuntimeModel, check_cost, economics, estimate_tokens,
+                         measured_cost)
 
     # Two independent questions, two flags: --llm actually compacts with the
-    # model (and then prices what it really used); --price-llm prices what
-    # the LLM front-end *would* cost without spending a token on it.
+    # model and prices the usage the API reported for those calls; --price-llm
+    # models what the LLM front-end *would* cost without spending a token.
     priced_llm = args.llm or args.price_llm
 
-    sources: list[tuple[str, str, dict]] = []      # (name, source text, pack)
+    # (name, source text, pack, usage blocks of the compaction calls)
+    sources: list[tuple[str, str, dict, list[dict]]] = []
     if args.corpus:
         for spec in load_corpus():
             # `nl` is the spec's natural-language source: the actual
-            # input a compaction front-end would be billed for.
-            sources.append((spec["id"], spec.get("nl", ""), spec["pack"]))
+            # input a compaction front-end would be billed for.  The corpus
+            # ships packs, so nothing is compacted and nothing is measured.
+            sources.append((spec["id"], spec.get("nl", ""), spec["pack"], []))
     else:
         root = Path(args.path) if args.path else None
         if root is None:
@@ -250,23 +254,30 @@ def cmd_cost(args) -> int:
         for f in files:
             text = f.read_text(encoding="utf-8") if f.suffix != ".json" else ""
             try:
-                pack, _ = _load_result(f, args)
+                with metered() as usage:
+                    pack, _ = _load_result(f, args)
             except (PackError, ValueError) as e:
                 print(f"skillc: {f}: {type(e).__name__}: {e}", file=sys.stderr)
                 continue
-            sources.append((pack.get("name", f.stem), text, pack))
+            sources.append((pack.get("name", f.stem), text, pack, usage))
 
     model = RuntimeModel(cache_hit_rate=args.cache_hit_rate)
     corpus = CorpusEconomics(price=args.price)
     achievable: list[tuple[str, int, int]] = []
-    for name, text, pack in sources:
+    measured: list[bool] = []          # per priced skill: usage measured?
+    for name, text, pack, usage in sources:
         try:
             v = check(pack)
         except (PackError, ValueError) as e:
             print(f"skillc: {name}: {type(e).__name__}: {e}", file=sys.stderr)
             continue
         src = text or json.dumps(pack)
-        ver = check_cost(src, llm=priced_llm, repair_rounds=args.repair_rounds)
+        if args.llm and usage:
+            ver = measured_cost(usage)
+        else:
+            ver = check_cost(src, llm=priced_llm, repair_rounds=args.repair_rounds)
+        if priced_llm:
+            measured.append(ver.measured)
         if v.refuted and v.reason in FAILURE_PROFILES:
             corpus.rows.append(economics(
                 src, v.reason, name=name, model=model,
@@ -276,8 +287,10 @@ def cmd_cost(args) -> int:
                 SUCCESSFUL_RUN_TURNS)
             achievable.append((name, ver.total_tokens, run.total_tokens))
 
+    front = _front_end_label(priced_llm, measured)
     if args.json:
         out = corpus.to_dict()
+        out["front_end"] = front
         out["not_refuted"] = [
             {"skill": n, "verification_tokens": vt,
              "successful_run_tokens": rt,
@@ -286,14 +299,12 @@ def cmd_cost(args) -> int:
         print(json.dumps(out, indent=2))
         return 0
 
-    _print_cost_report(corpus, achievable, args)
+    _print_cost_report(corpus, achievable, front)
     return 0
 
 
-def _print_cost_report(corpus, achievable: list[tuple[str, int, int]], args) -> None:
-    front = ("LLM compaction (measured)" if args.llm else
-             "LLM compaction (modelled)" if args.price_llm else
-             "deterministic front-end")
+def _print_cost_report(corpus, achievable: list[tuple[str, int, int]],
+                       front: str) -> None:
     print(f"front-end: {front}   trusted checker: 0 tokens (z3, no model in "
           f"the decision path)")
     if corpus.rows:
@@ -330,6 +341,17 @@ def _print_cost_report(corpus, achievable: list[tuple[str, int, int]], args) -> 
         print(f"  checking is {share:.1f}% of running each skill once")
     print("\nRuntime waste is a MODEL, not a measurement (see skillc.tokens): "
           "\nit prices a run that, if the refutation is right, never happens.")
+
+
+def _front_end_label(priced_llm: bool, measured: list[bool]) -> str:
+    """Says "measured" only for usage a live API call actually reported."""
+    if not priced_llm:
+        return "deterministic front-end"
+    if measured and all(measured):
+        return "LLM compaction (measured)"
+    if any(measured):
+        return "LLM compaction (measured where the API reported usage, else modelled)"
+    return "LLM compaction (modelled)"
 
 
 def _fmt(n: int) -> str:
@@ -493,7 +515,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--price", default="mid", choices=("frontier", "mid", "small"),
                     help="price tier used to convert tokens to dollars")
     sp.add_argument("--repair-rounds", type=int, default=0,
-                    help="LLM compaction repair rounds to price in (--llm)")
+                    help="repair rounds to price into a modelled LLM compaction "
+                         "cost (a measured --llm run counts the calls it made)")
     sp.add_argument("--cache-hit-rate", type=float, default=0.0, metavar="R",
                     help="fraction of the re-read runtime prefix served from "
                          "cache; changes dollars, never token counts")

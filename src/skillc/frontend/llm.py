@@ -16,10 +16,12 @@ import json
 
 from ..checker import check
 from ..pack import PackError, validate_pack
+from ..tokens import Cost, measured_cost
 from . import providers
 from .ce import CEError, ParseResult, compile_ce, extract_ce, parse_ce_detailed
 from .prompts import (CE_RETRY_PROMPT, REPAIR_PROMPT, RUNTIME_ABILITIES_NOTE,
                       SYSTEM, ce_messages, ce_runtime_messages)
+from .providers import metered
 from .runtime import bind_runtime
 
 
@@ -76,6 +78,19 @@ def compact_with_repair(nl: str, model: str | None = None,
         pack = compact(nl + "\n\n" + followup, model=model,
                        runtime_abilities=runtime_abilities, provider=provider)
     return pack, log
+
+
+def compact_with_repair_measured(
+        nl: str, model: str | None = None,
+        runtime_abilities: list[str] | None = None,
+        rounds: int = 1, provider: str | None = None) -> tuple[dict, list[str], Cost]:
+    """`compact_with_repair`, additionally returning the measured token cost
+    of every round as a `skillc.tokens.Cost` (the API's own usage blocks)."""
+    with metered() as usage:
+        pack, log = compact_with_repair(nl, model=model,
+                                        runtime_abilities=runtime_abilities,
+                                        rounds=rounds, provider=provider)
+    return pack, log, measured_cost(usage)
 
 
 def compact_ce(nl: str, model: str | None = None, timeout: int = 600,

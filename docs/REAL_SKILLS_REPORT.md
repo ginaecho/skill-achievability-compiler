@@ -1,23 +1,29 @@
 # Real-skill scan report
 
-`skillc 0.3.0` run over the public skills corpus ([anthropics/skills](https://github.com/anthropics/skills)): 36 `SKILL.md` files, checked under each capability profile.  Regenerate with `python3 scripts/make_report.py <dir>`.
+`skillc 0.3.0` run over the public skills corpus ([anthropics/skills](https://github.com/anthropics/skills)): 42 `SKILL.md` files, checked under each capability profile.  Regenerate with `python3 scripts/make_report.py <dir>`.
 
 A verdict is always *relative to a capability context*: `IMPOSSIBLE [MISSING_CAPABILITY]` means the skill's instructions invoke a tool that this runtime does not grant -- the skill cannot be carried out as written there.  It is not a defect of the skill.
 
 | skill | claude-ai | claude-code |
 |---|---|---|
 | `examples/algorithmic-art` | ACHIEVABLE | ACHIEVABLE |
+| `examples/artifact-emulator` | ACHIEVABLE | ACHIEVABLE |
 | `examples/benepass-reimbursement` | ACHIEVABLE | IMPOSSIBLE (`read_page`, `upload_file`) |
 | `examples/brand-guidelines` | ACHIEVABLE | ACHIEVABLE |
+| `examples/built-in-browser` | ACHIEVABLE | IMPOSSIBLE (`tabs_context`) |
 | `examples/call-to-book` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
 | `examples/cancel-unsubscribe` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
 | `examples/canvas-design` | ACHIEVABLE | ACHIEVABLE |
+| `examples/chrome-browser` | ACHIEVABLE | IMPOSSIBLE (`tabs_context_mcp`) |
+| `examples/computer-use` | ACHIEVABLE | ACHIEVABLE |
 | `examples/deep-research` | ACHIEVABLE | ACHIEVABLE |
 | `examples/doc-coauthoring` | ACHIEVABLE | IMPOSSIBLE (`create_file`, `str_replace`) |
+| `examples/docs` | ACHIEVABLE | ACHIEVABLE |
 | `examples/event-planning` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
 | `examples/file-expenses` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
 | `examples/file-form` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
 | `examples/financial-calculator` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
+| `examples/google-workspace` | ACHIEVABLE | ACHIEVABLE |
 | `examples/grocery-shopping` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
 | `examples/hire-help` | ACHIEVABLE | IMPOSSIBLE (`ask_user_input_v0`) |
 | `examples/import-memory` | ACHIEVABLE | ACHIEVABLE |
@@ -43,4 +49,4 @@ A verdict is always *relative to a capability context*: `IMPOSSIBLE [MISSING_CAP
 | `public/product-self-knowledge` | ACHIEVABLE | ACHIEVABLE |
 | `public/xlsx` | ACHIEVABLE | ACHIEVABLE |
 
-**Totals:** 36/36 achievable under `claude-ai`, 20/36 achievable under `claude-code`
+**Totals:** 42/42 achievable under `claude-ai`, 24/42 achievable under `claude-code`

@@ -83,11 +83,12 @@ trust model, while the source file defines the exact prompt.
 
 Compaction is the **only** stage of the pipeline that spends tokens: the schema
 gate and the trusted checker spend none, and neither does the deterministic
-front-end. `skillc.tokens.usage_to_cost` turns an API `usage` block into a
-measured `Cost`; the compaction calls in `frontend.llm` do not yet surface that
-block, so `skillc cost` currently models the compaction cost (including the
-single bounded repair round) rather than measuring it. For a median real skill this is ~2.8K tokens — about 4% of one
-successful run of the same skill, against a doomed run it avoids entirely.
+front-end. Provider calls made inside `frontend.llm.metered()` record the
+API's own `usage` block, so `skillc cost --llm` measures the cost rather than
+guessing it, and `compact_with_repair_measured` totals it across the single
+bounded repair round. For a median real skill the *modelled* cost
+(`skillc cost --price-llm`) is ~2.8K tokens — about 4% of one successful run of
+the same skill, against a doomed run it avoids entirely.
 See [`TOKEN_ECONOMICS.md`](TOKEN_ECONOMICS.md) and `skillc cost`.
 
 ## Live vs. reference compaction
