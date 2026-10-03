@@ -15,7 +15,7 @@ from real skills (deterministic or LLM compaction alike).
 from __future__ import annotations
 
 import copy
-from typing import Any, Optional
+from typing import Any
 
 from .formula import atoms
 
@@ -33,7 +33,7 @@ def _acts(steps: list[dict]) -> list[str]:
     return out
 
 
-def drop_invoked_capability(pack: dict) -> Optional[tuple[dict, str]]:
+def drop_invoked_capability(pack: dict) -> tuple[dict, str] | None:
     """Remove a capability the protocol actually invokes.
 
     Expected verdict on the mutant: IMPOSSIBLE / MISSING_CAPABILITY with the
@@ -48,7 +48,7 @@ def drop_invoked_capability(pack: dict) -> Optional[tuple[dict, str]]:
     return mutant, victim
 
 
-def strip_goal_establisher(pack: dict) -> Optional[tuple[dict, str]]:
+def strip_goal_establisher(pack: dict) -> tuple[dict, str] | None:
     """Strip a goal atom from the add-list of every capability establishing
     it (the tools stop delivering that effect).
 

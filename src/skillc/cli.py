@@ -25,39 +25,27 @@ from .checker import Verdict, check
 from .evaluate import evaluate, format_report, load_corpus
 from .frontend.ce import CEError
 from .frontend.markdown import CompileResult, compile_file
-from .pack import Pack, PackError, pack_digest
+from .frontend.providers import PROVIDERS
+from .pack import PackError, pack_digest
 from .profiles import builtin_profiles, load_profile
 
 
 def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
-    """Return (pack, compile_result_or_None) for a .json pack or markdown."""
+    """Return (pack, compile_result_or_None) for a .json pack, .ce or markdown."""
     res = None
     if path.suffix == ".json":
         pack = json.loads(path.read_text(encoding="utf-8"))
     elif path.suffix == ".ce":
         from .frontend.ce import compile_ce
         pack = compile_ce(path.read_text(encoding="utf-8"))
+    elif getattr(args, "llm", False):
+        pack = _compact_with_llm(path, args)
     else:
         profile = load_profile(args.profile)
         if getattr(args, "tool", None):
             profile = profile.with_tools(args.tool)
-        if getattr(args, "llm", False):
-            from .frontend.prompts import RUNTIME_ABILITY_PROFILES
-            from .frontend.llm import compact, compact_ce
-            abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
-            abilities.extend(args.runtime_ability or [])
-            kwargs = {}
-            if getattr(args, "runtime", None):
-                from .frontend.runtime import load_runtime
-                front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
-            else:
-                front = compact_ce if getattr(args, "via_ce", False) else compact
-            pack = front(path.read_text(encoding="utf-8"), model=args.model,
-                         provider=args.llm_provider,
-                         runtime_abilities=abilities or None, **kwargs)
-        else:
-            res = compile_file(path, profile)
-            pack = res.pack
+        res = compile_file(path, profile)
+        pack = res.pack
     if getattr(args, "contract", None):
         from .frontend.contract import bind_contract
         contract = json.loads(Path(args.contract).read_text(encoding="utf-8"))
@@ -66,6 +54,23 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
             res.pack = pack
             res.goal_source = "contract"
     return pack, res
+
+
+def _compact_with_llm(path: Path, args) -> dict:
+    """Semantic compaction of a markdown skill (opt-in, untrusted)."""
+    from .frontend.llm import compact, compact_ce
+    from .frontend.prompts import RUNTIME_ABILITY_PROFILES
+    abilities = [*RUNTIME_ABILITY_PROFILES[args.llm_runtime],
+                 *(args.runtime_ability or [])]
+    kwargs = {}
+    if getattr(args, "runtime", None):
+        from .frontend.runtime import load_runtime
+        front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
+    else:
+        front = compact_ce if getattr(args, "via_ce", False) else compact
+    return front(path.read_text(encoding="utf-8"), model=args.model,
+                 provider=args.llm_provider,
+                 runtime_abilities=abilities or None, **kwargs)
 
 
 def _check_loaded(pack, res, args):
@@ -124,25 +129,30 @@ def cmd_check(args) -> int:
             out["compaction_goal_source"] = res.goal_source
         print(json.dumps(out, indent=2))
     else:
-        print(f"{pack.get('name', '?')}: {v.label}"
-              + (f" [{v.reason}]" if not v.achievable else ""))
-        if v.detail and not v.achievable:
-            print(f"  {v.detail}")
-        if v.unknown:
-            print("  UNKNOWN is an abstention, not a refutation or permission to run.")
-        if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
-            lines = {i.tool: i.line for i in reversed(res.invocations)}
-            for capname in v.frontier:
-                loc = f" (line {lines[capname]})" if capname in lines else ""
-                print(f"  missing: {capname}{loc}")
-        if v.assumed_conformant:
-            print("  assumed conformant (participants of G with no declared "
-                  "behaviour): " + ", ".join(v.assumed_conformant))
-        if args.verbose and v.achievable:
-            print("  witness:", " -> ".join(f"{k}:{x}" for k, x in v.witness))
+        _print_verdict(pack, res, v, verbose=args.verbose)
     if v.unknown:
         return 3
     return 0 if v.achievable else 1
+
+
+def _print_verdict(pack: dict, res: CompileResult | None, v: Verdict,
+                   verbose: bool) -> None:
+    print(f"{pack.get('name', '?')}: {v.label}"
+          + (f" [{v.reason}]" if not v.achievable else ""))
+    if v.detail and not v.achievable:
+        print(f"  {v.detail}")
+    if v.unknown:
+        print("  UNKNOWN is an abstention, not a refutation or permission to run.")
+    if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
+        lines = {i.tool: i.line for i in reversed(res.invocations)}
+        for capname in v.frontier:
+            loc = f" (line {lines[capname]})" if capname in lines else ""
+            print(f"  missing: {capname}{loc}")
+    if v.assumed_conformant:
+        print("  assumed conformant (participants of G with no declared "
+              "behaviour): " + ", ".join(v.assumed_conformant))
+    if verbose and v.achievable:
+        print("  witness:", " -> ".join(f"{k}:{x}" for k, x in v.witness))
 
 
 def cmd_scan(args) -> int:
@@ -214,8 +224,8 @@ def cmd_cost(args) -> int:
     the honest denominator -- verification as a share of one successful run,
     which is what a healthy skill pays for the check that told it nothing.
     """
-    from .tokens import (CorpusEconomics, RuntimeModel, check_cost, economics,
-                         estimate_tokens)
+    from .tokens import (FAILURE_PROFILES, SUCCESSFUL_RUN_TURNS, CorpusEconomics,
+                         RuntimeModel, check_cost, economics, estimate_tokens)
 
     # Two independent questions, two flags: --llm actually compacts with the
     # model (and then prices what it really used); --price-llm prices what
@@ -255,16 +265,15 @@ def cmd_cost(args) -> int:
         except (PackError, ValueError) as e:
             print(f"skillc: {name}: {type(e).__name__}: {e}", file=sys.stderr)
             continue
-        ver = check_cost(text or json.dumps(pack), llm=priced_llm,
-                         repair_rounds=args.repair_rounds)
         src = text or json.dumps(pack)
-        if v.refuted and v.reason in _WASTE_REASONS:
+        ver = check_cost(src, llm=priced_llm, repair_rounds=args.repair_rounds)
+        if v.refuted and v.reason in FAILURE_PROFILES:
             corpus.rows.append(economics(
                 src, v.reason, name=name, model=model,
                 verification=ver, price=args.price))
         else:
             run = replace(model, skill_tokens=estimate_tokens(src)).run_cost(
-                _SUCCESS_TURNS)
+                SUCCESSFUL_RUN_TURNS)
             achievable.append((name, ver.total_tokens, run.total_tokens))
 
     if args.json:
@@ -277,6 +286,11 @@ def cmd_cost(args) -> int:
         print(json.dumps(out, indent=2))
         return 0
 
+    _print_cost_report(corpus, achievable, args)
+    return 0
+
+
+def _print_cost_report(corpus, achievable: list[tuple[str, int, int]], args) -> None:
     front = ("LLM compaction (measured)" if args.llm else
              "LLM compaction (modelled)" if args.price_llm else
              "deterministic front-end")
@@ -302,7 +316,7 @@ def cmd_cost(args) -> int:
         print(f"  tokens NOT wasted     : {w['typical']:,} typical "
               f"(${u['typical']:.4f}), band {w['low']:,}-{w['high']:,}")
         lev = t["leverage_typical"]
-        print(f"  leverage (typical)    : "
+        print("  leverage (typical)    : "
               + ("unbounded -- the check spends no tokens at all"
                  if lev is None else f"{lev}x, per invocation avoided"))
     if achievable:
@@ -316,12 +330,6 @@ def cmd_cost(args) -> int:
         print(f"  checking is {share:.1f}% of running each skill once")
     print("\nRuntime waste is a MODEL, not a measurement (see skillc.tokens): "
           "\nit prices a run that, if the refutation is right, never happens.")
-    return 0
-
-
-_WASTE_REASONS = ("MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
-                  "NON_PROJECTABLE", "NON_CONFORMANT")
-_SUCCESS_TURNS = 10
 
 
 def _fmt(n: int) -> str:
@@ -344,11 +352,10 @@ def cmd_ce(args) -> int:
     """Render a pack (or any compiled input) as CE, or a .ce file as JSON."""
     from .frontend.ce import render_ce
     path = Path(args.file)
+    pack, _ = _load_result(path, args)
     if args.to == "json" or (args.to is None and path.suffix == ".ce"):
-        pack, _ = _load_result(path, args)
         print(json.dumps(pack, indent=2))
     else:
-        pack, _ = _load_result(path, args)
         sys.stdout.write(render_ce(pack))
     return 0
 
@@ -408,7 +415,7 @@ def _add_compile_opts(sp) -> None:
                     help="bind extraction to reviewed goal, capabilities, and initial state")
     sp.add_argument("--llm", action="store_true",
                     help="use the semantic LLM compaction front-end")
-    sp.add_argument("--llm-provider", choices=("anthropic", "azure-openai"),
+    sp.add_argument("--llm-provider", choices=PROVIDERS,
                     help="LLM provider (default: SKILLC_LLM_PROVIDER or anthropic)")
     sp.add_argument("--model",
                     help="Anthropic model or Azure OpenAI deployment name")

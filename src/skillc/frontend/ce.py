@@ -155,8 +155,8 @@ def _canon_steps(steps: list) -> list:
         if kind in ("choice", "select", "branch"):
             b = {k: v for k, v in body.items()
                  if k != "branches" and not (k in CHOICE_FLAGS and v is False)}
-            b["branches"] = {l: _canon_steps(br)
-                             for l, br in body["branches"].items()}
+            b["branches"] = {lbl: _canon_steps(br)
+                             for lbl, br in body["branches"].items()}
             out.append({kind: b})
         elif kind == "rec":
             out.append({"rec": {"name": body["name"],

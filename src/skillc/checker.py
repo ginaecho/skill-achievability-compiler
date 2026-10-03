@@ -40,7 +40,8 @@ verdicts only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import z3
 
@@ -550,7 +551,7 @@ class Checker:
                 if self._goal_sat(cur):
                     return True, cur
                 return False, cur                   # unsatisfied checkpoint
-            elif "msg" in s:
+            if "msg" in s:
                 cur = _mk_state(cur.true_preds, cur.arith, cur.versions(),
                                 cur.path + (("msg", s["msg"]["label"]),))
             elif "act" in s:

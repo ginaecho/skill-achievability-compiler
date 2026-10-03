@@ -53,9 +53,7 @@ _FILE_EXT = re.compile(r"\.(md|json|csv|tsv|txt|py|js|mjs|cjs|ts|tsx|jsx|yaml|ym
 
 
 def norm(term: str) -> str:
-    t = term.strip().strip("`'\".,:;()[]").lower()
-    t = re.sub(r"\s+", " ", t)
-    return t
+    return re.sub(r"\s+", " ", term.strip().strip("`'\".,:;()[]").lower())
 
 
 def _cmd_head(s: str) -> str | None:
@@ -154,7 +152,7 @@ class PolicyIndex:
     entries: dict = field(default_factory=dict)   # term -> {"mentions": [...]} summary
 
     @staticmethod
-    def load(path: str | Path) -> "PolicyIndex":
+    def load(path: str | Path) -> PolicyIndex:
         p = Path(path)
         return PolicyIndex(json.loads(p.read_text())) if p.exists() else PolicyIndex()
 

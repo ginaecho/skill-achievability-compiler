@@ -60,7 +60,8 @@ import math
 import os
 import urllib.request
 from dataclasses import dataclass, field, replace
-from typing import Optional
+
+from .frontend.prompts import SYSTEM
 
 # --------------------------------------------------------------------------
 # Token estimation
@@ -172,7 +173,7 @@ class Cost:
         return p.cost(self.input_tokens, self.output_tokens,
                       self.cached_input_tokens)
 
-    def __add__(self, other: "Cost") -> "Cost":
+    def __add__(self, other: Cost) -> Cost:
         return Cost(self.input_tokens + other.input_tokens,
                     self.output_tokens + other.output_tokens,
                     self.cached_input_tokens + other.cached_input_tokens,
@@ -204,8 +205,8 @@ def usage_to_cost(usage: dict, label: str = "compaction") -> Cost:
 # The verification side: what a check costs
 # --------------------------------------------------------------------------
 
-def compaction_cost(skill_text: str, *, system_text: Optional[str] = None,
-                    pack: Optional[dict] = None, repair_rounds: int = 0,
+def compaction_cost(skill_text: str, *, system_text: str | None = None,
+                    pack: dict | None = None, repair_rounds: int = 0,
                     chars_per_token: float = CHARS_PER_TOKEN) -> Cost:
     """Estimated token cost of compacting one skill with the LLM front-end.
 
@@ -219,7 +220,6 @@ def compaction_cost(skill_text: str, *, system_text: Optional[str] = None,
     """
     if repair_rounds < 0:
         raise ValueError("repair_rounds must be >= 0")
-    from .frontend.prompts import SYSTEM
     sys_tokens = estimate_tokens(system_text if system_text is not None
                                  else SYSTEM, chars_per_token)
     skill_tokens = estimate_tokens(skill_text, chars_per_token)
@@ -433,8 +433,8 @@ SUCCESSFUL_RUN_TURNS = 10
 
 def economics(skill_text: str, reason: str, *, name: str = "skill",
               llm: bool = False, repair_rounds: int = 0,
-              model: Optional[RuntimeModel] = None,
-              verification: Optional[Cost] = None,
+              model: RuntimeModel | None = None,
+              verification: Cost | None = None,
               price: str = DEFAULT_PRICE,
               successful_run_turns: int = SUCCESSFUL_RUN_TURNS) -> Economics:
     """Compare the cost of refuting a skill with the cost of running it.

@@ -24,7 +24,8 @@ inside QF-LIA, the decidable fragment the paper's decision procedure assumes.
 from __future__ import annotations
 
 import operator
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import z3
 

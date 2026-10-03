@@ -48,14 +48,13 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
 import yaml
 
 from ..pack import PackError, validate_pack
 from ..profiles import Profile, normalize_tool
 from . import semantic
-from .prose import INVOKE_RE, NEGATION_RE
+from .prose import INVOKE_RE, negated_before
 
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.S)
 FENCE_RE = re.compile(r"^(```+|~~~+)([^\n]*)\n(.*?)^\1\s*$\n?", re.S | re.M)
@@ -64,9 +63,6 @@ TOOLS_LINE_RE = re.compile(
 
 AGENT_TOOL_RE = re.compile(r"\A(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Za-z0-9]*)\Z")
 SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
-# Matches a negation word ("not", "never") in the ~20 chars immediately
-# before an invocation verb, used to skip "do NOT use `X`" false positives.
-_NEGATION_BEFORE_VERB_RE = NEGATION_RE
 
 SHELL_CAP = "bash"
 PACK_FENCE_TAG = "skillc-pack"
@@ -118,10 +114,10 @@ def _tool_list(value) -> list[str]:
     return []
 
 
-def _strip_fences(body: str) -> tuple[str, Optional[dict]]:
+def _strip_fences(body: str) -> tuple[str, dict | None]:
     """Blank out fenced code blocks (preserving line numbers) and pull out an
     embedded ``skillc-pack`` JSON block if present."""
-    embedded: Optional[dict] = None
+    embedded: dict | None = None
 
     def repl(m: re.Match) -> str:
         nonlocal embedded
@@ -130,13 +126,13 @@ def _strip_fences(body: str) -> tuple[str, Optional[dict]]:
             try:
                 embedded = json.loads(m.group(3))
             except json.JSONDecodeError as e:
-                raise PackError(f"embedded skillc-pack block is not valid JSON: {e}")
+                raise PackError(f"embedded skillc-pack block is not valid JSON: {e}") from e
         return "\n" * m.group(0).count("\n")
 
     return FENCE_RE.sub(repl, body), embedded
 
 
-def _classify(raw: str) -> Optional[str]:
+def _classify(raw: str) -> str | None:
     """Classify an extracted identifier: 'agent-tool', 'shell', or None."""
     if ":" in raw:
         return None                      # XML-ish / namespaced code refs
@@ -155,8 +151,7 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
     out: list[Invocation] = []
     for m in INVOKE_RE.finditer(body):
         # Skip negated invocations: "do NOT use `X`", "never call `X`", etc.
-        prefix = body[max(0, m.start() - 20):m.start()]
-        if _NEGATION_BEFORE_VERB_RE.search(prefix):
+        if negated_before(body, m.start(), window=20):
             continue
         raw = m.group(1)
         norm = normalize_tool(raw)
@@ -179,7 +174,7 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
 
 
 def compile_markdown(text: str, profile: Profile,
-                     name: Optional[str] = None) -> CompileResult:
+                     name: str | None = None) -> CompileResult:
     """Compact a SKILL.md / agent markdown into an achievability pack."""
     meta, body = parse_frontmatter(text)
     skill_name = str(name or meta.get("name") or "skill")
@@ -191,30 +186,12 @@ def compile_markdown(text: str, profile: Profile,
                              profile=profile.name, embedded=True,
                              goal_source="embedded")
 
-    # --- capability context Γ -------------------------------------------
-    declared: dict[str, str] = {}
-    for t in sorted(profile.tools):
-        declared[t] = f"profile:{profile.name}"
-    for key in ("allowed-tools", "allowed_tools", "tools"):
-        for t in _tool_list(meta.get(key)):
-            declared[normalize_tool(t)] = f"frontmatter:{key}"
-    for m in TOOLS_LINE_RE.finditer(prose):
-        for t in m.group(1).rstrip(".").split(","):
-            t = t.strip().strip("`")
-            if t and re.match(r"\A[A-Za-z][A-Za-z0-9_-]*\Z", t):
-                declared[normalize_tool(t)] = "prose:tools-line"
-
-    if profile.shell and SHELL_CAP not in declared:
-        declared[SHELL_CAP] = f"profile:{profile.name}(shell)"
-
-    # --- invoked actions --------------------------------------------------
+    declared = _capability_context(meta, prose, profile)
     invocations = extract(prose, set(declared))
 
-    # --- semantic compaction ----------------------------------------------
     # If the document states what "finished" means and lists workflow steps,
     # compile what it actually claims (goal conditions, guards, budgets,
     # participants, choices) instead of the weaker used_<tool> reading.
-    warnings: list[str] = []
     sem = semantic.build(skill_name, prose, declared)
     if sem is not None:
         validate_pack(sem.pack)
@@ -223,40 +200,54 @@ def compile_markdown(text: str, profile: Profile,
                              invocations=invocations, notes=sem.notes,
                              goal_source="semantic")
 
+    warnings: list[str] = []
     if not invocations:
         warnings.append("no tool invocations extracted; the fallback goal is "
                         "trivially achievable, but the skill's actual goal "
                         "and tool requirements have not been established")
-
-    # --- pack --------------------------------------------------------------
-    def pred(tool: str) -> str:
-        return "used_" + re.sub(r"[^a-z0-9_]", "_", tool)
-
-    capabilities = {t: {"owner": "agent", "add": [pred(t)]}
-                    for t in sorted(declared)}
-    seen: list[str] = []
-    protocol = []
-    for inv in invocations:
-        protocol.append({"act": {"cap": inv.tool, "by": "agent"}})
-        if inv.tool not in seen:
-            seen.append(inv.tool)
-    goal_conjuncts = [pred(t) for t in seen]
-    goal = {"and": goal_conjuncts} if goal_conjuncts else True
-
-    pack = {
-        "name": skill_name,
-        "roles": ["agent"],
-        "capabilities": capabilities,
-        "protocol": protocol,
-        "goal": goal,
-        "init_true": [],
-    }
+    pack = _usage_pack(skill_name, declared, invocations)
     validate_pack(pack)
     return CompileResult(pack=pack, name=skill_name, profile=profile.name,
                          declared=declared, invocations=invocations,
                          warnings=warnings)
 
 
-def compile_file(path, profile: Profile, name: Optional[str] = None) -> CompileResult:
+def _capability_context(meta: dict, prose: str, profile: Profile) -> dict[str, str]:
+    """Γ: declared tool -> where it was declared (profile, frontmatter, prose)."""
+    declared = {t: f"profile:{profile.name}" for t in sorted(profile.tools)}
+    for key in ("allowed-tools", "allowed_tools", "tools"):
+        for t in _tool_list(meta.get(key)):
+            declared[normalize_tool(t)] = f"frontmatter:{key}"
+    for m in TOOLS_LINE_RE.finditer(prose):
+        for t in m.group(1).rstrip(".").split(","):
+            t = t.strip().strip("`")
+            if t and re.match(r"\A[A-Za-z][A-Za-z0-9_-]*\Z", t):
+                declared[normalize_tool(t)] = "prose:tools-line"
+    if profile.shell and SHELL_CAP not in declared:
+        declared[SHELL_CAP] = f"profile:{profile.name}(shell)"
+    return declared
+
+
+def _usage_pack(name: str, declared: dict[str, str],
+                invocations: list[Invocation]) -> dict:
+    """The legacy reading: each tool establishes `used_<tool>`, and the goal is
+    that every invoked tool has been used."""
+    def pred(tool: str) -> str:
+        return "used_" + re.sub(r"[^a-z0-9_]", "_", tool)
+
+    used = list(dict.fromkeys(inv.tool for inv in invocations))
+    return {
+        "name": name,
+        "roles": ["agent"],
+        "capabilities": {t: {"owner": "agent", "add": [pred(t)]}
+                         for t in sorted(declared)},
+        "protocol": [{"act": {"cap": inv.tool, "by": "agent"}}
+                     for inv in invocations],
+        "goal": {"and": [pred(t) for t in used]} if used else True,
+        "init_true": [],
+    }
+
+
+def compile_file(path, profile: Profile, name: str | None = None) -> CompileResult:
     with open(path, encoding="utf-8") as fh:
         return compile_markdown(fh.read(), profile, name=name)

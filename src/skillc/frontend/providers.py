@@ -79,8 +79,7 @@ def azure_openai_complete(system: str, user: str, model: str | None,
     if parsed.scheme != "https" or not parsed.netloc:
         raise RuntimeError("AZURE_OPENAI_ENDPOINT must be an https URL")
     host = (parsed.hostname or "").lower()
-    if not (host.endswith(".openai.azure.com")
-            or host.endswith(".services.ai.azure.com")):
+    if not host.endswith((".openai.azure.com", ".services.ai.azure.com")):
         raise RuntimeError(
             "AZURE_OPENAI_ENDPOINT must use an official Azure OpenAI or "
             "Foundry hostname")

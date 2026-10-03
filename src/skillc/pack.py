@@ -46,7 +46,8 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+from collections.abc import Iterator
 
 from .formula import FormulaError, validate_expr, validate_formula
 
