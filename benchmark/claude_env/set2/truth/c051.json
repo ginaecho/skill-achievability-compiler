@@ -1,0 +1,55 @@
+{
+ "case": "c051",
+ "primary_task": "Follow the repository's contribution guidelines to file an issue, create a branch, commit grouped changes and open a pull request.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "git",
+   "any_of": null,
+   "hard": true,
+   "evidence": "allowed-tools: Bash(git:*); 'ensure a branch has been created', 'Commit the grouped code to the branch'",
+   "check": "command -v git",
+   "observed": "/usr/bin/git",
+   "status": "available"
+  },
+  {
+   "kind": "account",
+   "name": "github-issue-pr-creation",
+   "any_of": [
+    {
+     "kind": "program",
+     "name": "gh (issue/pr subcommands, GraphQL-backed)",
+     "status": "unavailable"
+    },
+    {
+     "kind": "program",
+     "name": "gh api (REST) with working auth",
+     "status": "available"
+    },
+    {
+     "kind": "mcp",
+     "name": "github",
+     "status": "available"
+    }
+   ],
+   "hard": true,
+   "evidence": "allowed-tools: Bash(gh issue:*) Bash(gh pr:*); 'Before any issue is filed ... or pull request (or PR) created'",
+   "check": "command -v gh; gh api -i user; gh issue list -L 1; gh pr list -L 1",
+   "observed": "gh present; REST authenticated (scopes repo, workflow); gh issue/pr subcommands that use GraphQL return 403 'GitHub GraphQL is not available from Claude Code sessions'; github MCP connected (create_pull_request, issue_write, search_issues)",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "api.github.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "creating issues/PRs on GitHub",
+   "check": "curl -sS -o /dev/null -w '%{http_code}' https://api.github.com/",
+   "observed": "200",
+   "status": "available"
+  }
+ ],
+ "verdict": "ACHIEVABLE",
+ "blocking": [],
+ "notes": "gh CLI's GraphQL-backed `gh issue`/`gh pr` commands (list/create/checks) are refused by the session proxy; REST (`gh api repos/...`) works and the github MCP is connected, so issue/PR creation is achievable but not via the literal `gh issue`/`gh pr` subcommands. Target repo must also be attached to the session (user input). gh auth status falsely reports token invalid while API calls succeed."
+}

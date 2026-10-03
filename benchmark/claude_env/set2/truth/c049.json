@@ -1,0 +1,114 @@
+{
+ "case": "c049",
+ "primary_task": "Provision Microsoft Entra Agent Identity Blueprints, BlueprintPrincipals and Agent Identities via the Microsoft Graph beta API.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "provisioning-runtime",
+   "any_of": [
+    {
+     "kind": "program",
+     "name": "pwsh + Microsoft.Graph.Beta",
+     "status": "unavailable"
+    },
+    {
+     "kind": "program",
+     "name": "python3",
+     "status": "available"
+    }
+   ],
+   "hard": true,
+   "evidence": "PowerShell (Install-Module Microsoft.Graph.Beta...) or Python (pip install azure-identity requests)",
+   "check": "command -v pwsh ; apt-get -s install powershell ; command -v python3",
+   "observed": "pwsh absent, apt: Unable to locate package powershell; python3 present",
+   "status": "available"
+  },
+  {
+   "kind": "pymodule",
+   "name": "azure.identity",
+   "any_of": null,
+   "hard": true,
+   "evidence": "from azure.identity import ClientSecretCredential",
+   "check": "find_spec('azure.identity') ; pip download --no-deps azure-identity",
+   "observed": "No module named azure; azure_identity-1.26.0 wheel",
+   "status": "installable"
+  },
+  {
+   "kind": "pymodule",
+   "name": "requests",
+   "any_of": null,
+   "hard": true,
+   "evidence": "import requests",
+   "check": "find_spec('requests')",
+   "observed": "True",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "az",
+   "any_of": null,
+   "hard": true,
+   "evidence": "subprocess.run(['az','ad','signed-in-user','show',...]) ; az ad app permission admin-consent",
+   "check": "command -v az ; apt-get -s install azure-cli ; pip download --no-deps azure-cli",
+   "observed": "absent; apt: Unable to locate package; azure_cli-2.90.0 wheel downloadable",
+   "status": "installable"
+  },
+  {
+   "kind": "credential",
+   "name": "AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET",
+   "any_of": null,
+   "hard": true,
+   "evidence": "tenant_id=os.environ['AZURE_TENANT_ID'] ...",
+   "check": "[ -n \"${AZURE_TENANT_ID:-}\" ] && echo set || echo unset (and CLIENT_ID, CLIENT_SECRET)",
+   "observed": "all unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "entra-signed-in-user (az login / Connect-MgGraph)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Get sponsor user ID ... use az CLI: az ad signed-in-user show",
+   "check": "az absent; no Azure credentials in env",
+   "observed": "none",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "graph.microsoft.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "All endpoints use base URL: https://graph.microsoft.com/beta",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://graph.microsoft.com/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "login.microsoftonline.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "credential.get_token(...) client_credentials",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://login.microsoftonline.com/",
+   "observed": "302",
+   "status": "available"
+  },
+  {
+   "kind": "mcp",
+   "name": "microsoft-docs",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Search microsoft-docs MCP for the latest Agent ID documentation",
+   "check": "session connector list",
+   "observed": "not connected",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "credential:AZURE_TENANT_ID/AZURE_CLIENT_ID/AZURE_CLIENT_SECRET",
+  "account:entra-signed-in-user",
+  "egress:graph.microsoft.com"
+ ],
+ "notes": "microsoft-docs MCP is a 'Before you start' doc-verification step, treated as non-hard (also unavailable). Sidecar/Docker material lives in references and is not part of the core provisioning workflow."
+}

@@ -1,0 +1,106 @@
+{
+ "case": "c044",
+ "primary_task": "Run an end-to-end Mission Control + Nova Carter SIL showcase driving a locally installed Isaac Sim GUI via the isaac-sim-remote server.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "isaac-sim (local install at ISAAC_SIM_DIR)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Always launch Isaac Sim from a local installation ... default ~/isaacsim",
+   "check": "ls -d ~/isaacsim",
+   "observed": "No such file or directory",
+   "status": "unavailable"
+  },
+  {
+   "kind": "platform",
+   "name": "nvidia-gpu (driver R590+)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "NVIDIA driver R590 or newer",
+   "check": "command -v nvidia-smi",
+   "observed": "absent; container has no GPU",
+   "status": "unavailable"
+  },
+  {
+   "kind": "platform",
+   "name": "display (GUI window)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "launched in its GUI window ... Watch the robot in that window",
+   "check": "echo \"DISPLAY=${DISPLAY:-unset}\"",
+   "observed": "DISPLAY=unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "platform",
+   "name": "64GB-class host (>=48GB available)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "A 64 GB-class host with at least 48 GB available before startup",
+   "check": "free -g",
+   "observed": "total 15 GB",
+   "status": "unavailable"
+  },
+  {
+   "kind": "daemon",
+   "name": "docker",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Docker is still required for the Mission Control cloud stack and Nova Carter SIL",
+   "check": "docker info",
+   "observed": "failed to connect to the docker API at unix:///var/run/docker.sock",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "nvcr.io",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Nova Carter SIL: nvcr.io/nvidia/isaac/nova_carter_sil:release-3.2",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://nvcr.io/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "omniverse-content-production.s3-us-west-2.amazonaws.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Warehouse: https://omniverse-content-production.s3-us-west-2.amazonaws.com/.../warehouse.usd",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://omniverse-content-production.s3-us-west-2.amazonaws.com/",
+   "observed": "200",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "github.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "two public GitHub repositories, their pinned refs ... doctor.py dependencies --prepare",
+   "check": "git ls-remote https://github.com/cloudflare/vinext HEAD (public-repo git access probe)",
+   "observed": "returned a commit hash",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "python3",
+   "any_of": null,
+   "hard": true,
+   "evidence": "python3 \"$SKILL_DIR/scripts/doctor.py\" dependencies --prepare",
+   "check": "command -v python3",
+   "observed": "/usr/local/bin/python3",
+   "status": "available"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "program:isaac-sim",
+  "platform:nvidia-gpu",
+  "platform:display",
+  "platform:64GB-host",
+  "daemon:docker",
+  "egress:nvcr.io"
+ ],
+ "notes": "Isaac Sim installation is delegated to another skill and would anyway require an NVIDIA GPU; pypi.nvidia.com is also refused (403). Exact upstream repo names not given; github git access generally works for public repos."
+}

@@ -1,0 +1,61 @@
+{
+ "case": "c050",
+ "primary_task": "Assess and, after approval, migrate Aspire 13.6+ AppHost legacy ProjectResource resources to DotnetProjectResource (Project v2) and validate.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "dotnet",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Restore/build through repository conventions ... C# migrations must ... compile",
+   "check": "command -v dotnet ; apt-get -s install dotnet-sdk-10.0",
+   "observed": "absent; apt simulation resolves dotnet-sdk-10.0 10.0.110 (archive.ubuntu.com reachable 200)",
+   "status": "installable"
+  },
+  {
+   "kind": "program",
+   "name": "aspire",
+   "any_of": null,
+   "hard": true,
+   "evidence": "aspire docs search ... aspire start --non-interactive --isolated ... aspire wait",
+   "check": "command -v aspire ; curl https://api.nuget.org/v3-flatcontainer/aspire.cli/index.json",
+   "observed": "absent; Aspire.Cli 13.6.0 on nuget (dotnet tool install)",
+   "status": "installable"
+  },
+  {
+   "kind": "egress",
+   "name": "api.nuget.org",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Add Aspire.Hosting.Dotnet at a version compatible ...",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://api.nuget.org/ ; curl .../aspire.hosting.dotnet/index.json",
+   "observed": "400 (reachable); versions listed up to 13.6.0-preview",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "aspire.dev",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Hard gate 6: Use `aspire docs search` and `aspire docs api search` before relying on unfamiliar or preview API shapes",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://aspire.dev/llms-full.txt",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "daemon",
+   "name": "docker",
+   "any_of": null,
+   "hard": false,
+   "evidence": "aspire start (only if AppHost has container resources)",
+   "check": "docker info",
+   "observed": "daemon not running",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:aspire.dev"
+ ],
+ "notes": "Verified (by inspecting the downloaded Aspire.Cli.linux-x64 package strings) that `aspire docs` pulls https://aspire.dev/llms-full.txt, which the egress policy refuses. This is the only blocker and is somewhat debatable: it is listed under 'Hard gates' and the target API is experimental/preview so the condition always applies, but an agent could fall back to bundled references/installed package APIs. Everything else (dotnet, aspire CLI, NuGet) is installable."
+}

@@ -1,0 +1,114 @@
+{
+ "case": "c047",
+ "primary_task": "Convert an ePub book into a style-transfer SFT dataset and LoRA-train/validate a model on Tinker.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "python3",
+   "any_of": null,
+   "hard": true,
+   "evidence": "python pipeline code throughout",
+   "check": "command -v python3",
+   "observed": "/usr/local/bin/python3",
+   "status": "available"
+  },
+  {
+   "kind": "pymodule",
+   "name": "epub-reader",
+   "any_of": [
+    {
+     "kind": "pymodule",
+     "name": "epub2",
+     "status": "unavailable"
+    },
+    {
+     "kind": "pymodule",
+     "name": "ebooklib",
+     "status": "installable"
+    }
+   ],
+   "hard": true,
+   "evidence": "from epub2 import EPub",
+   "check": "find_spec('epub2') ; pip download --no-deps epub2 ; pip download --no-deps ebooklib",
+   "observed": "epub2: False / No matching distribution; ebooklib-0.20 wheel downloaded",
+   "status": "installable"
+  },
+  {
+   "kind": "pymodule",
+   "name": "bs4",
+   "any_of": null,
+   "hard": true,
+   "evidence": "from bs4 import BeautifulSoup",
+   "check": "find_spec('bs4') ; pip download --no-deps beautifulsoup4",
+   "observed": "False; beautifulsoup4-4.15.0 wheel",
+   "status": "installable"
+  },
+  {
+   "kind": "pymodule",
+   "name": "tinker",
+   "any_of": null,
+   "hard": true,
+   "evidence": "import tinker ... create_lora_training_client_async",
+   "check": "find_spec('tinker') ; pip download --no-deps tinker",
+   "observed": "False; tinker-0.32.0 wheel",
+   "status": "installable"
+  },
+  {
+   "kind": "credential",
+   "name": "TINKER_API_KEY",
+   "any_of": null,
+   "hard": true,
+   "evidence": "LoRA Training on Tinker ... service_client",
+   "check": "[ -n \"${TINKER_API_KEY:-}\" ] && echo set || echo unset",
+   "observed": "unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "tinker.thinkingmachines.dev",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Tinker training (15 min) ~$1.50",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://tinker.thinkingmachines.dev/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "credential",
+   "name": "instruction-LLM",
+   "any_of": [
+    {
+     "kind": "credential",
+     "name": "GEMINI_API_KEY",
+     "status": "unavailable"
+    },
+    {
+     "kind": "credential",
+     "name": "OPENAI_API_KEY",
+     "status": "unavailable"
+    },
+    {
+     "kind": "credential",
+     "name": "ANTHROPIC_API_KEY",
+     "status": "unavailable"
+    },
+    {
+     "kind": "tool",
+     "name": "agent itself / Agent tool",
+     "status": "available"
+    }
+   ],
+   "hard": true,
+   "evidence": "Use a fast, cheap LLM (e.g., Gemini Flash): instruction = llm_call(...)",
+   "check": "[ -n \"${GEMINI_API_KEY:-}\" ] && echo set || echo unset ; [ -n \"${OPENAI_API_KEY:-}\" ] && echo set || echo unset ; [ -n \"${ANTHROPIC_API_KEY:-}\" ] && echo set || echo unset",
+   "observed": "all unset",
+   "status": "available"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "credential:TINKER_API_KEY",
+  "egress:tinker.thinkingmachines.dev"
+ ],
+ "notes": "epub2 as written is not on PyPI; ebooklib is the practical substitute. The instruction-generation LLM is 'e.g.' so the agent itself can generate descriptions. Tinker API host assumed to be tinker.thinkingmachines.dev (SDK default). AI-detector testing (GPTZero etc.) is a validation suggestion, not hard."
+}

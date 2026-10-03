@@ -91,3 +91,69 @@ These numbers are for the frozen front-end. Fixing the causes above would use
 the test set as development data. Any later improvement must therefore be
 measured on a newly drawn test set: run `select_cases.py` with a different seed
 and exclude the cases already used.
+
+## Round 2: the six causes fixed, measured on 100 new documents
+
+The fixes are in commit `7b771f4b`:
+
+* install commands became alternative routes;
+* `$(...)` is parsed correctly;
+* a program that comes from an imported pip package gets a pip route;
+* helpers that ship with the skill are no longer refused;
+* sample-data downloads are no longer hard needs;
+* installer names no longer imply a platform.
+
+On the first set, the fixed version agrees on 92/100. All 20 correct blocks
+remain and there are no wrong blocks left. That set was used to make the fixes,
+so this is **not** a fair test.
+
+The fair test is `set2/`: 100 new documents drawn with seed 20261004, none
+shared with the first set. They were annotated blind by 10 new annotators using
+the same rubric. skillc was frozen at `7b771f4b` and run before the truth was
+read.
+
+|                    | skillc BLOCKED | skillc ACHIEVABLE |
+|--------------------|---------------:|------------------:|
+| truth BLOCKED (31) | **16** | 15 (missed) |
+| truth ACHIEVABLE (69) | 14 (false refutations) | **55** |
+
+Agreement is **71/100**, against 69% for always answering ACHIEVABLE. For a
+BLOCKED verdict, precision is **53%** and recall is **52%**. In 12 of the 16
+correct blocks the cause is right.
+
+The first set's 86% did not carry over. The new documents brought kinds of
+error the first set did not contain.
+
+### False refutations (14)
+
+| Cause | Cases |
+|---|---|
+| `tools:` written with spaces instead of commas, read as one tool | c016, c040, c051, c059 |
+| An account the document names but its main path does not use | c002, c006, c008, c023 |
+| Example credential names (`EXAMPLECLOUD_API_KEY`, `API_TOKEN` in sample code) | c025, c080 |
+| Alternatives read as all required (any browser tool; any one of several fuzzers) | c014, c039 |
+| A long list of tools in an advisory persona | c073 |
+| A mention of mobile devices | c084 |
+
+### Missed blocks (15)
+
+| Cause | Cases |
+|---|---|
+| Hardware or OS stated in prose: GPU, a special network card, a Windows domain | c011, c044, c054, c068, c075, c096 |
+| An MCP server named in prose | c009, c063 |
+| A service whose host never appears as a URL in a command: Microsoft 365, the Expo API inside an npm package, Vercel, Tinker, Arduino docs, Hex packages | c027, c034, c043, c047, c062, c090 |
+| A network port other than HTTPS (SSH or WinRM to a build machine) | c021 |
+
+Across the two fair runs, skillc agrees with the ground truth on 71–86% of real
+documents. When it blocks, it is right 53–77% of the time. Its value over
+always saying yes is real but small on fresh documents.
+
+The remaining errors fall into two groups:
+
+1. **Reading the document's intent.** Is a mention a requirement, an example
+   or one option among several? Is an account needed, or only mentioned?
+2. **Knowing which services and hardware a named product implies.**
+
+A rule-based reader can only cover a few of these. The next step is a
+model-based reader whose every claimed need is checked against the document's
+own text and probed exactly as now, with a third fresh set to measure it.

@@ -1,0 +1,82 @@
+{
+ "case": "c066",
+ "primary_task": "Execute validated Azure IaC deployment with az CLI, deploy app code, health-check endpoints and disable SCM publishing.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "az",
+   "any_of": null,
+   "hard": true,
+   "evidence": "az deployment sub create ... az rest --method put ...",
+   "check": "command -v az ; apt-get -s install azure-cli ; pip download --no-deps azure-cli",
+   "observed": "az absent; apt: Unable to locate package; pip: azure_cli-2.90.0 wheel downloaded",
+   "status": "installable"
+  },
+  {
+   "kind": "account",
+   "name": "Azure subscription",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Auth, mandatory what-if preview, RBAC ... az deployment",
+   "check": "[ -n \"${AZURE_CLIENT_ID:-}\" ] etc. for AZURE_CLIENT_ID/SECRET/TENANT_ID/SUBSCRIPTION_ID",
+   "observed": "all unset; az not installed so no login",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "management.azure.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "az deployment sub create / az rest ...",
+   "check": "curl ... https://management.azure.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "login.microsoftonline.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Auth (az login)",
+   "check": "curl ... https://login.microsoftonline.com/",
+   "observed": "302",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "openssl",
+   "any_of": null,
+   "hard": true,
+   "evidence": "openssl rand -base64 32",
+   "check": "command -v openssl",
+   "observed": "/usr/bin/openssl",
+   "status": "available"
+  },
+  {
+   "kind": "tool",
+   "name": "Agent (sub-agent task)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Sub-agent delegation is MANDATORY for Step 0 ... dispatch as a task",
+   "check": "tools.json",
+   "observed": "Agent present",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "PowerShell",
+   "any_of": null,
+   "hard": false,
+   "evidence": "$dn=...; Start-Process $l (portal-link snippet in PowerShell syntax)",
+   "check": "command -v pwsh powershell ; apt-get -s install powershell",
+   "observed": "absent; Unable to locate package",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "account:azure",
+  "egress:management.azure.com"
+ ],
+ "notes": "PowerShell snippet only generates/opens a portal link; treated as non-hard (bash equivalent possible)."
+}

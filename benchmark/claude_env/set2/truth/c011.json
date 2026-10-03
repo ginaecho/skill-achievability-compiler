@@ -1,0 +1,72 @@
+{
+ "case": "c011",
+ "primary_task": "Adapt BOP datasets and run/evaluate the FoundationPose perception pipeline (TAO TensorRT depth, SAM3 segmentation, FoundationPose) on GPU from the product checkout.",
+ "requirements": [
+  {
+   "kind": "platform",
+   "name": "nvidia-gpu (CUDA 13 / TensorRT)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Execution requires ... sufficient GPU memory; ctypes.CDLL('libcudart.so.13')",
+   "check": "command -v nvidia-smi",
+   "observed": "absent (no GPU in container)",
+   "status": "unavailable"
+  },
+  {
+   "kind": "program",
+   "name": "python3.12",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Execution requires the product's Python 3.12 venv",
+   "check": "command -v python3.12",
+   "observed": "/usr/bin/python3.12",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "github.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "If execution was requested and no checkout exists, obtain it from the URL above (github.com/nvidia-isaac/...)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://github.com/",
+   "observed": "400",
+   "status": "available"
+  },
+  {
+   "kind": "account",
+   "name": "SAM3 checkpoint access (Hugging Face gated weights)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Execution requires ... authorized SAM3 checkpoint access",
+   "check": "[ -n \"${HF_TOKEN:-}\" ]; curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://huggingface.co/",
+   "observed": "HF_TOKEN unset; huggingface.co: curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "huggingface.co",
+   "any_of": null,
+   "hard": false,
+   "evidence": "SAM3 checkpoint download host (not named in doc)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://huggingface.co/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "program",
+   "name": "git",
+   "any_of": null,
+   "hard": false,
+   "evidence": "obtain it from the URL above",
+   "check": "command -v git",
+   "observed": "/usr/bin/git",
+   "status": "available"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "platform:nvidia-gpu (CUDA 13 / TensorRT)",
+  "account:SAM3 checkpoint access (Hugging Face gated weights)"
+ ],
+ "notes": "Advice/analysis of supplied artifacts is a secondary mode needing nothing; primary execution path needs a GPU. SAM3 checkpoint host is not named in the doc; HF gating is assumed (huggingface.co is also blocked by egress policy)."
+}

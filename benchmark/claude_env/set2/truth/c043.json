@@ -1,0 +1,63 @@
+{
+ "case": "c043",
+ "primary_task": "Deploy the user's project to Vercel as a preview deployment and return the URL.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "vercel-cli-or-fallback-script",
+   "any_of": [
+    {
+     "kind": "program",
+     "name": "vercel",
+     "status": "installable"
+    },
+    {
+     "kind": "program",
+     "name": "scripts/deploy.sh (bash+curl, bundled)",
+     "status": "available"
+    }
+   ],
+   "hard": true,
+   "evidence": "If `vercel` is installed, run `vercel deploy [path] -y` ... If not installed ... use the fallback deploy.sh",
+   "check": "command -v vercel ; npm view vercel version",
+   "observed": "vercel absent; npm view -> 62.2.0 (registry.npmjs.org reachable)",
+   "status": "installable"
+  },
+  {
+   "kind": "egress",
+   "name": "vercel-deploy-endpoint",
+   "any_of": [
+    {
+     "kind": "egress",
+     "name": "api.vercel.com",
+     "status": "unavailable"
+    },
+    {
+     "kind": "egress",
+     "name": "codex-deploy-skills.vercel.sh",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "vercel deploy ... / fallback script handles packaging and deployment, returns previewUrl and claimUrl",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://api.vercel.com/ ; curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://vercel.com/ ; curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://codex-deploy-skills.vercel.sh/",
+   "observed": "all three: curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "vercel",
+   "any_of": null,
+   "hard": false,
+   "evidence": "if the CLI fails with 'No existing credentials found', use the fallback method (No Auth)",
+   "check": "[ -n \"${VERCEL_TOKEN:-}\" ] && echo set || echo unset",
+   "observed": "unset",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:vercel-deploy-endpoint"
+ ],
+ "notes": "Account is not hard because the documented no-auth fallback exists. The fallback script's exact host is not in the document (not provided); codex-deploy-skills.vercel.sh is the assumed claimable-deploy endpoint; every Vercel host tried is refused by the egress policy, so both paths are blocked."
+}
