@@ -68,6 +68,10 @@ SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
 # before an invocation verb, used to skip "do NOT use `X`" false positives.
 _NEGATION_BEFORE_VERB_RE = NEGATION_RE
 
+# API identifiers carry a date-version stamp (`computer_20251124`): they name a
+# request parameter or tool *type*, not a tool the agent calls.
+VERSIONED_RE = re.compile(r"[_-]\d{8}\Z")
+
 SHELL_CAP = "bash"
 PACK_FENCE_TAG = "skillc-pack"
 
@@ -150,6 +154,18 @@ def _classify(raw: str) -> Optional[str]:
     return None
 
 
+def _names_a_value(raw: str, body: str) -> bool:
+    """An undeclared identifier the document itself shows to be data, not a
+    tool: it is date-version stamped, or the document writes it as a quoted
+    string or as a key of an inline object literal (`{type: "between_tools"}`,
+    `{type: "enabled", budget_tokens: N}`).  "use `between_tools`" then names a
+    request parameter, not a tool call."""
+    if VERSIONED_RE.search(raw) or f'"{raw}"' in body or f"'{raw}'" in body:
+        return True
+    key = re.compile(r"`[^`\n]*\{[^`\n]*\b" + re.escape(raw) + r"\s*:[^`\n]*`")
+    return bool(key.search(body))
+
+
 def extract(body: str, declared: set[str]) -> list[Invocation]:
     """Extract ordered tool invocations from prose (code fences pre-stripped)."""
     out: list[Invocation] = []
@@ -163,6 +179,8 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
         line = body.count("\n", 0, m.start(1)) + 1
         if norm in declared:
             out.append(Invocation(raw, norm, "agent-tool", line))
+            continue
+        if _names_a_value(raw, body):
             continue
         kind = _classify(raw)
         if kind == "agent-tool" and raw[0].isupper():
