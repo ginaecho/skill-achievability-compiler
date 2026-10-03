@@ -60,6 +60,23 @@ KNOWN = frozenset("""git curl wget gh docker kubectl helm terraform ansible node
     supabase make cmake gcc clang tsc eslint prettier pytest ruff black mypy jupyter
     markitdown mmdc dot hf huggingface-cli yt-dlp playwright brew apt apt-get choco winget
     code claude rg fd openssl ssh scp rsync unzip""".split())
+# Commands that install a tool: (program, words that must follow it)
+INSTALL_VERBS = {"npm": ("install", "i", "add"), "pnpm": ("add", "install", "i"),
+                 "yarn": ("global",), "pipx": ("install",), "cargo": ("install",),
+                 "go": ("install",), "dotnet": ("tool",), "brew": ("install",),
+                 "winget": ("install",), "choco": ("install",), "scoop": ("install",),
+                 "uv": ("tool",), "gem": ("install",)}
+# Where an installer downloads from (pip, npm and apt are in claude_routes.json)
+REGISTRIES = {"cargo": ("index.crates.io", "static.crates.io"), "go": ("proxy.golang.org",),
+              "dotnet": ("api.nuget.org",), "gem": ("rubygems.org",),
+              "pipx": ("pypi.org", "files.pythonhosted.org"), "uv": ("pypi.org",),
+              "npm": ("registry.npmjs.org",), "pnpm": ("registry.npmjs.org",),
+              "yarn": ("registry.npmjs.org",), "brew": ("formulae.brew.sh",)}
+SCRIPT_SHELLS = {"bash", "sh", "zsh", "iex", "pwsh", "powershell"}
+# A download of one of these is sample input data, which any other file can replace
+DATA_EXT = re.compile(r"\.(ogg|mp3|mp4|wav|webm|png|jpe?g|gif|svg|csv|tsv|json|txt|pdf|"
+                      r"parquet|xml|html?)$", re.I)
+INSTALLER_NAMES = {"winget", "choco", "chocolatey", "scoop", "brew", "homebrew"}
 LOCAL_MODULES = frozenset("scripts src lib utils util core helpers app tests config".split())
 CREDENTIAL_RE = re.compile(
     r"\b([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*_(?:API_KEY|API_TOKEN|ACCESS_TOKEN|AUTH_TOKEN|TOKEN|"
@@ -89,9 +106,22 @@ class Requirement:
     title: str
     needs: list[dict]
     fix: str
-    install: dict | None = None            # {"id","title","needs","how"} when installable
+    installs: list[dict] = field(default_factory=list)   # {"id","title","needs","how"}
     evidence: list[str] = field(default_factory=list)
     core: bool = False
+
+
+@dataclass
+class _DocRoute:
+    """An install command in the document: a way to get a tool, not a need.
+
+    `provides` holds the package names and URL it installs from; it becomes an
+    alternative way to satisfy the program it names, carrying its own needs."""
+    line: int
+    text: str
+    tokens: list[str]
+    provides: list[str]
+    needs: list[dict]
 
 
 def routes() -> dict:
@@ -124,8 +154,16 @@ def _blocks(text: str) -> list[tuple[str, int, str]]:
 
 
 def _commands(lang: str, start: int, body: str):
-    """(line number, command) pairs of a shell block."""
+    """(line number, command) pairs of a shell block; a line ending in a
+    backslash continues on the next."""
+    pending, first = "", 0
     for i, raw in enumerate(body.splitlines()):
+        if raw.rstrip().endswith("\\"):
+            first = first if pending else i
+            pending += raw.rstrip()[:-1] + " "
+            continue
+        if pending:
+            raw, i, pending = pending + raw.strip(), first, ""
         line = raw.strip()
         prompted = line.startswith(("$ ", "> "))
         line = line[2:].strip() if prompted else line
@@ -137,9 +175,31 @@ def _commands(lang: str, start: int, body: str):
         yield start + i, line
 
 
+def _substitutions(command: str) -> tuple[str, list[str]]:
+    """`$( ... )` command substitutions taken out of a command line: the line
+    with each replaced by a placeholder word, and the inner commands."""
+    inner, out, i = [], [], 0
+    while i < len(command):
+        if command.startswith("$(", i):
+            depth, j = 1, i + 2
+            while j < len(command) and depth:
+                depth += {"(": 1, ")": -1}.get(command[j], 0)
+                j += 1
+            inner.append(command[i + 2:j - 1])
+            out.append("SUBST")
+            i = j
+        else:
+            out.append(command[i])
+            i += 1
+    return "".join(out), inner
+
+
 def _segments(command: str) -> list[list[str]]:
     """The simple commands of a command line, split at `&&`, `||`, `;` and `|`
-    outside quotes, each without leading assignments and wrappers."""
+    outside quotes, each without leading assignments and wrappers; the
+    commands inside `$( ... )` come out as commands of their own."""
+    command, inner = _substitutions(command)
+    nested = [seg for c in inner for seg in _segments(c)]
     lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|")
     lexer.whitespace_split = True
     try:
@@ -157,7 +217,7 @@ def _segments(command: str) -> list[list[str]]:
             tokens = []
         else:
             tokens.append(word)
-    return out
+    return out + nested
 
 
 def _hosts(tokens: list[str]) -> list[str]:
@@ -180,25 +240,28 @@ class _Collector:
         self.reqs: dict[str, Requirement] = {}
         self.optional = optional
         self.routes = routes()
+        self.doc_routes: list[_DocRoute] = []
 
-    def add(self, req: Requirement, line: int, text: str) -> None:
+    def add(self, req: Requirement, line: int, text: str, optional: bool = False) -> None:
         have = self.reqs.setdefault(req.cond, req)
         have.evidence.append(f"line {line}: {text.strip()[:160]}")
-        have.core = have.core or line not in self.optional
+        have.core = have.core or not (optional or line in self.optional)
 
     def program(self, name: str, line: int, text: str) -> None:
         if name in COMMON:
             return
         route = self.routes["programs"].get(name)
-        install = None
-        if route:
-            installer, package = route
-            install = {"id": f"install_{name}", "title": f"Install {name} ({installer} {package})",
-                       "needs": self.routes["installers"][installer],
-                       "how": {"pip": f"pip install {package}", "npm": f"npm install -g {package}",
-                               "apt": f"apt-get install -y {package}"}[installer]}
+        installs = [self.route(name, *route)] if route else []
         self.add(Requirement(f"program:{name}", f"the program {name}", [{"program": name}],
-                             f"install {name}" if not route else "", install), line, text)
+                             f"install {name}", installs), line, text)
+
+    def route(self, name: str, installer: str, package: str) -> dict:
+        """Installing `name` with a known installer (pip, npm, apt)."""
+        return {"id": f"install_{name}_{installer}",
+                "title": f"Install {name} ({installer} {package})",
+                "needs": self.routes["installers"][installer],
+                "how": {"pip": f"pip install {package}", "npm": f"npm install -g {package}",
+                        "apt": f"apt-get install -y {package}"}[installer]}
 
     def installer(self, name: str, line: int, text: str) -> None:
         self.add(Requirement(f"installer:{name}", f"{name} can install packages here",
@@ -222,7 +285,7 @@ class _Collector:
         install = {"id": f"install_{name}", "title": f"Install the Python package {package}",
                    "needs": self.routes["installers"]["pip"], "how": f"pip install {package}"}
         self.add(Requirement(f"pymodule:{name}", f"the Python module {name}",
-                             [{"pymodule": name}], "", install), line, text)
+                             [{"pymodule": name}], "", [install]), line, text)
 
     def credential(self, name: str, line: int, text: str) -> None:
         self.add(Requirement(f"credential:{name}", f"the credential {name}",
@@ -259,6 +322,7 @@ def requirements(text: str) -> list[Requirement]:
     _inline(col, lines, fenced)
     _library(col, text)
     _frontmatter_tools(col, meta, lines)
+    _attach_routes(col)
     _fold_credentials(col)
     return list(col.reqs.values())
 
@@ -294,47 +358,162 @@ def _fold_credentials(col: _Collector) -> None:
                 col.reqs[cond].core = col.reqs[cond].core or folded.core
 
 
+def _install_command(tokens: list[str], piped_to: str | None) -> list[str] | None:
+    """What an install command provides (package names, script URL), or None."""
+    head, args = tokens[0], [t for t in tokens[1:] if not t.startswith("-")]
+    if head in ("curl", "wget", "iwr", "irm", "invoke-webrequest") and piped_to in SCRIPT_SHELLS:
+        return [t for t in tokens if re.match(r"https?://", t)]
+    verbs = INSTALL_VERBS.get(head)
+    if verbs and args[:1] and args[0] in verbs:
+        global_npm = head not in ("npm", "pnpm") or {"-g", "--global"} & set(tokens)
+        packages = [a for a in args[1:] if a not in ("install", "add")]
+        return packages if global_npm and packages else None
+    if head in ("pip", "pip3") and "install" in args and "-r" not in tokens:
+        return [a for a in args if a != "install"]
+    return None
+
+
+def _provides(route: _DocRoute, program: str) -> bool:
+    """Whether an install command installs `program`: its package or script URL
+    names it (aspire <- @microsoft/aspire-cli, Aspire.Cli, aspire.dev/install.sh)."""
+    return _installs_what(route) == program.lower()
+
+
 def _read_command(col: _Collector, no: int, command: str, known_only: bool = False) -> None:
-    for tokens in _segments(command):
+    segments = _segments(command)
+    for k, tokens in enumerate(segments):
         head = tokens[0]
         if head in KEYWORDS or (known_only and head not in KNOWN):
             continue
         args = [t for t in tokens[1:] if not t.startswith("-")]
-        for host in _hosts(tokens):
-            col.egress(host, no, command)
-        if head in BUILTINS or "/" in head or not re.fullmatch(r"[a-z][a-z0-9._+-]*", head):
+        piped_to = segments[k + 1][0] if k + 1 < len(segments) else None
+        provides = _install_command(tokens, piped_to)
+        if provides is not None and not (head in ("pip", "pip3") and provides):
+            sub = _Collector(set())
+            sub.routes = col.routes
+            _needs_of(sub, no, tokens, command)
+            needs = [n for r in sub.reqs.values() for n in r.needs] + [
+                {"egress": h} for h in REGISTRIES.get(head, ())]
+            needs = [json.loads(n) for n in dict.fromkeys(json.dumps(n) for n in needs)]
+            col.doc_routes.append(_DocRoute(no, command, tokens, provides, needs))
+            if piped_to in SCRIPT_SHELLS:
+                segments[k + 1] = ["true"]          # the shell runs the script, not a need
             continue
-        if head in ("python", "python3") and "-m" in tokens:
-            after = tokens[tokens.index("-m") + 1:]
-            mod = after[0].split(".")[0] if after else ""
-            if mod == "pip":
-                head, args = "pip", tokens[tokens.index("-m") + 2:]
-            elif mod and mod not in sys.stdlib_module_names:
-                col.module(mod, no, command)
-        if head in ("pip", "pip3", "uv") and "install" in args:
-            col.installer("pip", no, command)
+        if head in ("curl", "wget"):
+            out = next((tokens[i + 1] for i, t in enumerate(tokens[:-1]) if t in ("-o", "-O")),
+                       None) or (args[-1] if head == "wget" and args else None)
+            sample = bool(out and DATA_EXT.search(out.split("?")[0]))
+            for host in _hosts(tokens):
+                col.add(Requirement(f"egress:{host}", f"network access to {host}",
+                                    [{"egress": host}],
+                                    f"ask for {host} to be allowed by the network policy"),
+                        no, command, optional=sample)
+            col.program(head, no, command)
             continue
-        if head in ("npm", "yarn", "pnpm", "bun") and args[:1] \
-                and args[0] in ("install", "i", "add", "ci"):
-            col.installer("npm", no, command)
-        if head in ("npx", "bunx"):
-            col.installer("npm", no, command)
-        if head in ("apt", "apt-get") and "install" in args:
-            col.installer("apt", no, command)
+        _needs_of(col, no, tokens, command)
+
+
+def _needs_of(col: _Collector, no: int, tokens: list[str], command: str) -> None:
+    """The needs of one simple command."""
+    head = tokens[0]
+    args = [t for t in tokens[1:] if not t.startswith("-")]
+    for host in _hosts(tokens):
+        col.egress(host, no, command)
+    if head in BUILTINS or "/" in head or not re.fullmatch(r"[a-z][a-z0-9._+-]*", head):
+        return
+    if head in ("python", "python3") and "-m" in tokens:
+        after = tokens[tokens.index("-m") + 1:]
+        mod = after[0].split(".")[0] if after else ""
+        if mod == "pip":
+            head, args = "pip", tokens[tokens.index("-m") + 2:]
+        elif mod and mod not in sys.stdlib_module_names:
+            col.module(mod, no, command)
+    if head in ("pip", "pip3", "uv") and "install" in args:
+        col.installer("pip", no, command)
+        return
+    if head in ("npm", "yarn", "pnpm", "bun") and args[:1] \
+            and args[0] in ("install", "i", "add", "ci"):
+        col.installer("npm", no, command)
+    if head in ("npx", "bunx"):
+        col.installer("npm", no, command)
+    if head in ("apt", "apt-get") and "install" in args:
+        col.installer("apt", no, command)
+        return
+    if head == "docker" and args[:1] and args[0] in ("pull", "run") and len(args) > 1:
+        image = args[1]
+        first = image.split("/")[0]
+        col.egress(first if "." in first else "registry-1.docker.io", no, command)
+        col.add(Requirement("daemon:docker", "a running Docker daemon",
+                            [{"daemon": "docker"}], "start a Docker daemon the agent can use"),
+                no, command)
+    col.program(head, no, command)
+
+
+def _attach_routes(col: _Collector) -> None:
+    """Install commands of the document become alternative ways to get the
+    programs they name; one that names no program the document runs is kept
+    as a need of its own (the document wants that thing installed)."""
+    used = set()
+    for cond, req in col.reqs.items():
+        if not cond.startswith("program:"):
             continue
-        if head == "docker" and args[:1] and args[0] in ("pull", "run") and len(args) > 1:
-            image = args[1]
-            first = image.split("/")[0]
-            col.egress(first if "." in first else "registry-1.docker.io", no, command)
-            col.add(Requirement("daemon:docker", "a running Docker daemon",
-                                [{"daemon": "docker"}], "start a Docker daemon the agent can use"),
-                    no, command)
-        col.program(head, no, command)
+        program = cond.split(":", 1)[1]
+        for i, route in enumerate(col.doc_routes):
+            if _provides(route, program):
+                used.add(i)
+                req.installs.append({"id": f"doc_install_{program}_{i}",
+                                     "title": f"Install {program} as the document says "
+                                              f"(line {route.line})",
+                                     "needs": route.needs, "how": route.text})
+        module = col.reqs.get(f"pymodule:{program}")
+        if module and not req.installs:          # a program that comes with a pip package
+            req.installs.append(col.route(program, "pip",
+                                          PIP_NAMES.get(program, program.replace("_", "-"))))
+    unused: dict[str, list[_DocRoute]] = {}
+    for i, route in enumerate(col.doc_routes):
+        if i not in used:
+            unused.setdefault(_installs_what(route), []).append(route)
+    for name, group in unused.items():
+        if not name:
+            for route in group:
+                _needs_of(col, route.line, route.tokens, route.text)
+            continue
+        # Several commands that install the same thing are alternatives
+        for route in group:
+            col.program(name, route.line, route.text)
+        col.reqs[f"program:{name}"].installs += [
+            {"id": f"doc_install_{name}_{k}", "title": f"Install {name} as the document says "
+             f"(line {r.line})", "needs": r.needs, "how": r.text} for k, r in enumerate(group)]
+
+
+GENERIC_HOSTS = {"raw.githubusercontent.com", "github.com", "gist.githubusercontent.com",
+                 "objects.githubusercontent.com", "get.pnpm.io"}
+
+
+def _installs_what(route: _DocRoute) -> str:
+    """The name of the tool an install command installs: `@microsoft/aspire-cli`,
+    `Aspire.Cli` and `https://aspire.dev/install.sh` all name `aspire`."""
+    item = route.provides[0] if route.provides else ""
+    if re.match(r"https?://", item):
+        url = urlparse(item)
+        parts = [p for p in url.path.split("/") if p]
+        item = (parts[1] if len(parts) > 1 else "") if url.hostname in GENERIC_HOSTS \
+            else (url.hostname or "").removeprefix("get.").removeprefix("www.").split(".")[0]
+    item = re.sub(r"^@[^/]+/", "", item.split("@")[0] if not item.startswith("@")
+                  else "@" + item[1:].split("@")[0]).lower()
+    item = re.sub(r"[.-](cli|tools?)$", "", item.split("/")[-1])
+    return item if re.fullmatch(r"[a-z][a-z0-9_-]{2,}", item) else ""
 
 
 def _library(col: _Collector, text: str) -> None:
     accounts, platforms = col.routes["accounts"], col.routes["platforms"]
-    for o in match(text, load_library()):
+    library = load_library()
+    for o in match(text, library):
+        if o.kind == "program" and library.programs.get(o.value, {}).get("status") \
+                == "unavailable":
+            continue          # unpublished: it ships with the skill's own package
+        if o.kind == "runtime_tool" and o.text.strip().lower() in INSTALLER_NAMES:
+            continue          # an installer named as one way to install something
         if o.kind == "resource" and o.value in accounts:
             alternatives = [{"all": [{"credential": v} for v in group]}
                             for group in accounts[o.value]]
@@ -381,7 +560,7 @@ def intent_from_text(text: str, name: str | None = None, source: str = "") -> di
     reqs = requirements(text)
     core = [r.cond for r in reqs if r.core]
     caps = [{"pred": r.cond, "title": r.title, "needs": r.needs, "fix": r.fix} for r in reqs]
-    ops = [{**r.install, "adds": [r.cond]} for r in reqs if r.install]
+    ops = [{**op, "adds": [r.cond]} for r in reqs for op in r.installs]
     if not core:
         caps.append({"pred": "deliverable", "title": "work the agent does by itself",
                      "needs": [], "fix": ""})

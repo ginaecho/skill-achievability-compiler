@@ -176,8 +176,8 @@ def test_inline_commands_and_pip_dependency_lines():
     text = ("Run `npx create-thing` first. | Tool | `curl -sSL https://get.example.dev/i.sh \\| bash` |\n"
             "Needs `openpyxl`, `Pillow` (pip) · `pptxgenjs` (npm) · LibreOffice (`soffice`)\n")
     conds = {r.cond for r in requirements(text)}
-    assert {"installer:npm", "program:npx", "egress:get.example.dev", "pymodule:openpyxl",
-            "pymodule:PIL", "program:soffice"} <= conds
+    assert {"installer:npm", "program:npx", "program:example", "pymodule:openpyxl",
+            "pymodule:PIL", "program:soffice"} <= conds          # the script installs `example`
     assert "pymodule:pptxgenjs" not in conds
 
 
@@ -212,3 +212,74 @@ def test_cli_intent_and_reach(tmp_path, env, capsys):
     assert main(["reach", str(path), "--env", str(env_file)]) == 1
     assert "egress:blocked.example.org" in capsys.readouterr().out
     assert main(["reach", str(path)]) == 2
+
+
+# --------------------------------------------------------------------------
+# Fixes found by the first evaluation (benchmark/claude_env/REPORT.md)
+# --------------------------------------------------------------------------
+
+INSTALL_TABLE = textwrap.dedent("""\
+    | Aspire CLI (curl) | `curl -sSL https://aspire.dev/install.sh \\| bash` |
+    | Aspire CLI (npm)  | `npm install -g @microsoft/aspire-cli` |
+    > Aspire also supports Homebrew, WinGet and the PowerShell installer.
+
+    ```bash
+    aspire new starter
+    ```
+    """)
+
+
+def test_install_commands_are_alternative_routes_not_needs():
+    intent = intent_from_text(INSTALL_TABLE)
+    assert "program:aspire" in intent["goal"]
+    assert not {"egress:aspire.dev", "installer:npm", "platform:windows",
+                "platform:macos"} & set(intent["goal"])
+    routes = [op for op in intent["operations"] if op["adds"] == ["program:aspire"]]
+    assert len(routes) == 2 and {"egress": "aspire.dev"} in routes[0]["needs"]
+
+
+def test_reach_takes_any_install_route(env):
+    env.nodes["egress/aspire.dev"] = {"id": "egress/aspire.dev", "kind": "service",
+                                      "name": "aspire.dev", "attrs": {"available": False}}
+    for host in ("registry.npmjs.org",):
+        env.nodes[f"egress/{host}"] = {"id": f"egress/{host}", "kind": "service", "name": host,
+                                       "attrs": {"available": True}}
+    env.nodes["program/npm"] = {"id": "program/npm", "kind": "service", "name": "npm",
+                                "attrs": {"available": True}}
+    env.nodes["program/aspire"] = {"id": "program/aspire", "kind": "service", "name": "aspire",
+                                   "attrs": {"available": False}}
+    result = reach(intent_from_text(INSTALL_TABLE), env)
+    assert "program:aspire" not in result.blocked
+    assert any("npm install -g @microsoft/aspire-cli" in str(step) for step in result.plan)
+
+
+def test_install_commands_naming_nothing_the_document_runs_are_grouped_by_tool():
+    text = "```bash\ncurl -fsSL https://get.tool.dev/x.sh | sh\nnpm i -g tool-cli\n```\n"
+    intent = intent_from_text(text)
+    assert intent["goal"] == ["program:tool"]
+
+
+def test_command_substitution_is_read_as_its_own_command():
+    assert _segments('cd "$(git rev-parse --show-toplevel)" && make') == [
+        ["cd", "SUBST"], ["make"], ["git", "rev-parse", "--show-toplevel"]]
+    conds = {r.cond for r in requirements("```bash\nX=$(git rev-parse HEAD)\n```\n")}
+    assert "program:git" in conds and "program:rev-parse" not in conds
+
+
+def test_a_program_from_a_pip_package_the_document_imports_is_installable():
+    text = "```python\nimport gradio as gr\n```\n```bash\ngradio deploy\n```\n"
+    reqs = {r.cond: r for r in requirements(text)}
+    assert reqs["program:gradio"].installs[0]["how"] == "pip install gradio"
+
+
+def test_downloading_sample_input_data_is_not_a_hard_need():
+    text = ("```bash\ncurl -o corpus/seed.ogg \\\n  https://media.example.org/File:seed.ogg\n"
+            "curl -fsSL https://api.example.org/v1/items\n```\n")
+    reqs = {r.cond: r for r in requirements(text)}
+    assert reqs["egress:media.example.org"].core is False
+    assert reqs["egress:api.example.org"].core is True
+
+
+def test_unpublished_helpers_ship_with_the_skill():
+    text = "Run the Go helper; Tuistory drives the terminal.\n"
+    assert not any(r.cond.startswith("program:") for r in requirements(text))

@@ -16,6 +16,9 @@ do not -- a criterion that does not depend on skillc -- so the set exercises
 runtime requirements while keeping prose-only documents represented.
 
     python benchmark/claude_env/select_cases.py --agents-root /path/to/clones
+    # a further, disjoint test set:
+    python benchmark/claude_env/select_cases.py --seed 20261004 --out benchmark/claude_env/set2 \
+        --exclude benchmark/claude_env/cases.json
 """
 from __future__ import annotations
 
@@ -45,6 +48,10 @@ HERE = Path(__file__).parent
 def git_show(path: str) -> str:
     return subprocess.run(["git", "show", f"{BRANCH}:{path}"], capture_output=True, text=True,
                           check=True).stdout
+
+
+def _fresh(pool: list[dict], used: set[str]) -> list[dict]:
+    return [d for d in pool if d["sha256"] not in used and d["id"] not in used]
 
 
 def stratified(pool: list[dict], n: int, rng: random.Random) -> list[dict]:
@@ -100,13 +107,20 @@ def agents(root: Path) -> dict[str, list[dict]]:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--agents-root", type=Path, default=Path("/home/user"))
+    ap.add_argument("--seed", type=int, default=SEED)
+    ap.add_argument("--out", type=Path, default=HERE)
+    ap.add_argument("--exclude", type=Path, action="append", default=[],
+                    help="cases.json of earlier test sets; their documents are not drawn again")
     args = ap.parse_args()
-    rng = random.Random(SEED)
-    chosen = stratified(skills(), 70, rng)
+    used = {v for f in args.exclude for c in json.loads(f.read_text())["cases"]
+            for v in (c["id"], c["sha256"])}
+    rng = random.Random(args.seed)
+    chosen = stratified(_fresh(skills(), used), 70, rng)
     for docs in agents(args.agents_root).values():
-        unique = list({d["sha256"]: d for d in docs}.values())
+        unique = list({d["sha256"]: d for d in _fresh(docs, used)}.values())
         chosen += stratified(unique, 15, rng)
-    docs_dir = HERE / "cases"
+    args.out.mkdir(parents=True, exist_ok=True)
+    docs_dir = args.out / "cases"
     shutil.rmtree(docs_dir, ignore_errors=True)
     docs_dir.mkdir()
     cases = []
@@ -114,8 +128,8 @@ def main() -> None:
         case_id = f"c{i:03d}"
         (docs_dir / f"{case_id}.md").write_text(d.pop("text"), encoding="utf-8")
         cases.append({"case": case_id, **d})
-    (HERE / "cases.json").write_text(json.dumps({"seed": SEED, "cases": cases}, indent=1) + "\n",
-                                     encoding="utf-8")
+    (args.out / "cases.json").write_text(
+        json.dumps({"seed": args.seed, "cases": cases}, indent=1) + "\n", encoding="utf-8")
     print(f"{len(cases)} cases: {sum(c['kind'] == 'skill' for c in cases)} skills, "
           f"{sum(c['kind'] == 'agent' for c in cases)} agents, "
           f"{sum(c['fenced'] for c in cases)} with code blocks")

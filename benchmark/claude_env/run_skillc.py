@@ -1,6 +1,6 @@
 """Run `skillc reach --claude` on every case and keep its verdict and probe.
 
-    python benchmark/claude_env/run_skillc.py [--out benchmark/claude_env/results]
+    python benchmark/claude_env/run_skillc.py [--set benchmark/claude_env/set2] [--out DIR]
 
 Exit 0 / 3 (achievable, or achievable under assumptions) count as ACHIEVABLE;
 exit 1 as BLOCKED.  The session's tool names and connected connectors are
@@ -18,9 +18,9 @@ HERE = Path(__file__).parent
 VERDICT = {0: "ACHIEVABLE", 3: "ACHIEVABLE", 1: "BLOCKED"}
 
 
-def run(case: str, out: Path) -> dict:
+def run(case: str, cases: Path, out: Path) -> dict:
     cmd = [sys.executable, "-c", "from skillc.cli import main; raise SystemExit(main())",
-           "reach", str(HERE / "cases" / f"{case}.md"), "--claude", "--json",
+           "reach", str(cases / "cases" / f"{case}.md"), "--claude", "--json",
            "--tools-file", str(HERE / "session" / "tools.json"),
            "--connectors-file", str(HERE / "session" / "connectors.json"),
            "--save-env", str(out / f"{case}.env.json")]
@@ -35,13 +35,15 @@ def run(case: str, out: Path) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", type=Path, default=HERE / "results")
+    ap.add_argument("--set", type=Path, default=HERE, help="test set directory")
+    ap.add_argument("--out", type=Path, help="default: SET/results")
     args = ap.parse_args()
+    args.out = args.out or args.set / "results"
     args.out.mkdir(exist_ok=True)
-    cases = [c["case"] for c in json.loads((HERE / "cases.json").read_text())["cases"]]
+    cases = [c["case"] for c in json.loads((args.set / "cases.json").read_text())["cases"]]
     rows = []
     for case in cases:
-        rows.append(run(case, args.out))
+        rows.append(run(case, args.set, args.out))
         print(case, rows[-1]["verdict"], rows[-1]["blocked"] or "", flush=True)
     (args.out / "skillc.json").write_text(json.dumps(rows, indent=1) + "\n", encoding="utf-8")
 
