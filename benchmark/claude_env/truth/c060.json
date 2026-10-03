@@ -1,0 +1,63 @@
+{
+ "case": "c060",
+ "primary_task": "Deploy Python web app code to Azure App Service Linux (create RG/plan/web app, set startup, zip deploy).",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "azure-deploy-cli",
+   "any_of": [
+    {
+     "kind": "program",
+     "name": "az",
+     "status": "installable"
+    },
+    {
+     "kind": "program",
+     "name": "azd",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "az webapp deploy ... or azd deploy (when azure.yaml)",
+   "check": "command -v az; command -v azd; pip download azure-cli",
+   "observed": "az absent, azd absent; azure-cli pip-downloadable",
+   "status": "installable"
+  },
+  {
+   "kind": "account",
+   "name": "azure",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Azure subscription is needed for the workflow's cost/policy/deploy operations",
+   "check": "[ -n \"${AZURE_CLIENT_ID:-}\" ] etc. (AZURE_CLIENT_ID/SECRET/TENANT_ID/SUBSCRIPTION_ID); command -v az; ls ~/.azure",
+   "observed": "all unset; az absent; no ~/.azure",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "management.azure.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Azure Resource Manager calls (az / MCP)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://management.azure.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "mcp",
+   "name": "azure",
+   "any_of": null,
+   "hard": false,
+   "evidence": "MCP tools used: mcp_azure_mcp_subscription_list, group_list, appservice",
+   "check": "session MCP list",
+   "observed": "not connected",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "account:azure",
+  "egress:management.azure.com"
+ ],
+ "notes": "az CLI installable via pip, but no Azure credentials and ARM endpoint is egress-blocked. Azure MCP treated as non-hard since az commands drive the workflow (it is also unavailable)."
+}

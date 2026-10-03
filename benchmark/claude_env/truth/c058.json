@@ -1,0 +1,67 @@
+{
+ "case": "c058",
+ "primary_task": "Deploy/run/test NVIDIA Nemotron Speech (Riva) ASR/TTS/NMT NIMs, cloud-hosted via build.nvidia.com or self-hosted Docker on GPU.",
+ "requirements": [
+  {
+   "kind": "account",
+   "name": "nvidia-inference-path",
+   "any_of": [
+    {
+     "kind": "credential",
+     "name": "NVIDIA_API_KEY (+egress grpc.nvcf.nvidia.com)",
+     "status": "unavailable"
+    },
+    {
+     "kind": "platform",
+     "name": "gpu + docker daemon + NGC_API_KEY + nvcr.io",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "Cloud: pip install nvidia-riva-client and a valid NVIDIA_API_KEY; Self-hosted: NVAIE, drivers, Docker, Container Toolkit, NGC API key",
+   "check": "[ -n \"${NVIDIA_API_KEY:-}\" ]; [ -n \"${NGC_API_KEY:-}\" ]; command -v nvidia-smi; docker info; curl grpc.nvcf.nvidia.com / nvcr.io",
+   "observed": "both keys unset; no GPU; docker daemon down; grpc.nvcf.nvidia.com and nvcr.io 403-blocked",
+   "status": "unavailable"
+  },
+  {
+   "kind": "pymodule",
+   "name": "riva",
+   "any_of": null,
+   "hard": true,
+   "evidence": "pip install -U nvidia-riva-client",
+   "check": "find_spec('riva'); pip download nvidia-riva-client",
+   "observed": "False; download ok",
+   "status": "installable"
+  },
+  {
+   "kind": "egress",
+   "name": "docs.nvidia.com",
+   "any_of": null,
+   "hard": false,
+   "evidence": "fetch or open the canonical NVIDIA doc",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://docs.nvidia.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "build.nvidia.com",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Cloud function IDs / NVIDIA_API_KEY from build.nvidia.com",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://build.nvidia.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "credential:NVIDIA_API_KEY",
+  "egress:grpc.nvcf.nvidia.com",
+  "platform:gpu",
+  "daemon:docker",
+  "credential:NGC_API_KEY",
+  "egress:nvcr.io"
+ ],
+ "notes": "Router skill; both execution paths (cloud and self-hosted) blocked. docs.nvidia.com source-of-truth fetching also blocked. Purely advisory sub-asks (model selection) would be partly possible but are degraded."
+}

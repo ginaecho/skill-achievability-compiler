@@ -1,0 +1,85 @@
+{
+ "case": "c057",
+ "primary_task": "azure-app-onboard Phase 2: map app components to Azure services, check policy/quota, estimate cost, write prepare-plan.json.",
+ "requirements": [
+  {
+   "kind": "mcp",
+   "name": "azure",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Step 2 Inline MCP: mcp_azure_mcp_policy + mcp_azure_mcp_advisor",
+   "check": "session MCP list",
+   "observed": "Azure MCP not connected",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "azure-pricing",
+   "any_of": [
+    {
+     "kind": "mcp",
+     "name": "azure (pricing)",
+     "status": "unavailable"
+    },
+    {
+     "kind": "egress",
+     "name": "prices.azure.com",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "pricing MCP; fallback subagent uses direct HTTP to prices.azure.com",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://prices.azure.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "program",
+   "name": "az",
+   "any_of": null,
+   "hard": true,
+   "evidence": "`az rest` | Quota validation (via sub-agent)",
+   "check": "command -v az; pip download azure-cli; apt-get -s install azure-cli",
+   "observed": "absent; pip download ok; apt: unable to locate",
+   "status": "installable"
+  },
+  {
+   "kind": "account",
+   "name": "azure",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Azure subscription is needed for the workflow's cost/policy/deploy operations",
+   "check": "[ -n \"${AZURE_CLIENT_ID:-}\" ] etc. (AZURE_CLIENT_ID/SECRET/TENANT_ID/SUBSCRIPTION_ID); command -v az; ls ~/.azure",
+   "observed": "all unset; az absent; no ~/.azure",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "management.azure.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Azure Resource Manager calls (az / MCP)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://management.azure.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "tool",
+   "name": "Agent",
+   "any_of": null,
+   "hard": true,
+   "evidence": "dispatch as `task` subagent",
+   "check": "tools.json",
+   "observed": "Agent present",
+   "status": "available"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "mcp:azure",
+  "egress:prices.azure.com",
+  "egress:management.azure.com",
+  "account:azure"
+ ],
+ "notes": "Quota checks have a 'best-effort estimate + disclaimer' fallback on failure, but policy MCP and pricing (MCP or prices.azure.com) remain blocked, as does any Azure account."
+}

@@ -65,6 +65,62 @@ Outputs:
 Runnable examples: `examples/environment/` (a Contributor and an Owner over the
 same simulated subscription).
 
+## The Claude runtime: what can a SKILL.md or agent.md achieve here?
+
+The same question applies to an agent's own runtime. For Claude, the
+environment is the session itself: its tools, its permission rules, the hosts
+its network policy lets it reach, the programs and Python modules installed,
+which credential variables are set (names only, never values), which paths it
+can write, and which MCP connectors are connected or still waiting for sign-in.
+
+```console
+# What does this skill need from its runtime? (each need cites its line)
+$ skillc intent path/to/SKILL.md
+
+# Probe exactly those needs here, read-only, and decide what is achievable
+$ skillc reach path/to/SKILL.md --claude [--save-env env.json] [--plan plan.md]
+
+# A cloud session's connectors and tools are not in a config file; name them
+$ skillc reach agent.md --claude --tools-file tools.json --connectors-file connectors.json
+
+# Or probe once and reuse the snapshot
+$ skillc env probe --claude --needs-from SKILL.md -o env.json
+$ skillc reach SKILL.md --env env.json
+```
+
+**Reading the document** (`env/nl.py`) is deterministic. It reads what the
+document *does*:
+
+* shell blocks: the programs it runs, the packages it installs (pip, npm, apt),
+  and the hosts it fetches from;
+* Python blocks: the imports outside the standard library;
+* inline commands, and packages listed on a line about pip;
+* credential variables; the tool-policy library's accounts, platforms and MCP
+  servers; and `allowed-tools` / `tools` from the frontmatter.
+
+Credentials that are alternatives of one account (an LLM key, a GitHub token)
+are folded into that account. A need found only in an optional passage
+("optionally", "alternatively", a troubleshooting section) is reported under
+`optional` and does not decide the verdict. A document with no runtime needs
+is a pure *deliverable*: it is achievable by the agent alone.
+
+**Installing.** A missing program, module or package is reachable when an
+installer can provide it here (`data/env/claude_routes.json`). The installer's
+own needs (the program, and egress to its registry) are checked like any other
+need, so a plan that says `pip install x` is only offered when pypi.org
+answers.
+
+**Facts.**
+
+* Egress is one HTTPS request per host. An answer from the host, even 404, is
+  "reachable". A 403/407 from the egress proxy is a refusal.
+* A tool with no allow or deny rule is an assumption ("the user approves when
+  asked"), never a refusal.
+* A credential that is set is assumed valid for the task.
+* A connector waiting for sign-in is not usable.
+
+The evaluation on 100 real documents is in `benchmark/claude_env/REPORT.md`.
+
 ## What is decided, and how
 
 **Permissions** follow role-based access control as Azure RBAC defines it:
