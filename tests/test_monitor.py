@@ -203,3 +203,18 @@ def test_claude_code_hook_protocol_end_to_end(tmp_path):
 def test_inactive_without_config(tmp_path):
     assert _hook("pre", {"cwd": str(tmp_path), "tool_name": "Bash",
                          "tool_input": {"command": "rm -rf x"}}, tmp_path) is None
+
+
+def test_post_tool_hook_reports_observed_runtime_facts(tmp_path):
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--root",
+                    str(tmp_path)], check=True, capture_output=True)
+    ev = {"session_id": "s1", "cwd": str(tmp_path)}
+    plan = str(tmp_path / ".skillc" / "plan.ce")
+    _hook("pre", {**ev, "tool_name": "Write",
+                  "tool_input": {"file_path": plan, "content": GOOD}}, tmp_path)
+    clean = {**ev, "tool_name": "Bash", "tool_input": {"command": "pytest"},
+             "tool_response": "3 passed"}
+    assert _hook("post", clean, tmp_path) is None                  # nothing observed
+    out = _hook("post", {**clean, "tool_response": "bash: pandoc: command not found"},
+                tmp_path)
+    assert "program `pandoc` is missing" in out["hookSpecificOutput"]["additionalContext"]

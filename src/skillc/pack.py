@@ -303,7 +303,8 @@ def _check_local_steps(steps: Any, path: str,
                 raise PackError(f"{p}: rec needs name+body")
             if body["name"] in rec_names:
                 raise PackError(f"{p}: duplicate rec name {body['name']!r}")
-            meaningful = [step for step in body["body"] if "goal" not in step]
+            meaningful = [step for step in body["body"]
+                          if not (isinstance(step, dict) and "goal" in step)]
             if (meaningful == [{"continue": body["name"]}]):
                 raise PackError(
                     f"{p}: recursion must be guarded by a local action")

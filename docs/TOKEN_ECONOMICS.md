@@ -69,7 +69,9 @@ not move.
 Each verdict reason maps to a distinct flailing profile — how long an agent
 runs before that particular structural failure stops it, and how many agents
 are billed for it. Numbers below are for `call-to-book`, a median-sized real
-consumer skill (≈1.7K tokens), priced against the LLM front-end.
+consumer skill (≈1.7K tokens), priced against the LLM front-end with the
+*modelled* compaction cost (`skillc cost --price-llm`; the figure moves with
+the prompt and the skill text, so a current run may differ by a few percent).
 
 | reason | turns (lo–typ–hi) | agents | wasted per run (typical) | check | leverage |
 |---|---|---|---|---|---|
@@ -165,10 +167,14 @@ deterministic front-end names the missing tool and the source line for free.
 
 This matters more than the numbers.
 
-**Measured.** Compaction usage, when a live API call reports it.
-`frontend.llm.compact_measured` returns the API's own `usage` block and
-`Cost.measured` is `True`. Nothing else in the pipeline has anything to
-measure — it spends no tokens.
+**Measured.** Compaction usage, when a live API call reports it. Every
+provider call made inside `frontend.llm.metered()` records the API's own
+`usage` block; `skillc cost --llm` compacts each skill that way and prices
+exactly that usage (`Cost.measured` is `True`, and the report says
+"measured"). `compact_with_repair_measured` does the same across the repair
+round. Where no call reported usage (`--price-llm`, `--corpus`, or JSON packs),
+the cost is modelled and labelled so. Nothing else in the pipeline has anything
+to measure — it spends no tokens.
 
 **Modelled.** Runtime waste, always. It is the cost of a run that, if the
 refutation is correct, *never happens* — so it cannot be measured, only

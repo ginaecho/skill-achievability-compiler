@@ -149,3 +149,18 @@ def test_pack_digest_is_stable_and_normalising():
 def test_pack_digest_validates_its_input():
     with pytest.raises(PackError):
         pack_digest({"name": "x"})
+
+
+@pytest.mark.parametrize("pack", [
+    # a comparison whose operator is not a string
+    {"name": "t", "capabilities": {}, "protocol": [],
+     "goal": {"cmp": ["x", ["<"], 1]}},
+    {"name": "t", "capabilities": {}, "protocol": [],
+     "goal": {"cmp": ["x", {"<": 1}, 1]}},
+    # a non-dict step inside a declared loop body
+    {"name": "t", "capabilities": {}, "protocol": [], "goal": "p",
+     "skills": {"a": [{"rec": {"name": "X", "body": [7, {"continue": "X"}]}}]}},
+])
+def test_gate_rejects_malformed_input_with_pack_error_not_a_crash(pack):
+    with pytest.raises(PackError):
+        validate_pack(pack)

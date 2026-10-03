@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 from .frontend.toolpolicy import match, unmet
-from .monitor import DENY, Config, Monitor, plan_instructions, thinking_since
+from .monitor import ALLOW, DENY, Config, Monitor, plan_instructions, thinking_since
 
 CONFIG = Path(".skillc") / "monitor.json"
 

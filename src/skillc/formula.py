@@ -102,7 +102,8 @@ def validate_formula(f: Any, path: str = "formula") -> None:
             return
         if "cmp" in f:
             c = f["cmp"]
-            if not (isinstance(c, list) and len(c) == 3 and c[1] in VALID_OPS):
+            if not (isinstance(c, list) and len(c) == 3
+                    and isinstance(c[1], str) and c[1] in VALID_OPS):
                 raise FormulaError(f"{path}: bad cmp {c!r}")
             validate_expr(c[0], f"{path}.cmp[0]")
             validate_expr(c[2], f"{path}.cmp[2]")
