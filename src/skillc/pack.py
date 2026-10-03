@@ -316,7 +316,8 @@ def _check_local_steps(steps: Any, path: str,
                                    rec_scope, rec_names)
         elif kind == "rec":
             _check_rec_head(body, p, rec_names)
-            meaningful = [step for step in body["body"] if "goal" not in step]
+            meaningful = [step for step in body["body"]
+                          if not (isinstance(step, dict) and "goal" in step)]
             if meaningful == [{"continue": body["name"]}]:
                 raise PackError(
                     f"{p}: recursion must be guarded by a local action")

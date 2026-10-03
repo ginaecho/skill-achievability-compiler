@@ -3,9 +3,7 @@ Claude Code hook protocol."""
 import json
 import subprocess
 import sys
-from pathlib import Path
 
-import pytest
 
 from skillc.monitor import ALLOW, DENY, WARN, Config, Monitor, Rule, thinking_since
 

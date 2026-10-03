@@ -527,7 +527,7 @@ def test_cli_reports_ce_errors_as_usage_errors(tmp_path, capsys):
 # Runtime-manifest binding
 # --------------------------------------------------------------------------
 
-from skillc.frontend.runtime import Runtime, bind_runtime, load_runtime  # noqa: E402
+from skillc.frontend.runtime import bind_runtime, load_runtime  # noqa: E402
 
 RT = load_runtime("developer-sandbox")
 BOUND = """\
@@ -747,7 +747,7 @@ def test_binder_keeps_external_choices_and_all_dead_choices():
 # Tool-policy library (TPL)
 # --------------------------------------------------------------------------
 
-from skillc.frontend.toolpolicy import (Library, coverage, load_library,  # noqa: E402
+from skillc.frontend.toolpolicy import (coverage, load_library,  # noqa: E402
                                         match, resolve_program)
 
 LIB = load_library()

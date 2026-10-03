@@ -16,7 +16,6 @@ two goal levels; the binder prunes the agent's unrunnable branches) or json
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from collections import Counter

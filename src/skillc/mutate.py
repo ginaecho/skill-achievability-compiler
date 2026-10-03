@@ -18,19 +18,7 @@ import copy
 from typing import Any
 
 from .formula import atoms
-
-
-def _acts(steps: list[dict]) -> list[str]:
-    out = []
-    for s in steps:
-        if "act" in s:
-            out.append(s["act"]["cap"])
-        if "choice" in s:
-            for br in s["choice"]["branches"].values():
-                out.extend(_acts(br))
-        if "rec" in s:
-            out.extend(_acts(s["rec"]["body"]))
-    return out
+from .pack import iter_steps
 
 
 def drop_invoked_capability(pack: dict) -> tuple[dict, str] | None:
@@ -38,7 +26,8 @@ def drop_invoked_capability(pack: dict) -> tuple[dict, str] | None:
 
     Expected verdict on the mutant: IMPOSSIBLE / MISSING_CAPABILITY with the
     dropped tool in the frontier (hallucinated planning, manufactured)."""
-    invoked = [c for c in _acts(pack["protocol"]) if c in pack["capabilities"]]
+    invoked = [s["act"]["cap"] for s in iter_steps(pack["protocol"])
+               if "act" in s and s["act"]["cap"] in pack["capabilities"]]
     if not invoked:
         return None
     victim = sorted(invoked)[0]

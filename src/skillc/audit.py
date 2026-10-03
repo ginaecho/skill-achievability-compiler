@@ -84,16 +84,24 @@ def audit_bundle(path: str | Path) -> list[Finding]:
         bundle, skill_md = path, path / "SKILL.md"
     else:
         bundle, skill_md = path.parent, path
-    out: list[Finding] = []
     rel = str(skill_md)
-
     if not skill_md.is_file():
         return [Finding("error", "manifest-missing",
                         f"no SKILL.md found in bundle {bundle}", str(bundle))]
     text = skill_md.read_text(encoding="utf-8", errors="replace")
     meta, body = parse_frontmatter(text)
+    out = [*_manifest_findings(meta, bundle, rel),
+           *_poisoning_findings(text, body, meta.get("description"), rel),
+           *_code_findings(body, bundle, rel),
+           *_permission_findings(meta, body, rel)]
+    order = {"error": 0, "warning": 1, "info": 2}
+    out.sort(key=lambda f: (order[f.severity], f.file, f.line))
+    return out
 
-    # ---- manifest consistency ------------------------------------------
+
+def _manifest_findings(meta: dict, bundle: Path, rel: str) -> list[Finding]:
+    """Manifest consistency: name and description present and well-formed."""
+    out = []
     name = meta.get("name")
     if not name:
         out.append(Finding("error", "manifest-no-name",
@@ -114,12 +122,16 @@ def audit_bundle(path: str | Path) -> list[Finding]:
         out.append(Finding("warning", "manifest-description-length",
                            f"description is {len(str(desc))} chars "
                            f"(> {MAX_DESCRIPTION})", rel))
+    return out
 
-    # ---- metadata poisoning ---------------------------------------------
-    for m in INVISIBLE_RE.finditer(text):
-        out.append(Finding("error", "unicode-invisible",
-                           f"invisible/bidi character U+{ord(m.group(0)):04X}",
-                           rel, _line_of(text, m.start())))
+
+def _poisoning_findings(text: str, body: str, desc, rel: str) -> list[Finding]:
+    """Metadata poisoning: invisible characters, injection phrases, hidden
+    HTML comments."""
+    out = [Finding("error", "unicode-invisible",
+                   f"invisible/bidi character U+{ord(m.group(0)):04X}",
+                   rel, _line_of(text, m.start()))
+           for m in INVISIBLE_RE.finditer(text)]
     if desc and INJECTION_RE.search(str(desc)):
         out.append(Finding("error", "description-injection",
                            "instruction-injection pattern in the description "
@@ -131,43 +143,43 @@ def audit_bundle(path: str | Path) -> list[Finding]:
             sev, code = "error", "hidden-injection"
             msg = "instruction-injection pattern hidden in an HTML comment"
         out.append(Finding(sev, code, msg, rel, _line_of(body, m.start())))
-    if INJECTION_RE.search(body):
-        pos = INJECTION_RE.search(body).start()
+    hit = INJECTION_RE.search(body)
+    if hit:
         out.append(Finding("warning", "body-injection-pattern",
                            "instruction-injection-like phrase in the skill "
-                           "body", rel, _line_of(body, pos)))
+                           "body", rel, _line_of(body, hit.start())))
+    return out
 
-    # ---- risky code patterns ---------------------------------------------
+
+def _code_findings(body: str, bundle: Path, rel: str) -> list[Finding]:
+    """Risky patterns in fenced code blocks and in the bundle's scripts."""
+    out: list[Finding] = []
     for m in FENCE_RE.finditer(body):
         _scan_code(m.group(3), rel, _line_of(body, m.start(3)), out)
     for script in sorted(bundle.rglob("*")):
         if script.suffix in SCRIPT_SUFFIXES and script.is_file():
             _scan_code(script.read_text(encoding="utf-8", errors="replace"),
                        str(script), 1, out)
+    return out
 
-    # ---- permission consistency ------------------------------------------
-    declared_raw = None
-    for key in ("allowed-tools", "allowed_tools", "tools"):
-        if meta.get(key) is not None:
-            declared_raw = _tool_list(meta.get(key))
-            break
-    if declared_raw is not None:
-        declared = {normalize_tool(t) for t in declared_raw}
-        try:
-            prose, _ = _strip_fences(body)
-        except PackError:
-            prose = body
-        for inv in extract(prose, declared):
-            if inv.kind == "agent-tool" and inv.tool not in declared:
-                out.append(Finding(
-                    "warning", "undeclared-tool-use",
+
+def _permission_findings(meta: dict, body: str, rel: str) -> list[Finding]:
+    """Prose that invokes an agent tool the frontmatter does not allow."""
+    key = next((k for k in ("allowed-tools", "allowed_tools", "tools")
+                if meta.get(k) is not None), None)
+    if key is None:
+        return []
+    declared = {normalize_tool(t) for t in _tool_list(meta[key])}
+    try:
+        prose, _ = _strip_fences(body)
+    except PackError:
+        prose = body
+    return [Finding("warning", "undeclared-tool-use",
                     f"prose invokes `{inv.raw}` but frontmatter allowed-tools "
                     f"does not declare it (permission-metadata inconsistency)",
-                    rel, inv.line))
-
-    order = {"error": 0, "warning": 1, "info": 2}
-    out.sort(key=lambda f: (order[f.severity], f.file, f.line))
-    return out
+                    rel, inv.line)
+            for inv in extract(prose, declared)
+            if inv.kind == "agent-tool" and inv.tool not in declared]
 
 
 def _scan_code(code: str, file: str, base_line: int, out: list[Finding]) -> None:

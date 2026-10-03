@@ -75,7 +75,7 @@ operand so the accepted language remains QF-LIA.
 ## Prompt source of truth
 
 The live prompt is the `SYSTEM` constant in
-`src/skillc/frontend/llm.py`. Keeping a second supposedly verbatim copy here
+`src/skillc/frontend/prompts.py`. Keeping a second supposedly verbatim copy here
 caused the documentation to drift; this document describes the interface and
 trust model, while the source file defines the exact prompt.
 
@@ -83,16 +83,16 @@ trust model, while the source file defines the exact prompt.
 
 Compaction is the **only** stage of the pipeline that spends tokens: the schema
 gate and the trusted checker spend none, and neither does the deterministic
-front-end. `frontend.llm.compact_measured` returns the API's own `usage` block
-so that cost is measured rather than guessed, and
-`compact_with_repair_measured` accumulates it across the single bounded repair
-round. For a median real skill this is ~2.8K tokens — about 4% of one
+front-end. `skillc.tokens.usage_to_cost` turns an API `usage` block into a
+measured `Cost`; the compaction calls in `frontend.llm` do not yet surface that
+block, so `skillc cost` currently models the compaction cost (including the
+single bounded repair round) rather than measuring it. For a median real skill this is ~2.8K tokens — about 4% of one
 successful run of the same skill, against a doomed run it avoids entirely.
 See [`TOKEN_ECONOMICS.md`](TOKEN_ECONOMICS.md) and `skillc cost`.
 
 ## Live vs. reference compaction
 
-`src/skillc/frontend/llm.py` supports Anthropic (`ANTHROPIC_API_KEY`) and Azure
+`src/skillc/frontend/providers.py` supports Anthropic (`ANTHROPIC_API_KEY`) and Azure
 OpenAI (`AZURE_OPENAI_ENDPOINT` plus either `AZURE_OPENAI_API_KEY` or the
 current `az login` identity). Select the provider with `--llm-provider`; no
 provider is contacted unless `--llm` is explicit. There is no silent

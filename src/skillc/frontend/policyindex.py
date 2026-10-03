@@ -49,7 +49,8 @@ _FENCE = re.compile(r"^```\s*([A-Za-z0-9_+-]*)\s*$")
 _IDENT = re.compile(r"^[A-Za-z][A-Za-z0-9_.+-]{1,40}$")
 _FILE_EXT = re.compile(r"\.(md|json|csv|tsv|txt|py|js|mjs|cjs|ts|tsx|jsx|yaml|yml|toml|ini|cfg|"
                        r"env|log|xml|html?|css|sh|ps1|docx?|xlsx?|pptx?|pdf|png|jpe?g|gif|"
-                       r"svg|ipynb|geojson|sql|lock|zip|gz|tar|parquet|c3d|ics|bib|tex|musicxml|midi?|wav|mp[34]|stl|dxf)$", re.I)
+                       r"svg|ipynb|geojson|sql|lock|zip|gz|tar|parquet|c3d|ics|bib|tex|"
+                       r"musicxml|midi?|wav|mp[34]|stl|dxf)$", re.I)
 
 
 def norm(term: str) -> str:
@@ -57,22 +58,20 @@ def norm(term: str) -> str:
 
 
 def _cmd_head(s: str) -> str | None:
-    s = s.strip().lstrip("$>").strip()
+    for _ in range(2):        # shell prompts: "$ cmd", "> cmd", "$ > cmd"
+        s = s.strip().lstrip("$>").strip()
     if not s or s.startswith("#"):
         return None
-    tok = s.split()[0]
-    if tok in ("npx", "uvx", "bunx", "pipx") and len(s.split()) > 1:
-        tok = s.split()[1]
-        tok = tok.split("@")[0] if not tok.startswith("@") else tok
-    if tok in ("python", "python3", "node", "bash", "sh") and len(s.split()) > 1:
-        nxt = s.split()[1]
-        if nxt == "-m" and len(s.split()) > 2:
-            return s.split()[2]
-        return None
+    parts = s.split()
+    tok = parts[0]
+    if tok in ("npx", "uvx", "bunx", "pipx") and len(parts) > 1:
+        tok = parts[1] if parts[1].startswith("@") else parts[1].split("@")[0]
+    if tok in ("python", "python3", "node", "bash", "sh") and len(parts) > 1:
+        return parts[2] if parts[1] == "-m" and len(parts) > 2 else None
     if tok in ("pip", "pip3", "npm", "yarn", "pnpm", "apt", "apt-get", "brew", "cargo",
-               "go", "gem", "conda", "uv") and len(s.split()) > 2 and s.split()[1] in (
+               "go", "gem", "conda", "uv") and len(parts) > 2 and parts[1] in (
                "install", "add", "i", "get"):
-        return s.split()[2]
+        return parts[2]
     if not (tok[:1].islower() or tok.startswith("./")) or "_" in tok:
         return None           # commands are lower-case; Capitalised/under_scored = prose/vars
     return tok if _IDENT.match(tok) and tok.lower() not in _STOP else None

@@ -165,9 +165,10 @@ deterministic front-end names the missing tool and the source line for free.
 
 This matters more than the numbers.
 
-**Measured.** Compaction usage, when a live API call reports it.
-`frontend.llm.compact_measured` returns the API's own `usage` block and
-`Cost.measured` is `True`. Nothing else in the pipeline has anything to
+**Measured.** Compaction usage, when a live API call reports it:
+`skillc.tokens.usage_to_cost` turns the API's own `usage` block into a `Cost`
+with `measured=True`. (The `frontend.llm` compaction calls do not yet surface
+that block, so `skillc cost` models compaction cost for now.) Nothing else in the pipeline has anything to
 measure — it spends no tokens.
 
 **Modelled.** Runtime waste, always. It is the cost of a run that, if the

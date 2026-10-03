@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import resources
 from pathlib import Path
 
@@ -56,9 +56,8 @@ class Profile:
                        tools=tools, shell=bool(d.get("shell", False)))
 
     def with_tools(self, extra: list[str]) -> Profile:
-        return Profile(name=self.name, description=self.description,
-                       tools=self.tools | {normalize_tool(t) for t in extra},
-                       shell=self.shell, extra=self.extra + list(extra))
+        return replace(self, tools=self.tools | {normalize_tool(t) for t in extra},
+                       extra=self.extra + list(extra))
 
 
 def builtin_profiles() -> list[str]:

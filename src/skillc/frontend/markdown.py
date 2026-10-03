@@ -214,7 +214,7 @@ def compile_markdown(text: str, profile: Profile,
 
 def _capability_context(meta: dict, prose: str, profile: Profile) -> dict[str, str]:
     """Γ: declared tool -> where it was declared (profile, frontmatter, prose)."""
-    declared = {t: f"profile:{profile.name}" for t in sorted(profile.tools)}
+    declared = dict.fromkeys(sorted(profile.tools), f"profile:{profile.name}")
     for key in ("allowed-tools", "allowed_tools", "tools"):
         for t in _tool_list(meta.get(key)):
             declared[normalize_tool(t)] = f"frontmatter:{key}"

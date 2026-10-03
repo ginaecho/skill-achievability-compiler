@@ -41,8 +41,9 @@ cached prefix is still read, just billed at a discount.  Both are reported.
 Honesty about what is measured
 ------------------------------
 * Compaction usage is **measured** when a live API call reports it
-  (``frontend.llm`` returns the API's own ``usage`` block) and **estimated**
-  otherwise; every result says which via ``Cost.measured``.
+  (`usage_to_cost` turns the API's own ``usage`` block into a `Cost`) and
+  **estimated** otherwise; every result says which via ``Cost.measured``.
+  The ``frontend.llm`` calls do not yet surface the usage block.
 * Runtime waste is always an **estimate**: it is the cost of a run that, by
   construction, we are arguing should never happen.  It is produced by an
   explicit, parameterized model with published defaults (`RuntimeModel`,
