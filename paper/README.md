@@ -126,6 +126,17 @@ primary-source pass before submission.
 
 ## MLADS+ Agents adaptation
 
+**Revised 30 September 2026** after the NeurIPS 2026 VerifyAgents reviews of the
+earlier manuscript: the main proposal and the supplement now report the
+real-skill benchmark with blind-execution ground truth (490 skill–runtime
+pairs), the direct-model-verdict baseline, Controlled English with
+runtime-bound compaction (P2g), the runtime monitor and pre-session hook, and
+a table of which formal result covers each verdict. `MLADS_REVISION_NOTES.md`
+lists every change, the evidence behind each number, and what the authors must
+still confirm before upload. Where the description below conflicts with the
+revised documents (figure numbering, Table 1, the workflow figure), the
+documents and the revision notes are current.
+
 `MLADS_AGENT_Submission.docx` is the canonical implementation-focused technical-talk
 proposal adapted from `main_submission.pdf` and repository evidence using the
 supplied December 2026 MLADS Word template.
@@ -239,6 +250,18 @@ Assumptions`):
 - `SkillAchievability.v` — the reachability soundness core: refutation
   soundness (T1), tolerance soundness (T2), capability monotonicity (T3), and
   the `FlightInstance` concrete instance (main-text overview and Appendix D).
+  Since 30 September 2026 it also holds the schema in **relational** form
+  (`refutation_sound_rel`; the functional form is the special case
+  `refutation_sound_fun_is_rel`) and `SymbolicInstance`, which mechanizes
+  Lemma 3 (the checker's symbolic abstraction satisfies step-sim and goal-sim)
+  for a shallow embedding of the state logic: constraints as predicates on
+  numeric worlds, guards and effects as relations, the strongest postcondition
+  as the image, the widening as an arbitrary edge policy. The relational form
+  was needed because the accumulated constraint depends on the search path, so
+  the abstraction is not a function of the concrete world and the earlier
+  paper-level Lemma 3 did not instantiate the functional schema as written.
+  What remains on paper is that the checker's QF-LIA formulas denote those
+  predicates and that Z3 decides them correctly.
 - `DirectTyping.v` — the direct-typing safety core: `type_directed_safety` /
   `progress` (Appendix D.3), and `HandoffInstance`, the mechanized
   planner/worker example.
