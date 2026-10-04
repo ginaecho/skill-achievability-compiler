@@ -168,11 +168,11 @@ def _hook_yaml(relative_agent: str) -> str:
     )
 
 
-def add_agent_hook(path: Path, workspace: Path) -> bool:
+def _agent_hook_update(path: Path, workspace: Path) -> str | None:
     text = path.read_text(encoding="utf-8")
     relative = path.relative_to(workspace).as_posix()
     if HOOK_MARKER in text:
-        return False
+        return None
     match = re.match(
         r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n)?", text, re.S)
     if not match:
@@ -182,7 +182,13 @@ def add_agent_hook(path: Path, workspace: Path) -> bool:
         raise ValueError(
             f"agent already defines hooks; merge manually: {relative}")
     frontmatter = match.group(1).rstrip() + "\n" + _hook_yaml(relative).rstrip()
-    updated = f"---\n{frontmatter}\n---\n" + text[match.end():]
+    return f"---\n{frontmatter}\n---\n" + text[match.end():]
+
+
+def add_agent_hook(path: Path, workspace: Path) -> bool:
+    updated = _agent_hook_update(path, workspace)
+    if updated is None:
+        return False
     path.write_text(updated, encoding="utf-8", newline="\n")
     return True
 
@@ -190,6 +196,8 @@ def add_agent_hook(path: Path, workspace: Path) -> bool:
 def install_integration(workspace: Path, agents: Iterable[Path]) -> IntegrationResult:
     workspace = workspace.resolve()
     selected = tuple(path.resolve() for path in agents)
+    updates = tuple((path, _agent_hook_update(path, workspace))
+                    for path in selected)
     scripts_dir = workspace / ".github" / "hooks" / "scripts"
     scripts_dir.mkdir(parents=True, exist_ok=True)
     powershell = scripts_dir / "skillc-pre-session.ps1"
@@ -197,6 +205,7 @@ def install_integration(workspace: Path, agents: Iterable[Path]) -> IntegrationR
     powershell.write_text(POWERSHELL_HOOK, encoding="utf-8", newline="\n")
     bash.write_text(BASH_HOOK, encoding="utf-8", newline="\n")
     bash.chmod(bash.stat().st_mode | 0o111)
-    for path in selected:
-        add_agent_hook(path, workspace)
+    for path, updated in updates:
+        if updated is not None:
+            path.write_text(updated, encoding="utf-8", newline="\n")
     return IntegrationResult(workspace, selected, (powershell, bash))

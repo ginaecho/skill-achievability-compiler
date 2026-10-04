@@ -75,6 +75,11 @@ def test_invalid_protocol_request_is_rejected():
         run_pre_session_hook({"schema": "wrong", "skills": []})
 
 
+def test_non_string_policy_action_is_rejected():
+    with pytest.raises(HookRequestError, match="policy.impossible"):
+        run_pre_session_hook(request(policy={"impossible": []}))
+
+
 def test_hook_cli_reads_stdin_and_emits_only_json(monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(request())))
     assert main(["hook", "pre-session", "--stdio"]) == 0
@@ -91,3 +96,14 @@ def test_hook_cli_exit_one_only_when_session_is_blocked(tmp_path, capsys):
         policy={"impossible": "block-session"})))
     assert main(["hook", "pre-session", "--request", str(path)]) == 1
     assert json.loads(capsys.readouterr().out)["decision"] == "block-session"
+
+
+def test_hook_cli_reports_malformed_policy_without_traceback(tmp_path, capsys):
+    path = tmp_path / "request.json"
+    path.write_text(json.dumps(request(policy={"impossible": []})))
+
+    assert main(["hook", "pre-session", "--request", str(path)]) == 2
+
+    output = capsys.readouterr()
+    assert "policy.impossible" in output.err
+    assert "Traceback" not in output.err

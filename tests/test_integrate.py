@@ -62,6 +62,24 @@ def test_existing_unmanaged_hooks_require_manual_merge(tmp_path):
         add_agent_hook(alpha, tmp_path)
 
 
+def test_install_validates_all_agents_before_writing_anything(tmp_path):
+    alpha = _agent(tmp_path, "alpha.md", "Alpha")
+    beta = _agent(tmp_path, "beta.md", "Beta")
+    beta_text = beta.read_text(encoding="utf-8")
+    beta.write_text(beta_text.replace("tools:", "hooks: {}\ntools:"),
+                    encoding="utf-8")
+    alpha_before = alpha.read_text(encoding="utf-8")
+    beta_before = beta.read_text(encoding="utf-8")
+
+    with pytest.raises(ValueError, match="already defines hooks"):
+        install_integration(tmp_path, [alpha, beta])
+
+    assert alpha.read_text(encoding="utf-8") == alpha_before
+    assert beta.read_text(encoding="utf-8") == beta_before
+    scripts = tmp_path / ".github" / "hooks" / "scripts"
+    assert not scripts.exists()
+
+
 def test_agent_session_cli_emits_host_hook_json(tmp_path, capsys):
     alpha = _agent(tmp_path, "alpha.md", "Alpha")
     assert main(["hook", "agent-session", "--agent", str(alpha)]) == 0

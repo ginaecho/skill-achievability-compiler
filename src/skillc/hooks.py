@@ -44,7 +44,7 @@ def _policy(request: dict) -> dict[str, str]:
         "auditError": {"exclude", "block-session", "allow"},
     }
     for key, value in result.items():
-        if value not in allowed[key]:
+        if not isinstance(value, str) or value not in allowed[key]:
             raise HookRequestError(
                 f"policy.{key} must be one of {sorted(allowed[key])}")
     return result
