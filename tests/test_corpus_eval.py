@@ -4,7 +4,7 @@ import json
 from importlib import resources
 
 from skillc import check
-from skillc.evaluate import evaluate, format_report, load_corpus
+from skillc.evaluate import evaluate, format_report, load_corpus, refutation_metrics
 
 EXPECTED_REASONS = {
     "hallucinated_email": "MISSING_CAPABILITY",
@@ -20,6 +20,29 @@ EXPECTED_REASONS = {
 def test_confusion_matrix_matches_paper():
     res = evaluate()
     assert (res.tp, res.fn, res.fp, res.tn) == (6, 0, 2, 7)
+
+
+def test_refutation_metrics_use_impossible_as_positive():
+    metrics = refutation_metrics(evaluate())
+    assert (metrics["tp"], metrics["fp"], metrics["fn"], metrics["tn"]) == (7, 0, 2, 6)
+    assert metrics["precision"] == 1
+    assert metrics["recall_decided"] == 7 / 9
+    assert metrics["false_positive_rate"] == 0
+    assert metrics["false_impossible_ids"] == []
+
+
+def test_refutation_metrics_do_not_turn_abstentions_into_true_negatives():
+    corpus = [
+        {"id": "abstention", "category": "test", "ground_truth": "IMPOSSIBLE",
+         "pack": {"name": "dynamic", "capabilities": {},
+                  "protocol": [{"spawn": {"role": "helper"}}], "goal": True}}
+    ]
+    metrics = refutation_metrics(evaluate(corpus))
+    assert metrics["n_scored"] == 0
+    assert metrics["precision"] is None
+    assert metrics["recall_decided"] is None
+    assert metrics["recall_all_labelled_impossible"] == 0
+    assert metrics["labelled_coverage"] == 0
 
 
 def test_soundness_no_false_impossible():

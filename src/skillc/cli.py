@@ -5,13 +5,13 @@
   skillc scan    DIR      [--profile P] [--json|--md]    batch-check a skill tree
   skillc audit   PATH     [--json]                       bundle security pre-pass
   skillc cost    FILE|DIR [--llm] [--json]                token economics of checking
+  skillc ce      FILE     [--to ce|json]                  controlled English <-> pack
   skillc eval                                            corpus evaluation
   skillc profiles                                        list capability profiles
     skillc hook pre-session [--request FILE|-]              host skill admission
 
 Exit codes: 0 achievable / all pass, 1 impossible / soundness violation,
-2 usage or input error, 3 unknown (an abstention: outside the decidable
-fragment, never a refutation).
+2 usage or input error, 3 unknown (an abstention, never a refutation).
 """
 from __future__ import annotations
 
@@ -22,11 +22,12 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import __version__
-from .checker import check
+from .checker import Verdict, check
 from .evaluate import evaluate, format_report, load_corpus
+from .frontend.ce import CEError
 from .frontend.markdown import CompileResult, compile_file
 from .hooks import HookRequestError, run_pre_session_hook
-from .pack import Pack, PackError
+from .pack import Pack, PackError, pack_digest
 from .profiles import builtin_profiles, load_profile
 
 
@@ -37,21 +38,53 @@ def _load_result(source: str | Path, args) -> tuple[dict, CompileResult | None]:
         return load_pack(args.mcp_command, args.mcp_arg or [], str(source)), None
 
     path = Path(source)
+    res = None
     if path.suffix == ".json":
-        return json.loads(path.read_text(encoding="utf-8")), None
-    profile = load_profile(args.profile)
-    if getattr(args, "tool", None):
-        profile = profile.with_tools(args.tool)
-    if getattr(args, "llm", False):
-        from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact
-        abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
-        abilities.extend(args.runtime_ability or [])
-        pack = compact(path.read_text(encoding="utf-8"), model=args.model,
-                       provider=args.llm_provider,
-                       runtime_abilities=abilities or None)
-        return pack, None
-    res = compile_file(path, profile)
-    return res.pack, res
+        pack = json.loads(path.read_text(encoding="utf-8"))
+    elif path.suffix == ".ce":
+        from .frontend.ce import compile_ce
+        pack = compile_ce(path.read_text(encoding="utf-8"))
+    else:
+        profile = load_profile(args.profile)
+        if getattr(args, "tool", None):
+            profile = profile.with_tools(args.tool)
+        if getattr(args, "llm", False):
+            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact, compact_ce
+            abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
+            abilities.extend(args.runtime_ability or [])
+            kwargs = {}
+            if getattr(args, "runtime", None):
+                from .frontend.runtime import load_runtime
+                front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
+            else:
+                front = compact_ce if getattr(args, "via_ce", False) else compact
+            pack = front(path.read_text(encoding="utf-8"), model=args.model,
+                         provider=args.llm_provider,
+                         runtime_abilities=abilities or None, **kwargs)
+        else:
+            res = compile_file(path, profile)
+            pack = res.pack
+    if getattr(args, "contract", None):
+        from .frontend.contract import bind_contract
+        contract = json.loads(Path(args.contract).read_text(encoding="utf-8"))
+        pack = bind_contract(pack, contract)
+        if res is not None:
+            res.pack = pack
+            res.goal_source = "contract"
+    return pack, res
+
+
+def _check_loaded(pack, res, args):
+    scope = "goal" if getattr(args, "goal_only", False) else "protocol"
+    if scope == "goal" and res is not None and res.goal_source == "tool_usage_only":
+        return Verdict(
+            False, "INCOMPLETE_COMPACTION",
+            "deterministic extraction captured tool usage, not the task goal; "
+            "supply a reviewed --contract, an embedded pack, or semantic compaction",
+            unknown=True, decision_scope=scope, pack_digest=pack_digest(pack))
+    return check(pack,
+                 semantics="adversarial" if getattr(args, "adversarial", False) else "may",
+                 scope=scope)
 
 
 def cmd_compile(args) -> int:
@@ -89,10 +122,12 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
 
 def cmd_check(args) -> int:
     pack, res = _load_result(args.file, args)
-    v = check(pack, semantics="adversarial" if args.adversarial else "may")
+    v = _check_loaded(pack, res, args)
     if args.json:
         out = v.to_dict()
         out["pack_name"] = pack.get("name", "?")
+        if res is not None:
+            out["compaction_goal_source"] = res.goal_source
         print(json.dumps(out, indent=2))
     else:
         print(f"{pack.get('name', '?')}: {v.label}"
@@ -100,8 +135,7 @@ def cmd_check(args) -> int:
         if v.detail and not v.achievable:
             print(f"  {v.detail}")
         if v.unknown:
-            print("  UNKNOWN is not a refutation: the pack falls outside the "
-                  "decidable fragment, so no claim is made either way.")
+            print("  UNKNOWN is an abstention, not a refutation or permission to run.")
         if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
             lines = {i.tool: i.line for i in reversed(res.invocations)}
             for capname in v.frontier:
@@ -127,12 +161,14 @@ def cmd_scan(args) -> int:
     for f in files:
         rel = f.relative_to(root)
         try:
-            pack, _ = _load_result(f, args)
-            v = check(pack)
+            pack, res = _load_result(f, args)
+            v = _check_loaded(pack, res, args)
             rows.append({"skill": rel.as_posix(), "verdict": v.label,
                          "reason": v.reason if not v.achievable else "",
                          "frontier": list(v.frontier),
-                         "unknown": v.unknown, "refuted": v.refuted})
+                         "unknown": v.unknown, "refuted": v.refuted,
+                         "decision_scope": v.decision_scope,
+                         "refutation_scope": v.refutation_scope})
         except (PackError, ValueError) as e:
             rows.append({"skill": rel.as_posix(), "verdict": "ERROR",
                          "reason": type(e).__name__, "frontier": [str(e)],
@@ -149,7 +185,7 @@ def cmd_scan(args) -> int:
         n_refuted = sum(r["refuted"] for r in rows)
         print(f"\n{n_ok}/{len(rows)} achievable under profile "
               f"'{args.profile}'; {n_refuted} refuted, {n_unknown} unknown "
-              f"(outside the decidable fragment -- not refutations)")
+              f"(abstentions -- not refutations or permission to run)")
     return 0
 
 
@@ -184,20 +220,23 @@ def cmd_cost(args) -> int:
     the honest denominator -- verification as a share of one successful run,
     which is what a healthy skill pays for the check that told it nothing.
     """
+    from .frontend.llm import metered
     from .tokens import (CorpusEconomics, RuntimeModel, check_cost, economics,
-                         estimate_tokens)
+                         estimate_tokens, measured_cost)
 
     # Two independent questions, two flags: --llm actually compacts with the
-    # model (and then prices what it really used); --price-llm prices what
-    # the LLM front-end *would* cost without spending a token on it.
+    # model and prices the usage the API reported for those calls; --price-llm
+    # models what the LLM front-end *would* cost without spending a token.
     priced_llm = args.llm or args.price_llm
 
-    sources: list[tuple[str, str, dict]] = []      # (name, source text, pack)
+    # (name, source text, pack, usage blocks of the compaction calls)
+    sources: list[tuple[str, str, dict, list[dict]]] = []
     if args.corpus:
         for spec in load_corpus():
             # `nl` is the spec's natural-language source: the actual
-            # input a compaction front-end would be billed for.
-            sources.append((spec["id"], spec.get("nl", ""), spec["pack"]))
+            # input a compaction front-end would be billed for.  The corpus
+            # ships packs, so nothing is compacted and nothing is measured.
+            sources.append((spec["id"], spec.get("nl", ""), spec["pack"], []))
     else:
         root = Path(args.path) if args.path else None
         if root is None:
@@ -210,24 +249,30 @@ def cmd_cost(args) -> int:
         for f in files:
             text = f.read_text(encoding="utf-8") if f.suffix != ".json" else ""
             try:
-                pack, _ = _load_result(f, args)
+                with metered() as usage:
+                    pack, _ = _load_result(f, args)
             except (PackError, ValueError) as e:
                 print(f"skillc: {f}: {type(e).__name__}: {e}", file=sys.stderr)
                 continue
-            sources.append((pack.get("name", f.stem), text, pack))
+            sources.append((pack.get("name", f.stem), text, pack, usage))
 
     model = RuntimeModel(cache_hit_rate=args.cache_hit_rate)
     corpus = CorpusEconomics(price=args.price)
     achievable: list[tuple[str, int, int]] = []
-    for name, text, pack in sources:
+    measured: list[bool] = []          # per priced skill: usage measured?
+    for name, text, pack, usage in sources:
         try:
             v = check(pack)
         except (PackError, ValueError) as e:
             print(f"skillc: {name}: {type(e).__name__}: {e}", file=sys.stderr)
             continue
-        ver = check_cost(text or json.dumps(pack), llm=priced_llm,
-                         repair_rounds=args.repair_rounds)
         src = text or json.dumps(pack)
+        if args.llm and usage:
+            ver = measured_cost(usage)
+        else:
+            ver = check_cost(src, llm=priced_llm, repair_rounds=args.repair_rounds)
+        if priced_llm:
+            measured.append(ver.measured)
         if v.refuted and v.reason in _WASTE_REASONS:
             corpus.rows.append(economics(
                 src, v.reason, name=name, model=model,
@@ -237,8 +282,10 @@ def cmd_cost(args) -> int:
                 _SUCCESS_TURNS)
             achievable.append((name, ver.total_tokens, run.total_tokens))
 
+    front = _front_end_label(priced_llm, measured)
     if args.json:
         out = corpus.to_dict()
+        out["front_end"] = front
         out["not_refuted"] = [
             {"skill": n, "verification_tokens": vt,
              "successful_run_tokens": rt,
@@ -247,9 +294,6 @@ def cmd_cost(args) -> int:
         print(json.dumps(out, indent=2))
         return 0
 
-    front = ("LLM compaction (measured)" if args.llm else
-             "LLM compaction (modelled)" if args.price_llm else
-             "deterministic front-end")
     print(f"front-end: {front}   trusted checker: 0 tokens (z3, no model in "
           f"the decision path)")
     if corpus.rows:
@@ -294,6 +338,17 @@ _WASTE_REASONS = ("MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
 _SUCCESS_TURNS = 10
 
 
+def _front_end_label(priced_llm: bool, measured: list[bool]) -> str:
+    """Says "measured" only for usage a live API call actually reported."""
+    if not priced_llm:
+        return "deterministic front-end"
+    if measured and all(measured):
+        return "LLM compaction (measured)"
+    if any(measured):
+        return "LLM compaction (measured where the API reported usage, else modelled)"
+    return "LLM compaction (modelled)"
+
+
 def _fmt(n: int) -> str:
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f}M"
@@ -308,6 +363,58 @@ def cmd_eval(args) -> int:
     print(format_report(res, corpus))
     ok = res.sound and res.fp_all_spurious(corpus)
     return 0 if ok else 1
+
+
+def cmd_ce(args) -> int:
+    """Render a pack (or any compiled input) as CE, or a .ce file as JSON."""
+    from .frontend.ce import render_ce
+    path = Path(args.file)
+    if args.to == "json" or (args.to is None and path.suffix == ".ce"):
+        pack, _ = _load_result(path, args)
+        print(json.dumps(pack, indent=2))
+    else:
+        pack, _ = _load_result(path, args)
+        sys.stdout.write(render_ce(pack))
+    return 0
+
+
+HOOKS_SNIPPET = {"hooks": {
+    "UserPromptSubmit": [{"hooks": [{"type": "command",
+                                     "command": "skillc monitor hook prompt"}]}],
+    "PreToolUse": [{"matcher": "*", "hooks": [{"type": "command",
+                                               "command": "skillc monitor hook pre"}]}],
+    "PostToolUse": [{"matcher": "*", "hooks": [{"type": "command",
+                                                "command": "skillc monitor hook post"}]}]}}
+
+
+def cmd_monitor(args) -> int:
+    from .monitor import Config, Monitor
+    root = Path(args.root)
+    cfg_path = root / ".skillc" / "monitor.json"
+    if args.action == "init":
+        cfg = Config(runtime=args.runtime, thinking=args.thinking)
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        cfg_path.write_text(json.dumps(cfg.dump(), indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {cfg_path}")
+        print("add to .claude/settings.json:")
+        print(json.dumps(HOOKS_SNIPPET, indent=1))
+        return 0
+    if args.action == "hook":
+        from .monitor_hook import main as hook_main
+        return hook_main(args.arg)
+    mon = Monitor(Config.load(cfg_path), root)
+    if args.action == "plan":
+        d, info = mon.check_plan(Path(args.arg).read_text(encoding="utf-8"))
+        print(json.dumps({**d.to_dict(), **info}, indent=1))
+        return 0 if d.action == "allow" else 1
+    if args.action == "status":
+        print(json.dumps({k: v for k, v in mon.state.__dict__.items() if k != "log"}
+                         | {"log": mon.state.log[-10:]}, indent=1))
+        return 0
+    if args.action == "reset":
+        mon.state_path.unlink(missing_ok=True)
+        return 0
+    raise KeyError(f"unknown monitor action {args.action!r}")
 
 
 def cmd_profiles(args) -> int:
@@ -483,6 +590,8 @@ def _add_compile_opts(sp) -> None:
                     help="capability profile (built-in name or JSON path)")
     sp.add_argument("--tool", action="append", metavar="NAME",
                     help="grant an extra tool capability (repeatable)")
+    sp.add_argument("--contract", metavar="JSON",
+                    help="bind extraction to reviewed goal, capabilities, and initial state")
     sp.add_argument("--llm", action="store_true",
                     help="use the semantic LLM compaction front-end")
     sp.add_argument("--llm-provider", choices=("anthropic", "azure-openai"),
@@ -494,6 +603,13 @@ def _add_compile_opts(sp) -> None:
                     help="runtime abilities supplied to semantic compaction")
     sp.add_argument("--runtime-ability", action="append", metavar="TEXT",
                     help="additional granted runtime ability (repeatable)")
+    sp.add_argument("--runtime", metavar="NAME|JSON",
+                    help="with --llm: compact via Controlled English bound to a "
+                         "runtime manifest (e.g. developer-sandbox); tools are "
+                         "granted only through the manifest")
+    sp.add_argument("--via-ce", action="store_true",
+                    help="with --llm: the model writes Controlled English, "
+                         "which is parsed into the pack deterministically")
 
 
 def _add_mcp_opts(sp) -> None:
@@ -522,9 +638,13 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("file")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("-v", "--verbose", action="store_true")
-    sp.add_argument("--adversarial", action="store_true",
+    decisions = sp.add_mutually_exclusive_group()
+    decisions.add_argument("--adversarial", action="store_true",
                     help="require the goal under EVERY resolution of choices "
                          "marked external (must-achievability)")
+    decisions.add_argument("--goal-only", action="store_true",
+                           help="refute only with a protocol-independent goal certificate; "
+                                "otherwise abstain on protocol rejection")
     _add_compile_opts(sp)
     _add_mcp_opts(sp)
     sp.set_defaults(fn=cmd_check)
@@ -533,6 +653,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("dir")
     sp.add_argument("--glob", default="SKILL.md")
     sp.add_argument("--json", action="store_true")
+    sp.add_argument("--goal-only", action="store_true",
+                    help="use conservative goal-impossibility scope instead of protocol admission")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_scan)
 
@@ -560,15 +682,35 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--price", default="mid", choices=("frontier", "mid", "small"),
                     help="price tier used to convert tokens to dollars")
     sp.add_argument("--repair-rounds", type=int, default=0,
-                    help="LLM compaction repair rounds to price in (--llm)")
+                    help="repair rounds to price into a modelled LLM compaction "
+                         "cost (a measured --llm run counts the calls it made)")
     sp.add_argument("--cache-hit-rate", type=float, default=0.0, metavar="R",
                     help="fraction of the re-read runtime prefix served from "
                          "cache; changes dollars, never token counts")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_cost)
 
+    sp = sub.add_parser("ce", help="Controlled English: render a pack as CE, "
+                                   "or parse a .ce file to a JSON pack")
+    sp.add_argument("file")
+    sp.add_argument("--to", choices=("ce", "json"),
+                    help="output form (default: json for .ce input, else ce)")
+    _add_compile_opts(sp)
+    sp.set_defaults(fn=cmd_ce)
+
     sp = sub.add_parser("eval", help="run the corpus evaluation")
     sp.set_defaults(fn=cmd_eval)
+
+    sp = sub.add_parser("monitor", help="runtime monitor: gate an agent's plan, "
+                                        "reasoning and actions (docs/RUNTIME_MONITOR.md)")
+    sp.add_argument("action", choices=("init", "hook", "plan", "status", "reset"))
+    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post) or plan file")
+    sp.add_argument("--root", default=".", help="project directory (default: .)")
+    sp.add_argument("--runtime", default="developer-sandbox",
+                    help="init: runtime manifest name or JSON path")
+    sp.add_argument("--thinking", choices=("stop", "warn", "off"), default="stop",
+                    help="init: what reasoning that heads to the impossible does")
+    sp.set_defaults(fn=cmd_monitor)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)
@@ -611,7 +753,8 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         return args.fn(args)
-    except (PackError, HookRequestError, KeyError, ValueError, FileNotFoundError,
+    except (PackError, HookRequestError, CEError, KeyError, ValueError,
+            FileNotFoundError,
             json.JSONDecodeError, RuntimeError) as e:
         print(f"skillc: error: {e}", file=sys.stderr)
         return 2

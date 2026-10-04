@@ -110,6 +110,37 @@ def evaluate(corpus: list[dict] | None = None) -> EvalResult:
     return res
 
 
+def refutation_metrics(res: EvalResult) -> dict:
+    """Reorient the legacy matrix: positive means IMPOSSIBLE, not ACHIEVABLE.
+
+    Precision/recall/FPR score decided, labelled cases. Also report recall
+    across all labelled impossible cases so abstentions cannot hide misses.
+    """
+    tp, fp, fn, tn = res.tn, res.fn, res.fp, res.tp
+
+    def ratio(numerator, denominator):
+        return numerator / denominator if denominator else None
+
+    labelled = [row for row in res.rows
+                if row.truth in {"ACHIEVABLE", "IMPOSSIBLE"}]
+    actual_impossible = sum(row.truth == "IMPOSSIBLE" for row in labelled)
+    return {
+        "positive_class": "IMPOSSIBLE",
+        "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+        "precision": ratio(tp, tp + fp),
+        "recall_decided": ratio(tp, tp + fn),
+        "recall_all_labelled_impossible": ratio(tp, actual_impossible),
+        "false_positive_rate": ratio(fp, fp + tn),
+        "accuracy_decided": ratio(tp + tn, res.n_scored),
+        "labelled_coverage": ratio(res.n_scored, len(labelled)),
+        "n": res.n, "n_scored": res.n_scored,
+        "abstentions": res.unknown,
+        "unlabelled": res.n - len(labelled),
+        "false_impossible_ids": list(res.fn_ids),
+        "missed_impossible_ids": list(res.fp_ids),
+    }
+
+
 def format_report(res: EvalResult, corpus: list[dict] | None = None) -> str:
     corpus = corpus if corpus is not None else load_corpus()
     notes = {c["id"]: c.get("note", "") for c in corpus}

@@ -40,9 +40,10 @@ cached prefix is still read, just billed at a discount.  Both are reported.
 
 Honesty about what is measured
 ------------------------------
-* Compaction usage is **measured** when a live API call reports it
-  (``frontend.llm`` returns the API's own ``usage`` block) and **estimated**
-  otherwise; every result says which via ``Cost.measured``.
+* Compaction usage is **measured** when a live API call reports it (every
+  provider call inside ``frontend.llm.metered()`` records the API's own
+  ``usage`` block; `measured_cost` totals them) and **estimated** otherwise;
+  every result says which via ``Cost.measured``.
 * Runtime waste is always an **estimate**: it is the cost of a run that, by
   construction, we are arguing should never happen.  It is produced by an
   explicit, parameterized model with published defaults (`RuntimeModel`,
@@ -192,12 +193,25 @@ ZERO = Cost(label="deterministic (no model in the loop)")
 
 
 def usage_to_cost(usage: dict, label: str = "compaction") -> Cost:
-    """Turn an Anthropic API ``usage`` block into a measured `Cost`."""
-    return Cost(input_tokens=int(usage.get("input_tokens", 0)),
-                output_tokens=int(usage.get("output_tokens", 0)),
-                cached_input_tokens=int(usage.get("cache_read_input_tokens", 0))
+    """Turn an Anthropic-shaped API ``usage`` block into a measured `Cost`.
+
+    Cache *reads* are discounted (`CACHE_READ_DISCOUNT`); cache *writes* are
+    billed at no less than the base input price, so they count as ordinary
+    input rather than as discounted cache reads."""
+    return Cost(input_tokens=int(usage.get("input_tokens", 0))
                 + int(usage.get("cache_creation_input_tokens", 0)),
+                output_tokens=int(usage.get("output_tokens", 0)),
+                cached_input_tokens=int(usage.get("cache_read_input_tokens", 0)),
                 measured=True, label=label)
+
+
+def measured_cost(usages: list[dict],
+                  label: str = "LLM compaction (measured)") -> Cost:
+    """Total of the usage blocks that live API calls reported."""
+    total = Cost(measured=True, label=label)
+    for usage in usages:
+        total += usage_to_cost(usage, label)
+    return total
 
 
 # --------------------------------------------------------------------------

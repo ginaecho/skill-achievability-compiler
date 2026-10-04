@@ -117,12 +117,118 @@ in favor of this direct-typing core; that material remains in git history and
 is not part of this revision's claims.
 
 The 2025--2026 related-work entries were verified against primary sources in
-`../docs/PILLAR3_PRIMARY_SOURCE_REVIEW.md`. **Not yet covered by that review:**
+`../docs/archive/PILLAR3_PRIMARY_SOURCE_REVIEW.md`. **Not yet covered by that review:**
 the six entries added with the harness-framed introduction (`harnesssurvey`,
 `harnessfix`, `agentskills`, `adas`, `aflow`, `cemri`) and the figures quoted
 from them in Section 1 (the 41--86.7% failure range, the 15.6% task-success
 improvement, the 6.3--18.4 point completion lift). Those need the same
 primary-source pass before submission.
+
+## MLADS+ Agents adaptation
+
+**Revised 30 September 2026** after the NeurIPS 2026 VerifyAgents reviews of the
+earlier manuscript: the main proposal and the supplement now report the
+real-skill benchmark with blind-execution ground truth (490 skill–runtime
+pairs), the direct-model-verdict baseline, Controlled English with
+runtime-bound compaction (P2g), the runtime monitor and pre-session hook, and
+a table of which formal result covers each verdict. `MLADS_REVISION_NOTES.md`
+lists every change, the evidence behind each number, and what the authors must
+still confirm before upload. Where the description below conflicts with the
+revised documents (figure numbering, Table 1, the workflow figure), the
+documents and the revision notes are current.
+
+`MLADS_AGENT_Submission.docx` is the canonical implementation-focused technical-talk
+proposal adapted from `main_submission.pdf` and repository evidence using the
+supplied December 2026 MLADS Word template.
+`MLADS_AGENT_Submission.pdf` is its rendered preview. The Word document follows the
+template's Introduction, Related Work, Methodology, Data, Results, and
+Implications / Conclusion structure: four content pages, followed by a separate
+references page (five PDF pages total). Its structure and visual balance are
+informed by the five supplied proposals in `MLADS_examples`, especially their
+problem-to-method-to-evidence narrative and practical takeaways. The introduction
+is one paragraph covering business motivation, importance, Agents alignment,
+the safety gap, the main contribution, and the confirmed first-submission status.
+It preserves the source paper's goal-achievability objective while emphasizing
+contract binding, deterministic preflight and planning, protocol checking, MCP
+integration, and runtime verification. It reports two separate measured comparisons:
+the corrected repeated-use study (22,892 tokens with SkillC versus 240,169
+without, 90.47% fewer across 20 attempts on four independently impossible
+tasks, with real API calls and simulated tool actions), and the 56-scenario
+live-backend comparison (35,220 without SkillC versus 18,758 with deterministic
+gating, 46.74% fewer, with all 28 achievable cases completed in each configuration).
+The corrected study's first-use reduction is 52.34%; the 90.47% figure
+amortizes compaction over five requests per unchanged skill. It also reports
+the LLM-compaction overhead and the direct executor's failed payload, rather
+than presenting either as an unqualified saving.
+
+Evidence comes from `../docs/LIVE_BACKEND_BENCHMARK_20260921.md`,
+`../docs/archive/COMPACTION_PRECISION_ASSESSMENT_20260921.md`, the real-skill and semantic
+validation reports, and their saved run artifacts. The 36-skill snapshot,
+semantic mutation study, 15-pack corpus, and 32-contract planning replay remain
+separate evidence sets. The proposal distinguishes measured provider usage from
+modeled economics and states the bounded-adapter and prototype limitations.
+The original manuscript and template are unchanged.
+
+The main document contains four figures and two editable tables: a redrawn
+trust-boundary graph, implemented SkillC architecture, all 14 per-family token
+reductions, and proposed Microsoft Agent Framework integration, alongside the
+validation signals and corrected first-use/repeated-use comparison. Results
+include the full live decision matrix (positive = IMPOSSIBLE), actual completion,
+the weighted savings formula, and session/tool/API/token accounting; the final
+content page covers integration, formal guarantees, production status, and
+actionable safety guidance. The aggregate cost/completion chart and original
+15-case matrix remain in the supplement alongside the detailed failure cases.
+
+`MLADS_supplementary.docx` is the twelve-page detailed supplement;
+`MLADS_supplementary.pdf` is its rendered preview. It contains the original
+paper's trust-boundary figure, an implementation module map, flight and
+coordination walkthroughs, all 14 per-family benchmark rows and savings bars,
+supporting-study summaries, and the explicitly modeled Appendix E cost table.
+It also provides the proposed framework API mapping, failure policy, runtime
+obligations, acceptance-test plan, and evidence provenance. The main paper's
+formal-foundation summary is expanded in S9-S10: the formal model, refutation
+soundness, tolerance, capability monotonicity, subject reduction, session
+fidelity, incompleteness, and the termination/undecidability boundary. The proof
+coverage table distinguishes scoped Coq results from paper-level arguments and
+the unverified executable implementation. S11-S12 adds the corrected reuse chart
+and case-level table, the historical measured PDF/XLSX comparison (85.28%
+over eight failed runs), and the larger historical failure-only accounting
+(98.68%, with estimated compaction costs explicitly separated from measurements).
+It retains the excluded successful runs, superseded simulator results, and
+negative August pilot rather than presenting the largest percentage as a
+universal savings claim. Its nine figures and fifteen editable
+tables retain detail without crowding the main proposal.
+
+Ten external related works from the original manuscript appear in the numbered
+bibliography, covering planning, session types, agentic workflow generation,
+multi-agent failures, policy safety, and skill security screening. All ten are
+cited in Related Work; they are not presented as evaluated baselines. Our own
+results are presented as original data, with experiment paths and the pinned
+historical commit retained as provenance in the supplement, not self-citations.
+The latest content is consolidated into these canonical files; duplicate
+`_revised` Word/PDF drafts have been removed. The supplementary document points
+to the main bibliography rather than maintaining a second reference list.
+
+Microsoft Agent Framework integration is **proposed, not implemented or
+benchmarked in this repository**. The design uses official middleware,
+workflow, MCP, and observability documentation, with references and API-version
+caveats in `../docs/archive/MICROSOFT_AGENT_FRAMEWORK_INTEGRATION_RESEARCH.md`.
+The existing Azure OpenAI/MCP experiments are not labeled as framework tests.
+
+Figures are retained in `figures/mlads_*.png`, with editable SVG versions of
+the new architecture and case diagrams. Live chart values are aggregated from
+saved trials and reconciled against provider-usage ledgers. The overall 46.74%
+reduction uses summed tokens, not the mean of per-family percentages. The
+direct executor's failed extraction and the single-pass sampling limitation
+remain explicit. Figure 1 redraws the supplied graph with distinct trust zones,
+aligned process cards, and color-coded verdicts; its editable source is
+`figures/mlads_trust_boundary.svg`. The supplied image is retained separately
+as an unchanged reference, not embedded as Figure 1.
+
+The source manuscript is anonymous, so no presenter identity was invented.
+Before uploading, supply presenter details as required by the submission process
+and review the conference's AI-use policy, which the template mentions but does
+not reproduce.
 
 ## Build
 
@@ -144,6 +250,18 @@ Assumptions`):
 - `SkillAchievability.v` — the reachability soundness core: refutation
   soundness (T1), tolerance soundness (T2), capability monotonicity (T3), and
   the `FlightInstance` concrete instance (main-text overview and Appendix D).
+  Since 30 September 2026 it also holds the schema in **relational** form
+  (`refutation_sound_rel`; the functional form is the special case
+  `refutation_sound_fun_is_rel`) and `SymbolicInstance`, which mechanizes
+  Lemma 3 (the checker's symbolic abstraction satisfies step-sim and goal-sim)
+  for a shallow embedding of the state logic: constraints as predicates on
+  numeric worlds, guards and effects as relations, the strongest postcondition
+  as the image, the widening as an arbitrary edge policy. The relational form
+  was needed because the accumulated constraint depends on the search path, so
+  the abstraction is not a function of the concrete world and the earlier
+  paper-level Lemma 3 did not instantiate the functional schema as written.
+  What remains on paper is that the checker's QF-LIA formulas denote those
+  predicates and that Z3 decides them correctly.
 - `DirectTyping.v` — the direct-typing safety core: `type_directed_safety` /
   `progress` (Appendix D.3), and `HandoffInstance`, the mechanized
   planner/worker example.

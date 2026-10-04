@@ -49,9 +49,11 @@ from .pack import Capability, Pack, normalize, pack_digest
 from .session import ProjectionError, conformance_report, participants, project
 
 REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
-           "NON_PROJECTABLE", "NON_CONFORMANT", "DYNAMIC_TOPOLOGY")
+           "NON_PROJECTABLE", "NON_CONFORMANT", "DYNAMIC_TOPOLOGY",
+           "PROTOCOL_ONLY", "INCOMPLETE_COMPACTION")
 
 VERDICT_SCHEMA = "skillc.verdict/1"
+DEFERRED_OBLIGATIONS = ("intent_fidelity", "payload_faithfulness")
 
 # Every solver query gets a finite budget.  The pack language is QF-LIA
 # (validate_expr rejects variable*variable), so queries are decidable in
@@ -82,12 +84,30 @@ class State:
 
     def cur(self, var: str) -> z3.ArithRef:
         v = self.versions().get(var, 0)
-        return z3.Int(f"{var}__{v}")
+        return z3.Int(f"{var}__init" if v == 0 else f"{var}__{v}")
 
 
 def _mk_state(preds, arith, version: dict[str, int], path) -> State:
     return State(frozenset(preds), tuple(arith),
                  tuple(sorted(version.items())), tuple(path))
+
+
+@dataclass(frozen=True)
+class TypingState:
+    """Symbolic world used to decide the world-sensitive T-Act/T-Goal premises."""
+
+    true_preds: frozenset
+    values: tuple
+
+    def env(self) -> dict[str, z3.ArithRef]:
+        return dict(self.values)
+
+    def cur(self, var: str) -> z3.ArithRef:
+        return self.env().get(var, z3.Int(f"{var}__init"))
+
+
+def _mk_typing_state(preds, values: dict[str, z3.ArithRef]) -> TypingState:
+    return TypingState(frozenset(preds), tuple(sorted(values.items())))
 
 
 def eval_expr(e: Any, st: State) -> z3.ArithRef:
@@ -102,6 +122,24 @@ def eval_expr(e: Any, st: State) -> z3.ArithRef:
             return eval_expr(e["-"][0], st) - eval_expr(e["-"][1], st)
         if "*" in e:
             return eval_expr(e["*"][0], st) * eval_expr(e["*"][1], st)
+    raise ValueError(f"bad expr: {e!r}")
+
+
+def eval_typing_expr(e: Any, st: TypingState) -> z3.ArithRef:
+    if isinstance(e, int):
+        return z3.IntVal(e)
+    if isinstance(e, str):
+        return st.cur(e)
+    if isinstance(e, dict):
+        if "+" in e:
+            return (eval_typing_expr(e["+"][0], st)
+                    + eval_typing_expr(e["+"][1], st))
+        if "-" in e:
+            return (eval_typing_expr(e["-"][0], st)
+                    - eval_typing_expr(e["-"][1], st))
+        if "*" in e:
+            return (eval_typing_expr(e["*"][0], st)
+                    * eval_typing_expr(e["*"][1], st))
     raise ValueError(f"bad expr: {e!r}")
 
 
@@ -123,6 +161,27 @@ def eval_formula(f: Any, st: State) -> z3.BoolRef:
         if "cmp" in f:
             lhs, op, rhs = f["cmp"]
             return CMP[op](eval_expr(lhs, st), eval_expr(rhs, st))
+    raise ValueError(f"bad formula: {f!r}")
+
+
+def eval_typing_formula(f: Any, st: TypingState) -> z3.BoolRef:
+    if f is True:
+        return z3.BoolVal(True)
+    if f is False:
+        return z3.BoolVal(False)
+    if isinstance(f, str):
+        return z3.BoolVal(f in st.true_preds)
+    if isinstance(f, dict):
+        if "and" in f:
+            return z3.And([eval_typing_formula(x, st) for x in f["and"]])
+        if "or" in f:
+            return z3.Or([eval_typing_formula(x, st) for x in f["or"]])
+        if "not" in f:
+            return z3.Not(eval_typing_formula(f["not"], st))
+        if "cmp" in f:
+            lhs, op, rhs = f["cmp"]
+            return CMP[op](eval_typing_expr(lhs, st),
+                           eval_typing_expr(rhs, st))
     raise ValueError(f"bad formula: {f!r}")
 
 
@@ -154,17 +213,23 @@ def apply_effect(st: State, cap: Capability) -> State:
         new_true.add(a)
     for d in cap.dele:
         new_true.discard(d)
-    new_version = st.versions()
+    old_version = st.versions()
+    new_version = dict(old_version)
     new_arith = list(st.arith)
     # deterministic assignments  v := expr  (RHS evaluated in the OLD state)
     for v, expr in cap.assigns.items():
         rhs = eval_expr(expr, st)
-        new_version[v] = new_version.get(v, 0) + 1
+        new_version[v] = old_version.get(v, 0) + 1
         new_arith.append(z3.Int(f"{v}__{new_version[v]}") == rhs)
-    # nondeterministic assignments  v := *  with a constraint over the NEW value
+    # Updates are simultaneous.  Each Nd(x) sees old N except for x's new
+    # value; Asg takes precedence when both partial maps define the same x.
     for v, constr in cap.nondet.items():
-        new_version[v] = new_version.get(v, 0) + 1
-        tmp = _mk_state(st.true_preds, new_arith, new_version, st.path)
+        if v in cap.assigns:
+            continue
+        new_version[v] = old_version.get(v, 0) + 1
+        formula_version = dict(old_version)
+        formula_version[v] = new_version[v]
+        tmp = _mk_state(st.true_preds, st.arith, formula_version, st.path)
         new_arith.append(eval_formula(constr, tmp))
     return _mk_state(new_true, new_arith, new_version,
                      st.path + (("act", cap.name),))
@@ -218,6 +283,19 @@ class Verdict:
     semantics: str = "may"       # judgment the verdict was decided under
     pack_digest: str = ""        # identity of the pack that was decided
     assumed_conformant: tuple = ()   # prt(G) roles with no declared behaviour
+    context_refuted: bool = False    # goal impossible over every protocol in Gamma
+    decision_scope: str = "protocol"
+
+    @property
+    def refutation_scope(self) -> str:
+        if not self.refuted:
+            return "none"
+        return "capability_context" if self.context_refuted else "declared_protocol"
+
+    @property
+    def obligations(self) -> tuple:
+        """Obligations intentionally outside the static Layer-A verdict."""
+        return DEFERRED_OBLIGATIONS if self.label == "ACHIEVABLE" else ()
 
     @property
     def label(self) -> str:
@@ -248,6 +326,9 @@ class Verdict:
             "refuted": self.refuted,
             "unknown": self.unknown,
             "semantics": self.semantics,
+            "decision_scope": self.decision_scope,
+            "refutation_scope": self.refutation_scope,
+            "deferred_obligations": list(self.obligations),
             "assumed_conformant": list(self.assumed_conformant),
             "skillc_version": _skillc_version(),
             "pack_digest": self.pack_digest,
@@ -282,6 +363,8 @@ class Checker:
         self.defeated: list[str] = []    # external branches that defeat the goal
         self.loop_seen: set = set()      # (rec name, pred-state) at back edges
         self.solver_unknown = False      # >=1 query hit the solver budget
+        self.typing_fresh = 0            # branch-local post-state variables
+        self.typing_condition: z3.BoolRef | None = None
         # prt(G) roles the pack declares no behaviour for: the residue of the
         # participant-agreement side condition (see session.ConformanceReport)
         self.assumed_conformant: tuple = ()
@@ -301,7 +384,7 @@ class Checker:
             v.detail = f"{v.detail} [{note}]" if v.detail else note
         return v
 
-    def _gamma_refutation(self) -> Verdict | None:
+    def _gamma_refutation(self, guard_closure: bool = False) -> Verdict | None:
         """Protocol-independent refutation over the establisher closure.
 
         Encode the goal with every non-establishable atom pinned FALSE and
@@ -311,7 +394,7 @@ class Checker:
         who still act through Gamma -- can satisfy the goal.  This is the
         FlightInstance argument made general and checked by z3.
         """
-        can = establishable_atoms(self.p)
+        can = set(self.p.init_true) if guard_closure else establishable_atoms(self.p)
         fresh = iter(range(10 ** 9))
 
         def enc(f: Any) -> z3.BoolRef:
@@ -320,7 +403,7 @@ class Checker:
             if f is False:
                 return z3.BoolVal(False)
             if isinstance(f, str):
-                return z3.Bool(f) if f in can else z3.BoolVal(False)
+                return z3.Bool(f"__predicate_{f}") if f in can else z3.BoolVal(False)
             if "and" in f:
                 return z3.And([enc(x) for x in f["and"]])
             if "or" in f:
@@ -331,15 +414,27 @@ class Checker:
                 return z3.Bool(f"__cmp_{next(fresh)}")   # arithmetic left free
             raise ValueError(f"bad formula: {f!r}")
 
+        if guard_closure:
+            remaining = list(self.p.capabilities.values())
+            while remaining:
+                enabled = [
+                    cap for cap in remaining
+                    if _sat([enc(cap.pre)], self._note_solver_unknown)]
+                if not enabled:
+                    break
+                for cap in enabled:
+                    can.update(cap.add)
+                    remaining.remove(cap)
         if _sat([enc(self.p.goal)], self._note_solver_unknown):
             return None
         dead = tuple(sorted(atoms(self.p.goal) - can))
         return Verdict(False, "GOAL_UNSAT",
-                       f"protocol-independent refutation: no capability in "
-                       f"Gamma establishes {list(dead)} and the goal cannot "
+                       f"protocol-independent refutation: "
+                       f"{'guard-reachable capabilities' if guard_closure else 'capabilities'} "
+                       f"in Gamma cannot establish {list(dead)} and the goal cannot "
                        f"hold without them -- every protocol over these "
                        f"capabilities is doomed, spawning included",
-                       frontier=dead)
+                       frontier=dead, context_refuted=True)
 
     def _decide(self) -> Verdict:
         # 1. capability existence (no hallucinated tools).  This premise is
@@ -347,9 +442,11 @@ class Checker:
         #    stays absent no matter how many participants are spawned.
         missing = self._missing_caps(self.p.protocol)
         if missing:
+            goal_refutation = self._gamma_refutation()
             return Verdict(False, "MISSING_CAPABILITY",
                            f"protocol invokes undeclared capabilities: {sorted(missing)}",
-                           frontier=tuple(sorted(missing)))
+                           frontier=tuple(sorted(missing)),
+                           context_refuted=goal_refutation is not None)
         # 1b. establisher-closure refutation: protocol-independent, so it too
         #     survives autonomy and is decided before degrading to UNKNOWN.
         gamma = self._gamma_refutation()
@@ -377,9 +474,29 @@ class Checker:
         if not rep.ok:
             return Verdict(False, "NON_CONFORMANT", rep.failure)
         self.assumed_conformant = rep.assumed
+        # T-Comm quantifies over every protocol branch at the same pre-world;
+        # T-Act and T-Goal then check guards/markers in lockstep.  Projection
+        # alone only checks process shape, so decide these world premises too.
+        typing_condition = self._direct_typing_condition()
         # 5. tolerant may-reachability of the goal
         ok, end_state = self._reach(self.p.protocol, initial_state(self.p), {})
         if ok:
+            # Search again with the shared-world premise at each goal.
+            # Rejecting only the first witness would miss compatible later
+            # branches; omitting the goal would admit incompatible worlds.
+            self.typing_condition = typing_condition
+            self.loop_seen.clear()
+            self.blocked.clear()
+            self.defeated.clear()
+            ok, end_state = self._reach(
+                self.p.protocol, initial_state(self.p), {})
+            if not ok:
+                return Verdict(
+                    False, "NON_CONFORMANT",
+                    "a may-reachability witness exists, but the whole-session "
+                    "T-Comm/T-Act/T-Goal judgment has no derivation from the "
+                    "same initial world: the protocol-wide guards and goal "
+                    "markers are inconsistent with the witness")
             return Verdict(True, "OK", "goal reachable along witness path",
                            witness=end_state.path)
         if self.defeated:
@@ -394,6 +511,80 @@ class Checker:
                        "protocol terminates but no run satisfies the goal "
                        "(goal predicate never established / refinement unsatisfiable)")
 
+    def _fresh_typing_value(self, var: str) -> z3.ArithRef:
+        self.typing_fresh += 1
+        return z3.Int(f"{var}__typing_{self.typing_fresh}")
+
+    def _typing_effect(self, st: TypingState,
+                       cap: Capability) -> tuple[TypingState, list[z3.BoolRef]]:
+        preds = set(st.true_preds) | set(cap.add)
+        preds -= set(cap.dele)
+        old = st.env()
+        values = dict(old)
+        constraints: list[z3.BoolRef] = []
+        for var, expr in cap.assigns.items():
+            values[var] = eval_typing_expr(expr, st)
+        for var, formula in cap.nondet.items():
+            if var in cap.assigns:
+                continue
+            fresh = self._fresh_typing_value(var)
+            formula_values = dict(old)
+            formula_values[var] = fresh
+            formula_state = _mk_typing_state(st.true_preds, formula_values)
+            constraints.append(eval_typing_formula(formula, formula_state))
+            values[var] = fresh
+        return _mk_typing_state(preds, values), constraints
+
+    def _typing_condition(self, steps: list[dict], st: TypingState,
+                          recenv: dict[str, list[dict]],
+                          seen: frozenset) -> z3.BoolRef:
+        if not steps:
+            return z3.BoolVal(True)
+        step, rest = steps[0], steps[1:]
+        if "goal" in step:
+            return z3.And(
+                eval_typing_formula(step["goal"], st),
+                self._typing_condition(rest, st, recenv, seen))
+        if "msg" in step:
+            return self._typing_condition(rest, st, recenv, seen)
+        if "act" in step:
+            cap = self.p.capabilities[step["act"]["cap"]]
+            post, effect_constraints = self._typing_effect(st, cap)
+            return z3.And(
+                eval_typing_formula(cap.pre, st),
+                *effect_constraints,
+                self._typing_condition(rest, post, recenv, seen))
+        if "choice" in step:
+            return z3.And([
+                self._typing_condition(list(branch) + rest, st, recenv,
+                                       frozenset(seen))
+                for branch in step["choice"]["branches"].values()
+            ])
+        if "rec" in step:
+            name = step["rec"]["name"]
+            unfolding = list(step["rec"]["body"]) + rest
+            return self._typing_condition(
+                unfolding, st, {**recenv, name: unfolding}, seen)
+        if "continue" in step:
+            name = step["continue"]
+            key = (name, st.true_preds)
+            if key in seen:
+                # Coinductive closure after predicate-state saturation.  This
+                # is an over-approximation for numeric loops, so it can only
+                # withhold a conformance refutation, never create one.
+                return z3.BoolVal(True)
+            return self._typing_condition(
+                recenv[name], st, recenv, seen | {key})
+        raise ValueError(f"unsupported typing step: {step!r}")
+
+    def _direct_typing_condition(self) -> z3.BoolRef:
+        st = _mk_typing_state(self.p.init_true, {})
+        initial = [eval_typing_formula(f, st)
+                   for f in self.p.init_constraints]
+        condition = self._typing_condition(
+            self.p.protocol, st, {}, frozenset())
+        return z3.And(*initial, condition)
+
     def _missing_caps(self, steps: list[dict]) -> set[str]:
         out: set[str] = set()
         for s in steps:
@@ -407,8 +598,10 @@ class Checker:
         return out
 
     def _goal_sat(self, st: State) -> bool:
-        return _sat(list(st.arith) + [eval_formula(self.p.goal, st)],
-                    self._note_solver_unknown)
+        constraints = list(st.arith) + [eval_formula(self.p.goal, st)]
+        if self.typing_condition is not None:
+            constraints.append(self.typing_condition)
+        return _sat(constraints, self._note_solver_unknown)
 
     def _widen(self, st: State, label: str) -> State:
         """Back-edge widening: havoc the numeric summary.  Dropping the
@@ -433,12 +626,23 @@ class Checker:
                                 cur.path + (("msg", s["msg"]["label"]),))
             elif "act" in s:
                 cap = self.p.capabilities[s["act"]["cap"]]
-                if not guard_satisfiable(cur, cap, self._note_solver_unknown):
+                guard = eval_formula(cap.pre, cur)
+                if not _sat(list(cur.arith) + [guard],
+                            self._note_solver_unknown):
                     self.blocked.append(
                         f"capability '{cap.name}' guard never satisfiable on "
                         f"this path (pre={cap.pre!r})")
                     return False, cur              # mandatory action blocked
-                cur = apply_effect(cur, cap)
+                guarded = _mk_state(
+                    cur.true_preds, list(cur.arith) + [guard],
+                    cur.versions(), cur.path)
+                successor = apply_effect(guarded, cap)
+                if not _sat(list(successor.arith), self._note_solver_unknown):
+                    self.blocked.append(
+                        f"capability '{cap.name}' has no successor world "
+                        f"satisfying its nondeterministic effect")
+                    return False, cur
+                cur = successor
             elif "rec" in s:
                 # mu X. body : the fall-through continuation folds into the
                 # unfolding (tail recursion), so the remainder is consumed
@@ -485,7 +689,8 @@ class Checker:
         return False, cur
 
 
-def check(pack: dict | Pack, semantics: str = "may") -> Verdict:
+def check(pack: dict | Pack, semantics: str = "may",
+          scope: str = "protocol") -> Verdict:
     """Check a pack (dict or Pack) and return the Verdict.
 
     Both input shapes go through the same schema gate (pack.normalize ->
@@ -502,8 +707,30 @@ def check(pack: dict | Pack, semantics: str = "may") -> Verdict:
                              agent's own choices stay existential (AND-OR
                              search).  ACHIEVABLE then means the agent has a
                              winning strategy against the declared model.
+
+    scope="protocol"        the default judgment about the declared protocol.
+    scope="goal"            may-only selective judgment: refute only with a
+                             capability-context certificate; otherwise abstain
+                             on protocol rejection. The guard closure ignores
+                             deletes and treats numeric comparisons as free
+                             Booleans, over-approximating possible producers.
     """
+    if scope not in {"protocol", "goal"}:
+        raise ValueError(f"unknown decision scope: {scope!r}")
+    if scope == "goal" and semantics != "may":
+        raise ValueError("goal scope supports may semantics only")
     p = normalize(pack)
-    v = Checker(p, semantics=semantics).run()
+    checker = Checker(p, semantics=semantics)
+    certificate = checker._gamma_refutation(guard_closure=True) if scope == "goal" else None
+    v = certificate if certificate is not None else checker.run()
+    v.decision_scope = scope
+    if scope == "goal" and v.refuted and not v.context_refuted:
+        protocol_reason = v.reason
+        v.unknown = True
+        v.reason = "PROTOCOL_ONLY"
+        v.detail = (
+            f"declared protocol rejected ({protocol_reason}), but no "
+            f"protocol-independent goal refutation was established; "
+            f"alternative plans are not ruled out. {v.detail}")
     v.pack_digest = pack_digest(p)
     return v

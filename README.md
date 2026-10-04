@@ -8,17 +8,9 @@ frame assumption) that no run of the declared pack can reach its goal.  It is
 deliberately **incomplete for achievement**: `ACHIEVABLE` means "structurally
 admissible", not "guaranteed".
 
-The paper presents the direct-typing and goal-achievability core. Its
-refutation-sound abstraction theorem is mechanized in Coq
-([`proof/SkillAchievability.v`](proof/SkillAchievability.v), zero axioms,
-audited by [`proof/check_assumptions.v`](proof/check_assumptions.v)); the
-executable checker is schema-gated and tested against that specification, but
-its exact symbolic transition system is not yet instantiated in Coq. It decides
-capability-guarded may-reachability with z3, in
-milliseconds, with no LLM in the trusted path. The exact scope of the
-accompanying paper and the implementation-only extensions is recorded in
-[`paper/README.md`](paper/README.md); the paper source and built
-[PDF](paper/skillachievability.pdf) live in [`paper/`](paper/).
+The checker uses z3 with **no LLM in the trusted decision path**. It can gate
+execution before an agent spends tokens on an invalid protocol or unreachable
+goal.
 
 ```
  natural-language skill ──► [ front-end compaction ] ──► pack ──► [ checker ] ──► verdict
@@ -26,7 +18,7 @@ accompanying paper and the implementation-only extensions is recorded in
                               deterministic or LLM                sound for refutation
 ```
 
-## Install
+## Quick start
 
 ```bash
 pip install -e ".[dev]"        # installs the `skillc` CLI
@@ -44,8 +36,6 @@ pipx runpip skillc show z3-solver
 install it automatically with `skillc`. The second command is an explicit
 post-install verification, not an additional installation step.
 
-## Quick start
-
 Check a real skill against the runtime that will execute it:
 
 ```console
@@ -58,17 +48,15 @@ call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
   missing: ask_user_input_v0 (line 7)
 ```
 
-The same skill, two verdicts: achievability is always judged **relative to a
-capability context Γ** (an environment profile plus self-declared
-`allowed-tools`/`tools` metadata). The profile and self-declared grants remain
-distinct trust inputs even though the front-end combines them. A consumer-app skill that asks
-questions via `ask_user_input_v0` is provably not executable as written under
-Claude Code, which has no such tool.
+The same skill, two verdicts: achievability is **relative to the declared
+environment**. Profiles and self-declared `allowed-tools`/`tools` metadata are
+distinct trust inputs; the frontend combines them but does not discover or
+verify actual runtime grants.
 
 Batch-scan a skill tree, compile a pack, or run the evaluation corpus:
 
 ```console
-$ skillc scan /mnt/skills --profile claude-ai      # 36/36 achievable
+$ skillc scan /mnt/skills --profile claude-ai      # every skill achievable (42/42)
 $ skillc compile SKILL.md -o pack.json             # inspect the formal object
 $ skillc check pack.json --json                    # machine-readable verdict
 $ skillc eval                                      # corpus + soundness audit
@@ -90,10 +78,6 @@ gate used for local and LLM-generated packs. The command and each argument are
 passed directly without a shell; starting the MCP server still executes that
 command locally, so only use servers you trust. Arguments beginning with `-`
 can be passed as `--mcp-arg=--flag`.
-
-Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (outside
-the decidable fragment) — so `skillc check` can
-gate CI for skill repositories.
 
 ## Pre-session agent hook
 
@@ -171,30 +155,67 @@ to be installed already or present in uv's cache; pass `-Python 3.13` on
 Windows or `--python 3.13` on Unix to select another Python 3.10+ runtime.
 Neither path disables TLS verification.
 
-## Recorded real-skill demo
+Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (an
+abstention, including outside the decidable fragment) — so `skillc check` can
+gate CI for skill repositories.
 
-The demo under [`demo/real-skill-cases`](demo/real-skill-cases) starts from five
-real Apache-2.0 natural-language `SKILL.md` files at a pinned
-`anthropics/skills` commit. Azure OpenAI `gpt-5.4` compacted each source live;
-the deterministic schema gate rejected one malformed MCP-builder response,
-accepted its retry, and the trusted checker found witnesses for all five
-accepted packs. Inputs, generated packs, source hashes, pack digests, schema
-attempts, and verdicts are committed as evidence.
+### Controlled English (CE)
 
-The 107-second 1080p recording is
-[`skillc-real-skills-demo.mp4`](demo/real-skill-cases/skillc-real-skills-demo.mp4).
-Reproduce the complete natural-language → LLM → schema gate → checker pipeline
-using Azure OpenAI and the current `az login` identity:
+A pack can also be written, reviewed or generated in SkillC Controlled
+English, a small formal language that reads as English. Every sentence form
+denotes exactly one pack construct, so parsing is deterministic and errors
+name the line and column:
 
-```powershell
-$env:AZURE_OPENAI_ENDPOINT = "https://YOUR-RESOURCE.openai.azure.com/openai/v1"
-python scripts\make_real_skill_demo.py --provider azure-openai --model YOUR_DEPLOYMENT
+```text
+Skill `book-flight`.
+Tool `book_flight` (owner `agent`): requires `flight_selected`; adds `booked`.
+Goal: `booked` and `confirmation_sent`.
+Protocol:
+  - `agent` uses `book_flight`.
+  - `agent` uses `send_email`.
 ```
 
-`AZURE_OPENAI_API_KEY` may be used instead of Azure CLI authentication.
-Anthropic remains available through `--llm-provider anthropic`. Primary-source and
-license notes are in
-[`docs/REAL_SKILL_DEMO_SOURCES.md`](docs/REAL_SKILL_DEMO_SOURCES.md).
+`skillc check skill.ce` checks a CE file, `skillc ce pack.json` renders any
+pack as CE for review, and `skillc check SKILL.md --llm --via-ce` has the
+model write CE instead of JSON. See `src/skillc/frontend/ce.py` for the
+grammar, `examples/controlled-english/` for a worked example, and
+[`docs/CONTROLLED_ENGLISH.md`](docs/CONTROLLED_ENGLISH.md) for the language and
+an A/B against JSON compaction. [`docs/P2G_RUNTIME_BINDING.md`](docs/P2G_RUNTIME_BINDING.md)
+describes runtime-bound compaction (P2g), tested on 200 blindly executed
+skills, and [`docs/LIBRARY_TEST.md`](docs/LIBRARY_TEST.md) the tool-policy
+library tests.
+
+All of this is **optional**: the default `skillc check` / `compile` path and the
+original JSON LLM front-end (`--llm`) are unchanged. CE is used only for `.ce`
+inputs, `skillc ce`, `--via-ce` or `--runtime`; the runtime monitor
+(`skillc monitor`, [`docs/RUNTIME_MONITOR.md`](docs/RUNTIME_MONITOR.md)) is active
+only in a project that runs `skillc monitor init` and installs its hooks.
+The experiment data behind these documents (`runs/`, `benchmark/` corpora)
+lives on the branch `gc/data_train_test`; the scripts under `scripts/` that
+reproduce the experiments expect that branch.
+
+### Protocol checks versus goal-only checks
+
+The default check judges the **declared protocol**, not every alternative plan.
+Use a reviewed environment contract and `--goal-only` when rejection must mean
+the goal is unreachable across the available capabilities:
+
+```powershell
+skillc check SKILL.md --contract task-contract.json --goal-only --json
+```
+
+A contract declares `goal` and `capabilities`, with optional roles and initial
+conditions. A contract-only impossibility preflight can skip LLM compaction.
+Without a protocol-independent refutation, protocol errors become `UNKNOWN`,
+not a rejection of all alternative plans. `UNKNOWN` is neither rejection nor
+permission to execute; this policy cannot be combined with `--adversarial`.
+
+For a trusted single-role Boolean contract,
+`skillc plan task-contract.json -o generated-pack.json` constructs a checked
+alternative protocol without an LLM. It does not certify the source's original
+protocol; unsupported inputs and search limits produce abstentions.
+
+Details: [compaction and goal-only policy](docs/archive/COMPACTION_PRECISION_ASSESSMENT_20260921.md).
 
 ## What the checker decides
 
@@ -202,8 +223,8 @@ A **pack** declares capabilities (STRIPS pre/effects, numeric assignments,
 constrained non-determinism), a goal-marked global protocol (`act` / `msg` /
 `choice` / tail-recursive `rec`/`continue` loops / `spawn`), a goal formula,
 the initial state, and optionally per-role declared behaviours (`skills`).
-The executable checker decides four algorithmic checks corresponding to the
-paper's direct conformance and achievability judgments (§5.2–§5.3):
+The executable checker decides four algorithmic checks for direct conformance
+and achievability:
 
 ```
    Γ ⊇ caps(G)          capability soundness   — no hallucinated tools
@@ -215,11 +236,7 @@ paper's direct conformance and achievability judgments (§5.2–§5.3):
    Γ ⊢ {S_p} : G ▷ ◇goal
 ```
 
-Projection implements Proj-Sel / Proj-Brn / Proj-Mrg with the merge `⊓`
-(label-union on external branches). The direct-conformance adapter requires
-exact internal selections and permits receiver-side external supersets. Its
-equivalence to the paper's declarative whole-session judgment is an open proof
-obligation. Refutations name the failing check:
+Refutations name the failing check:
 
 | reason | failure mode it catches |
 |---|---|
@@ -229,141 +246,89 @@ obligation. Refutations name the failing check:
 | `NON_PROJECTABLE` | a role must act inside a branch it is never told about and the branches do not merge (unobserved choice → deadlock/handoff freeze) |
 | `NON_CONFORMANT` | a declared role behaviour does not refine its projected contract — the verdict on `G` cannot be transported to it |
 
-**Participant agreement (`prt(G) = prt(𝕄)`).** The paper's judgment ranges
-over a whole session `𝕄 = ∏ₚ p[Sₚ]`, so `T-Comm`/`T-Act`/`T-Goal` each carry a
-side condition that the protocol's participants agree with the session's. A
-pack that declares behaviours for only *some* of `prt(G)` leaves the rest
-assumed to follow their projected contract — sound for the verdict about `G`,
-but a real premise when transporting it to a deployment. The checker computes
-`prt(G)` and reports that residue rather than leaving it implicit:
+## More than tool checking: stop impossible agent coordination
 
-```console
-$ skillc check examples/triage-team/SKILL.md --profile none
-triage-team: ACHIEVABLE
-  assumed conformant (participants of G with no declared behaviour): router
+`skillc` does not only check whether tools exist. It also checks whether the
+goal is reachable, action guards and numeric constraints can be satisfied, and
+the interactions among agents form a realizable protocol.
+
+For example, suppose a main agent privately chooses either a security review
+or a performance review. A reviewer performs the selected analysis, while an
+editor must publish the corresponding report. Every required capability may
+exist, but if the editor is never told which branch the main agent selected,
+the editor cannot know which publication action its local contract requires.
+`skillc` refutes this before any agents are launched:
+
+```text
+private-review-routing: IMPOSSIBLE [NON_PROJECTABLE]
+  role 'editor' must behave differently across an unobserved choice
 ```
 
-Declaring a behaviour for a role that is *not* a participant of `G` is refuted
-outright (`NON_CONFORMANT`): its contract is `end`, and nothing non-trivial
-conforms to `end`.
+The repair is a protocol change, not another tool: the main agent must send the
+editor a branch label such as `publish_security_report` or
+`publish_performance_report`.
 
-**The decidable fragment (`thm:dec` / `thm:undec`).** Tail-recursive loops are explored
-with predicate-state saturation plus numeric widening on the back edge —
-widening only enlarges the reachable set, so refutation stays sound.  Dynamic
-participant spawning (`spawn`) crosses the autonomy boundary
-(Brand–Zafiropulo): the procedure degrades to a semi-decision — it still
-refutes what survives autonomy and otherwise answers **`UNKNOWN`** (exit
-code 3) instead of guessing.
+Compaction has three paths; none puts an LLM in the trusted decision:
 
-**Implementation-only extensions** (useful capabilities not claimed by the
-current paper revision):
+| Input path | Use |
+|---|---|
+| Deterministic frontend | Supported markdown/prose patterns; zero LLM tokens |
+| `skillc compile --llm` | Unrestricted prose via Anthropic or Azure OpenAI |
+| Embedded `skillc-pack` | Author-reviewed formal capabilities and protocol |
 
-- **Establisher-closure refutation** — a goal conjunct no capability
-  establishes refutes *every* protocol over Γ in one SMT query, spawning
-  included; `GOAL_UNSAT` with a `protocol-independent` certificate then means
-  "acquire a tool", not "fix the plan".
-- **Observed choice** (`"observed": true`) — a choice resolved inside a live
-  conversation (assistant↔user chat, a phone call) is announced by the medium
-  itself; projection treats it as an implicit broadcast (unobserved choice is
-  a ≥3-party *asynchronous* phenomenon).  This eliminated every false
-  refutation of real conversational skills.
-- **Adversarial must-achievability** (`skillc check --adversarial`, choices
-  marked `"external": true`) — the goal must survive every environment
-  resolution while the agent's own choices stay existential (AND-OR search);
-  adversarial refutations inherit soundness compositionally from T1.
-- **Counterexample-guided compaction repair** — a `NON_PROJECTABLE`
-  counterexample is fed back to the untrusted compactor for one bounded,
-  structure-only repair round (it may not invent tools or weaken the goal);
-  the verdict always comes from the trusted checker.
+The corpus contains two protocol-specific refutations:
 
-Tolerance comes from may-reachability (detours allowed), receiver-side
-interface slack (a role may offer more receives), and goal-relevant
-abstraction — extra status
-messages or beneficial branches never cause a refutation (Coq T2), and
-*adding* capabilities never flips `ACHIEVABLE` to `IMPOSSIBLE` (Coq T3,
-`cap_monotone`).
+| case | protocol defect | verdict |
+|---|---|---|
+| `deadlock_unobserved` | a planner must react to a worker's private choice | `NON_PROJECTABLE` |
+| `nonconformant_handler` | a handler omits one route required by its contract | `NON_CONFORMANT` |
 
-## Front-ends
-
-1. **Deterministic markdown front-end** (default, no LLM).  Parses
-   frontmatter (`allowed-tools` / `tools`), prose tool declarations
-   (`Tools: a, b, c`), and extracts tool invocations from the prose
-   ("ask via `ask_user_input_v0`", "use `str_replace`", …).  Unix commands
-   and code symbols route through the profile's shell capability; fenced code
-   blocks are not scanned.  Every extraction is reported with line-number
-   provenance (`skillc compile` prints it to stderr) so the pack is
-   inspectable at one checkpoint.
-2. **Embedded pack**: a fenced block tagged ```` ```skillc-pack ```` inside
-   the SKILL.md is validated and used verbatim — full checker power (guards,
-   budgets, roles, choice) for authors who want precise semantics.
-3. **LLM compaction** (`skillc compile --llm`): semantic NL→pack distillation
-   through Anthropic or Azure OpenAI. Azure supports an API key or the current
-   `az login` identity. The provider is untrusted by design — its output passes
-   the same deterministic schema gate and trusted checker, so a hallucinated
-   compaction can only produce a false `ACHIEVABLE` (caught by later layers),
-   never a false `IMPOSSIBLE` about the pack it actually emitted.
-
-## The bundle security pre-pass (`skillc audit`)
-
-Before the formal pack is trusted, a SkillSpector-like deterministic scanner
-vets the bundle itself — admission control at the compiler's boundary,
-complementary to the type discipline:
-
-```console
-$ skillc audit ./my-skill
-my-skill: ERROR [description-injection] instruction-injection pattern in the description ...
-my-skill: ERROR [risky-code] pipe-to-shell install (SKILL.md:6)
-```
-
-Checks: manifest consistency (name/description present, name matches the
-bundle directory), metadata poisoning (invisible/bidi Unicode,
-instruction-injection patterns in the description or hidden in HTML
-comments), risky code patterns in fenced blocks and bundle scripts
-(pipe-to-shell, decode-and-execute, destructive commands, plaintext HTTP),
-and permission-metadata consistency (prose invocations not covered by
-`allowed-tools`).  Exit 1 on any error-severity finding.  All 36 real public
-bundles pass with zero errors; the planted `poisoned-helper` fixture trips
-every class.
+For `deadlock_unobserved`, the published token model estimates **1,888 tokens**
+for one-time LLM compaction versus **231,870 tokens** for a typical two-agent
+deadlock run (54,948–778,740 low–high). Deterministic compaction costs zero
+tokens. These are modeled economics: the repository does not yet claim a valid
+measured multi-agent with/without benchmark for protocol failures. See
+[Impossible agent coordination example](docs/IMPOSSIBLE_AGENT_COORDINATION.md)
+for the complete skill, repair, benchmark cases, and evidence boundary.
 
 ## Results on real, public skills
 
 Validated against Anthropic's public skills corpus
-([anthropics/skills](https://github.com/anthropics/skills), 36 `SKILL.md`
-files mounted at `/mnt/skills`, or fetched with
+([anthropics/skills](https://github.com/anthropics/skills), 42 `SKILL.md`
+files at the time of writing, mounted at `/mnt/skills`, or fetched with
 `python3 scripts/fetch_skills.py`):
 
-* **36/36 achievable under the `claude-ai` profile** — their home runtime.
-  Zero false refutations on deployed skills (the empirical face of T1).
-* **16/36 refuted under the `claude-code` profile**, each with the exact
+* **42/42 achievable under the `claude-ai` profile** — their home runtime.
+  Zero false refutations on deployed skills.
+* **18/42 refuted under the `claude-code` profile**, each with the exact
   missing tool named (`ask_user_input_v0`, `read_page`, `upload_file`,
-  `create_file`, `str_replace`, `show_widget`, `search_mcp_registry`, …) and
-  the source line.  Granting the named tools flips every one of them back to
-  achievable (an operational illustration of the contrapositive of T3).
+  `create_file`, `str_replace`, `show_widget`, `search_mcp_registry`,
+  `tabs_context`, …) and the source line: consumer-app skills, plus the two
+  browser skills, whose tools the default Claude Code toolset does not
+  include.  Granting the named tools flips every one of them back to
+  achievable.
 
-The corpus grows as upstream publishes new skills; the numbers above are
-regenerated by `python3 scripts/make_report.py <dir>`, so treat the report as
-the current figure and this paragraph as its snapshot.
-
-Full table: [`docs/REAL_SKILLS_REPORT.md`](docs/REAL_SKILLS_REPORT.md).
+These are snapshot results, not a guarantee of concrete success.
+Full table: [real-skills report](docs/REAL_SKILLS_REPORT.md).
 
 **Semantic level** ([`docs/SEMANTIC_VALIDATION.md`](docs/SEMANTIC_VALIDATION.md),
-`scripts/semantic_validation.py`): four representative consumer skills were
+`scripts/semantic_validation.py`; recorded with `skillc 0.2.0` and not yet
+re-run on 0.3.0, which needs an LLM API key): four representative consumer skills were
 LLM-compacted into semantic packs (goals like *booked ∧ calendar-updated ∧
 user-informed* with per-step guards), through the schema gate and at most one
 repair round — **4/4 check ACHIEVABLE** (no false alarms on deployed skills).
-Each pack was then sabotaged with a known ground truth: drop a capability the
-plan invokes, and strip a goal conjunct's establishers — **6/6 mutants
-refuted**, naming the dropped tool (`MISSING_CAPABILITY`) or the dead conjunct
-(`GOAL_UNSAT`, protocol-independent certificate) every time.  Deterministic
-mutation testing over all 32 skills works in both directions: removing an
-invoked tool from the profile flips the verdict and names exactly that tool;
-granting the frontier back flips it to achievable.
+Seeded faults removed capabilities or goal establishers: **6/6 mutants
+refuted**, naming the missing tool or unreachable goal conjunct.
 
 On the 15-spec ground-truth corpus (`skillc eval`): **FN = 0** (no achievable
-goal ever refuted — T1) and the only false `ACHIEVABLE`s are the two planted
+goal ever refuted) and the only false `ACHIEVABLE`s are the two planted
 `SPURIOUS` cases (payload faithfulness / intent fidelity), i.e. exactly the
 residues the compiler openly defers to runtime monitoring and human review.
 No structural failure was missed in this proof-of-concept corpus.
+
+**Watch the pipeline:** the [107-second demo](demo/real-skill-cases/skillc-real-skills-demo.mp4)
+compiles five real skills through Azure OpenAI, the schema gate, and the
+checker. [Sources, artifacts, and reproduction](demo/real-skill-cases/README.md).
 
 ## What checking costs (`skillc cost`)
 
@@ -372,30 +337,23 @@ so a check costs exactly what its front-end costs — and the deterministic
 front-end's is zero too. The only stage that spends tokens is the optional LLM
 compaction, and it is one-shot, per skill *version*.
 
-The thing it avoids is not: an agent turn re-sends its whole context, so a run
-of `T` turns reads `T·(S+K) + g·T(T−1)/2` input tokens. **Compaction is linear
-and paid once; a doomed run is quadratic and recurs on every invocation.**
+The model assumes each agent turn re-sends its growing conversation:
+`T·(S+K) + g·T(T−1)/2` input tokens. Compaction is paid once per unchanged
+skill version; unchecked execution costs recur on every invocation.
 
 ```console
 $ skillc cost --corpus --price-llm
-refuted 7 skill(s) before execution
-  tokens spent checking : 12,239        ($0.09)
-  tokens NOT wasted     : 1,067,913 typical ($3.58), band 281,547-3,146,804
-  leverage (typical)    : 87x, per invocation avoided
-
-8 skill(s) not refuted -- the check bought no savings, so this is what it cost:
-  checking is 2.9% of running each skill once
 ```
 
-Per failure mode, for a median real skill (leverage = wasted per prevented run
-÷ tokens spent checking):
+Modeled estimates for a median real skill (leverage = wasted per prevented run
+÷ tokens spent checking; turns shown as low–typical–high):
 
 | reason | turns before it stops the agent | leverage |
 |---|---|---|
-| `MISSING_CAPABILITY` | 3–8–14, one agent | 18× |
-| `GOAL_UNSAT` | 8–18–30, and the run may *believe it succeeded* | 63× |
-| `NON_PROJECTABLE` / `NON_CONFORMANT` | 6–15–30, **two** agents billed | 94× |
-| `BLOCKED_GUARD` | 12–25–50 — retry-forever runs to the turn cap | 110× |
+| `MISSING_CAPABILITY` | 3–8–14, one agent | 17× |
+| `GOAL_UNSAT` | 8–18–30, and the run may *believe it succeeded* | 61× |
+| `NON_PROJECTABLE` / `NON_CONFORMANT` | 6–15–30, **two** agents billed | 91× |
+| `BLOCKED_GUARD` | 12–25–50 — retry-forever runs to the turn cap | 106× |
 
 `UNKNOWN` deliberately claims no savings: an abstention prevents nothing.
 
@@ -406,115 +364,30 @@ is overridable, and the caveat prints on every invocation. Compaction usage is
 rationale: [`docs/TOKEN_ECONOMICS.md`](docs/TOKEN_ECONOMICS.md) and
 [`src/skillc/tokens.py`](src/skillc/tokens.py).
 
-## Tests
-
-```bash
-python -m pytest                           # 338 passing; optional suites may skip
-SKILLC_SKILLS_DIR=./real-skills pytest tests/test_real_skills.py   # real corpus
-SKILLC_LIVE_LLM=1 pytest tests/test_llm_frontend.py               # live LLM (opt-in)
-coqc proof/SkillAchievability.v && coqc proof/DirectTyping.v
-coqc proof/DirectTypingSR.v && coqc proof/check_assumptions.v
-coqc proof/check_direct_typing.v
-```
-
-The suite covers the formula language, the schema gate, every refutation
-reason, projection/merge/subtyping, tail recursion and the autonomy boundary
-(loops saturate, `spawn` degrades to `UNKNOWN`, refutation survives
-autonomy), direct conformance (exact sender labels, receiver-side slack), the corpus
-confusion matrix (reproduced exactly: TP=6 FN=0 FP=2 TN=7) plus a 6-spec
-extended corpus for the fragment boundary, the markdown front-end
-(extraction, classification, profiles, embedded packs), the bundle audit
-(poisoned fixture trips every class; real bundles are clean), the CLI, and —
-when a corpus is present — every real public skill under multiple profiles,
-including the monotone-widening property.
-
-## Layout
-
-```
-src/skillc/            the compiler package
-  checker.py             schema-gated decision procedure over z3
-                         may-reachability, loops + widening, UNKNOWN boundary
-  session.py             projection/merge, direct conformance, generic subtyping
-  pack.py                pack model + deterministic schema gate
-  formula.py             guard/goal mini-language
-  profiles.py            capability contexts (claude-ai, claude-code, none)
-  audit.py               SkillSpector-like bundle security pre-pass
-  frontend/markdown.py   deterministic SKILL.md -> pack compaction
-  frontend/llm.py        optional LLM compaction (untrusted, env-gated)
-  evaluate.py            corpus evaluation + soundness/incompleteness audit
-  tokens.py              token economics: check cost vs. avoided runtime waste
-  cli.py                 skillc compile | check | scan | audit | cost | eval
-                         | profiles
-  data/                  built-in profiles + evaluation corpora
-paper/                 the paper (LaTeX + built PDF): full proofs +
-                       implementation-driven extensions
-proof/                 theorem checkers for specified fragments (Coq 8.18,
-                       zero axioms) -- SkillAchievability.v proves T1/T2/T3;
-                       DirectTyping.v the direct-typing head-move safety;
-                       DirectTypingSR.v subject reduction + session fidelity
-                       (communication interleaving); the compiler itself is the
-                       Python package above
-corpus/build_corpus.py 15 headline specs + 6 fragment/conformance specs
-docs/                  compaction prompt + real-skill scan report
-examples/              embedded-pack skills: retry loop, conformance-checked team
-scripts/               fetch_skills.py, make_report.py
-tests/                 the test suite (pytest)
-```
-
 ## Honest limitations
 
-Everything is proved about the *declared* capabilities and protocol; if the
-prose lies, the checker verifies a fiction (honest declaration is a runtime
-obligation — the `skillc audit` pre-pass narrows, but does not close, that
-gap).  The deterministic front-end is a conservative heuristic — its
-extraction is inspectable and a misextraction only makes the checker judge a
-different pack, but it does not understand semantics (use the embedded-pack
-escape hatch or `--llm` for that).  The merge `⊓` implements label-union on
-external branches and structural recursion on equal prefixes — a sound core
-of, not the complete, MPST merge lattice; loop widening havocs *all* numeric
-state at the back edge (coarser than needed, always in the sound direction).
-Dynamic subagent spawning is outside the decidable fragment and yields
-`UNKNOWN`, never a guess.
+**Declarations, not reality.** Static validation judges the declared pack.
+Either frontend can misrepresent the source; human review must establish intent
+fidelity, and runtime verification must establish actual tool effects.
+`ACHIEVABLE` is an abstract witness, not a guarantee of concrete success.
+Protocol rejection does not rule out a repaired or alternative plan.
 
-## How to cite
+**Coordination assumptions.** Roles without declared local behaviors are
+reported as assumed conformant. Projection implements a restricted merge;
+loop widening conservatively forgets numeric state. Dynamic spawning normally
+yields `UNKNOWN` unless an independent refutation already applies.
 
-The skill-achievability-compiler is an open-source project. If you use it in academic work, research papers, or other publications, please cite it using one of the formats below:
+**Proof boundary.** The [refutation-sound abstraction theorem](proof/SkillAchievability.v)
+is mechanized in Coq with zero axioms, but the exact Python transition system
+is not instantiated in Coq. The conformance adapter's equivalence to the
+declarative whole-session judgment remains an open proof obligation.
 
-**BibTeX:**
-```bibtex
-@software{skillc2026,
-  title = {skill-achievability-compiler: A Static Compiler for Goal Achievability Verification in LLM-Synthesized Agent Skills},
-  author = {Tcchen, Gina},
-  year = {2026},
-  url = {https://github.com/ginaecho/skill-achievability-compiler},
-  license = {MIT}
-}
-```
+## Development and resources
 
-**APA:**
-```
-Tcchen, G. (2026). skill-achievability-compiler: A static compiler for goal achievability verification in LLM-synthesized agent skills. Retrieved from https://github.com/ginaecho/skill-achievability-compiler
-```
+Run `python -m pytest` for the test suite. `skillc audit .\my-skill` provides a
+deterministic pre-pass for manifest inconsistencies, suspicious metadata,
+risky code patterns, and permission mismatches; it is not a security guarantee.
 
-**Chicago:**
-```
-Tcchen, Gina. "skill-achievability-compiler: A Static Compiler for Goal Achievability Verification in LLM-Synthesized Agent Skills." GitHub. Accessed [date]. https://github.com/ginaecho/skill-achievability-compiler.
-```
-
-GitHub will also recognize the [`CITATION.cff`](CITATION.cff) file in this repository, which provides machine-readable citation metadata.
-
-## License
-
-This project is licensed under the **MIT License** — see the [`LICENSE`](LICENSE) file for details.
-
-Copyright © 2026 Gina Tcchen and contributors.
-
-The MIT License permits free use, modification, distribution, and sublicensing of the software, provided that the copyright notice and license text are retained. This means:
-
-✓ You **can** use this software for any purpose (commercial, private, etc.)  
-✓ You **can** modify and distribute the software  
-✓ You **can** include it in proprietary applications  
-✓ You **must** include the license and copyright notice  
-✓ The software is provided **as-is**, with no warranty
-
-For full legal terms, see the [LICENSE](LICENSE) file.
+[Source](src/skillc/) · [Examples](examples/) ·
+[Compaction prompt](docs/COMPACTION_PROMPT.md) ·
+[Citation](CITATION.cff) · [MIT License](LICENSE)

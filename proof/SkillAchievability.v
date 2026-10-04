@@ -224,3 +224,198 @@ Module FlightInstance.
   Qed.
 
 End FlightInstance.
+
+(* ============================================================= *)
+(*  T1r  Refutation soundness with a simulation RELATION          *)
+(*                                                               *)
+(*  The Soundness section above takes the abstraction as a       *)
+(*  FUNCTION abs : W -> A.  The checker's symbolic abstraction   *)
+(*  (Lemma 3 of the paper) is not a function of the concrete     *)
+(*  world: a world <B,N> is represented by (B,psi) for ANY        *)
+(*  accumulated constraint psi that N satisfies, and psi depends  *)
+(*  on the path the search took.  The schema is therefore         *)
+(*  restated with a simulation relation R, of which the          *)
+(*  functional form is the special case R w a := (a = abs w).    *)
+(* ============================================================= *)
+
+Section SoundnessRel.
+  Context {W A : Type}.
+  Variable cstep : W -> W -> Prop.
+  Variable astep : A -> A -> Prop.
+  Variable R     : W -> A -> Prop.   (* "a represents w" *)
+  Variable cgoal : W -> Prop.
+  Variable agoal : A -> Prop.
+
+  Hypothesis step_sim_rel :
+    forall w w' a, cstep w w' -> R w a -> exists a', astep a a' /\ R w' a'.
+  Hypothesis goal_sim_rel :
+    forall w a, cgoal w -> R w a -> agoal a.
+
+  Lemma reach_abs_rel :
+    forall s0 a0 w, R s0 a0 -> reach cstep s0 w ->
+      exists a, reach astep a0 a /\ R w a.
+  Proof.
+    intros s0 a0 w HR H. induction H as [| u v Hsu IH Huv].
+    - exists a0. split. apply reach_refl. exact HR.
+    - destruct IH as [a [Hra HRa]].
+      destruct (step_sim_rel u v a Huv HRa) as [a' [Hstep HR']].
+      exists a'. split.
+      + eapply reach_step. exact Hra. exact Hstep.
+      + exact HR'.
+  Qed.
+
+  Theorem refutation_sound_rel :
+    forall s0 a0, R s0 a0 ->
+      (~ exists a, reach astep a0 a /\ agoal a) ->
+      (~ exists w, reach cstep s0 w /\ cgoal w).
+  Proof.
+    intros s0 a0 HR Hno [w [Hreach Hgoal]].
+    destruct (reach_abs_rel s0 a0 w HR Hreach) as [a [Hra HRa]].
+    apply Hno. exists a. split.
+    - exact Hra.
+    - exact (goal_sim_rel w a Hgoal HRa).
+  Qed.
+End SoundnessRel.
+
+(* The functional schema (refutation_sound) is the special case
+   R w a := (a = abs w) of the relational one. *)
+Lemma refutation_sound_fun_is_rel {W A : Type}
+  (cstep : W -> W -> Prop) (astep : A -> A -> Prop) (abs : W -> A)
+  (cgoal : W -> Prop) (agoal : A -> Prop) :
+  (forall w w', cstep w w' -> astep (abs w) (abs w')) ->
+  (forall w, cgoal w -> agoal (abs w)) ->
+  forall s0, (~ exists a, reach astep (abs s0) a /\ agoal a) ->
+             (~ exists w, reach cstep s0 w /\ cgoal w).
+Proof.
+  intros Hs Hg s0.
+  apply (refutation_sound_rel cstep astep (fun w a => a = abs w) cgoal agoal).
+  - intros w w' a Hc Heq. subst a. exists (abs w'). split.
+    + apply Hs. exact Hc.
+    + reflexivity.
+  - intros w a Hcg Heq. subst a. apply Hg. exact Hcg.
+  - reflexivity.
+Qed.
+
+(* ============================================================= *)
+(*  Lemma 3 (the symbolic abstraction satisfies the hypotheses), *)
+(*  mechanized for a SHALLOW embedding of the state logic.        *)
+(*                                                               *)
+(*  A concrete configuration is (control, boolean valuation,     *)
+(*  numeric world).  The checker's abstract configuration is     *)
+(*  (control, boolean valuation, accumulated constraint psi).    *)
+(*  Constraints are modelled semantically, as predicates on      *)
+(*  numeric worlds; guards and numeric effects as relations; the *)
+(*  strongest postcondition as the image; and the widening on    *)
+(*  back edges as an ARBITRARY policy (any edge may drop psi).   *)
+(*                                                               *)
+(*  What this does NOT cover (and remains on paper): that the    *)
+(*  checker's QF-LIA formulas denote these predicates, and that   *)
+(*  the SMT solver decides their satisfiability correctly.        *)
+(* ============================================================= *)
+
+Module SymbolicInstance.
+  Section Symbolic.
+    Context {Ctl Bv Num Cap : Type}.
+    (* protocol control: firing capability a moves control g to g' *)
+    Variable cnext : Ctl -> Cap -> Ctl -> Prop.
+    (* guard, boolean (Add/Del) update, numeric effect (may be nondeterministic) *)
+    Variable pre  : Cap -> Bv -> Num -> Prop.
+    Variable bupd : Cap -> Bv -> Bv.
+    Variable eff  : Cap -> Num -> Num -> Prop.
+    (* goal markers and the goal formula *)
+    Variable goal_at : Ctl -> Prop.
+    Variable gphi    : Bv -> Num -> Prop.
+    (* the implementation's widening policy: on which edges psi is dropped *)
+    Variable widen : Ctl -> Cap -> Ctl -> bool.
+
+    Definition Constraint := Num -> Prop.
+    Definition CW := (Ctl * Bv * Num)%type.
+    Definition AW := (Ctl * Bv * Constraint)%type.
+
+    (* World-Act / G-Act-E: a concrete firing. *)
+    Definition cstep (c c' : CW) : Prop :=
+      let '(g, b, n) := c in
+      let '(g', b', n') := c' in
+      exists a, cnext g a g' /\ pre a b n /\ b' = bupd a b /\ eff a n n'.
+
+    (* strongest postcondition of firing a from (b, psi) *)
+    Definition sp (a : Cap) (b : Bv) (psi : Constraint) : Constraint :=
+      fun n' => exists n, psi n /\ pre a b n /\ eff a n n'.
+    Definition top : Constraint := fun _ => True.
+
+    (* The symbolic edge exists iff psi /\ pre_a is satisfiable under b. *)
+    Definition astep (s s' : AW) : Prop :=
+      let '(g, b, psi) := s in
+      let '(g', b', psi') := s' in
+      exists a, cnext g a g' /\ (exists n, psi n /\ pre a b n) /\ b' = bupd a b /\
+        psi' = (if widen g a g' then top else sp a b psi).
+
+    Definition cgoal (c : CW) : Prop :=
+      let '(g, b, n) := c in goal_at g /\ gphi b n.
+    Definition agoal (s : AW) : Prop :=
+      let '(g, b, psi) := s in goal_at g /\ exists n, psi n /\ gphi b n.
+
+    (* abs is a RELATION: <B,N> is represented by (B,psi) whenever N |= psi. *)
+    Definition R (c : CW) (s : AW) : Prop :=
+      let '(g, b, n) := c in
+      let '(g', b', psi) := s in
+      g = g' /\ b = b' /\ psi n.
+
+    Lemma step_sim :
+      forall c c' s, cstep c c' -> R c s -> exists s', astep s s' /\ R c' s'.
+    Proof.
+      intros [[g b] n] [[g' b'] n'] [[h d] psi] Hc HR.
+      unfold cstep in Hc. unfold R in HR.
+      destruct Hc as [a [Hn [Hp [Hb He]]]].
+      destruct HR as [Hg [Hd Hpsi]]. subst h d.
+      exists (g', b', if widen g a g' then top else sp a b psi). split.
+      - unfold astep. exists a. split.
+        + exact Hn.
+        + split.
+          * exists n. split. exact Hpsi. exact Hp.
+          * split. exact Hb. reflexivity.
+      - unfold R. split.
+        + reflexivity.
+        + split.
+          * reflexivity.
+          * destruct (widen g a g').
+            { exact I. }
+            { unfold sp. exists n. split. exact Hpsi. split. exact Hp. exact He. }
+    Qed.
+
+    Lemma goal_sim :
+      forall c s, cgoal c -> R c s -> agoal s.
+    Proof.
+      intros [[g b] n] [[h d] psi] Hcg HR.
+      unfold cgoal in Hcg. unfold R in HR.
+      destruct Hcg as [Hg Hphi]. destruct HR as [Hgh [Hbd Hpsi]]. subst h d.
+      unfold agoal. split.
+      - exact Hg.
+      - exists n. split. exact Hpsi. exact Hphi.
+    Qed.
+
+    (* Lemma 3 + Theorem 1, composed: the search the checker runs is
+       refutation-sound, for every widening policy. *)
+    Theorem symbolic_refutation_sound :
+      forall c0 s0, R c0 s0 ->
+        (~ exists s, reach astep s0 s /\ agoal s) ->
+        (~ exists c, reach cstep c0 c /\ cgoal c).
+    Proof.
+      intros c0 s0 HR.
+      exact (refutation_sound_rel cstep astep R cgoal agoal step_sim goal_sim c0 s0 HR).
+    Qed.
+
+    (* The initial abstract state: any constraint the initial numeric world
+       satisfies (the checker seeds psi with the initial assignments). *)
+    Lemma initial_related :
+      forall g b n (psi : Constraint), psi n -> R (g, b, n) (g, b, psi).
+    Proof. intros g b n psi H. unfold R. split. reflexivity. split. reflexivity. exact H. Qed.
+
+    (* Tolerance, instantiated: dropping psi everywhere (the coarsest policy)
+       still yields a system related to the concrete one, so Theorem 2's
+       reading holds here too: the constant-true widening refutes nothing
+       that a finer policy could have reached. *)
+    Lemma sp_implies_top : forall a b psi n', sp a b psi n' -> top n'.
+    Proof. intros. exact I. Qed.
+  End Symbolic.
+End SymbolicInstance.

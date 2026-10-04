@@ -7,12 +7,12 @@ source below is an official vendor repository or official vendor documentation p
 directly (GitHub Contents API / direct HTTP fetch) on 2026-08-26; no search-engine summary is used
 as evidence without a primary-source fetch to back it. **No compiler code, corpus, paper, or test
 was changed to produce this note** — the mapping into `skillc`'s declared-pack format
-(`name`/`roles`/`capabilities`/`protocol`/`goal`, see [`README.md`](../README.md#what-the-checker-decides)
-and the embedded-pack examples in [`examples/`](../examples)) below is a *proposal for a future
+(`name`/`roles`/`capabilities`/`protocol`/`goal`, see [`README.md`](../../README.md#what-the-checker-decides)
+and the embedded-pack examples in [`examples/`](../../examples)) below is a *proposal for a future
 compaction*, not an applied change.
 
 Method note: two of the five real skills already appear (compacted) in
-[`docs/REAL_SKILLS_REPORT.md`](REAL_SKILLS_REPORT.md) — `docx` and `xlsx` under `anthropics/skills`.
+[`docs/REAL_SKILLS_REPORT.md`](../REAL_SKILLS_REPORT.md) — `docx` and `xlsx` under `anthropics/skills`.
 They are included again here, with fresh primary-source citations against the repository's current
 layout (it was restructured from `public/`+`examples/` into a single `skills/` tree since that
 report was generated), because they remain the clearest first-party "document generation" and

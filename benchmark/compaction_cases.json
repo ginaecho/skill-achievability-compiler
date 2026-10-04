@@ -1,0 +1,121 @@
+[
+  {
+    "id": "langextract-usage",
+    "task": "Extract grounded entities from provided non-sensitive sample text with LangExtract using either the hosted provider or local Ollama, then save the results as JSONL. Examples are supplied. Visualization is optional; no further provider fallback is available.",
+    "goal": {"and": ["grounded_entities", "results_saved"]},
+    "init_true": ["examples_valid", "hosted_ready", "ollama_ready"],
+    "capabilities": {
+      "extract_hosted": {"pre": {"and": ["examples_valid", "hosted_ready"]}, "add": ["grounded_entities"]},
+      "extract_local": {"pre": {"and": ["examples_valid", "ollama_ready"]}, "add": ["grounded_entities"]},
+      "save_results": {"pre": "grounded_entities", "add": ["results_saved"]},
+      "visualize_results": {"pre": "results_saved", "add": ["visualization_saved"]}
+    },
+    "essential": ["extract_hosted", "extract_local"],
+    "optional": "visualize_results",
+    "blocked_guard": "examples_valid"
+  },
+  {
+    "id": "azure-arm-postgresql-dotnet",
+    "task": "Provision a PostgreSQL Flexible Server and a database through the .NET ARM SDK. The requested outcome is existing resources, not generated code or a plan. Adding a client firewall rule is optional and SQL client connectivity is not requested. No existing server or database is available.",
+    "goal": {"and": ["server_exists", "database_exists"]},
+    "init_true": ["arm_write"],
+    "capabilities": {
+      "create_server": {"pre": "arm_write", "add": ["server_exists"]},
+      "create_database": {"pre": {"and": ["server_exists", "arm_write"]}, "add": ["database_exists"]},
+      "configure_firewall": {"pre": {"and": ["server_exists", "arm_write"]}, "add": ["client_allowed"]}
+    },
+    "essential": ["create_database"],
+    "optional": "configure_firewall",
+    "blocked_guard": "arm_write"
+  },
+  {
+    "id": "azure-arm-cosmosdb-dotnet",
+    "task": "Provision a Cosmos DB account, SQL database and container using the management-plane .NET SDK. The requested outcome is all three resources existing, not a plan. Fetching connection strings is optional. Data-plane CRUD and importing an existing account are unavailable.",
+    "goal": {"and": ["account_exists", "database_exists", "container_exists"]},
+    "init_true": ["arm_write"],
+    "capabilities": {
+      "create_account": {"pre": "arm_write", "add": ["account_exists"]},
+      "create_database": {"pre": {"and": ["account_exists", "arm_write"]}, "add": ["database_exists"]},
+      "create_container": {"pre": {"and": ["database_exists", "arm_write"]}, "add": ["container_exists"]},
+      "get_connection_strings": {"pre": "account_exists", "add": ["connection_strings_read"]}
+    },
+    "essential": ["create_container"],
+    "optional": "get_connection_strings",
+    "blocked_guard": "arm_write"
+  },
+  {
+    "id": "aspire-orchestration",
+    "task": "For a known valid local AppHost, start it non-interactively, wait for the resource to be ready, record its status and stop the AppHost. Completion requires both the recorded status and no running AppHost. Running diagnostics is optional; no source edit or restart is required. Cloud credentials are irrelevant.",
+    "goal": {"and": ["status_recorded", {"not": "app_running"}]},
+    "init_true": ["process_permission"],
+    "capabilities": {
+      "aspire_start": {"pre": "process_permission", "add": ["app_running"]},
+      "aspire_wait": {"pre": "app_running", "add": ["resource_ready"]},
+      "aspire_describe": {"pre": {"and": ["resource_ready", "app_running"]}, "add": ["status_recorded"]},
+      "aspire_stop": {"pre": "app_running", "del": ["app_running", "resource_ready"]},
+      "aspire_doctor": {"add": ["diagnostics_recorded"]}
+    },
+    "essential": ["aspire_start"],
+    "optional": "aspire_doctor",
+    "blocked_guard": "process_permission"
+  },
+  {
+    "id": "aspire-deployment",
+    "task": "Deploy the already locally verified and stopped Aspire application to either the permitted Azure target or the permitted Kubernetes target. Publishing artifacts alone is not completion. Clearing deployment cache is optional; other targets and credential acquisition are unavailable.",
+    "goal": {"or": ["azure_deployed", "kubernetes_deployed"]},
+    "init_true": ["target_access"],
+    "capabilities": {
+      "aspire_publish": {"add": ["artifacts_ready"]},
+      "aspire_deploy_azure": {"pre": {"and": ["artifacts_ready", "target_access"]}, "add": ["azure_deployed"]},
+      "kubectl_apply": {"pre": {"and": ["artifacts_ready", "target_access"]}, "add": ["kubernetes_deployed"]},
+      "clear_deployment_cache": {"add": ["cache_cleared"]}
+    },
+    "essential": ["aspire_deploy_azure", "kubectl_apply"],
+    "optional": "clear_deployment_cache",
+    "blocked_guard": "target_access"
+  },
+  {
+    "id": "azure-monitor-opentelemetry-exporter-java",
+    "task": "Configure the existing Java OpenTelemetry exporter, record a span and deliver it to the configured Azure Monitor ingestion endpoint. Merely producing code or keeping a local span is not completion. Custom enrichment is optional. The connection string is assumed configured; no actual secret is included. This is a compatibility scenario for the deprecated package in the source.",
+    "goal": "telemetry_delivered",
+    "init_true": ["ingestion_egress"],
+    "capabilities": {
+      "configure_exporter": {"add": ["exporter_configured"]},
+      "record_span": {"pre": "exporter_configured", "add": ["span_recorded"]},
+      "export_span": {"pre": {"and": ["span_recorded", "ingestion_egress"]}, "add": ["telemetry_delivered"]},
+      "enrich_span": {"pre": "span_recorded", "add": ["span_enriched"]}
+    },
+    "essential": ["export_span"],
+    "optional": "enrich_span",
+    "blocked_guard": "ingestion_egress"
+  },
+  {
+    "id": "huggingface-datasets",
+    "task": "Discover a public dataset's config and split, then fetch its first page of rows from the Dataset Viewer API. No upload token is required. Availability validation is optional. The split is not already known; no cached rows, local dataset or alternate network adapter exists.",
+    "goal": {"and": ["split_known", "rows_fetched"]},
+    "init_true": ["viewer_egress"],
+    "capabilities": {
+      "get_splits": {"pre": "viewer_egress", "add": ["split_known"]},
+      "get_rows": {"pre": {"and": ["split_known", "viewer_egress"]}, "add": ["rows_fetched"]},
+      "validate_dataset": {"pre": "viewer_egress", "add": ["dataset_validated"]}
+    },
+    "essential": ["get_rows"],
+    "optional": "validate_dataset",
+    "blocked_guard": "viewer_egress"
+  },
+  {
+    "id": "gh-cli-code-review",
+    "task": "Read the local PR diff and the supplied repository contract, then deliver a static review. The issue, PR description and applicable guides are supplied. Running Go tests is optional; report unrun tests honestly rather than claiming they passed. No diff has yet been read and no alternate diff source exists. Actual review correctness is an explicit payload assumption, not verified by this abstraction.",
+    "goal": "review_delivered",
+    "init_true": ["workspace_readable"],
+    "capabilities": {
+      "read_pr_diff": {"pre": "workspace_readable", "add": ["diff_read"]},
+      "read_repo_contract": {"pre": "workspace_readable", "add": ["contract_read"]},
+      "deliver_review": {"pre": {"and": ["diff_read", "contract_read"]}, "add": ["review_delivered"]},
+      "run_go_tests": {"pre": "workspace_readable", "add": ["tests_observed"]}
+    },
+    "essential": ["read_pr_diff"],
+    "optional": "run_go_tests",
+    "blocked_guard": "workspace_readable"
+  }
+]

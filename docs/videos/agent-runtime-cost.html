@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SkillC | The cost of unchecked execution</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #070d18; color: #edf6ff; font-family: "Segoe UI", sans-serif; }
+    main { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; gap: 18px; padding: 20px; }
+    canvas { display: block; width: 100%; max-width: 1600px; min-width: 0; height: auto; margin: auto; border-radius: 12px; }
+    nav { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 16px; }
+    button { background: #172c40; color: #edf6ff; border: 1px solid #54708e; border-radius: 6px; padding: 9px 18px; font: inherit; cursor: pointer; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #55d8ff; outline-offset: 3px; }
+    input { width: min(40vw, 480px); accent-color: #55d8ff; }
+    output, .note { color: #a9bed1; font-size: 14px; }
+    .note { text-align: center; margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <canvas id="scene" width="1920" height="1080" role="img"
+      aria-label="Illustrative agent execution: token spending rises as an agent retries, waits and adapts, then discovers it cannot send a report because the email tool is missing."></canvas>
+    <nav aria-label="Animation playback">
+      <button id="play" type="button">Play</button>
+      <button id="replay" type="button">Replay</button>
+      <label for="scrub">Timeline</label>
+      <input id="scrub" type="range" min="0" max="10" step="0.01" value="0">
+      <output id="time" for="scrub">0.00 / 10.00 s</output>
+    </nav>
+    <p class="note">Original illustrative animation. Not a recorded agent run. Token counts are fictional. Silent, ready for voiceover.</p>
+  </main>
+  <script>
+    const canvas = document.getElementById("scene");
+    const ctx = canvas.getContext("2d");
+    const C = { white: "#edf6ff", muted: "#9db2c9", cyan: "#55d8ff", amber: "#ffbe66", red: "#ff6e85", green: "#4be0a6" };
+    const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+    const ease = x => 1 - Math.pow(1 - clamp(x), 3);
+    const phases = [
+      { at: 0, title: "Working hard. Getting nowhere.", label: "EXECUTING", color: C.cyan },
+      { at: 4, title: "They retry.", label: "RETRYING", color: C.amber },
+      { at: 5, title: "They wait.", label: "WAITING", color: C.amber },
+      { at: 6, title: "They adapt.", label: "REPLANNING", color: C.cyan },
+      { at: 7, title: "The cost is paid.", label: "FINAL ATTEMPT", color: C.amber },
+      { at: 8.15, title: "Only then: failure.", label: "FAILED", color: C.red }
+    ];
+    const events = [
+      [0.25, "plan", "Prepare report and deliver by email.", C.cyan],
+      [1.00, "tool", "read_file(report.md) -> complete", C.green],
+      [1.80, "tool", "write_file(summary.md) -> complete", C.green],
+      [2.55, "plan", "Find a route to deliver the report...", C.cyan],
+      [3.30, "tool", "search(delivery options) -> no route", C.amber],
+      [4.00, "retry", "Retry delivery with revised arguments.", C.amber],
+      [4.55, "tool", "Delivery attempt -> unsuccessful", C.amber],
+      [5.00, "wait", "Backoff before next attempt...", C.amber],
+      [6.00, "adapt", "Replan: try an alternative tool path.", C.cyan],
+      [6.55, "tool", "search(alternative delivery) -> no route", C.amber],
+      [7.20, "retry", "Final delivery attempt...", C.amber],
+      [8.15, "error", "Cannot deliver: email tool unavailable.", C.red]
+    ];
+    function stateAt(seconds) {
+      if (!Number.isFinite(seconds)) throw new TypeError("Frame time must be finite.");
+      const t = clamp(seconds, 0, 10);
+      const phase = phases.findLast(p => t >= p.at);
+      let tokens;
+      if (t < 4) tokens = Math.round(800 + t * 1350);
+      else if (t < 5) tokens = Math.round(6200 + (t - 4) * 1700);
+      else if (t < 6) tokens = 7900;
+      else if (t < 7) tokens = Math.round(7900 + (t - 6) * 2450);
+      else tokens = Math.round(10350 + clamp((t - 7) / 1.15) * 2130);
+      return { t, phase, tokens, failed: t >= 8.15, waiting: t >= 5 && t < 6 };
+    }
+    function text(value, x, y, size = 24, color = C.white, weight = 400, mono = false) {
+      ctx.font = `${weight} ${size}px ${mono ? '"Cascadia Code", Consolas, monospace' : '"Segoe UI", Arial, sans-serif'}`;
+      ctx.fillStyle = color;
+      ctx.fillText(value, x, y);
+    }
+    function box(x, y, w, h, fill, stroke, radius = 18) {
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, radius);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1.5; ctx.stroke(); }
+    }
+    function line(points, color, width = 2) {
+      ctx.beginPath();
+      points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.stroke();
+    }
+    function dot(x, y, r, color, glow = false) {
+      ctx.save();
+      if (glow) { ctx.shadowColor = color; ctx.shadowBlur = 20; }
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
+      ctx.restore();
+    }
+    function flow(points, t, color, active) {
+      line(points, "#2c4157", 3);
+      if (!active) return;
+      const lengths = points.slice(1).map((p, i) => Math.hypot(p[0] - points[i][0], p[1] - points[i][1]));
+      const total = lengths.reduce((a, b) => a + b, 0);
+      for (let p = 0; p < 3; p++) {
+        let d = ((t * 0.6 + p / 3) % 1) * total;
+        for (let i = 0; i < lengths.length; i++) {
+          if (d <= lengths[i]) {
+            const f = d / lengths[i];
+            dot(points[i][0] + (points[i + 1][0] - points[i][0]) * f,
+              points[i][1] + (points[i + 1][1] - points[i][1]) * f, 5, color, true);
+            break;
+          }
+          d -= lengths[i];
+        }
+      }
+    }
+    function node(x, y, title, subtitle, color, active, t) {
+      if (active) {
+        ctx.save(); ctx.globalAlpha = 0.12 + 0.07 * Math.sin(t * 5);
+        box(x - 7, y - 7, 276, 104, color, null, 20); ctx.restore();
+      }
+      box(x, y, 262, 90, "#102033", active ? color : "#30445d", 13);
+      dot(x + 22, y + 29, 5, color, active);
+      text(title, x + 39, y + 37, 26, C.white, 600);
+      text(subtitle, x + 20, y + 68, 18, C.muted, 400, true);
+    }
+    function renderFrame(seconds) {
+      const s = stateAt(seconds);
+      const { t, phase, failed, waiting, tokens } = s;
+      ctx.clearRect(0, 0, 1920, 1080);
+      const bg = ctx.createLinearGradient(0, 0, 1920, 1080);
+      bg.addColorStop(0, "#07111f"); bg.addColorStop(1, "#102238");
+      ctx.fillStyle = bg; ctx.fillRect(0, 0, 1920, 1080);
+      const halo = ctx.createRadialGradient(1000, 430, 0, 1000, 430, 950);
+      halo.addColorStop(0, failed ? "#51233766" : "#124c6d44"); halo.addColorStop(1, "#00000000");
+      ctx.fillStyle = halo; ctx.fillRect(0, 0, 1920, 1080);
+      ctx.globalAlpha = 0.16;
+      for (let x = 32; x < 1920; x += 48) for (let y = 32; y < 1080; y += 48) dot(x, y, 1, "#6385a2");
+      ctx.globalAlpha = 1;
+
+      box(96, 62, 100, 36, "#133046", "#28506b", 7);
+      text("SkillC", 113, 88, 24, C.cyan, 700);
+      text("THE COST OF UNCHECKED EXECUTION", 216, 87, 19, C.muted, 600);
+      text("ILLUSTRATIVE AGENT RUN", 1506, 87, 19, C.muted, 500);
+      ctx.save();
+      ctx.globalAlpha = 0.35 + 0.65 * ease((t - phase.at) / 0.25);
+      text(phase.title, 96, 197 + (1 - ease((t - phase.at) / 0.3)) * 9, 68, failed ? C.red : C.white, 700);
+      ctx.restore();
+
+      box(96, 253, 1124, 560, "#0b1727", "#2c4058", 22);
+      dot(126, 286, 5, phase.color, true);
+      text("agent.run()", 144, 294, 21, C.white, 500, true);
+      text(phase.label, 983, 294, 18, phase.color, 600, true);
+      line([[96, 316], [1220, 316]], "#24374d");
+      text("GOAL", 126, 355, 17, C.muted, 600);
+      text("Send the completed report by email", 194, 355, 23, C.white, 600);
+
+      const active = !failed && !waiting;
+      flow([[414, 437], [507, 437]], t, phase.color, active);
+      flow([[769, 437], [862, 437]], t + 0.4, phase.color, active);
+      flow([[993, 482], [993, 521], [283, 521], [283, 482]], t, phase.color, active);
+      node(152, 392, "Agent", t >= 6 && !failed ? "plan.revise()" : "plan.execute()", phase.color, !failed, t);
+      node(507, 392, "Tool calls", "read / write / search", C.cyan, active, t + 1);
+      node(862, 392, "Goal", failed ? "unreachable" : "not reached", failed ? C.red : C.muted, failed, t);
+      if (waiting) {
+        ctx.beginPath(); ctx.arc(640, 521, 13, t * 5, t * 5 + Math.PI * 1.55);
+        ctx.strokeStyle = C.amber; ctx.lineWidth = 4; ctx.stroke();
+      }
+      box(120, 550, 1076, 237, "#07111e", "#22344a", 12);
+      text("EXECUTION TRACE", 144, 580, 16, C.muted, 600, true);
+      const visible = events.filter(e => e[0] <= t).slice(-5);
+      visible.forEach(([at, kind, message, color], i) => {
+        ctx.save(); ctx.globalAlpha = ease((t - at) / 0.18);
+        text(`+${at.toFixed(2)}s`, 145, 618 + i * 33, 19, "#7f96ae", 400, true);
+        text(kind.padEnd(5), 240, 618 + i * 33, 19, color, 600, true);
+        text(message, 320, 618 + i * 33, 20, color === C.red ? C.red : "#c4d4e5", 400, true);
+        ctx.restore();
+      });
+
+      box(1244, 253, 580, 560, "#0b1727", "#2c4058", 22);
+      text("TOKENS SPENT", 1280, 298, 21, C.muted, 600);
+      text(tokens.toLocaleString("en-US"), 1275, 411, 102, failed ? C.red : C.amber, 700, true);
+      text(waiting ? "Backoff: no new tokens" : failed ? "Spent. Not recovered." : "Reasoning + tool interactions", 1280, 455, 23, C.muted);
+      const bars = 44;
+      for (let i = 0; i < bars; i++) {
+        const filled = i / bars < tokens / 12480;
+        box(1280 + i * 11.5, 482, 7, 30, filled ? failed ? C.red : C.amber : "#1d3046", null, 2);
+      }
+      text("GOAL COMPLETION", 1280, 565, 19, C.muted, 600);
+      text("0%", 1664, 572, 42, failed ? C.red : C.white, 600, true);
+      box(1280, 595, 508, 8, "#203348", null, 4);
+      if (failed) {
+        ctx.save(); ctx.globalAlpha = ease((t - 8.15) / 0.3);
+        box(1276, 636, 512, 135, "#331c2c", "#ac4e66", 12);
+        text("MISSING CAPABILITY", 1298, 671, 18, C.red, 700, true);
+        text("send_email", 1298, 711, 33, C.white, 600, true);
+        text("No available tool can reach the goal.", 1298, 746, 21, "#deb4bf");
+        ctx.restore();
+      } else {
+        text("ACTIVITY IS NOT ACHIEVABILITY", 1280, 672, 18, C.cyan, 600);
+        text("More attempts.", 1280, 711, 29, C.white, 500);
+        text("Still no path to the goal.", 1280, 750, 29, C.white, 500);
+      }
+
+      let caption;
+      if (t < 4) caption = ["Today, agents can burn thousands of tokens", "pursuing goals they can never achieve."];
+      else if (t < 5) caption = ["They retry."];
+      else if (t < 6) caption = ["They wait."];
+      else if (t < 7) caption = ["They adapt."];
+      else caption = ["And only after the cost is paid,", "do they discover failure."];
+      ctx.save(); ctx.textAlign = "center";
+      caption.forEach((value, i) => text(value, 960, (caption.length === 1 ? 915 : 887) + i * 53, 40, C.white, 500));
+      ctx.restore();
+      const beats = [
+        [0, "EXECUTE"], [4, "RETRY"], [5, "WAIT"], [6, "ADAPT"], [7, "DISCOVER FAILURE"]
+      ];
+      for (let i = 0; i < beats.length; i++) {
+        const [at, name] = beats[i];
+        const end = beats[i + 1]?.[0] ?? 10;
+        const x = 96 + at / 10 * 1728;
+        const w = (end - at) / 10 * 1728 - 8;
+        box(x, 977, w, 4, "#29405a", null, 2);
+        if (t > at) box(x, 977, Math.max(1, w * clamp((t - at) / (end - at))), 4, i === 4 ? C.red : C.cyan, null, 2);
+        text(name, x, 1010, 15, t >= at && t < end ? C.white : C.muted, 600, true);
+      }
+      text("Original visualization / fictional token counts", 96, 1052, 16, "#8ca2ba");
+      ctx.save(); ctx.textAlign = "right";
+      text(`NARRATION 00:${String(Math.floor(t + 8)).padStart(2, "0")}`, 1824, 1052, 16, "#8ca2ba", 400, true);
+      ctx.restore();
+      return s;
+    }
+
+    const play = document.getElementById("play");
+    const scrub = document.getElementById("scrub");
+    const output = document.getElementById("time");
+    let current = 0;
+    let playing = false;
+    let started = 0;
+    let request;
+    function show(t) {
+      current = clamp(t, 0, 10);
+      renderFrame(current);
+      scrub.value = String(current);
+      output.textContent = `${current.toFixed(2)} / 10.00 s`;
+    }
+    function pause() {
+      playing = false; cancelAnimationFrame(request); play.textContent = "Play";
+    }
+    function tick(now) {
+      show((now - started) / 1000);
+      if (current >= 10) pause();
+      else request = requestAnimationFrame(tick);
+    }
+    function start() {
+      pause();
+      if (current >= 10) current = 0;
+      started = performance.now() - current * 1000;
+      playing = true; play.textContent = "Pause";
+      request = requestAnimationFrame(tick);
+    }
+    play.addEventListener("click", () => playing ? pause() : start());
+    document.getElementById("replay").addEventListener("click", () => { show(0); start(); });
+    scrub.addEventListener("input", () => { pause(); show(Number(scrub.value)); });
+    window.animation = { renderFrame, stateAt, duration: 10, width: 1920, height: 1080 };
+    show(0);
+    if (!new URLSearchParams(location.search).has("render") && !matchMedia("(prefers-reduced-motion: reduce)").matches) start();
+  </script>
+</body>
+</html>
