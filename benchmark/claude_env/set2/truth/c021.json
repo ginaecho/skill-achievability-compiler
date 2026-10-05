@@ -1,0 +1,93 @@
+{
+ "case": "c021",
+ "primary_task": "Build a Windows machine image (AWS AMI or Azure image) with Packer using the WinRM communicator and PowerShell provisioners.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "packer",
+   "any_of": null,
+   "hard": true,
+   "evidence": "packer build . / Packer WinRM communicator",
+   "check": "command -v packer; apt-get -s install packer; curl -I https://releases.hashicorp.com/packer/1.11.2/packer_1.11.2_linux_amd64.zip",
+   "observed": "absent; apt: no installation candidate; vendor zip HTTP 200",
+   "status": "installable"
+  },
+  {
+   "kind": "account",
+   "name": "cloud account (AWS or Azure)",
+   "any_of": [
+    {
+     "kind": "credential",
+     "name": "AWS_ACCESS_KEY_ID+AWS_SECRET_ACCESS_KEY",
+     "status": "available"
+    },
+    {
+     "kind": "credential",
+     "name": "Azure client_id/client_secret (ARM_*)",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "source \"amazon-ebs\" ... / source \"azure-arm\" ... client_id, client_secret",
+   "check": "[ -n \"${AWS_ACCESS_KEY_ID:-}\" ]; [ -n \"${AWS_SECRET_ACCESS_KEY:-}\" ]; ARM_*/AZURE_* checks; ls ~/.azure",
+   "observed": "AWS keys set; ARM/AZURE vars unset, no ~/.azure",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "cloud API host (AWS or Azure)",
+   "any_of": [
+    {
+     "kind": "egress",
+     "name": "ec2.us-west-2.amazonaws.com",
+     "status": "available"
+    },
+    {
+     "kind": "egress",
+     "name": "management.azure.com",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "region = \"us-west-2\" / location = \"East US\"",
+   "check": "curl https://ec2.us-west-2.amazonaws.com/ ; curl https://management.azure.com/",
+   "observed": "ec2: 301; management.azure.com: CONNECT tunnel failed 403",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "packer plugin download (github.com releases)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Packer amazon/azure builder plugins are downloaded via packer init / required_plugins",
+   "check": "curl https://github.com/hashicorp/packer-plugin-amazon/releases/download/v1.3.3/...linux_amd64.zip",
+   "observed": "302 redirect to release-assets.githubusercontent.com",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "build VM WinRM tcp/5986 (direct TCP from container)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "communicator = \"winrm\" ... winrm_use_ssl = true; Verify security group allows ports 5985/5986",
+   "check": "bash /dev/tcp to portquiz.net:5985, :5986, :22, :8080, :443",
+   "observed": "5985/5986/22/8080 fail; only 443 (and 80) connect; proxy README: non-443 ports unsupported",
+   "status": "unavailable"
+  },
+  {
+   "kind": "platform",
+   "name": "windows (local)",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Windows images",
+   "check": "uname",
+   "observed": "linux x86_64; Windows runs on the remote build VM, not locally",
+   "status": "available"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:build VM WinRM tcp/5986 (direct TCP from container)"
+ ],
+ "notes": "Packer itself installable and AWS credentials are present (validity not verified; no aws CLI/boto3). Packer must open a WinRM connection (5985/5986) directly to the launched instance's public IP; direct outbound TCP on non-443 ports is blocked here, so the build cannot provision. If the grader does not count instance communicator connectivity, verdict would be ACHIEVABLE via the AWS path."
+}

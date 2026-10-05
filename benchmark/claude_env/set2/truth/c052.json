@@ -1,0 +1,49 @@
+{
+ "case": "c052",
+ "primary_task": "Inspect failing GitHub Actions checks on a PR with gh, fetch and summarize logs, draft a fix plan, and implement after approval.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "gh",
+   "any_of": null,
+   "hard": true,
+   "evidence": "'use `gh` to inspect checks and logs'; gh pr checks, gh run view --log, gh api",
+   "check": "command -v gh",
+   "observed": "/usr/local/bin/gh",
+   "status": "available"
+  },
+  {
+   "kind": "account",
+   "name": "github (gh auth, repo+workflow scopes)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "'Run `gh auth status` in the repo ... (repo + workflow scopes are typically required)'",
+   "check": "gh auth status; gh api -i user",
+   "observed": "gh auth status: 'The token in GH_TOKEN is invalid'; but `gh api user` -> 200 login ginaecho, X-Oauth-Scopes: gist, read:org, repo, workflow (REST works via proxy)",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "python3",
+   "any_of": null,
+   "hard": true,
+   "evidence": "python \"<path-to-skill>/scripts/inspect_pr_checks.py\" (preferred path)",
+   "check": "command -v python3 python",
+   "observed": "/usr/local/bin/python3, /usr/local/bin/python",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "api.github.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "gh pr checks / gh run view / gh api /repos/.../actions/jobs/<id>/logs",
+   "check": "curl -sS -o /dev/null -w '%{http_code}' https://api.github.com/; gh pr checks 1; gh api repos/<this repo>/actions/runs",
+   "observed": "200 for REST; gh pr list / gh pr checks / gh issue list -> 'HTTP 403: GitHub GraphQL is not available from Claude Code sessions; use the REST API'",
+   "status": "available"
+  }
+ ],
+ "verdict": "ACHIEVABLE",
+ "blocking": [],
+ "notes": "Partial: `gh pr checks`, `gh pr list` (and likely the bundled script, which wraps gh pr checks) hit GitHub GraphQL, which this session's proxy refuses (403). REST endpoints (gh run view, gh api repos/.../actions/...) work, and the github MCP (pull_request_read, actions_get, get_job_logs) is connected, so the workflow is achievable with REST substitutes. Also `gh auth status` reports the token invalid even though API calls succeed; a literal agent might stop at step 1. Repo must be attached to the session. Judged ACHIEVABLE but borderline."
+}

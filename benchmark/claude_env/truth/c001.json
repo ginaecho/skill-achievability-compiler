@@ -1,0 +1,90 @@
+{
+ "case": "c001",
+ "primary_task": "Build or maintain a Cloudflare Worker app using the stable @cloudflare/sandbox npm package, consulting the Sandbox docs and installed stable types.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "node",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Typecheck against installed stable types",
+   "check": "command -v node; node --version",
+   "observed": "/opt/node22/bin/node v22.22.0",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "npm",
+   "any_of": null,
+   "hard": true,
+   "evidence": "npm dependency | Default `@cloudflare/sandbox`; trust installed stable types",
+   "check": "command -v npm; npm view @cloudflare/sandbox version",
+   "observed": "/opt/node22/bin/npm; 1.0.0",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "registry.npmjs.org",
+   "any_of": null,
+   "hard": true,
+   "evidence": "installed stable types (package install)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}' https://registry.npmjs.org/",
+   "observed": "200",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "sandbox-docs-access",
+   "any_of": [
+    {
+     "kind": "egress",
+     "name": "developers.cloudflare.com",
+     "status": "unavailable"
+    },
+    {
+     "kind": "tool",
+     "name": "WebFetch",
+     "status": "available"
+    }
+   ],
+   "hard": true,
+   "evidence": "Fetch the page before implementing.",
+   "check": "curl https://developers.cloudflare.com/ ; tools.json lists WebFetch",
+   "observed": "container egress: CONNECT tunnel failed, response 403; WebFetch tool present",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "wrangler",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Production deploy (retrieval row only)",
+   "check": "command -v wrangler; npm view wrangler (registry reachable)",
+   "observed": "MISSING (npm-installable)",
+   "status": "installable"
+  },
+  {
+   "kind": "account",
+   "name": "cloudflare",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Production deployment guide (not part of core workflow as written)",
+   "check": "[ -n \"${CLOUDFLARE_API_TOKEN:-}\" ]",
+   "observed": "unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "daemon",
+   "name": "docker",
+   "any_of": null,
+   "hard": false,
+   "evidence": "First Worker, template, Docker (retrieval row)",
+   "check": "docker info",
+   "observed": "daemon not answering",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "ACHIEVABLE",
+ "blocking": [],
+ "notes": "Core workflow is code authoring + typecheck; docs fetch is satisfied by WebFetch even though container egress to developers.cloudflare.com is blocked. Deploy (wrangler/Cloudflare account/Docker for container image build) is only referenced, not required as written; if deployment were considered hard, Cloudflare account and Docker daemon would block."
+}

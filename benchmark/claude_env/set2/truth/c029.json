@@ -1,0 +1,61 @@
+{
+ "case": "c029",
+ "primary_task": "Build an Amazon Machine Image with Packer's amazon-ebs builder (packer init/validate/build).",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "packer",
+   "any_of": null,
+   "hard": true,
+   "evidence": "packer build . / Packer WinRM communicator",
+   "check": "command -v packer; apt-get -s install packer; curl -I https://releases.hashicorp.com/packer/1.11.2/packer_1.11.2_linux_amd64.zip",
+   "observed": "absent; apt: no installation candidate; vendor zip HTTP 200",
+   "status": "installable"
+  },
+  {
+   "kind": "account",
+   "name": "AWS account credentials",
+   "any_of": null,
+   "hard": true,
+   "evidence": "export AWS_ACCESS_KEY_ID ... AWS_SECRET_ACCESS_KEY ... packer build .",
+   "check": "[ -n \"${AWS_ACCESS_KEY_ID:-}\" ]; [ -n \"${AWS_SECRET_ACCESS_KEY:-}\" ]",
+   "observed": "both set (validity not verified)",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "ec2.<region>.amazonaws.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "region = var.region (us-west-2)",
+   "check": "curl https://ec2.us-west-2.amazonaws.com/ ; https://sts.us-west-2.amazonaws.com/",
+   "observed": "301; 302",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "github.com plugin releases",
+   "any_of": null,
+   "hard": true,
+   "evidence": "packer init . (required_plugins amazon source github.com/hashicorp/amazon)",
+   "check": "curl https://github.com/hashicorp/packer-plugin-amazon/releases/download/v1.3.3/...linux_amd64.zip",
+   "observed": "302 to release-assets.githubusercontent.com",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "build instance SSH tcp/22 (direct TCP from container)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "ssh_username = \"ubuntu\"; provisioner \"shell\"; SSH Timeout - Ensure security group allows SSH (port 22)",
+   "check": "bash /dev/tcp to github.com:22, gitlab.com:22, portquiz.net:22",
+   "observed": "all fail; only 443/80 connect; proxy README: non-443 ports unsupported",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:build instance SSH tcp/22 (direct TCP from container)"
+ ],
+ "notes": "Packer installable, AWS creds present, AWS API reachable; but the SSH communicator must connect directly to the instance on port 22, which the container's egress does not allow. If communicator connectivity is not counted, verdict would be ACHIEVABLE."
+}

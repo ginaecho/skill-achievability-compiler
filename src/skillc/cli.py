@@ -21,42 +21,36 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import __version__
-from .checker import Verdict, check
+from .checker import Verdict, check, trace_artifact
 from .evaluate import evaluate, format_report, load_corpus
 from .frontend.ce import CEError
-from .frontend.markdown import CompileResult, compile_file
-from .pack import Pack, PackError, pack_digest
+from .frontend.markdown import (
+    CompileResult,
+    compaction_manifest,
+    compile_file,
+    result_from_manifest,
+)
+from .frontend.providers import PROVIDERS
+from .pack import PackError, pack_digest
 from .profiles import builtin_profiles, load_profile
 
 
 def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
-    """Return (pack, compile_result_or_None) for a .json pack or markdown."""
+    """Return (pack, compile_result_or_None) for a .json pack, .ce or markdown."""
     res = None
     if path.suffix == ".json":
         pack = json.loads(path.read_text(encoding="utf-8"))
     elif path.suffix == ".ce":
         from .frontend.ce import compile_ce
         pack = compile_ce(path.read_text(encoding="utf-8"))
+    elif getattr(args, "llm", False):
+        pack = _compact_with_llm(path, args)
     else:
         profile = load_profile(args.profile)
         if getattr(args, "tool", None):
             profile = profile.with_tools(args.tool)
-        if getattr(args, "llm", False):
-            from .frontend.llm import RUNTIME_ABILITY_PROFILES, compact, compact_ce
-            abilities = list(RUNTIME_ABILITY_PROFILES[args.llm_runtime])
-            abilities.extend(args.runtime_ability or [])
-            kwargs = {}
-            if getattr(args, "runtime", None):
-                from .frontend.runtime import load_runtime
-                front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
-            else:
-                front = compact_ce if getattr(args, "via_ce", False) else compact
-            pack = front(path.read_text(encoding="utf-8"), model=args.model,
-                         provider=args.llm_provider,
-                         runtime_abilities=abilities or None, **kwargs)
-        else:
-            res = compile_file(path, profile)
-            pack = res.pack
+        res = compile_file(path, profile)
+        pack = res.pack
     if getattr(args, "contract", None):
         from .frontend.contract import bind_contract
         contract = json.loads(Path(args.contract).read_text(encoding="utf-8"))
@@ -64,20 +58,97 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
         if res is not None:
             res.pack = pack
             res.goal_source = "contract"
+    provenance_path = getattr(args, "compaction_provenance", None)
+    if provenance_path:
+        if res is not None:
+            raise ValueError("--compaction-provenance is only valid for a compiled JSON pack")
+        manifest = json.loads(Path(provenance_path).read_text(encoding="utf-8"))
+        res = result_from_manifest(pack, manifest)
     return pack, res
 
 
+def _compact_with_llm(path: Path, args) -> dict:
+    """Semantic compaction of a markdown skill (opt-in, untrusted)."""
+    from .frontend.llm import compact, compact_ce
+    from .frontend.prompts import RUNTIME_ABILITY_PROFILES
+    abilities = [*RUNTIME_ABILITY_PROFILES[args.llm_runtime],
+                 *(args.runtime_ability or [])]
+    kwargs = {}
+    if getattr(args, "runtime", None):
+        from .frontend.runtime import load_runtime
+        front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
+    else:
+        front = compact_ce if getattr(args, "via_ce", False) else compact
+    if getattr(args, "vocabulary", None):
+        if front is not compact:
+            raise ValueError("--vocabulary applies to JSON compaction, not --runtime or --via-ce")
+        kwargs["vocabulary"] = json.loads(Path(args.vocabulary).read_text(encoding="utf-8"))
+    return front(path.read_text(encoding="utf-8"), model=args.model,
+                 provider=args.llm_provider,
+                 runtime_abilities=abilities or None, **kwargs)
+
+
 def _check_loaded(pack, res, args):
-    scope = "goal" if getattr(args, "goal_only", False) else "protocol"
-    if scope == "goal" and res is not None and res.goal_source == "tool_usage_only":
+    vocabulary = getattr(args, "vocabulary", None)
+    states = (
+        json.loads(Path(vocabulary).read_text(encoding="utf-8")).get("states")
+        if vocabulary else None
+    )
+    source = getattr(args, "source", None)
+    if source is None and getattr(args, "llm", False) and getattr(args, "file", None):
+        source = args.file          # an LLM-compacted intent grounds on its own text
+    evidence = [Path(source).read_text(encoding="utf-8")] if source else []
+    if evidence and getattr(args, "contract", None):
+        evidence.append(Path(args.contract).read_text(encoding="utf-8"))  # reviewed input
+    return check_compiled(
+        pack,
+        res,
+        scope="goal" if getattr(args, "goal_only", False) else "protocol",
+        semantics="adversarial" if getattr(args, "adversarial", False) else "may",
+        vocabulary_states=states,
+        source_text="\n".join(evidence) or None,
+    )
+
+
+def check_compiled(pack: dict, res: CompileResult | None, *,
+                   scope: str = "protocol", semantics: str = "may",
+                   vocabulary_states: dict | None = None,
+                   source_text: str | None = None) -> Verdict:
+    """Decide a compiled pack, abstaining when compaction established no task
+    or when a refutation rests only on names found in no input (the intent
+    text, the environment's state vocabulary, or deterministic extraction)."""
+    from .frontend.contracts import abstain_ungrounded
+
+    verdict = _decide(pack, res, scope, semantics)
+    extracted = {inv.tool for inv in res.invocations} if res else set()
+    return abstain_ungrounded(verdict, states=vocabulary_states,
+                              source_text=source_text, extracted=extracted, pack=pack)
+
+
+def _decide(pack: dict, res: CompileResult | None, scope: str, semantics: str) -> Verdict:
+    if (
+        res is not None
+        and res.goal_source == "tool_usage_only"
+        and (scope == "goal" or not res.invocations)
+    ):
+        digest = pack_digest(pack)
+        trace_artifact("schema", {
+            "status": "passed",
+            "pack": pack,
+            "pack_digest": digest,
+        })
+        skipped = {
+            "status": "skipped",
+            "reason": "compaction did not establish the task goal or required operations",
+        }
+        for stage in ("capability", "interaction", "reachability"):
+            trace_artifact(stage, skipped)
         return Verdict(
             False, "INCOMPLETE_COMPACTION",
             "deterministic extraction captured tool usage, not the task goal; "
             "supply a reviewed --contract, an embedded pack, or semantic compaction",
-            unknown=True, decision_scope=scope, pack_digest=pack_digest(pack))
-    return check(pack,
-                 semantics="adversarial" if getattr(args, "adversarial", False) else "may",
-                 scope=scope)
+            unknown=True, decision_scope=scope, pack_digest=digest)
+    return check(pack, semantics=semantics, scope=scope)
 
 
 def cmd_compile(args) -> int:
@@ -87,6 +158,13 @@ def cmd_compile(args) -> int:
         Path(args.output).write_text(out + "\n", encoding="utf-8")
     else:
         print(out)
+    if args.provenance_output:
+        source = "llm" if args.llm else "compiled"
+        manifest = compaction_manifest(res, goal_source=source)
+        Path(args.provenance_output).write_text(
+            json.dumps(manifest, indent=2) + "\n",
+            encoding="utf-8",
+        )
     if res is not None and not args.quiet:
         _print_provenance(res, file=sys.stderr)
     return 0
@@ -116,6 +194,7 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
 def cmd_check(args) -> int:
     pack, res = _load_result(Path(args.file), args)
     v = _check_loaded(pack, res, args)
+    trace_artifact("verdict", v.to_dict())
     if args.json:
         out = v.to_dict()
         out["pack_name"] = pack.get("name", "?")
@@ -123,25 +202,30 @@ def cmd_check(args) -> int:
             out["compaction_goal_source"] = res.goal_source
         print(json.dumps(out, indent=2))
     else:
-        print(f"{pack.get('name', '?')}: {v.label}"
-              + (f" [{v.reason}]" if not v.achievable else ""))
-        if v.detail and not v.achievable:
-            print(f"  {v.detail}")
-        if v.unknown:
-            print("  UNKNOWN is an abstention, not a refutation or permission to run.")
-        if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
-            lines = {i.tool: i.line for i in reversed(res.invocations)}
-            for capname in v.frontier:
-                loc = f" (line {lines[capname]})" if capname in lines else ""
-                print(f"  missing: {capname}{loc}")
-        if v.assumed_conformant:
-            print("  assumed conformant (participants of G with no declared "
-                  "behaviour): " + ", ".join(v.assumed_conformant))
-        if args.verbose and v.achievable:
-            print("  witness:", " -> ".join(f"{k}:{x}" for k, x in v.witness))
+        _print_verdict(pack, res, v, verbose=args.verbose)
     if v.unknown:
         return 3
     return 0 if v.achievable else 1
+
+
+def _print_verdict(pack: dict, res: CompileResult | None, v: Verdict,
+                   verbose: bool) -> None:
+    print(f"{pack.get('name', '?')}: {v.label}"
+          + (f" [{v.reason}]" if not v.achievable else ""))
+    if v.detail and not v.achievable:
+        print(f"  {v.detail}")
+    if v.unknown:
+        print("  UNKNOWN is an abstention, not a refutation or permission to run.")
+    if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
+        lines = {i.tool: i.line for i in reversed(res.invocations)}
+        for capname in v.frontier:
+            loc = f" (line {lines[capname]})" if capname in lines else ""
+            print(f"  missing: {capname}{loc}")
+    if v.assumed_conformant:
+        print("  assumed conformant (participants of G with no declared "
+              "behaviour): " + ", ".join(v.assumed_conformant))
+    if verbose and v.achievable:
+        print("  witness:", " -> ".join(f"{k}:{x}" for k, x in v.witness))
 
 
 def cmd_scan(args) -> int:
@@ -214,8 +298,9 @@ def cmd_cost(args) -> int:
     which is what a healthy skill pays for the check that told it nothing.
     """
     from .frontend.llm import metered
-    from .tokens import (CorpusEconomics, RuntimeModel, check_cost, economics,
-                         estimate_tokens, measured_cost)
+    from .tokens import (FAILURE_PROFILES, SUCCESSFUL_RUN_TURNS, CorpusEconomics,
+                         RuntimeModel, check_cost, economics, estimate_tokens,
+                         measured_cost)
 
     # Two independent questions, two flags: --llm actually compacts with the
     # model and prices the usage the API reported for those calls; --price-llm
@@ -266,13 +351,13 @@ def cmd_cost(args) -> int:
             ver = check_cost(src, llm=priced_llm, repair_rounds=args.repair_rounds)
         if priced_llm:
             measured.append(ver.measured)
-        if v.refuted and v.reason in _WASTE_REASONS:
+        if v.refuted and v.reason in FAILURE_PROFILES:
             corpus.rows.append(economics(
                 src, v.reason, name=name, model=model,
                 verification=ver, price=args.price))
         else:
             run = replace(model, skill_tokens=estimate_tokens(src)).run_cost(
-                _SUCCESS_TURNS)
+                SUCCESSFUL_RUN_TURNS)
             achievable.append((name, ver.total_tokens, run.total_tokens))
 
     front = _front_end_label(priced_llm, measured)
@@ -287,6 +372,12 @@ def cmd_cost(args) -> int:
         print(json.dumps(out, indent=2))
         return 0
 
+    _print_cost_report(corpus, achievable, front)
+    return 0
+
+
+def _print_cost_report(corpus, achievable: list[tuple[str, int, int]],
+                       front: str) -> None:
     print(f"front-end: {front}   trusted checker: 0 tokens (z3, no model in "
           f"the decision path)")
     if corpus.rows:
@@ -309,7 +400,7 @@ def cmd_cost(args) -> int:
         print(f"  tokens NOT wasted     : {w['typical']:,} typical "
               f"(${u['typical']:.4f}), band {w['low']:,}-{w['high']:,}")
         lev = t["leverage_typical"]
-        print(f"  leverage (typical)    : "
+        print("  leverage (typical)    : "
               + ("unbounded -- the check spends no tokens at all"
                  if lev is None else f"{lev}x, per invocation avoided"))
     if achievable:
@@ -323,12 +414,6 @@ def cmd_cost(args) -> int:
         print(f"  checking is {share:.1f}% of running each skill once")
     print("\nRuntime waste is a MODEL, not a measurement (see skillc.tokens): "
           "\nit prices a run that, if the refutation is right, never happens.")
-    return 0
-
-
-_WASTE_REASONS = ("MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
-                  "NON_PROJECTABLE", "NON_CONFORMANT")
-_SUCCESS_TURNS = 10
 
 
 def _front_end_label(priced_llm: bool, measured: list[bool]) -> str:
@@ -362,11 +447,10 @@ def cmd_ce(args) -> int:
     """Render a pack (or any compiled input) as CE, or a .ce file as JSON."""
     from .frontend.ce import render_ce
     path = Path(args.file)
+    pack, _ = _load_result(path, args)
     if args.to == "json" or (args.to is None and path.suffix == ".ce"):
-        pack, _ = _load_result(path, args)
         print(json.dumps(pack, indent=2))
     else:
-        pack, _ = _load_result(path, args)
         sys.stdout.write(render_ce(pack))
     return 0
 
@@ -410,6 +494,166 @@ def cmd_monitor(args) -> int:
     raise KeyError(f"unknown monitor action {args.action!r}")
 
 
+def _probe_env(args):
+    """Build an environment from the adapters the arguments name."""
+    from .env import azure, mcp
+    from .env.model import merge
+    envs = []
+    if args.from_raw:
+        envs.append(azure.probe(azure.replay_runner(args.from_raw), args.subscription,
+                                mode="replay"))
+    elif args.azure:
+        envs.append(azure.probe(azure.live_runner(args.save_raw), args.subscription))
+    if args.mcp_config:
+        envs.append(mcp.probe(args.mcp_config, list_tools=args.list_tools))
+    if args.claude:
+        envs.append(_probe_claude(args, args.needs_from or []))
+    if not envs:
+        raise ValueError("say what to probe: --azure, --from-raw DIR, --claude "
+                         "and/or --mcp-config FILE")
+    return merge(*envs)
+
+
+def _probe_claude(args, intents):
+    """The Claude runtime, asking about everything the given intents need."""
+    from .env import claude
+    from .env.reach import intent_needs, load_intent
+    wanted = {"egress": list(args.host or []), "program": list(args.program or []),
+              "pymodule": list(args.module or []), "path": list(args.path or []),
+              "credential": []}
+    for intent in intents:
+        intent = load_intent(intent) if isinstance(intent, str) else intent
+        for kind, values in intent_needs(intent).items():
+            wanted.setdefault(kind, []).extend(values)
+    tools = (json.loads(Path(args.tools_file).read_text(encoding="utf-8"))
+             if args.tools_file else None)
+    connectors = (json.loads(Path(args.connectors_file).read_text(encoding="utf-8"))
+                  if args.connectors_file else None)
+    return claude.probe(hosts=wanted["egress"], programs=wanted["program"],
+                        modules=wanted["pymodule"], paths=wanted["path"],
+                        credentials=[*claude.CREDENTIALS, *wanted["credential"]],
+                        tools=tools, connectors=connectors,
+                        check_egress=not args.no_egress)
+
+
+def cmd_env(args) -> int:
+    from .env.model import Environment, diff, merge
+    from .env.report import env_summary, html_page
+    if args.action == "probe":
+        env = _probe_env(args)
+        env.save(args.output)
+        print(env_summary(env))
+        print(f"wrote {args.output}")
+        return 0
+    if args.action == "show":
+        env = Environment.load(args.file)
+        print(env_summary(env))
+        if args.html:
+            Path(args.html).write_text(html_page(env), encoding="utf-8")
+            print(f"wrote {args.html}")
+        return 0
+    if args.action == "diff":
+        changes = diff(Environment.load(args.old), Environment.load(args.new))
+        sign = {"added": "+", "removed": "-", "changed": "~"}
+        for kind, lines in changes.items():
+            for line in lines:
+                print(f"{sign[kind]} {line}")
+        return 0 if not any(changes.values()) else 1
+    if args.action == "merge":
+        merge(*(Environment.load(f) for f in args.files)).save(args.output)
+        print(f"wrote {args.output}")
+        return 0
+    from .env.reach import load_intent
+    from .env.watch import watch
+    intents = {Path(i).stem: load_intent(i) for i in args.intent or []}
+    watch(args.dir, lambda: _probe_env(args), intents, args.interval,
+          rounds=1 if args.once else None,
+          on_report=lambda r: print(json.dumps(r, indent=1), flush=True))
+    return 0
+
+
+def cmd_reach(args) -> int:
+    from .env.model import Environment
+    from .env.reach import as_json, load_catalog, load_intent, reach
+    from .env.report import english_plan, html_page, text_report
+    intent = load_intent(args.intent)
+    if args.env:
+        env = Environment.load(args.env)
+    elif args.claude:
+        env = _probe_claude(args, [intent])
+        if args.save_env:
+            env.save(args.save_env)
+            print(f"wrote {args.save_env}", file=sys.stderr)
+    else:
+        raise ValueError("say where to look: --env FILE, or --claude to probe this runtime")
+    result = reach(intent, env, load_catalog(args.catalog) if args.catalog else None)
+    print(as_json(result) if args.json else text_report(result))
+    if args.plan:
+        Path(args.plan).write_text(english_plan(result), encoding="utf-8")
+        print(f"wrote {args.plan}", file=sys.stderr)
+    if args.html:
+        Path(args.html).write_text(html_page(env, result), encoding="utf-8")
+        print(f"wrote {args.html}", file=sys.stderr)
+    if result.blocked:
+        return 1
+    return 0 if result.complete else 3
+
+
+def cmd_intent(args) -> int:
+    """What a SKILL.md / agent.md needs from its runtime, as a skillc.intent/1."""
+    from .env.nl import intent_from_text
+    intent = intent_from_text(Path(args.file).read_text(encoding="utf-8"), source=args.file)
+    if args.output:
+        Path(args.output).write_text(json.dumps(intent, indent=1) + "\n", encoding="utf-8")
+        print(f"wrote {args.output}", file=sys.stderr)
+        return 0
+    if args.json:
+        print(json.dumps(intent, indent=1))
+        return 0
+    print(f"{intent['name']}: {intent['description'][:200]}")
+    for kind, conds in (("needs", intent["goal"]), ("optional", intent["optional"])):
+        for cond in conds:
+            print(f"  {kind:<8} {cond}")
+            for line in intent["evidence"].get(cond, [])[:2]:
+                print(f"           {line}")
+    return 0
+
+
+def _add_probe_opts(sp) -> None:
+    sp.add_argument("--azure", action="store_true",
+                    help="probe Azure live with your `az login` (read-only commands only)")
+    sp.add_argument("--subscription", help="Azure subscription id or name (default: current)")
+    sp.add_argument("--save-raw", metavar="DIR",
+                    help="also keep every raw az answer under DIR (replayable offline)")
+    sp.add_argument("--from-raw", metavar="DIR",
+                    help="replay a saved az export instead of calling Azure")
+    sp.add_argument("--mcp-config", action="append", metavar="FILE",
+                    help="MCP configuration to read (.mcp.json, claude_desktop_config.json, "
+                         ".vscode/mcp.json); repeatable")
+    sp.add_argument("--list-tools", action="store_true",
+                    help="start the configured stdio MCP servers to list their tools")
+    sp.add_argument("--needs-from", action="append", metavar="INTENT",
+                    help="with --claude: probe what these intents' operations need")
+    _add_claude_opts(sp)
+
+
+def _add_claude_opts(sp) -> None:
+    sp.add_argument("--claude", action="store_true",
+                    help="probe the Claude runtime: tools, permission rules, egress, "
+                         "programs, modules, credentials (names only), paths, connectors")
+    sp.add_argument("--host", action="append", help="with --claude: check egress to HOST")
+    sp.add_argument("--program", action="append", help="with --claude: look for PROGRAM")
+    sp.add_argument("--module", action="append", help="with --claude: look for a Python module")
+    sp.add_argument("--path", action="append", help="with --claude: check PATH is writable")
+    sp.add_argument("--tools-file", metavar="JSON",
+                    help="with --claude: the session's tool names (default: claude-code profile)")
+    sp.add_argument("--connectors-file", metavar="JSON",
+                    help="with --claude: {connector: [tool, ...]} for connected MCP servers "
+                         "not in any config file")
+    sp.add_argument("--no-egress", action="store_true",
+                    help="with --claude: do not send the egress requests")
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -426,7 +670,7 @@ def _add_compile_opts(sp) -> None:
                     help="bind extraction to reviewed goal, capabilities, and initial state")
     sp.add_argument("--llm", action="store_true",
                     help="use the semantic LLM compaction front-end")
-    sp.add_argument("--llm-provider", choices=("anthropic", "azure-openai"),
+    sp.add_argument("--llm-provider", choices=PROVIDERS,
                     help="LLM provider (default: SKILLC_LLM_PROVIDER or anthropic)")
     sp.add_argument("--model",
                     help="Anthropic model or Azure OpenAI deployment name")
@@ -442,6 +686,11 @@ def _add_compile_opts(sp) -> None:
     sp.add_argument("--via-ce", action="store_true",
                     help="with --llm: the model writes Controlled English, "
                          "which is parsed into the pack deterministically")
+    sp.add_argument("--vocabulary", metavar="JSON",
+                    help="environment manifest: with --llm the compacted pack reuses "
+                         "its tool and state names (contracts are not shown); a "
+                         "refutation resting only on conditions outside its states "
+                         "becomes UNKNOWN")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -454,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("file")
     sp.add_argument("-o", "--output")
     sp.add_argument("-q", "--quiet", action="store_true")
+    sp.add_argument("--provenance-output", metavar="JSON",
+                    help="write compaction provenance beside the compiled pack")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_compile)
 
@@ -461,6 +712,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("file")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("-v", "--verbose", action="store_true")
+    sp.add_argument("--compaction-provenance", metavar="JSON",
+                    help="provenance emitted by compile --provenance-output")
+    sp.add_argument("--source", metavar="FILE",
+                    help="the original intent text: a refutation must name something "
+                         "it (or the --vocabulary environment) contains, else UNKNOWN")
     decisions = sp.add_mutually_exclusive_group()
     decisions.add_argument("--adversarial", action="store_true",
                     help="require the goal under EVERY resolution of choices "
@@ -534,6 +790,50 @@ def main(argv: list[str] | None = None) -> int:
                     help="init: what reasoning that heads to the impossible does")
     sp.set_defaults(fn=cmd_monitor)
 
+    sp = sub.add_parser("env", help="environment topology: probe, show, diff, merge, watch "
+                                    "(docs/ENVIRONMENT.md)")
+    env_sub = sp.add_subparsers(dest="action", required=True)
+    e = env_sub.add_parser("probe", help="read the environment (Azure, MCP) into skillc.env/1")
+    _add_probe_opts(e)
+    e.add_argument("-o", "--output", default=".skillc/env/latest.json")
+    e = env_sub.add_parser("show", help="summarise an environment file")
+    e.add_argument("file")
+    e.add_argument("--html", metavar="FILE", help="also write the topology as a page")
+    e = env_sub.add_parser("diff", help="what changed between two snapshots")
+    e.add_argument("old")
+    e.add_argument("new")
+    e = env_sub.add_parser("merge", help="combine environment files (e.g. Azure + MCP)")
+    e.add_argument("files", nargs="+")
+    e.add_argument("-o", "--output", required=True)
+    e = env_sub.add_parser("watch", help="re-probe on a schedule; report what changed")
+    _add_probe_opts(e)
+    e.add_argument("--dir", default=".skillc/env", help="where snapshots are kept")
+    e.add_argument("--intent", action="append", metavar="FILE|NAME",
+                   help="intent to re-check after every probe; repeatable")
+    e.add_argument("--interval", type=float, default=3600.0, help="seconds between probes")
+    e.add_argument("--once", action="store_true", help="one round, then exit (cron, CI)")
+    sp.set_defaults(fn=cmd_env)
+
+    sp = sub.add_parser("reach", help="what an intent can achieve in an environment, "
+                                      "and what blocks the rest")
+    sp.add_argument("intent", help="skillc.intent/1 file, a built-in intent name, "
+                                   "or a SKILL.md / agent.md")
+    sp.add_argument("--env", help="skillc.env/1 file (from `skillc env probe`)")
+    sp.add_argument("--save-env", metavar="FILE", help="with --claude: keep the probe")
+    _add_claude_opts(sp)
+    sp.add_argument("--catalog", help="operation catalogue name or skillc.ops/1 file")
+    sp.add_argument("--json", action="store_true")
+    sp.add_argument("--plan", metavar="FILE", help="write the English + CE plan (Markdown)")
+    sp.add_argument("--html", metavar="FILE", help="write the visual report")
+    sp.set_defaults(fn=cmd_reach)
+
+    sp = sub.add_parser("intent", help="what a SKILL.md / agent.md needs from its runtime "
+                                       "(natural-language front-end)")
+    sp.add_argument("file", help="SKILL.md or agent.md")
+    sp.add_argument("--json", action="store_true")
+    sp.add_argument("-o", "--output", help="write the skillc.intent/1 JSON here")
+    sp.set_defaults(fn=cmd_intent)
+
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)
 
@@ -541,7 +841,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.fn(args)
     except (PackError, CEError, KeyError, FileNotFoundError,
-            json.JSONDecodeError, RuntimeError) as e:
+            json.JSONDecodeError, RuntimeError, ValueError) as e:
         print(f"skillc: error: {e}", file=sys.stderr)
         return 2
 

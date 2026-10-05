@@ -26,7 +26,8 @@ from scripts.benchmark_semantics import audit_goal_reachability  # noqa: E402
 from skillc import check  # noqa: E402
 from skillc.evaluate import EvalResult, EvalRow, refutation_metrics  # noqa: E402
 from skillc.frontend.contract import bind_contract  # noqa: E402
-from skillc.frontend.llm import SYSTEM, _extract_json_object  # noqa: E402
+from skillc.frontend.prompts import SYSTEM  # noqa: E402
+from skillc.frontend.providers import extract_json_object  # noqa: E402
 from skillc.frontend.markdown import compile_markdown  # noqa: E402
 from skillc.pack import PackError, validate_pack  # noqa: E402
 from skillc.profiles import Profile  # noqa: E402
@@ -250,7 +251,7 @@ def run(output: Path, live: bool, endpoint: str, model: str) -> None:
                     try:
                         if response["finish_reason"] != "stop":
                             raise ValueError(f"incomplete output: {response['finish_reason']}")
-                        pack = _extract_json_object(response["output_text"])
+                        pack = extract_json_object(response["output_text"])
                         validate_pack(pack)
                         llm = {"pack": pack, "attempts": attempt,
                                "resolved_model": response["resolved_model"]}

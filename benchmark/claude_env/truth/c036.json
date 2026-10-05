@@ -1,0 +1,63 @@
+{
+ "case": "c036",
+ "primary_task": "Deploy applications/infrastructure to Cloudflare (Workers, Pages, etc.) using wrangler.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "wrangler",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Verify auth before `wrangler deploy`, `wrangler pages deploy` ... npx wrangler whoami",
+   "check": "command -v wrangler; command -v npx; npm view wrangler version",
+   "observed": "wrangler not found; /opt/node22/bin/npx; 4.147.0",
+   "status": "installable"
+  },
+  {
+   "kind": "program",
+   "name": "node/npx",
+   "any_of": null,
+   "hard": true,
+   "evidence": "npx wrangler whoami",
+   "check": "command -v npx",
+   "observed": "/opt/node22/bin/npx",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "api.cloudflare.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "The deploy requires ... network access to deploy to Cloudflare",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://api.cloudflare.com/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "cloudflare",
+   "any_of": [
+    {
+     "kind": "credential",
+     "name": "CLOUDFLARE_API_TOKEN",
+     "status": "unavailable"
+    },
+    {
+     "kind": "account",
+     "name": "wrangler login (OAuth)",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "Authentication (Required Before Deploy) ... wrangler login ... or Set CLOUDFLARE_API_TOKEN",
+   "check": "[ -n \"${CLOUDFLARE_API_TOKEN:-}\" ]; [ -n \"${CF_API_TOKEN:-}\" ]; ls ~/.wrangler ~/.config/.wrangler",
+   "observed": "all unset; no wrangler config",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:api.cloudflare.com",
+  "account:cloudflare"
+ ],
+ "notes": "wrangler login OAuth would also need dash.cloudflare.com, which is blocked (403). sandbox_permissions escalation does not apply to this container's egress policy."
+}

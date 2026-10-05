@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from skillc.checker import observe_check
 from skillc.cli import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -76,6 +77,42 @@ def test_goal_only_abstains_on_tool_usage_only_extraction(tmp_path, capsys):
     result = json.loads(capsys.readouterr().out)
     assert result["reason"] == "INCOMPLETE_COMPACTION"
     assert result["compaction_goal_source"] == "tool_usage_only"
+
+
+def test_protocol_check_abstains_when_compaction_extracts_nothing(tmp_path, capsys):
+    source = tmp_path / "prompt.md"
+    source.write_text("plan a trip", encoding="utf-8")
+
+    assert main(["check", str(source), "--json"]) == 3
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["verdict"] == "UNKNOWN"
+    assert result["reason"] == "INCOMPLETE_COMPACTION"
+
+
+def test_compiled_pack_preserves_incomplete_compaction_provenance(tmp_path, capsys):
+    source = tmp_path / "prompt.md"
+    pack = tmp_path / "pack.json"
+    provenance = tmp_path / "compaction.json"
+    source.write_text("plan a trip", encoding="utf-8")
+
+    assert main([
+        "compile", str(source), "--profile", "none", "--quiet",
+        "--output", str(pack), "--provenance-output", str(provenance),
+    ]) == 0
+    artifacts = {}
+    with observe_check(lambda stage, content: artifacts.__setitem__(stage, content)):
+        assert main([
+            "check", str(pack), "--compaction-provenance", str(provenance), "--json",
+        ]) == 3
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["verdict"] == "UNKNOWN"
+    assert result["reason"] == "INCOMPLETE_COMPACTION"
+    assert set(artifacts) == {
+        "schema", "capability", "interaction", "reachability", "verdict",
+    }
+    assert artifacts["capability"]["status"] == "skipped"
 
 
 def test_goal_only_contract_prevents_silent_goal_weakening(tmp_path, capsys):
@@ -231,3 +268,20 @@ def test_profiles_listed(capsys):
 def test_error_exit_2(capsys):
     rc = main(["check", "no-such-file.json"])
     assert rc == 2
+
+
+def test_check_with_vocabulary_abstains_on_undefined_conditions(tmp_path, capsys):
+    pack = {"name": "pay", "roles": ["payer"],
+            "capabilities": {"pay": {"owner": "payer", "add": ["paid"]}},
+            "protocol": [{"act": {"cap": "pay", "by": "payer"}}],
+            "goal": {"and": ["paid", "card_selected"]}}
+    pack_path = tmp_path / "pack.json"
+    pack_path.write_text(json.dumps(pack))
+    vocabulary = tmp_path / "environment.json"
+    vocabulary.write_text(json.dumps({"tools": {"pay": "pays"}, "states": {"paid": "paid"}}))
+
+    assert main(["check", str(pack_path), "--json"]) == 1
+    capsys.readouterr()
+    assert main(["check", str(pack_path), "--json", "--vocabulary", str(vocabulary)]) == 3
+    result = json.loads(capsys.readouterr().out)
+    assert (result["verdict"], result["reason"]) == ("UNKNOWN", "UNALIGNED_CONDITION")

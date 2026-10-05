@@ -1,0 +1,125 @@
+{
+ "case": "c035",
+ "primary_task": "Build persistent Azure AI Foundry agents in Python with the Microsoft Agent Framework (AzureAIAgentsProvider), with tools, threads, streaming and structured outputs.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "python3",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Python SDK; asyncio.run(main())",
+   "check": "command -v python3",
+   "observed": "/usr/local/bin/python3 3.11.15",
+   "status": "available"
+  },
+  {
+   "kind": "pymodule",
+   "name": "agent_framework (agent-framework-azure-ai)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "pip install agent-framework-azure-ai --pre; from agent_framework.azure import AzureAIAgentsProvider",
+   "check": "find_spec('agent_framework'); pip download --no-deps --pre agent-framework-azure-ai",
+   "observed": "False; agent_framework_azure_ai-1.0.0rc6 wheel downloaded",
+   "status": "installable"
+  },
+  {
+   "kind": "pymodule",
+   "name": "azure.identity",
+   "any_of": null,
+   "hard": true,
+   "evidence": "from azure.identity.aio import AzureCliCredential",
+   "check": "find_spec('azure'); (dependency of agent-framework-azure-ai, from PyPI)",
+   "observed": "False; pypi.org 200",
+   "status": "installable"
+  },
+  {
+   "kind": "credential",
+   "name": "AZURE_AI_PROJECT_ENDPOINT",
+   "any_of": null,
+   "hard": true,
+   "evidence": "export AZURE_AI_PROJECT_ENDPOINT=... # Required for all auth methods",
+   "check": "[ -n \"${AZURE_AI_PROJECT_ENDPOINT:-}\" ]",
+   "observed": "unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "credential",
+   "name": "AZURE_AI_MODEL_DEPLOYMENT_NAME",
+   "any_of": null,
+   "hard": true,
+   "evidence": "# Required for all auth methods",
+   "check": "[ -n \"${AZURE_AI_MODEL_DEPLOYMENT_NAME:-}\" ]",
+   "observed": "unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "Azure (Entra) sign-in",
+   "any_of": [
+    {
+     "kind": "program",
+     "name": "az (logged in)",
+     "status": "unavailable"
+    },
+    {
+     "kind": "credential",
+     "name": "AZURE_CLIENT_ID/AZURE_TENANT_ID/AZURE_CLIENT_SECRET",
+     "status": "unavailable"
+    }
+   ],
+   "hard": true,
+   "evidence": "AzureCliCredential() / DefaultAzureCredential",
+   "check": "command -v az; AZURE_CLIENT_ID/AZURE_TENANT_ID/AZURE_CLIENT_SECRET set?",
+   "observed": "az missing (pip azure-cli downloadable, but not logged in); all AZURE_* creds unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "<project>.services.ai.azure.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "https://<project>.services.ai.azure.com/api/projects/<project-id>",
+   "check": "curl https://example.services.ai.azure.com/",
+   "observed": "CONNECT tunnel failed, response 403 (also management.azure.com, ai.azure.com 403)",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "login.microsoftonline.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Entra token acquisition by azure-identity",
+   "check": "curl https://login.microsoftonline.com/",
+   "observed": "302",
+   "status": "available"
+  },
+  {
+   "kind": "credential",
+   "name": "BING_CONNECTION_ID",
+   "any_of": null,
+   "hard": false,
+   "evidence": "For web search",
+   "check": "[ -n \"${BING_CONNECTION_ID:-}\" ]",
+   "observed": "unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "learn.microsoft.com",
+   "any_of": null,
+   "hard": false,
+   "evidence": "MCPStreamableHTTPTool url https://learn.microsoft.com/api/mcp (complete example only)",
+   "check": "curl https://learn.microsoft.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "credential:AZURE_AI_PROJECT_ENDPOINT",
+  "credential:AZURE_AI_MODEL_DEPLOYMENT_NAME",
+  "account:Azure (Entra) sign-in",
+  "egress:<project>.services.ai.azure.com"
+ ],
+ "notes": "SDK is installable from PyPI but the workflow needs a live Azure AI Foundry project; no credentials and the Azure endpoints are refused by the egress policy."
+}

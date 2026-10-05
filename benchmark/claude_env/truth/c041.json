@@ -1,0 +1,61 @@
+{
+ "case": "c041",
+ "primary_task": "Migrate Terraform provider resources from Plugin SDKv2 to the Plugin Framework with mux, then verify via acceptance tests and empty-plan state compatibility.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "go",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Combine both plugin servers in main.go ... go.mod",
+   "check": "command -v go; go version",
+   "observed": "/usr/local/go/bin/go; go1.24.7 linux/amd64",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "proxy.golang.org",
+   "any_of": null,
+   "hard": true,
+   "evidence": "github.com/hashicorp/terraform-plugin-mux/tf5to6server imports",
+   "check": "curl -sS -o /dev/null -w '%{http_code}' https://proxy.golang.org/github.com/hashicorp/terraform-plugin-mux/@v/list",
+   "observed": "200",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "terraform",
+   "any_of": null,
+   "hard": true,
+   "evidence": "`terraform plan` against a real pre-migration state file shows no diff; acceptance tests need the Terraform CLI",
+   "check": "command -v terraform; apt-get -s install terraform; curl -I https://releases.hashicorp.com/terraform/1.9.8/terraform_1.9.8_linux_amd64.zip",
+   "observed": "missing; apt: Unable to locate package; releases.hashicorp.com zip 200",
+   "status": "installable"
+  },
+  {
+   "kind": "egress",
+   "name": "registry.terraform.io",
+   "any_of": null,
+   "hard": true,
+   "evidence": "apply a config with the last released (SDKv2) provider version ... using ExternalProviders for the old version",
+   "check": "curl -sS -o /dev/null -w '%{http_code}' --max-time 15 https://registry.terraform.io/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "provider's target cloud API (acceptance tests)",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Ensure the resource has passing acceptance coverage",
+   "check": "n/a (provider-specific, example cloud)",
+   "observed": "unknown",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:registry.terraform.io"
+ ],
+ "notes": "Code porting itself is doable with go + proxy.golang.org. Verification step requires downloading the last released provider from the Terraform registry (ExternalProviders / real state plan), which the egress policy refuses. Acceptance tests also hit the provider's real cloud API with user credentials, which are provider-specific and not present; recorded as non-hard because unspecified."
+}

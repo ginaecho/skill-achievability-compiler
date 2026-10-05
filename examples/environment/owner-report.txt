@@ -1,0 +1,29 @@
+intent: building-topology -- Model a building's topology (building, floors, rooms) as a queryable Azure Digital Twins graph, built from floor plans in blob storage.
+target: resource group rg-building in westeurope
+environment captured 2026-10-03T12:00:00Z
+
+conditions (OK = achievable, OK* = achievable under assumptions, NO = blocked):
+  OK  dt_instance
+  OK  building_data
+  OK  dt_models
+  OK  topology_twins
+  OK  topology_relationships
+  OK  topology_queryable
+
+plan (ACHIEVABLE by the trusted checker):
+  1. Create the Azure Digital Twins instance
+       $ az dt create --dt-name bldg-twins --resource-group rg-building --location westeurope
+  2. Assign yourself the Azure Digital Twins Data Owner role on the instance
+       $ az dt role-assignment create --dt-name bldg-twins --assignee <your sign-in name> --role "Azure Digital Twins Data Owner"
+  3. Read the floor plans and space lists
+       $ az storage blob download-batch --auth-mode login --account-name bldgplans --source floorplans --destination ./building
+  4. Upload the DTDL models (Building, Floor, Room, Sensor)
+       $ az dt model create --dt-name bldg-twins --from-directory ./models
+  5. Create one twin per building, floor and room
+       $ az dt twin create --dt-name bldg-twins --dtmi <model> --twin-id <id>   (one per space)
+  6. Connect the twins (building contains floors, floor contains rooms)
+       $ az dt twin relationship create --dt-name bldg-twins --twin-id <parent> --target <child> --relationship contains --relationship-id <id>
+  7. Query the building graph
+       $ az dt twin query --dt-name bldg-twins --query-command "SELECT * FROM digitaltwins"
+
+6/6 conditions achievable

@@ -1,0 +1,76 @@
+{
+ "case": "c040",
+ "primary_task": "Add Aspire to a repo for the first time via `aspire new <template>` or `aspire init`, dropping the AppHost skeleton and handing off to aspireify.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "aspire",
+   "any_of": [
+    {
+     "kind": "program",
+     "name": "aspire via npm (@microsoft/aspire-cli)",
+     "status": "installable"
+    },
+    {
+     "kind": "program",
+     "name": "aspire via curl installer (aspire.dev)",
+     "status": "unavailable"
+    },
+    {
+     "kind": "program",
+     "name": "aspire via dotnet tool install -g Aspire.Cli",
+     "status": "installable"
+    }
+   ],
+   "hard": true,
+   "evidence": "INVOKES: aspire CLI (init, new, doctor); aspire init --language csharp --non-interactive",
+   "check": "command -v aspire; npm view @microsoft/aspire-cli version; npm view @microsoft/aspire-cli-linux-x64 version; curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://aspire.dev/",
+   "observed": "not found; 13.6.0; 13.6.0; aspire.dev curl: (56) CONNECT tunnel failed, response 403",
+   "status": "installable"
+  },
+  {
+   "kind": "program",
+   "name": "AppHost runtime (.NET 10 SDK or Node.js)",
+   "any_of": [
+    {
+     "kind": "program",
+     "name": "dotnet (SDK 10)",
+     "status": "installable"
+    },
+    {
+     "kind": "program",
+     "name": "node (>=22.13)",
+     "status": "available"
+    }
+   ],
+   "hard": true,
+   "evidence": "Prerequisites: .NET 10.0 SDK; Node.js ^20.19.0, ^22.13.0, or >=24 (TypeScript AppHost)",
+   "check": "command -v dotnet; apt-get -s install dotnet-sdk-10.0; curl archive.ubuntu.com; node --version",
+   "observed": "dotnet not found; apt simulation resolves dotnet-sdk-10.0 10.0.110 (archive/security.ubuntu.com reachable, 200); node v22.22.0",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "api.nuget.org",
+   "any_of": null,
+   "hard": true,
+   "evidence": "aspire new <template> (templates/SDK packages fetched from NuGet)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://api.nuget.org/v3/index.json",
+   "observed": "200",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "builds.dotnet.microsoft.com",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Install .NET 10: https://dotnet.microsoft.com/download (official installer downloads)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://builds.dotnet.microsoft.com/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "ACHIEVABLE",
+ "blocking": [],
+ "notes": "Aspire CLI installable from npm (linux-x64 optional dep published); the curl installer host aspire.dev is blocked, and the official dotnet download hosts are blocked, but Ubuntu's dotnet-sdk-10.0 apt package resolves from reachable mirrors. NuGet egress for templates is inferred (not stated literally). C# path needs .NET 10; TypeScript path works with the existing Node 22.22."
+}

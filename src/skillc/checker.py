@@ -39,13 +39,16 @@ verdicts only.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 
 import z3
 
-from .formula import CMP, atoms
-from .pack import Capability, Pack, normalize, pack_digest
+from .formula import CMP, atoms, compile_expr, compile_formula
+from .pack import Capability, Pack, iter_steps, normalize, pack_digest
 from .session import ProjectionError, conformance_report, participants, project
 
 REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
@@ -61,6 +64,26 @@ DEFERRED_OBLIGATIONS = ("intent_fidelity", "payload_faithfulness")
 # solver UNKNOWN, which _sat resolves toward satisfiable, i.e. away from
 # refutation.  A finite budget therefore costs completeness, never soundness.
 SOLVER_TIMEOUT_MS = 10_000
+_TRACE_OBSERVER: ContextVar[Callable[[str, dict], None] | None] = ContextVar(
+    "skillc_trace_observer",
+    default=None,
+)
+
+
+@contextmanager
+def observe_check(observer: Callable[[str, dict], None]):
+    """Observe trusted-check stage artifacts without changing checker results."""
+    token = _TRACE_OBSERVER.set(observer)
+    try:
+        yield
+    finally:
+        _TRACE_OBSERVER.reset(token)
+
+
+def trace_artifact(stage: str, payload: dict) -> None:
+    observer = _TRACE_OBSERVER.get()
+    if observer is not None:
+        observer(stage, payload)
 
 
 def _skillc_version() -> str:
@@ -110,79 +133,16 @@ def _mk_typing_state(preds, values: dict[str, z3.ArithRef]) -> TypingState:
     return TypingState(frozenset(preds), tuple(sorted(values.items())))
 
 
-def eval_expr(e: Any, st: State) -> z3.ArithRef:
-    if isinstance(e, int):
-        return z3.IntVal(e)
-    if isinstance(e, str):
-        return st.cur(e)
-    if isinstance(e, dict):
-        if "+" in e:
-            return eval_expr(e["+"][0], st) + eval_expr(e["+"][1], st)
-        if "-" in e:
-            return eval_expr(e["-"][0], st) - eval_expr(e["-"][1], st)
-        if "*" in e:
-            return eval_expr(e["*"][0], st) * eval_expr(e["*"][1], st)
-    raise ValueError(f"bad expr: {e!r}")
+def eval_expr(e: Any, st: State | TypingState) -> z3.ArithRef:
+    return compile_expr(e, st.cur)
 
 
-def eval_typing_expr(e: Any, st: TypingState) -> z3.ArithRef:
-    if isinstance(e, int):
-        return z3.IntVal(e)
-    if isinstance(e, str):
-        return st.cur(e)
-    if isinstance(e, dict):
-        if "+" in e:
-            return (eval_typing_expr(e["+"][0], st)
-                    + eval_typing_expr(e["+"][1], st))
-        if "-" in e:
-            return (eval_typing_expr(e["-"][0], st)
-                    - eval_typing_expr(e["-"][1], st))
-        if "*" in e:
-            return (eval_typing_expr(e["*"][0], st)
-                    * eval_typing_expr(e["*"][1], st))
-    raise ValueError(f"bad expr: {e!r}")
-
-
-def eval_formula(f: Any, st: State) -> z3.BoolRef:
-    """Compile a formula against concrete predicate truth + SSA arith vars."""
-    if f is True:
-        return z3.BoolVal(True)
-    if f is False:
-        return z3.BoolVal(False)
-    if isinstance(f, str):
-        return z3.BoolVal(f in st.true_preds)
-    if isinstance(f, dict):
-        if "and" in f:
-            return z3.And([eval_formula(x, st) for x in f["and"]])
-        if "or" in f:
-            return z3.Or([eval_formula(x, st) for x in f["or"]])
-        if "not" in f:
-            return z3.Not(eval_formula(f["not"], st))
-        if "cmp" in f:
-            lhs, op, rhs = f["cmp"]
-            return CMP[op](eval_expr(lhs, st), eval_expr(rhs, st))
-    raise ValueError(f"bad formula: {f!r}")
-
-
-def eval_typing_formula(f: Any, st: TypingState) -> z3.BoolRef:
-    if f is True:
-        return z3.BoolVal(True)
-    if f is False:
-        return z3.BoolVal(False)
-    if isinstance(f, str):
-        return z3.BoolVal(f in st.true_preds)
-    if isinstance(f, dict):
-        if "and" in f:
-            return z3.And([eval_typing_formula(x, st) for x in f["and"]])
-        if "or" in f:
-            return z3.Or([eval_typing_formula(x, st) for x in f["or"]])
-        if "not" in f:
-            return z3.Not(eval_typing_formula(f["not"], st))
-        if "cmp" in f:
-            lhs, op, rhs = f["cmp"]
-            return CMP[op](eval_typing_expr(lhs, st),
-                           eval_typing_expr(rhs, st))
-    raise ValueError(f"bad formula: {f!r}")
+def eval_formula(f: Any, st: State | TypingState) -> z3.BoolRef:
+    """Compile a formula against concrete predicate truth + symbolic numerics."""
+    return compile_formula(
+        f,
+        pred=lambda name: z3.BoolVal(name in st.true_preds),
+        cmp=lambda lhs, op, rhs: CMP[op](eval_expr(lhs, st), eval_expr(rhs, st)))
 
 
 def _sat(constraints: list, on_unknown: Callable[[], None] | None = None) -> bool:
@@ -200,11 +160,6 @@ def _sat(constraints: list, on_unknown: Callable[[], None] | None = None) -> boo
     if res == z3.unknown and on_unknown is not None:
         on_unknown()
     return res != z3.unsat
-
-
-def guard_satisfiable(st: State, cap: Capability,
-                      on_unknown: Callable[[], None] | None = None) -> bool:
-    return _sat(list(st.arith) + [eval_formula(cap.pre, st)], on_unknown)
 
 
 def apply_effect(st: State, cap: Capability) -> State:
@@ -257,15 +212,7 @@ def roles_acting(steps: list[dict]) -> set[str]:
 
 def has_spawn(steps: list[dict]) -> bool:
     """Dynamic participant spawning: the autonomy boundary (thm:undec)."""
-    for s in steps:
-        if "spawn" in s:
-            return True
-        if "choice" in s:
-            if any(has_spawn(br) for br in s["choice"]["branches"].values()):
-                return True
-        if "rec" in s and has_spawn(s["rec"]["body"]):
-            return True
-    return False
+    return any("spawn" in s for s in iter_steps(steps))
 
 
 # --------------------------------------------------------------------------
@@ -372,6 +319,9 @@ class Checker:
     def _note_solver_unknown(self) -> None:
         self.solver_unknown = True
 
+    def _sat(self, constraints: list) -> bool:
+        return _sat(constraints, self._note_solver_unknown)
+
     def run(self) -> Verdict:
         """Decide the pack, then stamp the verdict with what decided it."""
         v = self._decide()
@@ -398,34 +348,25 @@ class Checker:
         fresh = iter(range(10 ** 9))
 
         def enc(f: Any) -> z3.BoolRef:
-            if f is True:
-                return z3.BoolVal(True)
-            if f is False:
-                return z3.BoolVal(False)
-            if isinstance(f, str):
-                return z3.Bool(f"__predicate_{f}") if f in can else z3.BoolVal(False)
-            if "and" in f:
-                return z3.And([enc(x) for x in f["and"]])
-            if "or" in f:
-                return z3.Or([enc(x) for x in f["or"]])
-            if "not" in f:
-                return z3.Not(enc(f["not"]))
-            if "cmp" in f:
-                return z3.Bool(f"__cmp_{next(fresh)}")   # arithmetic left free
-            raise ValueError(f"bad formula: {f!r}")
+            return compile_formula(
+                f,
+                # non-establishable atoms are pinned FALSE, the rest left free
+                pred=lambda name: (z3.Bool(f"__predicate_{name}") if name in can
+                                   else z3.BoolVal(False)),
+                # arithmetic left free
+                cmp=lambda *_: z3.Bool(f"__cmp_{next(fresh)}"))
 
         if guard_closure:
             remaining = list(self.p.capabilities.values())
             while remaining:
-                enabled = [
-                    cap for cap in remaining
-                    if _sat([enc(cap.pre)], self._note_solver_unknown)]
+                enabled = [cap for cap in remaining
+                           if self._sat([enc(cap.pre)])]
                 if not enabled:
                     break
                 for cap in enabled:
                     can.update(cap.add)
                     remaining.remove(cap)
-        if _sat([enc(self.p.goal)], self._note_solver_unknown):
+        if self._sat([enc(self.p.goal)]):
             return None
         dead = tuple(sorted(atoms(self.p.goal) - can))
         return Verdict(False, "GOAL_UNSAT",
@@ -441,8 +382,23 @@ class Checker:
         #    decided first and survives autonomy: a tool absent from Gamma
         #    stays absent no matter how many participants are spawned.
         missing = self._missing_caps(self.p.protocol)
+        required = sorted(
+            {step["act"]["cap"] for step in iter_steps(self.p.protocol)
+             if "act" in step}
+        )
+        trace_artifact("capability", {
+            "status": "refuted" if missing else "passed",
+            "required_by_protocol": required,
+            "available_definitions": sorted(self.p.capabilities),
+            "missing": sorted(missing),
+        })
         if missing:
             goal_refutation = self._gamma_refutation()
+            self._skip_traces(
+                "capability existence failed",
+                interaction=True,
+                reachability=True,
+            )
             return Verdict(False, "MISSING_CAPABILITY",
                            f"protocol invokes undeclared capabilities: {sorted(missing)}",
                            frontier=tuple(sorted(missing)),
@@ -451,10 +407,23 @@ class Checker:
         #     survives autonomy and is decided before degrading to UNKNOWN.
         gamma = self._gamma_refutation()
         if gamma:
+            self._skip_traces(
+                "capability context already refutes the goal",
+                interaction=True,
+                reachability=True,
+            )
             return gamma
         # 2. the autonomy boundary: dynamic spawning -> unbounded participants
         #    -> undecidable (thm:undec).  Degrade to a semi-decision.
         if has_spawn(self.p.protocol):
+            trace_artifact("interaction", {
+                "status": "unknown",
+                "reason": "dynamic participant spawning is outside the decidable fragment",
+            })
+            self._skip_traces(
+                "dynamic topology prevents finite interaction and reachability checks",
+                reachability=True,
+            )
             return Verdict(False, "DYNAMIC_TOPOLOGY",
                            "protocol spawns participants at run time; "
                            "achievability is undecidable outside the "
@@ -462,18 +431,47 @@ class Checker:
                            unknown=True)
         # 3. realizability: projection G|p defined for every role (Proj-Sel /
         #    Proj-Brn / Proj-Mrg).  Undefined = deadlocking handoff.
+        projections = {}
         for role in sorted(set(self.p.roles) | roles_acting(self.p.protocol)):
             try:
-                project(self.p.protocol, role)
+                projections[role] = _jsonable(project(self.p.protocol, role))
             except ProjectionError as e:
+                trace_artifact("interaction", {
+                    "status": "refuted",
+                    "check": "projection",
+                    "role": role,
+                    "failure": str(e),
+                    "projections": projections,
+                })
+                self._skip_traces(
+                    "protocol projection failed",
+                    reachability=True,
+                )
                 return Verdict(False, "NON_PROJECTABLE", str(e))
         # 4. conformance: every declared skill refines its projected contract
         #    (S_p <= G|p, Gay-Hole subtyping).  Refutes the *judgment*: the
         #    verdict on G cannot be transported to a non-conforming skill.
         rep = conformance_report(self.p.skills, self.p.protocol)
         if not rep.ok:
+            trace_artifact("interaction", {
+                "status": "refuted",
+                "check": "conformance",
+                "projections": projections,
+                "failure": rep.failure,
+                "assumed_conformant": list(rep.assumed),
+            })
+            self._skip_traces(
+                "declared role behavior is non-conformant",
+                reachability=True,
+            )
             return Verdict(False, "NON_CONFORMANT", rep.failure)
         self.assumed_conformant = rep.assumed
+        trace_artifact("interaction", {
+            "status": "passed",
+            "projections": projections,
+            "conformance": "passed",
+            "assumed_conformant": list(rep.assumed),
+        })
         # T-Comm quantifies over every protocol branch at the same pre-world;
         # T-Act and T-Goal then check guards/markers in lockstep.  Projection
         # alone only checks process shape, so decide these world premises too.
@@ -491,25 +489,62 @@ class Checker:
             ok, end_state = self._reach(
                 self.p.protocol, initial_state(self.p), {})
             if not ok:
+                trace_artifact("reachability", {
+                    "status": "refuted",
+                    "reason": "whole-session typing rejected every witness",
+                    "blocked": list(self.blocked),
+                    "defeated": list(self.defeated),
+                })
                 return Verdict(
                     False, "NON_CONFORMANT",
                     "a may-reachability witness exists, but the whole-session "
                     "T-Comm/T-Act/T-Goal judgment has no derivation from the "
                     "same initial world: the protocol-wide guards and goal "
                     "markers are inconsistent with the witness")
+            trace_artifact("reachability", {
+                "status": "passed",
+                "witness": _jsonable(end_state.path),
+                "terminal_predicates": sorted(end_state.true_preds),
+            })
             return Verdict(True, "OK", "goal reachable along witness path",
                            witness=end_state.path)
         if self.defeated:
             uniq = tuple(dict.fromkeys(self.defeated))
+            trace_artifact("reachability", {
+                "status": "refuted",
+                "reason": "external branch defeats the goal",
+                "frontier": list(uniq),
+            })
             return Verdict(False, "GOAL_UNSAT",
                            "adversarially unachievable: " + "; ".join(uniq),
                            frontier=uniq)
         if self.blocked:
             uniq = tuple(dict.fromkeys(self.blocked))
+            trace_artifact("reachability", {
+                "status": "refuted",
+                "reason": "mandatory action guard is blocked",
+                "frontier": list(uniq),
+            })
             return Verdict(False, "BLOCKED_GUARD", "; ".join(uniq), frontier=uniq)
+        trace_artifact("reachability", {
+            "status": "refuted",
+            "reason": "protocol terminates without satisfying the goal",
+        })
         return Verdict(False, "GOAL_UNSAT",
                        "protocol terminates but no run satisfies the goal "
                        "(goal predicate never established / refinement unsatisfiable)")
+
+    def _skip_traces(
+        self,
+        reason: str,
+        *,
+        interaction: bool = False,
+        reachability: bool = False,
+    ) -> None:
+        if interaction:
+            trace_artifact("interaction", {"status": "skipped", "reason": reason})
+        if reachability:
+            trace_artifact("reachability", {"status": "skipped", "reason": reason})
 
     def _fresh_typing_value(self, var: str) -> z3.ArithRef:
         self.typing_fresh += 1
@@ -523,7 +558,7 @@ class Checker:
         values = dict(old)
         constraints: list[z3.BoolRef] = []
         for var, expr in cap.assigns.items():
-            values[var] = eval_typing_expr(expr, st)
+            values[var] = eval_expr(expr, st)
         for var, formula in cap.nondet.items():
             if var in cap.assigns:
                 continue
@@ -531,7 +566,7 @@ class Checker:
             formula_values = dict(old)
             formula_values[var] = fresh
             formula_state = _mk_typing_state(st.true_preds, formula_values)
-            constraints.append(eval_typing_formula(formula, formula_state))
+            constraints.append(eval_formula(formula, formula_state))
             values[var] = fresh
         return _mk_typing_state(preds, values), constraints
 
@@ -543,7 +578,7 @@ class Checker:
         step, rest = steps[0], steps[1:]
         if "goal" in step:
             return z3.And(
-                eval_typing_formula(step["goal"], st),
+                eval_formula(step["goal"], st),
                 self._typing_condition(rest, st, recenv, seen))
         if "msg" in step:
             return self._typing_condition(rest, st, recenv, seen)
@@ -551,7 +586,7 @@ class Checker:
             cap = self.p.capabilities[step["act"]["cap"]]
             post, effect_constraints = self._typing_effect(st, cap)
             return z3.And(
-                eval_typing_formula(cap.pre, st),
+                eval_formula(cap.pre, st),
                 *effect_constraints,
                 self._typing_condition(rest, post, recenv, seen))
         if "choice" in step:
@@ -579,29 +614,21 @@ class Checker:
 
     def _direct_typing_condition(self) -> z3.BoolRef:
         st = _mk_typing_state(self.p.init_true, {})
-        initial = [eval_typing_formula(f, st)
+        initial = [eval_formula(f, st)
                    for f in self.p.init_constraints]
         condition = self._typing_condition(
             self.p.protocol, st, {}, frozenset())
         return z3.And(*initial, condition)
 
     def _missing_caps(self, steps: list[dict]) -> set[str]:
-        out: set[str] = set()
-        for s in steps:
-            if "act" in s and s["act"]["cap"] not in self.p.capabilities:
-                out.add(s["act"]["cap"])
-            if "choice" in s:
-                for br in s["choice"]["branches"].values():
-                    out |= self._missing_caps(br)
-            if "rec" in s:
-                out |= self._missing_caps(s["rec"]["body"])
-        return out
+        return {s["act"]["cap"] for s in iter_steps(steps)
+                if "act" in s and s["act"]["cap"] not in self.p.capabilities}
 
     def _goal_sat(self, st: State) -> bool:
         constraints = list(st.arith) + [eval_formula(self.p.goal, st)]
         if self.typing_condition is not None:
             constraints.append(self.typing_condition)
-        return _sat(constraints, self._note_solver_unknown)
+        return self._sat(constraints)
 
     def _widen(self, st: State, label: str) -> State:
         """Back-edge widening: havoc the numeric summary.  Dropping the
@@ -612,6 +639,25 @@ class Checker:
         return _mk_state(st.true_preds, (), bumped,
                          st.path + (("continue", label),))
 
+    def _act(self, cur: State, cap: Capability) -> State | None:
+        """The successor of a mandatory action, or None (frontier recorded)
+        when its guard or its nondeterministic effect is unsatisfiable."""
+        guard = eval_formula(cap.pre, cur)
+        if not self._sat(list(cur.arith) + [guard]):
+            self.blocked.append(
+                f"capability '{cap.name}' guard never satisfiable on "
+                f"this path (pre={cap.pre!r})")
+            return None
+        guarded = _mk_state(cur.true_preds, list(cur.arith) + [guard],
+                            cur.versions(), cur.path)
+        successor = apply_effect(guarded, cap)
+        if not self._sat(list(successor.arith)):
+            self.blocked.append(
+                f"capability '{cap.name}' has no successor world "
+                f"satisfying its nondeterministic effect")
+            return None
+        return successor
+
     def _reach(self, steps: list[dict], st: State,
                recenv: dict) -> tuple[bool, State]:
         """(reached_goal, witnessing/end state).  Existential over branches."""
@@ -621,27 +667,13 @@ class Checker:
                 if self._goal_sat(cur):
                     return True, cur
                 return False, cur                   # unsatisfied checkpoint
-            elif "msg" in s:
+            if "msg" in s:
                 cur = _mk_state(cur.true_preds, cur.arith, cur.versions(),
                                 cur.path + (("msg", s["msg"]["label"]),))
             elif "act" in s:
-                cap = self.p.capabilities[s["act"]["cap"]]
-                guard = eval_formula(cap.pre, cur)
-                if not _sat(list(cur.arith) + [guard],
-                            self._note_solver_unknown):
-                    self.blocked.append(
-                        f"capability '{cap.name}' guard never satisfiable on "
-                        f"this path (pre={cap.pre!r})")
+                successor = self._act(cur, self.p.capabilities[s["act"]["cap"]])
+                if successor is None:
                     return False, cur              # mandatory action blocked
-                guarded = _mk_state(
-                    cur.true_preds, list(cur.arith) + [guard],
-                    cur.versions(), cur.path)
-                successor = apply_effect(guarded, cap)
-                if not _sat(list(successor.arith), self._note_solver_unknown):
-                    self.blocked.append(
-                        f"capability '{cap.name}' has no successor world "
-                        f"satisfying its nondeterministic effect")
-                    return False, cur
                 cur = successor
             elif "rec" in s:
                 # mu X. body : the fall-through continuation folds into the
@@ -720,6 +752,11 @@ def check(pack: dict | Pack, semantics: str = "may",
     if scope == "goal" and semantics != "may":
         raise ValueError("goal scope supports may semantics only")
     p = normalize(pack)
+    trace_artifact("schema", {
+        "status": "passed",
+        "pack": p.to_dict(),
+        "pack_digest": pack_digest(p),
+    })
     checker = Checker(p, semantics=semantics)
     certificate = checker._gamma_refutation(guard_closure=True) if scope == "goal" else None
     v = certificate if certificate is not None else checker.run()
@@ -734,3 +771,13 @@ def check(pack: dict | Pack, semantics: str = "may",
             f"alternative plans are not ruled out. {v.detail}")
     v.pack_digest = pack_digest(p)
     return v
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return repr(value)

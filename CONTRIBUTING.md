@@ -30,8 +30,9 @@ Enhancement suggestions are also welcome via GitHub issues. Please include:
 1. **Fork the repository** and create a feature branch from `gc/implement-and-testing`.
 2. **Make your changes** following the coding style of the project.
 3. **Write or update tests** to cover your changes (see `tests/`).
-4. **Run the test suite** to ensure all tests pass:
+4. **Run the linter and the test suite** to ensure both pass:
    ```bash
+   ruff check .
    python3 -m pytest
    ```
 5. **Update documentation** as needed (README, docstrings, etc.).
@@ -80,7 +81,8 @@ Projection, merge, and Gay-Hole subtyping for multiparty session types.
 
 ### Front-ends
 - **Markdown** (`frontend/markdown.py`): deterministic SKILL.md → pack compaction
-- **LLM** (`frontend/llm.py`): semantic NL → pack distillation (untrusted, schema-gated)
+- **LLM** (`frontend/llm.py`): semantic NL → pack distillation (untrusted, schema-gated);
+  prompt texts in `frontend/prompts.py`, provider clients in `frontend/providers.py`
 
 ## Testing
 

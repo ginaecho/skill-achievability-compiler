@@ -1,0 +1,82 @@
+{
+ "case": "c034",
+ "primary_task": "Build a tailored Gradio demo for a user's Hugging Face LoRA and publish it as a private ZeroGPU Space, then smoke-test it.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "python3",
+   "any_of": null,
+   "hard": true,
+   "evidence": "from huggingface_hub import HfApi, get_token",
+   "check": "command -v python3",
+   "observed": "/usr/local/bin/python3",
+   "status": "available"
+  },
+  {
+   "kind": "pymodule",
+   "name": "huggingface_hub",
+   "any_of": null,
+   "hard": true,
+   "evidence": "api.create_repo(... repo_type=\"space\" ...); api.upload_file(...)",
+   "check": "python3 -c \"import importlib.util; print(importlib.util.find_spec('huggingface_hub') is not None)\"; pip download --no-deps -q -d $(mktemp -d) huggingface_hub",
+   "observed": "False; downloaded huggingface_hub-2.1.1-py3-none-any.whl",
+   "status": "installable"
+  },
+  {
+   "kind": "program",
+   "name": "gradio",
+   "any_of": null,
+   "hard": true,
+   "evidence": "gradio info {repo_id} --token {hf_token} ... gradio predict ... Don't skip it",
+   "check": "command -v gradio; pip download --no-deps -q -d $(mktemp -d) gradio",
+   "observed": "not found; downloaded gradio-6.29.1-py3-none-any.whl",
+   "status": "installable"
+  },
+  {
+   "kind": "egress",
+   "name": "huggingface.co",
+   "any_of": null,
+   "hard": true,
+   "evidence": "The output is a real, published Space ... https://huggingface.co/spaces/{repo_id}",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://huggingface.co/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "huggingface (write token)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "I need a Hugging Face access token with **write** scope ... to publish the Space",
+   "check": "[ -n \"${HF_TOKEN:-}\" ]; [ -n \"${HUGGING_FACE_HUB_TOKEN:-}\" ]; ls ~/.cache/huggingface/token",
+   "observed": "HF_TOKEN unset; HUGGING_FACE_HUB_TOKEN unset; no cached token file",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "www.gradio.app",
+   "any_of": null,
+   "hard": false,
+   "evidence": "If you're unsure whether a component exists ... web-fetch the current Gradio docs",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://www.gradio.app/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "pypi.org",
+   "any_of": null,
+   "hard": false,
+   "evidence": "pip index versions gradio (to look up sdk_version)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://pypi.org/",
+   "observed": "200",
+   "status": "available"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:huggingface.co",
+  "account:huggingface (write token)"
+ ],
+ "notes": "The doc lets the user paste a token at runtime, but no HF credential is present in the container; even with one, huggingface.co is refused by the egress policy, so publishing and the smoke-test cannot happen. ZeroGPU runs on HF, so no local GPU is needed."
+}

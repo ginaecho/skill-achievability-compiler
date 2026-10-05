@@ -25,14 +25,15 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from .checker import check
 from .frontend.ce import CEError, parse_ce_detailed
-from .frontend.runtime import Runtime, bind_runtime, load_runtime
-from .frontend.toolpolicy import Library, Obligation, load_library, match
+from .frontend.prompts import CE_DOC, CE_RUNTIME_DOC, CE_SOFTWARE_DOC
+from .frontend.runtime import Runtime, bind_runtime, load_runtime, runtime_note
+from .frontend.toolpolicy import Library, Obligation, load_library, match, unmet
 from .pack import PackError
 
 ALLOW, DENY, WARN = "allow", "deny", "warn"
@@ -96,7 +97,7 @@ class Config:
     prohibited: list = field(default_factory=list)   # list[Rule]
 
     @staticmethod
-    def load(path: Path) -> "Config":
+    def load(path: Path) -> Config:
         d = json.loads(path.read_text(encoding="utf-8"))
         rules = [Rule(**r) for r in d.pop("prohibited", [])]
         if "free_tools" in d:
@@ -150,13 +151,12 @@ class Monitor:
         return d
 
     # ------------------------------------------------------------------ runtime facts
-    def _effective(self) -> tuple[Runtime, Library]:
+    def effective(self) -> tuple[Runtime, Library]:
         """The runtime and library with everything observed during the run applied."""
         rt = self.runtime
         if self.state.missing_resources:
-            rt = Runtime(rt.name, rt.description, rt.tools,
-                         tuple(g for g in rt.grants if g not in self.state.missing_resources),
-                         rt.lacks, rt.forbid_effects, rt.software)
+            rt = replace(rt, grants=tuple(g for g in rt.grants
+                                          if g not in self.state.missing_resources))
         lib = self.library
         if self.state.missing_programs:
             progs = dict(lib.programs)
@@ -166,8 +166,7 @@ class Monitor:
         return rt, lib
 
     def _unmet(self, obs: list[Obligation]) -> list[Obligation]:
-        rt, lib = self._effective()
-        from .frontend.toolpolicy import unmet
+        rt, lib = self.effective()
         return [o for o in obs if unmet(o, rt, lib)]
 
     def _prohibited_text(self, text: str) -> list[str]:
@@ -196,7 +195,7 @@ class Monitor:
         if bad:
             return Decision(DENY, "the plan contains prohibited behaviour: " + "; ".join(bad),
                             bad), info
-        rt, lib = self._effective()
+        rt, lib = self.effective()
         try:
             b = bind_runtime(parsed.pack, parsed.bindings, rt, prune=True, library=lib,
                              software=True)
@@ -239,6 +238,12 @@ class Monitor:
             self.state.block = None
         return self._record("plan", d, json.dumps(info)[:200])
 
+    def _revoke(self, reason: str) -> None:
+        """Hold every further action until a plan that passes is written."""
+        self.state.block = reason
+        self.state.plan = None
+        self.state.plan_sha = None
+
     def _plan_via(self) -> set:
         if not self.state.plan:
             return set()
@@ -272,18 +277,17 @@ class Monitor:
                   + f"\nWrite a plan that avoids it to `{self.cfg.plan_file}` (it must pass "
                     "skillc), or stop and tell the user.")
         if self.cfg.thinking == "stop":
-            self.state.block = reason
-            self.state.plan = None     # the approved plan no longer describes the intent
-            self.state.plan_sha = None
+            self._revoke(reason)       # the approved plan no longer describes the intent
             return self._record("thinking", Decision(DENY, reason, hits))
         return self._record("thinking", Decision(WARN, reason, hits))
 
     # ------------------------------------------------------------------ actions
-    def _action_text(self, tool: str, tool_input: dict) -> str:
+    @staticmethod
+    def _action_text(tool_input: dict) -> str:
         keys = ("command", "content", "new_string", "url", "query", "prompt", "file_path")
-        return "\n".join(str(tool_input[k]) for k in keys if isinstance(tool_input.get(k), str))
+        return "\n".join(tool_input[k] for k in keys if isinstance(tool_input.get(k), str))
 
-    def _is_plan_file(self, tool_input: dict) -> bool:
+    def is_plan_file(self, tool_input: dict) -> bool:
         p = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         if not p:
             return False
@@ -293,7 +297,7 @@ class Monitor:
             return False
 
     def pre_action(self, tool: str, tool_input: dict) -> Decision:
-        if self._is_plan_file(tool_input):
+        if self.is_plan_file(tool_input):
             if tool != "Write":
                 return self._record("action", Decision(
                     DENY, f"skillc: write the whole plan with Write to `{self.cfg.plan_file}`."))
@@ -307,19 +311,17 @@ class Monitor:
                 DENY, f"skillc: no approved plan. Before implementing, write your plan in "
                       f"Controlled English to `{self.cfg.plan_file}`; only a plan skillc "
                       "judges ACHIEVABLE can be implemented."), tool)
-        text = self._action_text(tool, tool_input)
-        bad = self._prohibited_text(text)
-        unmet = self._unmet(match(text, self.library)) if text else []
+        text = self._action_text(tool_input)
         rt_tool = self.cfg.tool_map.get(tool, tool)
-        if rt_tool not in self.runtime.tools and tool not in self.cfg.free_tools:
-            unmet_msg = [f"`{tool}` is not a tool of runtime `{self.runtime.name}`"]
-        else:
-            unmet_msg = []
-        unmet_msg += [f"'{o.text}' needs {o.clause()}, not available in runtime "
-                      f"`{self.runtime.name}`" for o in unmet]
-        if bad or unmet_msg:
-            reason = "skillc: action blocked:\n  - " + "\n  - ".join(bad + unmet_msg)
-            return self._record("action", Decision(DENY, reason, bad + unmet_msg), tool)
+        problems = self._prohibited_text(text)
+        if rt_tool not in self.runtime.tools:
+            problems.append(f"`{tool}` is not a tool of runtime `{self.runtime.name}`")
+        problems += [f"'{o.text}' needs {o.clause()}, not available in runtime "
+                     f"`{self.runtime.name}`"
+                     for o in (self._unmet(match(text, self.library)) if text else [])]
+        if problems:
+            reason = "skillc: action blocked:\n  - " + "\n  - ".join(problems)
+            return self._record("action", Decision(DENY, reason, problems), tool)
         if self.cfg.plan_conformance and self.state.plan and rt_tool not in self._plan_via():
             return self._record("action", Decision(
                 DENY, f"skillc: `{tool}` (runtime tool `{rt_tool}`) is not used by any Tool "
@@ -329,7 +331,20 @@ class Monitor:
     def post_action(self, tool: str, tool_input: dict, result: Any) -> Decision:
         """Turn failures in a tool's output into runtime facts; re-check the plan."""
         out = result if isinstance(result, str) else json.dumps(result, default=str)
-        cmd = self._action_text(tool, tool_input)
+        new = self._observe(out, self._action_text(tool_input))
+        if not new or not self.state.plan:
+            return self._record("observe", Decision(ALLOW), "; ".join(new))
+        d, _ = self.check_plan(self.state.plan)
+        if d.action == ALLOW:
+            return self._record("observe", Decision(
+                WARN, "skillc observed: " + "; ".join(new) + ". The approved plan is still "
+                      "ACHIEVABLE."), "; ".join(new))
+        self._revoke("skillc: the approved plan is no longer achievable after what the "
+                     "run showed (" + "; ".join(new) + ").\n" + d.reason)
+        return self._record("observe", Decision(DENY, self.state.block, new), "; ".join(new))
+
+    def _observe(self, out: str, cmd: str) -> list[str]:
+        """Record the runtime facts a tool's output shows; describe the new ones."""
         new = []
         for rx, kind in OBSERVATIONS:
             for m in rx.finditer(out):
@@ -348,26 +363,13 @@ class Monitor:
                         if o.kind == "resource" and o.value not in self.state.missing_resources:
                             self.state.missing_resources.append(o.value)
                             new.append(f"credential `{o.value}` was rejected")
-        if not new or not self.state.plan:
-            return self._record("observe", Decision(ALLOW), "; ".join(new))
-        d, _ = self.check_plan(self.state.plan)
-        if d.action == ALLOW:
-            return self._record("observe", Decision(
-                WARN, "skillc observed: " + "; ".join(new) + ". The approved plan is still "
-                      "ACHIEVABLE."), "; ".join(new))
-        self.state.block = ("skillc: the approved plan is no longer achievable after what the "
-                            "run showed (" + "; ".join(new) + ").\n" + d.reason)
-        self.state.plan = None
-        self.state.plan_sha = None
-        return self._record("observe", Decision(DENY, self.state.block, new), "; ".join(new))
+        return new
 
 
 # ---------------------------------------------------------------------- instructions
 
 def plan_instructions(runtime: Runtime, plan_file: str) -> str:
     """What the agent is told once per session: the plan protocol and the CE grammar."""
-    from .frontend.llm import CE_DOC, CE_RUNTIME_DOC, CE_SOFTWARE_DOC
-    from .frontend.runtime import runtime_note
     return (
         "SKILLC RUNTIME MONITOR is active. Before you implement anything (run commands, "
         f"write or edit files), write your plan to `{plan_file}` with the Write tool, in "

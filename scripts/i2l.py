@@ -17,7 +17,7 @@ import hashlib
 import json
 import random
 import sys
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,7 +30,8 @@ from scripts.benchmark_ce_runtime import (_cases, case_runtime, parse_reply,  # 
                                           skill_path)
 from skillc import check  # noqa: E402
 from skillc.frontend.ce import render_ce  # noqa: E402
-from skillc.frontend.llm import _extract_json_object, direct_messages  # noqa: E402
+from skillc.frontend.prompts import direct_messages  # noqa: E402
+from skillc.frontend.providers import extract_json_object  # noqa: E402
 from skillc.frontend.runtime import load_runtime, repair_violations  # noqa: E402
 
 RUNS = ROOT / "runs"
@@ -76,7 +77,7 @@ def direct_verdicts() -> dict:
     for job in json.loads((out / "frozen.json").read_text())["jobs"]:
         p = out / job["output"]
         try:
-            v = _extract_json_object(p.read_text(encoding="utf-8"))["verdict"]
+            v = extract_json_object(p.read_text(encoding="utf-8"))["verdict"]
             v = v if v in ("ACHIEVABLE", "IMPOSSIBLE", "UNKNOWN") else "UNKNOWN"
         except (OSError, ValueError, KeyError, TypeError):
             v = "INVALID"
@@ -289,7 +290,7 @@ def judge_maps(tag: str = "judge") -> dict:
     for j in json.loads((out / "frozen.json").read_text())["jobs"]:
         p = out / j["output"]
         try:
-            m = _extract_json_object(p.read_text(encoding="utf-8"))
+            m = extract_json_object(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             m = None
         res[(j["arm"], j["case"])] = m

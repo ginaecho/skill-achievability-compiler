@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from importlib import resources
 from pathlib import Path
 
@@ -50,15 +50,14 @@ class Profile:
         return normalize_tool(tool) in self.tools
 
     @staticmethod
-    def from_dict(d: dict) -> "Profile":
+    def from_dict(d: dict) -> Profile:
         tools = frozenset(normalize_tool(t) for t in d.get("tools", []))
         return Profile(name=d["name"], description=d.get("description", ""),
                        tools=tools, shell=bool(d.get("shell", False)))
 
-    def with_tools(self, extra: list[str]) -> "Profile":
-        return Profile(name=self.name, description=self.description,
-                       tools=self.tools | {normalize_tool(t) for t in extra},
-                       shell=self.shell, extra=self.extra + list(extra))
+    def with_tools(self, extra: list[str]) -> Profile:
+        return replace(self, tools=self.tools | {normalize_tool(t) for t in extra},
+                       extra=self.extra + list(extra))
 
 
 def builtin_profiles() -> list[str]:

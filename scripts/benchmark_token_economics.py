@@ -21,7 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from skillc import check  # noqa: E402
-from skillc.frontend.llm import SYSTEM, _extract_json_object  # noqa: E402
+from skillc.frontend.prompts import SYSTEM  # noqa: E402
+from skillc.frontend.providers import extract_json_object  # noqa: E402
 from skillc.pack import PackError  # noqa: E402
 
 DEFAULT_ENDPOINT = "https://foundary-tzuc06.openai.azure.com/openai/v1"
@@ -337,7 +338,7 @@ def main() -> int:
         parse_error = None
         if a_row["http_status"] == 200 and a_row["output_text"]:
             try:
-                pack = _extract_json_object(a_row["output_text"])
+                pack = extract_json_object(a_row["output_text"])
                 started = time.perf_counter()
                 checked = check(pack)
                 checker_ms = (time.perf_counter() - started) * 1000

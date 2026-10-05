@@ -1,0 +1,83 @@
+{
+ "case": "c017",
+ "primary_task": "Create and manage Azure Weights & Biases marketplace instances with the Azure.ResourceManager.WeightsAndBiases .NET SDK.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "dotnet",
+   "any_of": null,
+   "hard": true,
+   "evidence": "dotnet add package Azure.ResourceManager.WeightsAndBiases --prerelease",
+   "check": "command -v dotnet; apt-get -s install dotnet-sdk-8.0",
+   "observed": "ABSENT; apt simulation resolves dotnet-sdk-8.0 8.0.129 (archive.ubuntu.com 200)",
+   "status": "installable"
+  },
+  {
+   "kind": "egress",
+   "name": "api.nuget.org",
+   "any_of": null,
+   "hard": true,
+   "evidence": "dotnet add package ...",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://api.nuget.org/",
+   "observed": "400 at root; v3-flatcontainer index lists 1.0.0-beta.1, 1.0.0",
+   "status": "available"
+  },
+  {
+   "kind": "credential",
+   "name": "AZURE_SUBSCRIPTION_ID",
+   "any_of": null,
+   "hard": true,
+   "evidence": "AZURE_SUBSCRIPTION_ID=<your-subscription-id> # Required",
+   "check": "[ -n \"${AZURE_SUBSCRIPTION_ID:-}\" ] && echo set || echo unset",
+   "observed": "unset",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "Azure (DefaultAzureCredential)",
+   "any_of": null,
+   "hard": true,
+   "evidence": "new DefaultAzureCredential(...) ArmClient client = new ArmClient(credential)",
+   "check": "AZURE_CLIENT_ID/TENANT_ID/CLIENT_SECRET set?; command -v az; ls ~/.azure",
+   "observed": "all unset; az absent; no ~/.azure",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "management.azure.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "ArmClient ... CreateOrUpdateAsync",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://management.azure.com/",
+   "observed": "curl: (56) CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "login.microsoftonline.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "DefaultAzureCredential token acquisition",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://login.microsoftonline.com/",
+   "observed": "302",
+   "status": "available"
+  },
+  {
+   "kind": "pymodule",
+   "name": "wandb",
+   "any_of": null,
+   "hard": false,
+   "evidence": "After creating the Azure resource, use the W&B Python SDK",
+   "check": "not checked in detail",
+   "observed": "optional follow-on",
+   "status": "installable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "credential:AZURE_SUBSCRIPTION_ID",
+  "account:Azure (DefaultAzureCredential)",
+  "egress:management.azure.com"
+ ],
+ "notes": "AZURE_RESOURCE_GROUP and AZURE_WANDB_INSTANCE_NAME also unset (user-supplied names). wandb integration is optional."
+}

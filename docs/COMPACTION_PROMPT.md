@@ -75,7 +75,7 @@ operand so the accepted language remains QF-LIA.
 ## Prompt source of truth
 
 The live prompt is the `SYSTEM` constant in
-`src/skillc/frontend/llm.py`. Keeping a second supposedly verbatim copy here
+`src/skillc/frontend/prompts.py`. Keeping a second supposedly verbatim copy here
 caused the documentation to drift; this document describes the interface and
 trust model, while the source file defines the exact prompt.
 
@@ -93,7 +93,7 @@ See [`TOKEN_ECONOMICS.md`](TOKEN_ECONOMICS.md) and `skillc cost`.
 
 ## Live vs. reference compaction
 
-`src/skillc/frontend/llm.py` supports Anthropic (`ANTHROPIC_API_KEY`) and Azure
+`src/skillc/frontend/providers.py` supports Anthropic (`ANTHROPIC_API_KEY`) and Azure
 OpenAI (`AZURE_OPENAI_ENDPOINT` plus either `AZURE_OPENAI_API_KEY` or the
 current `az login` identity). Select the provider with `--llm-provider`; no
 provider is contacted unless `--llm` is explicit. There is no silent

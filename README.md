@@ -56,6 +56,13 @@ Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (an
 abstention, including outside the decidable fragment) — so `skillc check` can
 gate CI for skill repositories.
 
+### Interactive execution architecture
+
+The [SkillC Execution Atlas](demo/skillc-architecture-app/README.md) is a local
+browser app for demonstrating how a `SKILL.md`, `agent.md`, or prompt moves
+through the real compiler. It streams the active Python modules and functions,
+generated formal pack, terminal commands, and final verdict while SkillC runs.
+
 ### Controlled English (CE)
 
 A pack can also be written, reviewed or generated in SkillC Controlled
@@ -90,6 +97,39 @@ only in a project that runs `skillc monitor init` and installs its hooks.
 The experiment data behind these documents (`runs/`, `benchmark/` corpora)
 lives on the branch `gc/data_train_test`; the scripts under `scripts/` that
 reproduce the experiments expect that branch.
+
+### What can I achieve in *my* environment? (`skillc reach`)
+
+`skillc env probe` reads, read-only, the environment you work in: your Azure
+role assignments and the scopes they cover, deny assignments, policies,
+registered services, resources, and your configured MCP servers and tools. It
+saves this as a provider-neutral graph (`skillc.env/1`). `skillc reach` then
+answers, for an intent such as *"model a building's topology in Azure Digital
+Twins"*:
+
+* which goal conditions you can achieve;
+* a plan for them, verified by the trusted checker;
+* which conditions are blocked, why, and the exact fix (for example, ask for
+  *Azure Digital Twins Data Owner* at `rg-building`).
+
+You get the result as a CLI report, an English plan and an HTML graph.
+
+```console
+$ skillc reach building-topology --env examples/environment/contoso-contributor.env.json
+conditions (OK = achievable, OK* = achievable under assumptions, NO = blocked):
+  OK  dt_instance
+  OK  building_data
+  NO  dt_models
+  NO  topology_twins
+  NO  topology_relationships
+  NO  topology_queryable
+...
+2/6 conditions achievable; blocked conditions are certified unreachable with the operations this environment allows (checker: GOAL_UNSAT)
+```
+
+Anything that could not be read becomes an assumption, never a refusal.
+`skillc env watch` re-probes on a schedule and reports what changed. See
+[`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md).
 
 ### Protocol checks versus goal-only checks
 

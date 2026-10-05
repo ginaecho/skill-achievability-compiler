@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Optional
 
+from ..pack import iter_steps
 from ..profiles import normalize_tool
 from .prose import (BOLD_RE, CONTINUE_RE, INVOKE_RE, Condition, Role,
                     condition_predicate, content_stems, find_num_clause,
@@ -93,7 +93,7 @@ class Build:
 # Naming states
 # --------------------------------------------------------------------------
 
-def register_predicate(build: Build, phrase: str) -> Optional[str]:
+def register_predicate(build: Build, phrase: str) -> str | None:
     """Canonical predicate name for a state description.
 
     Two clauses name one state when they name it the same way, so a guard
@@ -184,7 +184,7 @@ def _msg_events(text: str, roles: list[Role]) -> list[Event]:
 
 
 def scan_span(text: str, tools: list[str], roles: list[Role],
-              default_role: str, loop: Optional[str] = None) -> list[Event]:
+              default_role: str, loop: str | None = None) -> list[Event]:
     """Ordered protocol events a span of prose describes.
 
     `loop` is the name of the enclosing repeated block, when there is one: a
@@ -322,8 +322,8 @@ def _named_tools(sent: str, tools: list[str]) -> list[str]:
 
 
 def read_tool_notes(build: Build, tools_body: str, tools: list[str],
-                    var: Optional[str]
-                    ) -> tuple[dict, dict, Optional[str], bool]:
+                    var: str | None
+                    ) -> tuple[dict, dict, str | None, bool]:
     """Guards, effects and numeric bounds the Tools section states.
 
     Returns (preconditions, numeric bounds, quantity name, whether the
@@ -334,7 +334,7 @@ def read_tool_notes(build: Build, tools_body: str, tools: list[str],
     pres: dict[str, list] = {}
     nondet: dict[str, dict] = {}
     stated_effect = False
-    subject: Optional[str] = None
+    subject: str | None = None
     for sent in sentences(tools_body):
         named = _named_tools(sent, tools)
         if named:
@@ -382,8 +382,8 @@ def read_tool_notes(build: Build, tools_body: str, tools: list[str],
 # Declared per-role behaviour
 # --------------------------------------------------------------------------
 
-def read_declared_behaviour(section_title: str, body: str, tools: list[str],
-                            roles: list[Role]) -> tuple[Optional[str], list]:
+def read_declared_behaviour(section_title: str, body: str,
+                            roles: list[Role]) -> tuple[str | None, list]:
     """(role, branch entries) from a 'Declared handler behaviour' section."""
     m = re.search(BEHAVIOUR_HEADING, section_title, re.I)
     if not m:
@@ -421,7 +421,7 @@ class SemanticResult:
     notes: list[str]
 
 
-def build(name: str, prose: str, declared: dict[str, str]) -> Optional[SemanticResult]:
+def build(name: str, prose: str, declared: dict[str, str]) -> SemanticResult | None:
     """Compile a skill document into a semantic pack, or None if the document
     does not state what "finished" means."""
     conds, var = parse_goal(prose)
@@ -456,7 +456,48 @@ def build(name: str, prose: str, declared: dict[str, str]) -> Optional[SemanticR
     pres, nondet, var, stated_effect = read_tool_notes(
         build_, tools_sec.body if tools_sec else "", tools, var)
 
-    # ---- protocol ------------------------------------------------------
+    protocol, choosers = _build_protocol(build_, segments, tools, roles,
+                                         stated_effect)
+    if not protocol:
+        return None
+    if not stated_effect:
+        attribute_by_name(build_, conds, _invoked_caps(protocol))
+
+    goal = _build_goal(conds, goal_num, var)
+    if goal is None:
+        return None
+    pack = {
+        "name": name,
+        "roles": [r.name for r in roles],
+        "capabilities": _build_capabilities(build_, tools, pres, nondet,
+                                            default_role),
+        "protocol": protocol,
+        "goal": goal,
+        "init_true": [],
+    }
+    skills = _build_skills(build_, sections, protocol, tools, roles, choosers)
+    if skills:
+        pack["skills"] = skills
+    return SemanticResult(pack, build_.notes)
+
+
+def _scan_into(build_: Build, text: str, tools: list[str], roles: list[Role],
+               loop: str | None, stated_effect: bool) -> list[dict]:
+    """Protocol steps for one span, recording its effects and owners."""
+    evs = scan_span(text, tools, roles, roles[0].name, loop)
+    if not stated_effect:
+        attribute_effects(build_, text, evs)
+    for e in evs:
+        if e.kind == "act":
+            build_.owners.setdefault(e.cap, e.by)
+    return [e.as_step() for e in evs]
+
+
+def _build_protocol(build_: Build, segments: list[tuple[str, str]],
+                    tools: list[str], roles: list[Role],
+                    stated_effect: bool) -> tuple[list[dict], list[str]]:
+    """(protocol, choosers): numbered steps become acts/msgs/spawns, a step
+    announcing a choice over bullets becomes a choice, a "Loop:" block a rec."""
     protocol: list[dict] = []
     choosers: list[str] = []
     loops = 0
@@ -472,38 +513,27 @@ def build(name: str, prose: str, declared: dict[str, str]) -> Optional[SemanticR
         for text in steps_text:
             head, bullets = split_bullets(text)
             if bullets and CHOICE_CUE_RE.search(head):
-                chooser = _role_at(roles, head, len(head), default_role)
+                chooser = _role_at(roles, head, len(head), roles[0].name)
                 choosers.append(chooser)
-                branches: dict[str, list] = {}
-                for i, b in enumerate(bullets):
-                    label = branch_label(b, f"b{i + 1}")
-                    evs = scan_span(b, tools, roles, default_role, loop_name)
-                    if not stated_effect:
-                        attribute_effects(build_, b, evs)
-                    _record_owners(build_, evs)
-                    branches[label] = [e.as_step() for e in evs]
-                if branches:
-                    block.append({"choice": {"by": chooser,
-                                             "branches": branches}})
+                branches = {
+                    branch_label(b, f"b{i + 1}"): _scan_into(
+                        build_, b, tools, roles, loop_name, stated_effect)
+                    for i, b in enumerate(bullets)}
+                block.append({"choice": {"by": chooser, "branches": branches}})
                 continue
-            evs = scan_span(text, tools, roles, default_role, loop_name)
-            if not stated_effect:
-                attribute_effects(build_, text, evs)
-            _record_owners(build_, evs)
-            block.extend(e.as_step() for e in evs)
+            block.extend(_scan_into(build_, text, tools, roles, loop_name,
+                                    stated_effect))
         if not block:
             continue
         if loop_name:
             protocol.append({"rec": {"name": loop_name, "body": block}})
         else:
             protocol.extend(block)
+    return protocol, choosers
 
-    if not protocol:
-        return None
-    if not stated_effect:
-        attribute_by_name(build_, conds, _invoked_caps(protocol))
 
-    # ---- capabilities ---------------------------------------------------
+def _build_capabilities(build_: Build, tools: list[str], pres: dict,
+                        nondet: dict, default_role: str) -> dict[str, dict]:
     capabilities: dict[str, dict] = {}
     for t in tools:
         cap: dict = {"owner": build_.owners.get(t, default_role)}
@@ -514,88 +544,55 @@ def build(name: str, prose: str, declared: dict[str, str]) -> Optional[SemanticR
         if t in nondet:
             cap["nondet"] = nondet[t]
         capabilities[t] = cap
+    return capabilities
 
-    # ---- goal -----------------------------------------------------------
-    conjuncts: list = []
-    for c in conds:
-        if c.predicate:
-            conjuncts.append(c.predicate)
-    for num in [c.num for c in conds if c.num is not None] + \
-            ([goal_num] if goal_num is not None else []):
+
+def _build_goal(conds: list[Condition], goal_num, var: str | None):
+    """The conjunction of the stated conditions and numeric bounds, or None."""
+    conjuncts: list = [c.predicate for c in conds if c.predicate]
+    nums = [c.num for c in conds if c.num is not None]
+    if goal_num is not None:
+        nums.append(goal_num)
+    for num in nums:
         v = var or quantity_var(num.noun)
         conjuncts.append({"cmp": [v, num.op, num.value]})
     if not conjuncts:
         return None
-    goal = conjuncts[0] if len(conjuncts) == 1 else {"and": conjuncts}
+    return conjuncts[0] if len(conjuncts) == 1 else {"and": conjuncts}
 
-    # ---- declared behaviours -------------------------------------------
+
+def _build_skills(build_: Build, sections, protocol: list[dict],
+                  tools: list[str], roles: list[Role],
+                  choosers: list[str]) -> dict[str, list]:
+    """Declared per-role behaviours: one external choice per declared role."""
     skills: dict[str, list] = {}
     for sec in sections:
-        role, entries = read_declared_behaviour(sec.title, sec.body, tools,
-                                                roles)
+        role, entries = read_declared_behaviour(sec.title, sec.body, roles)
         if not role or not entries:
             continue
-        sender = _sender_to(protocol, role) or _other_role(roles, role) \
-            or (choosers[0] if choosers else default_role)
-        branches = {}
-        for label, span in entries:
-            evs = [e for e in scan_span(span, tools, roles, role)
-                   if e.kind == "act"]
-            branches[label] = [{"act": {"cap": e.cap}} for e in evs]
+        sender = (_sender_to(protocol, role) or _other_role(roles, role)
+                  or (choosers[0] if choosers else roles[0].name))
+        branches = {
+            label: [{"act": {"cap": e.cap}}
+                    for e in scan_span(span, tools, roles, role) if e.kind == "act"]
+            for label, span in entries}
         skills[role] = [{"branch": {"from": sender, "branches": branches}}]
         build_.notes.append(
             f"declared behaviour for '{role}': {sorted(branches)}")
-
-    pack = {
-        "name": name,
-        "roles": [r.name for r in roles],
-        "capabilities": capabilities,
-        "protocol": protocol,
-        "goal": goal,
-        "init_true": [],
-    }
-    if skills:
-        pack["skills"] = skills
-    return SemanticResult(pack, build_.notes)
+    return skills
 
 
 def _invoked_caps(protocol: list[dict]) -> list[str]:
-    out: list[str] = []
-    for s in protocol:
-        if "act" in s and s["act"]["cap"] not in out:
-            out.append(s["act"]["cap"])
-        if "choice" in s:
-            for br in s["choice"]["branches"].values():
-                out.extend(c for c in _invoked_caps(br) if c not in out)
-        if "rec" in s:
-            out.extend(c for c in _invoked_caps(s["rec"]["body"]) if c not in out)
-    return out
+    """Capabilities the protocol invokes, in first-use order."""
+    return list(dict.fromkeys(s["act"]["cap"] for s in iter_steps(protocol)
+                              if "act" in s))
 
 
-def _record_owners(build_: Build, events: list[Event]) -> None:
-    for e in events:
-        if e.kind == "act":
-            build_.owners.setdefault(e.cap, e.by)
+def _sender_to(protocol: list[dict], role: str) -> str | None:
+    """The sender of the first message the protocol addresses to `role`."""
+    return next((s["msg"]["from"] for s in iter_steps(protocol)
+                 if "msg" in s and s["msg"]["to"] == role), None)
 
 
-def _sender_to(protocol: list[dict], role: str) -> Optional[str]:
-    for s in protocol:
-        if "msg" in s and s["msg"]["to"] == role:
-            return s["msg"]["from"]
-        if "choice" in s:
-            for br in s["choice"]["branches"].values():
-                got = _sender_to(br, role)
-                if got:
-                    return got
-        if "rec" in s:
-            got = _sender_to(s["rec"]["body"], role)
-            if got:
-                return got
-    return None
-
-
-def _other_role(roles: list[Role], role: str) -> Optional[str]:
-    for r in roles:
-        if r.name != role:
-            return r.name
-    return None
+def _other_role(roles: list[Role], role: str) -> str | None:
+    return next((r.name for r in roles if r.name != role), None)

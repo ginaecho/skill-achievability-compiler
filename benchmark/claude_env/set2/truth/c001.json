@@ -1,0 +1,51 @@
+{
+ "case": "c001",
+ "primary_task": "Write/review Terraform HCL per HashiCorp style conventions and validate it with terraform fmt/validate before committing.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "terraform",
+   "any_of": null,
+   "hard": true,
+   "evidence": "Run before committing: terraform fmt -recursive / terraform validate",
+   "check": "command -v terraform; apt-get -s install terraform; curl releases.hashicorp.com/terraform/1.14.0/terraform_1.14.0_linux_amd64.zip",
+   "observed": "absent; apt: Unable to locate package; vendor zip HTTP 200",
+   "status": "installable"
+  },
+  {
+   "kind": "egress",
+   "name": "registry.terraform.io",
+   "any_of": null,
+   "hard": true,
+   "evidence": "terraform validate (requires terraform init to fetch hashicorp/aws provider from required_providers)",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://registry.terraform.io/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "program",
+   "name": "tflint",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Additional tools: tflint",
+   "check": "not checked (optional)",
+   "observed": "-",
+   "status": "unavailable"
+  },
+  {
+   "kind": "egress",
+   "name": "developer.hashicorp.com",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Reference: HashiCorp Terraform Style Guide link",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://developer.hashicorp.com/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  }
+ ],
+ "verdict": "BLOCKED",
+ "blocking": [
+  "egress:registry.terraform.io"
+ ],
+ "notes": "Ambiguous: code generation itself needs nothing; read literally, 'Run before committing ... terraform validate' is part of the workflow, and validate on a config with required_providers needs `terraform init`, which needs the provider registry (blocked). terraform fmt alone would work after installing terraform from releases.hashicorp.com. If validation is treated as non-core, verdict would be ACHIEVABLE."
+}

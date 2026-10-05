@@ -25,8 +25,10 @@ from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 
+from ..checker import check
 from ..pack import validate_pack
 from .ce import CEError
+from .toolpolicy import resolve_program
 
 
 @dataclass(frozen=True)
@@ -40,7 +42,7 @@ class Runtime:
     software: str = "installable"  # installable | preinstalled | none (see resolve_software)
 
     @staticmethod
-    def from_dict(d: dict) -> "Runtime":
+    def from_dict(d: dict) -> Runtime:
         return Runtime(d["name"], d.get("description", ""), dict(d["tools"]),
                        tuple(d.get("grants", [])), tuple(d.get("lacks", [])),
                        tuple(d.get("forbid_effects", [])),
@@ -78,7 +80,7 @@ def _variants(name: str) -> set:
         | {b[len("py"):] for b in base if b.startswith("py") and len(b) > 4}
 
 
-def resolve_software(name: str, runtime: "Runtime") -> tuple[bool, str]:
+def resolve_software(name: str, runtime: Runtime) -> tuple[bool, str]:
     """Whether a Tool that `runs` this software can run in the runtime.
 
     installable  -> always (a registry is reachable; absence on the machine is
@@ -148,6 +150,12 @@ def _spawn_to_act(steps: list, by: str) -> list:
 SPAWN_TOOL = "agent_spawn"
 
 
+def _guard(cap: dict, guards: list) -> None:
+    """Prepend `guards` to the capability's precondition."""
+    pre = cap.get("pre", True)
+    cap["pre"] = {"and": guards} if pre is True else {"and": [*guards, pre]}
+
+
 def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
                  prune: bool = True, library=None, software: bool = False) -> Binding:
     """Apply `via`/`needs` bindings to a parsed pack under `runtime`.
@@ -165,6 +173,11 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
     dynamic-topology boundary)."""
     out = deepcopy(pack)
     res = Binding(out)
+
+    def withdraw(name: str, why: str) -> None:
+        res.withdrawn[name] = why
+        del out["capabilities"][name]
+
     for name in list(out["capabilities"]):
         b = bindings.get(name)
         if not b or not b.get("via"):
@@ -172,16 +185,11 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
                           f"tool performs it ({', '.join(sorted(runtime.tools))}), "
                           "or name what it would need", b.get("line") if b else None)
         if b["via"] not in runtime.tools:
-            res.withdrawn[name] = b["via"]
-            del out["capabilities"][name]
+            withdraw(name, b["via"])
             continue
         needs = list(b.get("needs") or [])
         if needs:
-            cap = out["capabilities"][name]
-            pre = cap.get("pre", True)
-            guards = [f"needs:{r}" for r in needs]
-            cap["pre"] = ({"and": guards} if pre is True
-                          else {"and": guards + [pre]})
+            _guard(out["capabilities"][name], [f"needs:{r}" for r in needs])
             missing = [r for r in needs if r not in runtime.grants]
             if missing:
                 res.blocked[name] = missing
@@ -192,24 +200,19 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
             for prog in b.get("runs") or []:
                 ok, why = resolve_software(prog, runtime)
                 if not ok:
-                    res.withdrawn[name] = f"software:{prog} ({why})"
-                    del out["capabilities"][name]
+                    withdraw(name, f"software:{prog} ({why})")
                     break
             if name not in out["capabilities"]:
                 continue
         if library is not None:
-            from .toolpolicy import resolve_program
             for prog in b.get("runs") or []:
                 status, why = resolve_program(prog, runtime, library)
                 if status == "unavailable":
-                    res.withdrawn[name] = f"program:{prog} ({why})"
-                    del out["capabilities"][name]
+                    withdraw(name, f"program:{prog} ({why})")
                     break
             if name in out["capabilities"] and b.get("effect") in runtime.forbid_effects:
-                cap = out["capabilities"][name]
                 guard = f"policy:{b['effect']}"
-                pre = cap.get("pre", True)
-                cap["pre"] = {"and": [guard]} if pre is True else {"and": [guard, pre]}
+                _guard(out["capabilities"][name], [guard])
                 res.blocked.setdefault(name, []).append(guard)
     dead = set(res.withdrawn) | set(res.blocked)
     if library is not None and SPAWN_TOOL not in runtime.tools:
@@ -270,7 +273,6 @@ def check_levels(pack: dict, live_goal=None, scope: str = "protocol") -> dict:
     runtime, e.g. a public deployment).  Both are ordinary, deterministic
     `check` calls; `live` is None when the document has no Live goal.
     """
-    from ..checker import check
     core = check(pack, scope=scope)
     if live_goal is None:
         return {"core": core, "live": None}

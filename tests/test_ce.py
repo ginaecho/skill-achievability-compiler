@@ -7,7 +7,7 @@ import pytest
 
 from skillc import check
 from skillc.cli import main
-from skillc.frontend import llm
+from skillc.frontend import llm, prompts, providers
 from skillc.frontend.ce import (CEError, canonical_pack, compile_ce,
                                 extract_ce, parse_ce, parse_ce_detailed,
                                 render_ce, render_formula)
@@ -444,7 +444,7 @@ def test_extract_ce_without_a_document():
 # --------------------------------------------------------------------------
 
 def test_prompt_example_compiles_and_reports_the_undeclared_tool():
-    example = llm.CE_DOC.split("Example:\n", 1)[1].split("\n(`send_email`", 1)[0]
+    example = prompts.CE_DOC.split("Example:\n", 1)[1].split("\n(`send_email`", 1)[0]
     pack = compile_ce("\n".join(l[2:] for l in example.splitlines()) + "\n")
     v = check(pack)
     assert v.reason == "MISSING_CAPABILITY" and v.frontier == ("send_email",)
@@ -452,8 +452,8 @@ def test_prompt_example_compiles_and_reports_the_undeclared_tool():
 
 def test_ce_prompt_keeps_every_rule_of_the_json_prompt():
     for n in range(1, 9):
-        assert f"\n{n}. " in llm.SYSTEM and f"\n{n}. " in llm.CE_SYSTEM
-    system, user = llm.ce_messages("prose", ["read files"])
+        assert f"\n{n}. " in prompts.SYSTEM and f"\n{n}. " in prompts.CE_SYSTEM
+    system, user = prompts.ce_messages("prose", ["read files"])
     assert "DECLARE it as a Tool" in system and "read files" in system
     assert user.startswith("Natural-language skill:\n```\nprose\n```")
 
@@ -470,7 +470,7 @@ def test_compact_ce_parses_and_retries_with_the_located_error(monkeypatch):
         calls.append(user)
         return next(replies)
 
-    monkeypatch.setattr(llm, "_compact_anthropic", fake)
+    monkeypatch.setattr(providers, "anthropic_complete", fake)
     pack, text = llm.compact_ce("prose", provider="anthropic", return_text=True)
     assert check(pack).achievable
     assert len(calls) == 2
@@ -479,7 +479,7 @@ def test_compact_ce_parses_and_retries_with_the_located_error(monkeypatch):
 
 
 def test_compact_ce_gives_up_after_the_retry_budget(monkeypatch):
-    monkeypatch.setattr(llm, "_compact_anthropic",
+    monkeypatch.setattr(providers, "anthropic_complete",
                         lambda *a: "```ce\nSkill `s`.\n```")
     with pytest.raises(CEError, match="missing 'Goal:'"):
         llm.compact_ce("prose", provider="anthropic", retries=1)
@@ -492,7 +492,7 @@ def test_compact_ce_azure_requests_text_not_json(monkeypatch):
         seen["json_mode"] = json_mode
         return DOC
 
-    monkeypatch.setattr(llm, "_compact_azure_openai", fake)
+    monkeypatch.setattr(providers, "azure_openai_complete", fake)
     llm.compact_ce("prose", provider="azure-openai")
     assert seen["json_mode"] is False
 
@@ -527,7 +527,7 @@ def test_cli_reports_ce_errors_as_usage_errors(tmp_path, capsys):
 # Runtime-manifest binding
 # --------------------------------------------------------------------------
 
-from skillc.frontend.runtime import Runtime, bind_runtime, load_runtime  # noqa: E402
+from skillc.frontend.runtime import bind_runtime, load_runtime  # noqa: E402
 
 RT = load_runtime("developer-sandbox")
 BOUND = """\
@@ -589,7 +589,7 @@ def test_tool_without_via_is_a_located_error():
 
 
 def test_runtime_prompt_replaces_rule_1_and_lists_the_manifest():
-    system, _ = llm.ce_runtime_messages("prose", RT)
+    system, _ = prompts.ce_runtime_messages("prose", RT)
     assert system.count("\n1. ") == 1 and "bind it with 'via'" in system
     assert "9. Thinking is not a Tool" in system and "10. The Goal" in system
     for tool in RT.tools:
@@ -605,7 +605,7 @@ def test_compact_ce_with_runtime_binds_and_retries(monkeypatch):
         "Goal: `g`.\nProtocol:\n  - `agent` uses `t`.\n```",
     ])
     calls = []
-    monkeypatch.setattr(llm, "_compact_anthropic",
+    monkeypatch.setattr(providers, "anthropic_complete",
                         lambda s, u, m, t: calls.append(u) or next(replies))
     pack = llm.compact_ce("prose", provider="anthropic", runtime=RT)
     assert check(pack).achievable and "no 'via' clause" in calls[1]
@@ -715,8 +715,8 @@ def test_repair_that_moves_the_goal_into_the_live_goal_is_rejected():
 
 
 def test_levels_prompt_replaces_rule_10_only():
-    plain, _ = llm.ce_runtime_messages("prose", RT)
-    lv, _ = llm.ce_runtime_messages("prose", RT, levels=True)
+    plain, _ = prompts.ce_runtime_messages("prose", RT)
+    lv, _ = prompts.ce_runtime_messages("prose", RT, levels=True)
     assert "10. The Goal is" in plain and "10. The Goal is" not in lv
     assert "10. Two goal levels" in lv and "Live goal: F." in lv
     assert plain.split("10. ")[0] == lv.split("10. ")[0]
@@ -747,7 +747,7 @@ def test_binder_keeps_external_choices_and_all_dead_choices():
 # Tool-policy library (TPL)
 # --------------------------------------------------------------------------
 
-from skillc.frontend.toolpolicy import (Library, coverage, load_library,  # noqa: E402
+from skillc.frontend.toolpolicy import (coverage, load_library,  # noqa: E402
                                         match, resolve_program)
 
 LIB = load_library()
@@ -869,7 +869,7 @@ def test_repair_guard_freezes_runs_and_effect():
 
 def test_tpl_prompt_lists_obligations_and_forbidden_effects():
     obs = match("export OPENAI_API_KEY=x", LIB)
-    system, user = llm.ce_tpl_messages("export OPENAI_API_KEY=x", RT, obs)
+    system, user = prompts.ce_tpl_messages("export OPENAI_API_KEY=x", RT, obs)
     assert "effect `E`" in system and "`writes_external`, `publishes`" in system
     assert "needs `llm_api_key`" in user and user.endswith("CE document:")
 

@@ -23,7 +23,9 @@ inside QF-LIA, the decidable fragment the paper's decision procedure assumes.
 """
 from __future__ import annotations
 
-from typing import Any, Callable
+import operator
+from typing import Any
+from collections.abc import Callable
 
 import z3
 
@@ -37,6 +39,8 @@ CMP: dict[str, Callable[[Any, Any], z3.BoolRef]] = {
 }
 
 VALID_OPS = frozenset(CMP)
+ARITH: dict[str, Callable[[Any, Any], Any]] = {
+    "+": operator.add, "-": operator.sub, "*": operator.mul}
 
 
 class FormulaError(ValueError):
@@ -54,7 +58,7 @@ def is_constant_expr(e: Any) -> bool:
     if isinstance(e, int):
         return True
     if isinstance(e, dict) and len(e) == 1:
-        for k in ("+", "-", "*"):
+        for k in ARITH:
             if k in e and isinstance(e[k], list) and len(e[k]) == 2:
                 return all(is_constant_expr(x) for x in e[k])
     return False
@@ -67,7 +71,7 @@ def validate_expr(e: Any, path: str = "expr") -> None:
     if isinstance(e, (int, str)):
         return
     if isinstance(e, dict) and len(e) == 1:
-        for k in ("+", "-", "*"):
+        for k in ARITH:
             if k in e:
                 if not (isinstance(e[k], list) and len(e[k]) == 2):
                     raise FormulaError(f"{path}: '{k}' needs exactly 2 operands")
@@ -133,7 +137,7 @@ def numeric_vars(f: Any) -> set[str]:
             return {e}
         if isinstance(e, dict):
             out: set[str] = set()
-            for k in ("+", "-", "*"):
+            for k in ARITH:
                 for sub in e.get(k, []):
                     out |= expr_vars(sub)
             return out
@@ -150,3 +154,41 @@ def numeric_vars(f: Any) -> set[str]:
         if "not" in f:
             return numeric_vars(f["not"])
     return set()
+
+
+# --------------------------------------------------------------------------
+# Compilation to z3 (one fold, parameterized by how leaves are interpreted)
+# --------------------------------------------------------------------------
+
+def compile_expr(e: Any, var: Callable[[str], z3.ArithRef]) -> z3.ArithRef:
+    """An expression as a z3 term; `var` interprets variable names."""
+    if isinstance(e, int):
+        return z3.IntVal(e)
+    if isinstance(e, str):
+        return var(e)
+    if isinstance(e, dict):
+        for op, fn in ARITH.items():
+            if op in e:
+                lhs, rhs = e[op]
+                return fn(compile_expr(lhs, var), compile_expr(rhs, var))
+    raise ValueError(f"bad expr: {e!r}")
+
+
+def compile_formula(f: Any, pred: Callable[[str], z3.BoolRef],
+                    cmp: Callable[[Any, str, Any], z3.BoolRef]) -> z3.BoolRef:
+    """A formula as a z3 Boolean; `pred` interprets predicate atoms and
+    `cmp(lhs, op, rhs)` interprets comparisons."""
+    if f is True or f is False:
+        return z3.BoolVal(f)
+    if isinstance(f, str):
+        return pred(f)
+    if isinstance(f, dict):
+        if "and" in f:
+            return z3.And([compile_formula(x, pred, cmp) for x in f["and"]])
+        if "or" in f:
+            return z3.Or([compile_formula(x, pred, cmp) for x in f["or"]])
+        if "not" in f:
+            return z3.Not(compile_formula(f["not"], pred, cmp))
+        if "cmp" in f:
+            return cmp(*f["cmp"])
+    raise ValueError(f"bad formula: {f!r}")

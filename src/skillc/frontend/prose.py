@@ -57,8 +57,7 @@ Deliberate limits, stated rather than hidden:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass
 
 # --------------------------------------------------------------------------
 # Morphology: crude but deterministic stemming, enough to tell "Book the
@@ -84,14 +83,14 @@ IRREGULAR = {
 # Words that carry no discriminating meaning: they must never make a tool
 # match a step or a step establish a goal condition.
 STOPWORDS = frozenset("""
-a an the this that these those it its it's their they them there here
-and or but so then than if when while once until after before
-is are was were be been being am do does did done doing
-have has had having will would shall should can could may might must
-of in on at to for from with without by into onto over under about as
-not no nor never any all each every some both either neither
-i you he she we us our your my his her one two three
-what which who whom whose how why where
+    a an the this that these those it its it's their they them there
+    here and or but so then than if when while once until after before
+    is are was were be been being am do does did done doing have has had
+    having will would shall should can could may might must of in on at
+    to for from with without by into onto over under about as not no nor
+    never any all each every some both either neither i you he she we us
+    our your my his her one two three what which who whom whose how why
+    where
 """.split())
 
 
@@ -185,10 +184,10 @@ class NumClause:
     value: int
     start: int
     end: int
-    noun: Optional[str] = None
+    noun: str | None = None
 
 
-def find_num_clause(text: str) -> Optional[NumClause]:
+def find_num_clause(text: str) -> NumClause | None:
     """The first numeric comparison stated in `text`, if any."""
     cands: list[NumClause] = []
     for m in _NUM_BEFORE_RE.finditer(text):
@@ -211,7 +210,7 @@ def find_num_clause(text: str) -> Optional[NumClause]:
     return NumClause(c.op, c.value, c.start, c.end, noun)
 
 
-def quantity_var(noun: Optional[str]) -> str:
+def quantity_var(noun: str | None) -> str:
     """Canonical name of the document's single numeric quantity."""
     if not noun:
         return "amount"
@@ -254,7 +253,7 @@ def _is_participle(word: str) -> bool:
     return w.endswith("ed") or w in IRREGULAR
 
 
-def condition_predicate(phrase: str) -> Optional[str]:
+def condition_predicate(phrase: str) -> str | None:
     """Name the state a goal condition describes: its head participle.
 
     "booked flight" -> booked; "a confirmation email has been sent" -> sent;
@@ -292,18 +291,18 @@ class Condition:
     the participle.
     """
     text: str
-    predicate: Optional[str] = None
-    num: Optional[NumClause] = None
+    predicate: str | None = None
+    num: NumClause | None = None
     context: str = ""
 
 
-def goal_clause(prose: str) -> Optional[str]:
+def goal_clause(prose: str) -> str | None:
     """The raw text of the document's completion sentence, if it has one."""
     m = DONE_RE.search(prose)
     return m.group(1) if m else None
 
 
-def parse_goal(prose: str) -> tuple[list[Condition], Optional[str]]:
+def parse_goal(prose: str) -> tuple[list[Condition], str | None]:
     """Conditions the document says must hold when the skill is finished,
     plus the name of the numeric quantity it budgets (if any)."""
     m = DONE_RE.search(prose)
@@ -314,7 +313,7 @@ def parse_goal(prose: str) -> tuple[list[Condition], Optional[str]]:
     if not parts:
         return [], None
     conds: list[Condition] = []
-    var: Optional[str] = None
+    var: str | None = None
     prev = 0
     for b in parts:
         text = " ".join(b.group(1).split())
@@ -400,7 +399,7 @@ def split_sections(prose: str) -> list[Section]:
     return out
 
 
-def find_section(sections: list[Section], pattern: str) -> Optional[Section]:
+def find_section(sections: list[Section], pattern: str) -> Section | None:
     rx = re.compile(pattern, re.I)
     for s in sections:
         if rx.search(s.title):
@@ -412,7 +411,7 @@ def numbered_steps(body: str) -> list[str]:
     """Top-level numbered steps, each with its indented continuation lines."""
     lines = body.split("\n")
     steps: list[list[str]] = []
-    cur: Optional[list[str]] = None
+    cur: list[str] | None = None
     pending: list[str] = []
     for line in lines:
         if STEP_RE.match(line):
@@ -493,7 +492,7 @@ def split_bullets(text: str) -> tuple[str, list[str]]:
     lines = text.split("\n")
     head: list[str] = []
     bullets: list[list[str]] = []
-    indent: Optional[int] = None
+    indent: int | None = None
     pending: list[str] = []
     closed = False
     for line in lines:

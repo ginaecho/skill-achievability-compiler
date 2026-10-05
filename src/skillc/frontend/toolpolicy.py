@@ -29,6 +29,8 @@ from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 
+from ..pack import iter_steps
+
 __all__ = ["Library", "Obligation", "load_library", "match", "obligations_note",
            "coverage", "resolve_program", "core_lines", "unmet", "veto"]
 
@@ -125,7 +127,7 @@ def coverage(parsed, obligations: list[Obligation]) -> list[str]:
     needs = {r for v in b.values() for r in (v.get("needs") or [])}
     runs = {p for v in b.values() for p in (v.get("runs") or [])}
     effects = {v.get("effect") for v in b.values()}
-    spawns = _has_spawn(parsed.pack.get("protocol", []))
+    spawns = any("spawn" in s for s in iter_steps(parsed.pack.get("protocol", [])))
     out = []
     for o in obligations:
         ok = {"resource": o.value in needs,
@@ -136,18 +138,6 @@ def coverage(parsed, obligations: list[Obligation]) -> list[str]:
             out.append(f"skill line {o.line} ('{o.text}') requires {o.clause()}, "
                        "but no Tool carries it")
     return out
-
-
-def _has_spawn(steps: list) -> bool:
-    for s in steps:
-        (kind, body), = s.items()
-        if kind == "spawn":
-            return True
-        if kind == "choice" and any(_has_spawn(br) for br in body["branches"].values()):
-            return True
-        if kind == "rec" and _has_spawn(body["body"]):
-            return True
-    return False
 
 
 def resolve_program(program: str, runtime, library: Library,

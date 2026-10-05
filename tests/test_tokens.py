@@ -6,7 +6,6 @@ the first prevented invocation -- rather than the particular default
 constants, which are an openly parameterized model.
 """
 import json
-import math
 
 import pytest
 

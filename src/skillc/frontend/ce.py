@@ -81,7 +81,7 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..pack import validate_pack
+from ..pack import CAP_FIELDS, validate_pack
 
 CE_VERSION = "1.2"   # 1.1: "Initially true: none."; 1.2: runs/effect clauses, Live goal
 INDENT = "  "
@@ -90,7 +90,6 @@ EFFECTS = ("local", "reads_external", "writes_external", "publishes")
 CMP_OPS = ("<=", ">=", "==", "!=", "<", ">")
 ARITH_OPS = ("+", "-", "*")
 CHOICE_FLAGS = ("external", "observed")
-CAP_FIELDS = ("owner", "pre", "add", "del", "assigns", "nondet")
 
 
 class CEError(ValueError):
@@ -155,8 +154,8 @@ def _canon_steps(steps: list) -> list:
         if kind in ("choice", "select", "branch"):
             b = {k: v for k, v in body.items()
                  if k != "branches" and not (k in CHOICE_FLAGS and v is False)}
-            b["branches"] = {l: _canon_steps(br)
-                             for l, br in body["branches"].items()}
+            b["branches"] = {lbl: _canon_steps(br)
+                             for lbl, br in body["branches"].items()}
             out.append({kind: b})
         elif kind == "rec":
             out.append({"rec": {"name": body["name"],
@@ -240,7 +239,7 @@ def _formula_operand(f: Any) -> str:
 
 
 def _render_cap(name: str, cap: dict, binding: dict | None = None) -> str:
-    unknown = set(cap) - set(CAP_FIELDS)
+    unknown = set(cap) - CAP_FIELDS
     if unknown:
         raise CEError(f"capability {name!r} has fields CE cannot express: "
                       f"{sorted(unknown)}")
@@ -483,6 +482,11 @@ class _Stream:
         if self.peek() is not None:
             raise self.fail("end of statement")
 
+    def close(self) -> None:
+        """The statement's final '.' and nothing after it."""
+        self.sym(".")
+        self.end()
+
     # -- formulas ----------------------------------------------------------
     def formula(self) -> Any:
         parts = [self._conj()]
@@ -667,8 +671,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
                       "left margin", first.no, 1)
     st.word("Skill")
     pack["name"] = st.name("the skill name in backticks")
-    st.sym(".")
-    st.end()
+    st.close()
 
     pos = 1
     while pos < len(lines):
@@ -682,14 +685,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
             if roles is not None:
                 raise CEError("duplicate 'Roles:' statement", ln.no, 1)
             st.word("Roles")
-            st.sym(":")
-            if st.is_word("none"):
-                st.word("none")
-                roles = []
-            else:
-                roles = st.names()
-            st.sym(".")
-            st.end()
+            roles = _names_or_none(st)
         elif st.is_word("Tool"):
             st.word("Tool")
             name_col = st.col()
@@ -703,20 +699,12 @@ def parse_ce_detailed(text: str) -> ParseResult:
             if init_true is not None:
                 raise CEError("duplicate 'Initially true:' statement", ln.no, 1)
             st.words("Initially true")
-            st.sym(":")
-            if st.is_word("none"):
-                st.word("none")
-                init_true = []
-            else:
-                init_true = st.names()
-            st.sym(".")
-            st.end()
+            init_true = _names_or_none(st)
         elif st.is_word("Initially"):
             st.word("Initially")
             st.sym(":")
             init_constraints.append(st.formula())
-            st.sym(".")
-            st.end()
+            st.close()
         elif st.is_word("Goal"):
             if goal_line is not None:
                 raise CEError(f"duplicate 'Goal:' statement (first on line "
@@ -725,8 +713,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
             st.word("Goal")
             st.sym(":")
             pack["goal"] = st.formula()
-            st.sym(".")
-            st.end()
+            st.close()
         elif st.is_word("Live") and st.is_word("goal", k=1):
             if live_line is not None:
                 raise CEError(f"duplicate 'Live goal:' statement (first on line "
@@ -737,8 +724,7 @@ def parse_ce_detailed(text: str) -> ParseResult:
             st.words("Live goal")
             st.sym(":")
             live_goal = st.formula()
-            st.sym(".")
-            st.end()
+            st.close()
         elif st.is_word("Protocol"):
             if protocol is not None:
                 raise CEError("duplicate 'Protocol:' statement", ln.no, 1)
@@ -776,6 +762,18 @@ def parse_ce_detailed(text: str) -> ParseResult:
     return ParseResult(out, comments, bindings, live_goal)
 
 
+def _names_or_none(st: _Stream) -> list[str]:
+    """': none.' or ': `A`, `B` ... .' -- the rest of a list statement."""
+    st.sym(":")
+    if st.is_word("none"):
+        st.word("none")
+        names = []
+    else:
+        names = st.names()
+    st.close()
+    return names
+
+
 def _parse_cap(st: _Stream) -> tuple[dict, dict]:
     cap: dict[str, Any] = {}
     binding: dict[str, Any] = {"via": None, "needs": [], "runs": [], "effect": None}
@@ -786,8 +784,7 @@ def _parse_cap(st: _Stream) -> tuple[dict, dict]:
         st.sym(")")
     cap.update({"pre": True, "add": [], "del": [], "assigns": {}, "nondet": {}})
     if st.is_sym("."):
-        st.sym(".")
-        st.end()
+        st.close()
         return cap, binding
     st.sym(":")
     seen = set()
@@ -845,8 +842,7 @@ def _parse_cap(st: _Stream) -> tuple[dict, dict]:
         if st.is_sym(";"):
             st.sym(";")
             continue
-        st.sym(".")
-        st.end()
+        st.close()
         return cap, binding
 
 
@@ -856,8 +852,7 @@ def _parse_block_head(st: _Stream, lines: list[_Line], pos: int, depth: int,
     st.sym(":")
     if st.is_word("none"):
         st.word("none")
-        st.sym(".")
-        st.end()
+        st.close()
         return [], pos
     st.end()
     return _parse_steps(lines, pos, depth, local, st.line)
@@ -888,8 +883,7 @@ def _parse_step(st: _Stream, lines: list[_Line], pos: int, depth: int,
         st.word("checkpoint")
         st.sym(":")
         f = st.formula()
-        st.sym(".")
-        st.end()
+        st.close()
         return {"goal": f}, pos
     if st.is_word("loop"):
         st.word("loop")
@@ -899,31 +893,27 @@ def _parse_step(st: _Stream, lines: list[_Line], pos: int, depth: int,
     if st.is_word("repeat"):
         st.word("repeat")
         name = st.name("the loop name in backticks")
-        st.sym(".")
-        st.end()
+        st.close()
         return {"continue": name}, pos
     if local:
         return _parse_local_step(st, lines, pos, depth)
     if st.is_word("spawn"):
         st.word("spawn")
         role = st.name("the spawned role in backticks")
-        st.sym(".")
-        st.end()
+        st.close()
         return {"spawn": {"role": role}}, pos
     actor = st.name("a step: `ROLE` uses/tells/chooses, checkpoint, loop, "
                     "repeat or spawn")
     if st.is_word("uses"):
         st.word("uses")
         cap = st.name("the tool name in backticks")
-        st.sym(".")
-        st.end()
+        st.close()
         return {"act": {"cap": cap, "by": actor}}, pos
     if st.is_word("tells"):
         st.word("tells")
         to = st.name("the receiving role in backticks")
         label = st.name("the message label in backticks")
-        st.sym(".")
-        st.end()
+        st.close()
         return {"msg": {"from": actor, "to": to, "label": label}}, pos
     if st.is_word("chooses"):
         st.words("chooses one of")
@@ -958,24 +948,21 @@ def _parse_local_step(st: _Stream, lines: list[_Line], pos: int,
     if st.is_word("use"):
         st.word("use")
         cap = st.name("the tool name in backticks")
-        st.sym(".")
-        st.end()
+        st.close()
         return {"act": {"cap": cap}}, pos
     if st.is_word("send"):
         st.word("send")
         label = st.name("the message label in backticks")
         st.word("to")
         to = st.name("the receiving role in backticks")
-        st.sym(".")
-        st.end()
+        st.close()
         return {"send": {"to": to, "label": label}}, pos
     if st.is_word("receive"):
         st.word("receive")
         label = st.name("the message label in backticks")
         st.word("from")
         frm = st.name("the sending role in backticks")
-        st.sym(".")
-        st.end()
+        st.close()
         return {"recv": {"from": frm, "label": label}}, pos
     if st.is_word("select"):
         st.words("select one of")

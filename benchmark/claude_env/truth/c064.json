@@ -1,0 +1,59 @@
+{
+ "case": "c064",
+ "primary_task": "Split an NVIDIA/Megatron-LM PR into multiple draft PRs minimizing CODEOWNERS reviewer groups, pushing branches to the user's fork.",
+ "requirements": [
+  {
+   "kind": "program",
+   "name": "gh",
+   "any_of": null,
+   "hard": true,
+   "evidence": "`gh pr view <number> --repo NVIDIA/Megatron-LM --json ...` and `gh pr diff ...`; `gh api user --jq .login`",
+   "check": "command -v gh",
+   "observed": "/usr/local/bin/gh",
+   "status": "available"
+  },
+  {
+   "kind": "program",
+   "name": "git",
+   "any_of": null,
+   "hard": true,
+   "evidence": "`git diff upstream/main..<source-branch> -- <paths> | git apply` ... push to the user's fork",
+   "check": "command -v git",
+   "observed": "/usr/bin/git",
+   "status": "available"
+  },
+  {
+   "kind": "account",
+   "name": "github",
+   "any_of": null,
+   "hard": true,
+   "evidence": "determine the current GitHub user with `gh api user --jq .login`; push to the user's fork; Create the PR as a draft",
+   "check": "[ -n \"${GH_TOKEN:-}\" ]; gh auth status; gh api user --jq .login",
+   "observed": "GH_TOKEN/GITHUB_TOKEN set; gh auth status reports token invalid, but `gh api user` returns a login via the agent proxy",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "api.github.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "gh pr view / gh api",
+   "check": "curl -sS -o /dev/null -w '%{http_code}' https://api.github.com/",
+   "observed": "200",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "github.com",
+   "any_of": null,
+   "hard": true,
+   "evidence": "git fetch upstream / push to fork",
+   "check": "curl https://github.com/ ; git ls-remote https://github.com/NVIDIA/Megatron-LM HEAD",
+   "observed": "400 (reachable); ls-remote returned HEAD sha",
+   "status": "available"
+  }
+ ],
+ "verdict": "ACHIEVABLE",
+ "blocking": [],
+ "notes": "Ambiguous. Program/account/egress all present, but in this session: `gh pr view` fails with HTTP 403 'GitHub GraphQL is not available from Claude Code sessions' (gh pr create also uses GraphQL), and REST `gh api repos/NVIDIA/Megatron-LM/pulls/1` returns 403 'GitHub access to this repository is not enabled for this session. Use add_repo'. Workable via add_repo (read/push), REST gh api calls or the connected github MCP (create_pull_request), so marked ACHIEVABLE; pushing to the user's fork needs that fork attached with push access, which could not be verified read-only."
+}

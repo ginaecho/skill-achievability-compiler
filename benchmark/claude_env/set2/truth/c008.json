@@ -1,0 +1,70 @@
+{
+ "case": "c008",
+ "primary_task": "Choose the correct SageMaker serving container family and look up its current image URI for the target region.",
+ "requirements": [
+  {
+   "kind": "egress",
+   "name": "DLC image catalog",
+   "any_of": [
+    {
+     "kind": "egress",
+     "name": "aws.github.io",
+     "status": "unavailable"
+    },
+    {
+     "kind": "egress",
+     "name": "api.github.com (aws/deep-learning-containers contents)",
+     "status": "unavailable"
+    },
+    {
+     "kind": "egress",
+     "name": "raw.githubusercontent.com",
+     "status": "available"
+    },
+    {
+     "kind": "program",
+     "name": "aws (ecr describe-images)",
+     "status": "installable"
+    }
+   ],
+   "hard": true,
+   "evidence": "read the URI from the AWS catalog page ... Fallbacks: catalog source data on GitHub (api.github.com / raw.githubusercontent.com), aws ecr describe-images",
+   "check": "see any_of",
+   "observed": "aws.github.io blocked; raw.githubusercontent.com yml 200",
+   "status": "available"
+  },
+  {
+   "kind": "egress",
+   "name": "huggingface.co",
+   "any_of": null,
+   "hard": false,
+   "evidence": "Preflight [for rerankers]: curl -s https://huggingface.co/<model-id>/raw/main/config.json",
+   "check": "curl -sS -o /dev/null -w '%{http_code}\\n' --max-time 15 https://huggingface.co/",
+   "observed": "CONNECT tunnel failed, response 403",
+   "status": "unavailable"
+  },
+  {
+   "kind": "program",
+   "name": "docker + aws (mirror_image.py)",
+   "any_of": null,
+   "hard": false,
+   "evidence": "For images requiring public.ecr.aws access (less common): mirror ... needs Docker + the aws CLI",
+   "check": "command -v docker aws",
+   "observed": "docker CLI present, aws absent",
+   "status": "unavailable"
+  },
+  {
+   "kind": "account",
+   "name": "AWS",
+   "any_of": null,
+   "hard": false,
+   "evidence": "pass it to deploy.py --image-uri (deployment is downstream)",
+   "check": "[ -n \"${AWS_ACCESS_KEY_ID:-}\" ]",
+   "observed": "set",
+   "status": "available"
+  }
+ ],
+ "verdict": "ACHIEVABLE",
+ "blocking": [],
+ "notes": "Checks: curl aws.github.io -> 403 tunnel; api.github.com contents -> 403 'GitHub access to this repository is not enabled for this session'; raw.githubusercontent.com/aws/deep-learning-containers/main/docs/src/data/huggingface-vllm/0.21.0-gpu-sagemaker.yml -> 200. Listing the directory via API is blocked, so finding the newest file needs guessing names or add_repo; still the documented fallback works. Reranker config preflight (huggingface.co) is conditional on reranker models; blocked if needed."
+}

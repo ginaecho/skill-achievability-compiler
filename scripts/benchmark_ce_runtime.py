@@ -16,7 +16,6 @@ two goal levels; the binder prunes the agent's unrunnable branches) or json
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import sys
 from collections import Counter
@@ -32,12 +31,14 @@ from scripts.benchmark_ce import (CE_SYSTEM_NOTE, JSON_RETRY, VARIANTS, assess, 
                                   wilson, write_json)
 from skillc import check  # noqa: E402
 from skillc.frontend.ce import CEError, extract_ce, parse_ce_detailed  # noqa: E402
-from skillc.frontend.llm import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
-                                 _extract_json_object, ce_grounded_messages,
-                                 ce_index_messages, json_runtime_messages,
-                                 JSON_RT_REPAIR_PROMPT, JSON_RT_RETRY, parse_json_rt,
-                                 ce_runtime_messages, ce_tpl_messages,
-                                 explain_refutation, render_index_facts)
+from skillc.frontend.prompts import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT,  # noqa: E402
+                                     JSON_RT_REPAIR_PROMPT, JSON_RT_RETRY,
+                                     ce_grounded_messages, ce_index_messages,
+                                     ce_runtime_messages, ce_tpl_messages,
+                                     explain_refutation, json_runtime_messages,
+                                     render_index_facts)
+from skillc.frontend.providers import extract_json_object  # noqa: E402
+from skillc.frontend.llm import parse_json_rt  # noqa: E402
 from skillc.frontend.policyindex import (CLASSES, Mention, PolicyIndex,  # noqa: E402
                                          extract_terms, norm, registry_probe)
 from skillc.frontend.toolpolicy import coverage, load_library, match, veto  # noqa: E402
@@ -346,7 +347,7 @@ def parse_reply(case: dict, text: str, rt, method: str = "ce_rt",
     rt = case_runtime(case, rt)
     try:
         if method == "json":
-            pack = _extract_json_object(text)
+            pack = extract_json_object(text)
             validate_pack(pack)
             return {"ok": True, "pack": pack, "withdrawn": {}, "blocked": {},
                     "pruned": [], "parsed": None, "live_goal": None}
@@ -434,7 +435,7 @@ def repair(out: Path) -> None:
         rel = f"prompts/{frozen['method']}/{cid}__s0__r3.json"
         expl = explain_refutation(v, _B(parsed["withdrawn"], parsed["blocked"]))
         tail = (JSON_RT_REPAIR_PROMPT.format(
-                    explanation=expl, text=json.dumps(_extract_json_object(reply), indent=1))
+                    explanation=expl, text=json.dumps(extract_json_object(reply), indent=1))
                 if frozen["method"] == "json_rt" else
                 CE_REPAIR_PROMPT.format(explanation=expl, text=extract_ce(reply).strip()))
         write_json(out / rel, {"system": base["system"], "user": base["user"] + tail})
