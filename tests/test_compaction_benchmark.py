@@ -1,13 +1,19 @@
 import json
 from collections import Counter
 
+import pytest
+
 from scripts.benchmark_compaction import PROFILES, ROOT, assess, make_contract, score
 from scripts.benchmark_semantics import audit_goal_reachability
 from skillc import check
 
+CASES = ROOT / "benchmark" / "compaction_cases.json"
+
 
 def test_all_expanded_scenarios_have_independent_labels_and_no_false_certificates():
-    cases = json.loads((ROOT / "benchmark" / "compaction_cases.json").read_text())
+    if not CASES.is_file():
+        pytest.skip("benchmark data (benchmark/compaction_cases.json) not present")
+    cases = json.loads(CASES.read_text())
     counts = Counter()
     for case in cases:
         for profile in PROFILES:
