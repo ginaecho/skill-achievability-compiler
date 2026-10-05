@@ -1,0 +1,1 @@
+I need a planner and booking desk to finish an itinerary booking. The planner should pick flexible or fixed travel handling; for flexible, send `use_window` and run `reserve_window`, and for fixed, send `use_direct` and run `reserve_direct`. Please complete the work with the itinerary confirmed.

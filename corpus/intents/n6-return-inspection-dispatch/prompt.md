@@ -1,0 +1,1 @@
+I need a return inspection flow started and recorded. Have the returns coordinator use `create_return_case`, add a return inspector during the flow, and then use `assign_inspection_task`. The return inspector should use `record_inspection_result`. I want the case created and the inspection result recorded.

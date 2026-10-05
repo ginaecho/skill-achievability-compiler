@@ -1,0 +1,1 @@
+Please process this HR role-change handoff. The HR partner should send `role_change_ready`, then the IAM admin should use `update_directory_group` and follow with `open_access_ticket`. I need the group updated and the access ticket opened.

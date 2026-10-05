@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from importlib import resources
 
 from .checker import check
+from .frontend.grants import bind_grants
 
 
 def load_corpus() -> list[dict]:
@@ -84,7 +85,10 @@ def evaluate(corpus: list[dict] | None = None) -> EvalResult:
     corpus = corpus if corpus is not None else load_corpus()
     res = EvalResult()
     for c in corpus:
-        v = check(c["pack"])
+        pack = c["pack"]
+        if "environment_grants" in c:
+            pack = bind_grants(pack, c["environment_grants"]).pack
+        v = check(pack)
         pred = v.label
         truth = c["ground_truth"]
         res.rows.append(EvalRow(c["id"], c["category"], truth, pred, v.reason))

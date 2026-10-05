@@ -1,0 +1,1 @@
+Please bring up a hosted runner using `start_runner`, then announce it with `notify_runner_ready`. I need the ready notice sent and the queue wait under 10 minutes.

@@ -21,12 +21,19 @@ Categories trace the user's own failure docs:
   SPURIOUS  (T3 incompleteness demonstrations)
 """
 import json
+import os
+from collections import Counter
 
 C = []
 
-def add(id, category, ground_truth, nl, pack, note=""):
+def add(id, category, ground_truth, nl, pack, note="", environment_grants=None,
+        input_type="skill"):
     C.append({"id": id, "category": category, "ground_truth": ground_truth,
-              "nl": nl.strip(), "pack": pack, "note": note})
+              "nl": nl.strip(), "pack": pack, "note": note,
+              "environment_grants": (
+                  list(pack["capabilities"])
+                  if environment_grants is None else environment_grants),
+              "input_type": input_type})
 
 # ---------------------------------------------------------------- ACHIEVABLE
 add("book_flight_ok", "ACHIEVABLE", "ACHIEVABLE",
@@ -106,38 +113,42 @@ add("hallucinated_email", "HALLUCINATED_PLANNING", "IMPOSSIBLE",
 """
 # Skill: Book a flight and confirm
 Goal: flight booked AND confirmation email sent.
-Tools available: search, filter, book.   (No email tool is provided.)
-But the plan still says: ...then send the confirmation email.
+Required tools: search, filter, book, send_email.
+Plan: search, filter, book, then send the confirmation email.
 """,
 {"name":"hallucinated_email","roles":["agent"],
  "capabilities":{
    "search":{"owner":"agent","add":["searched"]},
    "filter":{"owner":"agent","pre":"searched","add":["filtered"]},
-   "book":{"owner":"agent","pre":"filtered","add":["booked"]}},
+   "book":{"owner":"agent","pre":"filtered","add":["booked"]},
+   "send_email":{"owner":"agent","pre":"booked","add":["confirmation_sent"]}},
  "protocol":[{"act":{"cap":"search","by":"agent"}},
              {"act":{"cap":"filter","by":"agent"}},
              {"act":{"cap":"book","by":"agent"}},
-             {"act":{"cap":"send_email","by":"agent"}}],   # <- undeclared tool
+             {"act":{"cap":"send_email","by":"agent"}}],
  "goal":{"and":["booked","confirmation_sent"]}},
- note="plan invokes a tool that does not exist -> MISSING_CAPABILITY")
+ note="environment omits the required send_email grant -> MISSING_CAPABILITY",
+ environment_grants=["search", "filter", "book"])
 
 add("no_establisher", "HALLUCINATED_PLANNING", "IMPOSSIBLE",
 """
 # Skill: Book a flight and confirm
 Goal: flight booked AND confirmation sent.
-Tools: search, filter, book.  No tool can send a confirmation, and the plan
-forgets that step entirely.
+Required tools: search, filter, book, notify_customer.
+Plan: search, filter, book, then notify the customer.
 """,
 {"name":"no_establisher","roles":["agent"],
  "capabilities":{
    "search":{"owner":"agent","add":["searched"]},
    "filter":{"owner":"agent","pre":"searched","add":["filtered"]},
-   "book":{"owner":"agent","pre":"filtered","add":["booked"]}},
+   "book":{"owner":"agent","pre":"filtered","add":["booked"]},
+   "notify_customer":{"owner":"agent","pre":"booked","add":["notification_queued"]}},
  "protocol":[{"act":{"cap":"search","by":"agent"}},
              {"act":{"cap":"filter","by":"agent"}},
-             {"act":{"cap":"book","by":"agent"}}],
+             {"act":{"cap":"book","by":"agent"}},
+             {"act":{"cap":"notify_customer","by":"agent"}}],
  "goal":{"and":["booked","confirmation_sent"]}},
- note="no capability establishes confirmation_sent -> GOAL_UNSAT (Coq FlightInstance)")
+ note="the granted notifier only queues work; no capability establishes confirmation_sent")
 
 add("over_budget", "REFINEMENT", "IMPOSSIBLE",
 """
@@ -161,8 +172,9 @@ add("blocked_precondition", "INFINITE_LOOP", "IMPOSSIBLE",
 """
 # Skill: Publish a report
 Goal: the report is published.
-publish requires the report to be APPROVED; but there is no approval tool and
-nothing in the plan ever approves it, so publish can never fire.
+Tools: draft, publish.
+The publish tool requires the report to be DRAFTED and APPROVED.
+Plan: draft, then publish.
 """,
 {"name":"blocked_precondition","roles":["agent"],
  "capabilities":{
@@ -179,8 +191,8 @@ add("deadlock_unobserved", "DEADLOCK", "IMPOSSIBLE",
 # Skill: Plan / worker collaboration
 Goal: the task result is delivered.
 The worker decides whether to ASK a clarifying question or to DELIVER. In the
-'ask' branch the planner must answer -- but the planner is never told the
-worker chose to ask, so it just keeps waiting for a result. Classic freeze.
+'ask' branch the planner answers before the worker delivers. The branch choice
+is local to the worker; no branch-label message precedes the planner's action.
 """,
 {"name":"deadlock_unobserved","roles":["planner","worker"],
  "capabilities":{
@@ -198,27 +210,29 @@ add("missing_tool_chain", "HALLUCINATED_PLANNING", "IMPOSSIBLE",
 """
 # Skill: Refund a customer
 Goal: refund issued AND ledger updated.
-Tools: lookup_order, issue_refund.   The plan also 'updates the ledger' but no
-ledger tool exists.
+Required tools: lookup, refund, update_ledger.
+Plan: look up the order, issue the refund, then update the ledger.
 """,
 {"name":"missing_tool_chain","roles":["agent"],
  "capabilities":{
    "lookup":{"owner":"agent","add":["order_found"]},
-   "refund":{"owner":"agent","pre":"order_found","add":["refunded"]}},
+   "refund":{"owner":"agent","pre":"order_found","add":["refunded"]},
+   "update_ledger":{"owner":"agent","pre":"refunded","add":["ledger_updated"]}},
  "protocol":[{"act":{"cap":"lookup","by":"agent"}},
              {"act":{"cap":"refund","by":"agent"}},
-             {"act":{"cap":"update_ledger","by":"agent"}}],   # undeclared
+             {"act":{"cap":"update_ledger","by":"agent"}}],
  "goal":{"and":["refunded","ledger_updated"]}},
- note="MISSING_CAPABILITY on update_ledger")
+ note="environment omits the required update_ledger grant",
+ environment_grants=["lookup", "refund"])
 
 # ---------------------------------------------- SPURIOUS (T3 incompleteness)
 add("spurious_payload", "SPURIOUS", "IMPOSSIBLE",
 """
 # Skill: Book a flight under $500
 Goal: booked under 500 and confirmed.
-The 'filter_cheap' tool CLAIMS to keep only fares under 500, and the compaction
-trusts that claim -- but in this market every real fare is >= 800, so no run
-actually succeeds. The structure is fine; the payload claim is false.
+Tools: search, filter_cheap, book, email.
+The filter_cheap tool keeps only fares under 500.
+Plan: search, filter, book, then email the confirmation.
 """,
 {"name":"spurious_payload","roles":["agent"],
  "capabilities":{
@@ -240,9 +254,10 @@ actually succeeds. The structure is fine; the payload claim is false.
 add("spurious_intent", "SPURIOUS", "IMPOSSIBLE",
 """
 # Skill: Schedule a meeting
-Goal (what the USER meant): schedule with the RIGHT attendees next week.
-The compacted goal only says 'meeting_scheduled'. A plan that schedules an
-empty meeting satisfies the formal goal but not the user's intent.
+The user asks for a meeting with the right attendees next week.
+Goal: the meeting is scheduled.
+Tool: create_event.
+Plan: create the calendar event for next week.
 """,
 {"name":"spurious_intent","roles":["agent"],
  "capabilities":{
@@ -270,20 +285,25 @@ add("two_goals_one_missing", "HALLUCINATED_PLANNING", "IMPOSSIBLE",
 """
 # Skill: Onboard employee
 Goal: account created AND badge issued.
-Tools: create_account only. Badge system not integrated.
+Required tools: create_account, issue_badge.
+Plan: create the employee account, then issue the employee badge.
 """,
 {"name":"two_goals_one_missing","roles":["agent"],
  "capabilities":{
-   "create_account":{"owner":"agent","add":["account_created"]}},
- "protocol":[{"act":{"cap":"create_account","by":"agent"}}],
+   "create_account":{"owner":"agent","add":["account_created"]},
+   "issue_badge":{"owner":"agent","pre":"account_created","add":["badge_issued"]}},
+ "protocol":[{"act":{"cap":"create_account","by":"agent"}},
+             {"act":{"cap":"issue_badge","by":"agent"}}],
  "goal":{"and":["account_created","badge_issued"]}},
- note="badge_issued has no establisher -> GOAL_UNSAT")
+ note="environment omits the required issue_badge grant",
+ environment_grants=["create_account"])
 
 add("choice_one_branch_ok", "TOLERANCE", "ACHIEVABLE",
 """
 # Skill: Pay invoice by card or transfer
-Goal: invoice paid. Either branch (card or transfer) reaches it; the payer is
-informed which rail to use.
+Goal: invoice paid.
+The system chooses card or transfer, tells the payer which rail to use, and the
+payer completes the selected payment.
 """,
 {"name":"choice_one_branch_ok","roles":["sys","payer"],
  "capabilities":{
@@ -296,13 +316,11 @@ informed which rail to use.
                  {"act":{"cap":"pay_transfer","by":"payer"}}]}}}],
  "goal":"paid"})
 
-import os
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                    "..", "src", "skillc", "data", "corpus.json")
 with open(OUT, "w") as f:
     json.dump(C, f, indent=2)
 print(f"wrote {os.path.relpath(OUT)} with {len(C)} specs")
-from collections import Counter
 print("by category:", dict(Counter(c["category"] for c in C)))
 print("by ground truth:", dict(Counter(c["ground_truth"] for c in C)))
 
@@ -316,9 +334,14 @@ print("by ground truth:", dict(Counter(c["ground_truth"] for c in C)))
 
 E = []
 
-def add_ext(id, category, ground_truth, nl, pack, note=""):
+def add_ext(id, category, ground_truth, nl, pack, note="",
+            environment_grants=None, input_type="skill"):
     E.append({"id": id, "category": category, "ground_truth": ground_truth,
-              "nl": nl.strip(), "pack": pack, "note": note})
+              "nl": nl.strip(), "pack": pack, "note": note,
+              "environment_grants": (
+                  list(pack["capabilities"])
+                  if environment_grants is None else environment_grants),
+              "input_type": input_type})
 
 add_ext("retry_loop_ok", "TOLERANCE", "ACHIEVABLE",
 """
@@ -340,11 +363,15 @@ Goal: answer delivered. Search in a loop; when found, exit and deliver.
 
 add_ext("spin_forever", "INFINITE_LOOP", "IMPOSSIBLE",
 """
-# Skill: Publish a report (but the plan only ever re-drafts)
-Goal: published. The loop re-drafts forever; nothing establishes published.
+# Skill: Publish a report
+Goal: published.
+Required tools: draft, publish.
+Plan: repeatedly draft and review the report without reaching the publish step.
 """,
 {"name":"spin_forever","roles":["agent"],
- "capabilities":{"draft":{"owner":"agent","add":["drafted"]}},
+ "capabilities":{
+   "draft":{"owner":"agent","add":["drafted"]},
+   "publish":{"owner":"agent","pre":"drafted","add":["published"]}},
  "protocol":[{"rec":{"name":"X","body":[
                 {"act":{"cap":"draft","by":"agent"}},
                 {"continue":"X"}]}}],
@@ -366,20 +393,25 @@ Goal: report delivered. The planner spawns helper agents at run time.
 add_ext("spawn_with_ghost_tool", "AUTONOMY", "IMPOSSIBLE",
 """
 # Skill: Fan out, then update the ledger
-Goal: ledger updated. Spawns helpers AND invokes a tool nobody has.
+Goal: ledger updated.
+Required tool: update_ledger.
+Plan: spawn helpers, collect their work, then update the ledger.
 """,
 {"name":"spawn_with_ghost_tool","roles":["planner"],
- "capabilities":{},
+ "capabilities":{
+   "update_ledger":{"owner":"planner","add":["ledger_updated"]}},
  "protocol":[{"spawn":{"role":"helper"}},
              {"act":{"cap":"update_ledger","by":"planner"}}],
  "goal":"ledger_updated"},
- note="capability soundness survives autonomy: refute before degrading")
+ note="environment omits update_ledger; capability refutation precedes autonomy",
+ environment_grants=[])
 
 add_ext("nonconformant_handler", "CONFORMANCE", "IMPOSSIBLE",
 """
-# Skill: Triage then handle -- but the declared handler only handles one path
-Goal: resolved. Contract informs the handler of go_simple/go_complex; the
-declared handler behaviour only receives go_simple.
+# Skill: Triage then handle
+Goal: resolved.
+The router may send go_simple or go_complex. The declared handler behaviour
+waits for go_simple and then resolves the ticket.
 """,
 {"name":"nonconformant_handler","roles":["router","handler"],
  "capabilities":{
@@ -397,9 +429,10 @@ declared handler behaviour only receives go_simple.
 
 add_ext("conformant_tolerant_handler", "CONFORMANCE", "ACHIEVABLE",
 """
-# Skill: Triage then handle -- handler declared with an EXTRA receive
-Goal: resolved. The declared handler also accepts a go_escalate label the
-contract never sends; extra external choices are safe (Sub-Ext).
+# Skill: Triage then handle
+Goal: resolved.
+The router may send go_simple or go_complex. The declared handler accepts
+go_simple, go_complex, or go_escalate.
 """,
 {"name":"conformant_tolerant_handler","roles":["router","handler"],
  "capabilities":{
@@ -416,6 +449,69 @@ contract never sends; extra external choices are safe (Sub-Ext).
      "go_complex":[{"act":{"cap":"resolve_complex"}}],
      "go_escalate":[{"act":{"cap":"resolve_complex"}}]}}}]}},
  note="interface slack in the safe direction must not refute (T2 flavour)")
+
+add_ext("choice_uninformed_alert", "NON_PROJECTABLE", "IMPOSSIBLE",
+"""
+# Skill: Route an alert
+Goal: the alert is handled.
+Required tools: handle_now, handle_later.
+The monitor privately chooses urgent or routine. The oncall must handle urgent
+alerts now and routine alerts later, but receives no branch label.
+""",
+{"name":"choice_uninformed_alert","roles":["monitor","oncall"],
+ "capabilities":{
+   "handle_now":{"owner":"oncall","add":["handled"]},
+   "handle_later":{"owner":"oncall","add":["handled"]}},
+ "protocol":[{"choice":{"by":"monitor","branches":{
+   "urgent":[{"act":{"cap":"handle_now","by":"oncall"}}],
+   "routine":[{"act":{"cap":"handle_later","by":"oncall"}}]}}}],
+ "goal":"handled"},
+ note="the acting role cannot observe which branch the monitor selected")
+
+add_ext("selector_drops_branch", "CONFORMANCE", "IMPOSSIBLE",
+"""
+# Agent: Route a ticket
+Goal: the ticket is resolved.
+Required tools: fix_a, fix_b.
+The contract permits routes A and B and notifies the handler with go_a or
+go_b. The router agent declares only route A.
+""",
+{"name":"selector_drops_branch","roles":["router","handler"],
+ "capabilities":{
+   "fix_a":{"owner":"handler","add":["resolved"]},
+   "fix_b":{"owner":"handler","add":["resolved"]}},
+ "protocol":[{"choice":{"by":"router","branches":{
+   "a":[{"msg":{"from":"router","to":"handler","label":"go_a"}},
+        {"act":{"cap":"fix_a","by":"handler"}}],
+   "b":[{"msg":{"from":"router","to":"handler","label":"go_b"}},
+        {"act":{"cap":"fix_b","by":"handler"}}]}}}],
+ "goal":"resolved",
+ "skills":{"router":[{"select":{"branches":{
+   "a":[{"send":{"to":"handler","label":"go_a"}}]}}}]}},
+ note="the declared sender behavior omits a contract branch",
+ input_type="agent")
+
+add_ext("selector_invents_label", "CONFORMANCE", "IMPOSSIBLE",
+"""
+Prompt: Resolve a routed ticket.
+Required tools: fix_a, fix_b.
+The protocol permits go_a and go_b. The router implementation instead selects
+go_c, which is not a protocol label.
+""",
+{"name":"selector_invents_label","roles":["router","handler"],
+ "capabilities":{
+   "fix_a":{"owner":"handler","add":["resolved"]},
+   "fix_b":{"owner":"handler","add":["resolved"]}},
+ "protocol":[{"choice":{"by":"router","branches":{
+   "a":[{"msg":{"from":"router","to":"handler","label":"go_a"}},
+        {"act":{"cap":"fix_a","by":"handler"}}],
+   "b":[{"msg":{"from":"router","to":"handler","label":"go_b"}},
+        {"act":{"cap":"fix_b","by":"handler"}}]}}}],
+ "goal":"resolved",
+ "skills":{"router":[{"select":{"branches":{
+   "c":[{"send":{"to":"handler","label":"go_c"}}]}}}]}},
+ note="the declared sender behavior invents a label outside the protocol",
+ input_type="prompt")
 
 OUT_EXT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                        "..", "src", "skillc", "data", "corpus_extended.json")

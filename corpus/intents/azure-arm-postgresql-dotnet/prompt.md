@@ -1,0 +1,1 @@
+Please provision an Azure Database for PostgreSQL Flexible Server and an application database through the .NET ARM SDK flow. Use `create_server` for the Flexible Server and `create_database` for the database under it. I want the resources created in Azure, rather than a plan or sample program. Share the names of the created server and database at the end.

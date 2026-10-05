@@ -1,0 +1,1 @@
+Please spawn helper agents at run time to fan out the work, collect what they produce, and then update the ledger. Use `update_ledger` for the ledger entry. I want the ledger updated after the helper work is gathered.

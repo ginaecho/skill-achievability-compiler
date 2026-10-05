@@ -1,0 +1,1 @@
+Please prepare the speaker session for our event. I need `reserve_stage`, `send_briefing`, and `publish_schedule` used in that order so the stage is reserved, the speaker is briefed, and the schedule is published.

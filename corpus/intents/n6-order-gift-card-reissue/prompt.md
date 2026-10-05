@@ -1,0 +1,1 @@
+I need a gift card reissued for this e-commerce order. Please use `find_order`, then `verify_payment`. After the paid order is confirmed, use `issue_gift_card` and send the receipt with `email_receipt`. The final state should be an issued gift card and an emailed receipt.

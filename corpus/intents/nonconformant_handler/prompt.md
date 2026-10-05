@@ -1,0 +1,1 @@
+I need a router-handler ticket flow. The router may send `go_simple` for `resolve_simple` or `go_complex` for `resolve_complex`. The handler's declared behaviour is to wait for `go_simple` from the router and then run `resolve_simple`. Please complete the ticket as resolved.

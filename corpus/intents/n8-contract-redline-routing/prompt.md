@@ -1,0 +1,1 @@
+I need a reviewer and editor to finish a contract redline. Use `scan_terms` first, then have the reviewer choose privacy or payment. If it is privacy, send `privacy_track` and run `revise_privacy`; if it is payment, send `payment_track` and run `revise_payment`. The job is done when the redline is ready.

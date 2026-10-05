@@ -9,9 +9,10 @@ Your job is finished when the report is **published**.
 
 ## Tools
 
-Tools: draft.
+Required tools: draft, publish.
 
 - `draft` marks the report **drafted**.
+- `publish` requires the report **drafted** and marks the report **published**.
 
 ## Workflow
 

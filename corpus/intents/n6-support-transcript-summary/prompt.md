@@ -1,0 +1,1 @@
+Please add a concise summary to this support case. Use `fetch_conversation` to get the transcript, then use `summarize_conversation` to prepare the summary. After that, use `post_case_summary` to post it to the case. I want the case summary posted.

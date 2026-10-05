@@ -1,0 +1,1 @@
+I need the finance BI report certified for the close meeting. Please use `assemble_finance_report`, then use `record_finance_review` as the certification step. Finish with the finance report certified.

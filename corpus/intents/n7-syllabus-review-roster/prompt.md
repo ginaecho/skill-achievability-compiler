@@ -1,0 +1,1 @@
+I need a syllabus packet review recorded. Please use `collect_syllabus_packet`, create the department_reviewer participant, and have that participant use `record_department_review`. The final state should be review_recorded.

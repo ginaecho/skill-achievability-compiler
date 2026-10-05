@@ -1,0 +1,1 @@
+I need this requisition turned into a supplier order. Please use `intake_requisition`, then `approve_budget_check`, then `create_purchase_order`, and finally `send_supplier_order`. The purchase order should be created and the supplier order sent.

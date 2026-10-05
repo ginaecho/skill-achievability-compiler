@@ -12,7 +12,9 @@ Your job is finished when the **ledger has been updated**.
 
 ## Tools
 
-No tools are granted to this skill.
+Required tool: update_ledger.
+
+- `update_ledger` marks the ledger **updated**.
 
 ## Workflow
 

@@ -1,0 +1,1 @@
+I need a circulation workflow for a patron hold. Use `inspect_hold_queue`, then choose ready or wait. If it is ready, use `send_hold_notice`; if it is wait, repeat the same check. The final result should be patron_alerted.

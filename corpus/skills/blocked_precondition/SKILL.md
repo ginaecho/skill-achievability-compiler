@@ -15,8 +15,6 @@ Tools: draft, publish.
 - `publish` requires the report to be **drafted** and **approved**, and marks
   it **published**.
 
-Nothing in this skill grants approval — there is no approval tool available.
-
 ## Workflow
 
 1. Draft the report.

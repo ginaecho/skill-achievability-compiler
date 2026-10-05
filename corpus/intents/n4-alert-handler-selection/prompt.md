@@ -1,0 +1,1 @@
+I need a coordinator and handler to process this alert. The coordinator chooses urgent or routine. For urgent, the handler uses `page_oncall`; for routine, the handler uses `file_ticket`. The goal is an incident handled record.

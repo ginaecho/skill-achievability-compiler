@@ -1,0 +1,1 @@
+Please handle this administrative claim response. Use `open_claim_file` for the file, then use `send_claim_response` so the response goes out within 5 days. I need the result to show response_sent with response_days at most 5.

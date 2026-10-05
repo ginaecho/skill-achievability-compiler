@@ -1,0 +1,1 @@
+I need a Cosmos DB SQL API setup created with the Azure Resource Manager SDK for .NET. Use `create_account`, then `create_database`, then `create_container` for the requested account, database, and container. The outcome I want is the resource hierarchy existing in Azure, not just implementation guidance. Include the final resource names when you are done.

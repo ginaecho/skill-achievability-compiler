@@ -1,0 +1,1 @@
+Please pay my invoice using a sys-and-payer flow. Sys should choose card or transfer; if card is selected, send `use_card` and use `pay_card`, and if transfer is selected, send `use_transfer` and use `pay_transfer`. I want the invoice paid on the selected rail. Complete it once the payment is paid.

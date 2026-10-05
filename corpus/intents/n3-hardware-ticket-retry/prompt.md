@@ -1,0 +1,1 @@
+Please handle this laptop ticket with a stock cycle. Run `check_laptop_stock`, choose `try_again` for another pass or `ready` to move on, and then use `assign_laptop_asset`. I need the laptop asset assigned.

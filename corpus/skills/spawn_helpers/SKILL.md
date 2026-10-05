@@ -24,6 +24,3 @@ Tools: deliver.
    helpers is decided during execution, not before it.
 3. Collect what comes back.
 4. Deliver the report.
-
-The set of participants is not known before the run starts: the planner
-creates new ones as it goes, and there is no bound on how many it may create.

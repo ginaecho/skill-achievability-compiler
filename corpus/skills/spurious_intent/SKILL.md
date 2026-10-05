@@ -19,5 +19,3 @@ Tools: create_event.
 ## Workflow
 
 1. Create the calendar event for next week.
-
-Once the entry exists on the calendar, the job is done.

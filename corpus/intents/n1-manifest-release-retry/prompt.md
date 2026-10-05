@@ -1,0 +1,1 @@
+I need the yard agent to scan a shipment manifest until the release pass is ready. Use `scan_manifest`, choose either `scan_again` for another scan or `ready` to proceed, and then use `release_container`. The container should end up released.

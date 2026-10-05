@@ -1,0 +1,1 @@
+I need a benefits lead and HR specialist to finish an employee enrollment. Have the lead choose standard or executive, then send `use_standard_plan` before `record_standard_enrollment` or `use_executive_plan` before `record_executive_enrollment`. End with the enrollment recorded.

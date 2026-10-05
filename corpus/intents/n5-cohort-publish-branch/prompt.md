@@ -1,0 +1,1 @@
+I need a scientist and publisher to finish a cohort publication. The scientist should choose research or marketing. In the research path, the publisher uses `publish_research_cohort`; in the marketing path, the publisher uses `publish_marketing_cohort`. Finish with the cohort published.

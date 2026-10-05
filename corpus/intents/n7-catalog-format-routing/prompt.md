@@ -1,0 +1,1 @@
+I need acquisitions and cataloging to handle one new title. The acquisitions lead should choose ebook or print. For ebook, the cataloger uses `catalog_ebook_record`; for print, the cataloger uses `catalog_print_record`. The result should be catalog_ready.

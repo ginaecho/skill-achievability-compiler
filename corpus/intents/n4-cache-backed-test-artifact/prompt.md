@@ -1,0 +1,1 @@
+For this repo check, run the cached path: `restore_cache`, then `run_tests`, then `save_artifact`. I need green tests and a saved artifact at the end.

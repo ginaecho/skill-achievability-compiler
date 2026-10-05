@@ -5,16 +5,25 @@ from importlib import resources
 
 from skillc import check
 from skillc.evaluate import evaluate, format_report, load_corpus, refutation_metrics
+from skillc.frontend.grants import bind_grants
 
 EXPECTED_REASONS = {
     "hallucinated_email": "MISSING_CAPABILITY",
     "missing_tool_chain": "MISSING_CAPABILITY",
     "no_establisher": "GOAL_UNSAT",
-    "two_goals_one_missing": "GOAL_UNSAT",
+    "two_goals_one_missing": "MISSING_CAPABILITY",
     "over_budget": "GOAL_UNSAT",
     "blocked_precondition": "BLOCKED_GUARD",
     "deadlock_unobserved": "NON_PROJECTABLE",
 }
+
+
+def check_case(case):
+    pack = bind_grants(
+        case["pack"],
+        case.get("environment_grants", case["pack"]["capabilities"]),
+    ).pack
+    return check(pack)
 
 
 def test_confusion_matrix_matches_paper():
@@ -59,9 +68,9 @@ def test_incompleteness_only_on_spurious_residue():
 
 
 def test_each_failure_mode_fires_its_matching_reason():
-    packs = {c["id"]: c["pack"] for c in load_corpus()}
+    cases = {c["id"]: c for c in load_corpus()}
     for cid, expected in EXPECTED_REASONS.items():
-        v = check(packs[cid])
+        v = check_case(cases[cid])
         assert not v.achievable, cid
         assert v.reason == expected, (
             f"{cid}: expected {expected}, got {v.reason}")
@@ -70,7 +79,7 @@ def test_each_failure_mode_fires_its_matching_reason():
 def test_achievable_specs_have_witness_paths():
     for c in load_corpus():
         if c["ground_truth"] == "ACHIEVABLE":
-            v = check(c["pack"])
+            v = check_case(c)
             assert v.achievable and len(v.witness) > 0, c["id"]
 
 

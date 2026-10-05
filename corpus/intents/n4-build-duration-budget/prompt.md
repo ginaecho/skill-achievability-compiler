@@ -1,0 +1,1 @@
+Please run our CI job with `queue_build`, then gather the run data with `collect_metrics`. I want the build duration within 15 minutes and the metrics collected for the release notes. Keep the phrasing in the job summary simple.

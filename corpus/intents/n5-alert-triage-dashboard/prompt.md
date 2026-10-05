@@ -1,0 +1,1 @@
+I need an analyst and builder to prepare an alert dashboard. Have the analyst choose urgent or routine; for urgent, send `urgent_slice` and use `build_urgent_dashboard`, and for routine, send `routine_slice` and use `build_routine_dashboard`. Please finish with the dashboard ready. The branch label should be sent before the builder action.

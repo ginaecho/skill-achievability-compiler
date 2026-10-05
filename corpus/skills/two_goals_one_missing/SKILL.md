@@ -10,15 +10,12 @@ Your job is finished when the new employee has an **account created** and a
 
 ## Tools
 
-Tools: create_account.
+Required tools: create_account, issue_badge.
 
 - `create_account` marks the **account created**.
-
-The badge system is not integrated with this skill.
+- `issue_badge` requires the **account created** and marks the **badge issued**.
 
 ## Workflow
 
 1. Create the employee's account.
-
-Both the account and the badge are required before the employee is considered
-onboarded.
+2. Issue the employee's badge.

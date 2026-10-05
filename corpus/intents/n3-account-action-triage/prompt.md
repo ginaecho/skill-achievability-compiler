@@ -1,0 +1,1 @@
+I need a security coordinator and IAM admin to handle an employee account. The coordinator should choose urgent or review; for urgent the IAM admin uses `disable_account_now`, and for review the IAM admin uses `schedule_access_review`. Finish with the account handled.

@@ -1,0 +1,1 @@
+I want the test runner to use `run_suite` in a retry loop. After each pass, choose either `again` to run it again or `ready` to move ahead. Once ready is chosen, publish the results with `publish_test_report`. The goal is a shared test report.

@@ -1,0 +1,1 @@
+Please handle this dependency update for me. Use `inspect_deps`, then `patch_manifest`, and then `publish_advisory`. The goal is a patched manifest and a published advisory.

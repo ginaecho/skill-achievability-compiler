@@ -23,7 +23,3 @@ Tools: pay_card, pay_transfer.
      settles the invoice with `pay_card`.
    - **transfer rail** — the system tells the payer `use_transfer`, and the
      payer settles the invoice with `pay_transfer`.
-
-Either branch reaches the goal — the invoice is settled either way. What
-matters is that the payer is always told which rail was chosen, so it never
-has to guess.

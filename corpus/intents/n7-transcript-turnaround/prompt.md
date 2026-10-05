@@ -1,0 +1,1 @@
+Please process this transcript request with a 5 business day target. Use `intake_transcript_request`, then `set_transcript_window`, and then `send_transcript_status`. I need status_sent and business_days at most 5.

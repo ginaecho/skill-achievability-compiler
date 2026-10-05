@@ -1,0 +1,1 @@
+Please onboard this supplier for procurement. Use `collect_supplier_profile` first, then `verify_tax_form`, then `create_vendor_record`. After the vendor record is created, use `send_onboarding_packet`. I need the vendor record created and the onboarding packet sent.

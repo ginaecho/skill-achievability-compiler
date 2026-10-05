@@ -1,0 +1,1 @@
+I need a propensity model ready for campaign reuse. Please use `prepare_propensity_dataset`, then `train_propensity_model`, then `evaluate_propensity_model`. After evaluation, use `register_propensity_model` and finish with the model registered.

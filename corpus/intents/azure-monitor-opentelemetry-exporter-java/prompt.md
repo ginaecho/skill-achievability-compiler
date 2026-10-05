@@ -1,0 +1,1 @@
+Please set up the Java Azure Monitor OpenTelemetry exporter path and deliver a real span to Azure Monitor. Use `configure_exporter`, then `record_span`, then `export_span`. Producing code or keeping the span local is not enough for this task. I need confirmation that telemetry was delivered to the ingestion endpoint.

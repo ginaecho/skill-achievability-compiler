@@ -1,0 +1,1 @@
+Please prepare the monthly sales dashboard from the source extract. Run `ingest_sales_extract`, then `shape_sales_metrics`, and finish by running `publish_sales_dashboard`. The goal is a published sales dashboard.

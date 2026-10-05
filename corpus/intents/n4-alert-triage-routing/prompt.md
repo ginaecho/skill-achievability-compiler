@@ -1,0 +1,1 @@
+An alert came in and I need the dispatcher and responder to route it. If the dispatcher chooses the minor path, send `route_minor` and have the responder run `ack_page`. If the dispatcher chooses the major path, send `route_major` and have the responder run `open_major_case`. The outcome I want is an incident routed record.

@@ -1,0 +1,1 @@
+Please book my flight and notify me so the confirmation reaches me. Use `search` to find flights, then `filter` the results for my itinerary. Use `book` to reserve the flight and `notify_customer` to notify me. I want the flight booked and the confirmation sent.

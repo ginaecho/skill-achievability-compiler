@@ -1,0 +1,1 @@
+Please perform a static review of this GitHub CLI pull request. Use `read_pr_diff` to read the local diff and `read_repo_contract` to ground the review in the repository rules. Then use `deliver_review` to provide the findings, grouped by severity, with an honest note about any tests observed. I want an actual review delivered, not just a checklist.

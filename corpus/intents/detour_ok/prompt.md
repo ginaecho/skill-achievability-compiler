@@ -1,0 +1,1 @@
+Please handle my request as a worker-user exchange. Send me `status_note`, use `search`, send `status_note2`, and then use `deliver` for the answer. I want the result delivered after the research step. The job is complete when the researched answer is answered.

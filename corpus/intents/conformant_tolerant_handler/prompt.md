@@ -1,0 +1,1 @@
+Please handle a routed ticket with a router and handler. The router may send `go_simple` and then the handler uses `resolve_simple`, or send `go_complex` and then the handler uses `resolve_complex`. The handler's declared behaviour accepts `go_simple`, `go_complex`, or `go_escalate`, with `go_escalate` resolved by `resolve_complex`. I want the ticket resolved.

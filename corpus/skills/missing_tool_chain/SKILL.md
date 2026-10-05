@@ -10,10 +10,12 @@ has been updated** to record it.
 
 ## Tools
 
-Tools: lookup, refund.
+Required tools: lookup, refund, update_ledger.
 
 - `lookup` marks the **order found**.
 - `refund` requires the **order found** and marks the customer **refunded**.
+- `update_ledger` requires the customer **refunded** and marks the ledger
+  **updated**.
 
 ## Workflow
 
@@ -21,6 +23,3 @@ Tools: lookup, refund.
 2. Issue the refund against that order.
 3. Record the outcome in the accounting ledger via `update_ledger`, so the
    books match what was actually paid out.
-
-Both halves matter: money that never reaches the ledger leaves the accounts
-wrong.

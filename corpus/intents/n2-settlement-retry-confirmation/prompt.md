@@ -1,0 +1,1 @@
+I need this payment settlement batch confirmed. Use `review_settlement_batch` to review it, then run a retry cycle with `submit_settlement_run`. After each submit, check the confirmation point and repeat the cycle if another pass is needed. The goal is a confirmed settlement.

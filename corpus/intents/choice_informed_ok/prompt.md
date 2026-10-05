@@ -1,0 +1,1 @@
+I need a router and handler to resolve a ticket. Have the router choose simple or complex; for simple, send `go_simple` and use `resolve_simple`, and for complex, send `go_complex` and use `resolve_complex`. Please finish with the ticket resolved. I want the branch label sent before the handler action.

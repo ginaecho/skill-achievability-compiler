@@ -1,0 +1,1 @@
+I want the article handled through a copy review cycle. Use `check_draft`, choose whether to run `revise_copy` and loop back, or run `publish_article`. Continue revisions as needed, and finish once the article is published.

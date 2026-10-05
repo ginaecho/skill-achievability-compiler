@@ -20,6 +20,17 @@ def md(body: str) -> str:
 
 # ------------------------------------------------------------------ reading
 
+
+def test_required_tools_heading_declares_requirements():
+    res = compile_markdown(md("""
+        # Notify
+
+        Required tools: inspect, send_email.
+
+        Use `inspect`, then use `send_email`.
+        """), NONE)
+    assert set(res.pack["capabilities"]) == {"inspect", "send_email"}
+
 def test_stem_relates_verb_forms():
     assert stem("booked") == stem("booking") == stem("book")
     assert stem("sent") == stem("sends") == stem("send")

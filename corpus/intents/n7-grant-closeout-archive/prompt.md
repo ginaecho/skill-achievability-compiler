@@ -1,0 +1,1 @@
+I need this sponsored research award closed out. Please use `collect_closeout_forms`, `reconcile_award_ledger`, `submit_closeout_packet`, and `archive_award_file` in that order. The result should show packet_submitted and file_archived.

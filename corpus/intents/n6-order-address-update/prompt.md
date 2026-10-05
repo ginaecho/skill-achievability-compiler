@@ -1,0 +1,1 @@
+Please update the shipping address on this e-commerce order. Start with `lookup_order` to find the order. Then use `edit_shipping_address` for the new address and `save_order_note` to record the change. I need both the address update and the saved note completed.

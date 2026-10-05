@@ -1,0 +1,1 @@
+I need this CRM opportunity moved into follow-up handoff. Have the sales rep use `update_stage`, then send `stage_ready` to the account coordinator. The account coordinator should use `create_followup_task`, and the sales rep should finish with `log_handoff`. The outcome should include the updated stage, created follow-up task, and logged handoff.

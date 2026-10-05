@@ -1,0 +1,1 @@
+Please prepare a loyalty discount quote for this CRM contact. Use `find_profile` so you are working from the customer record. Then use `create_discount_quote` for a quote with a discount from 10 to 20 percent, and send it with `send_quote`. I want the sent quote to carry a discount in that range.

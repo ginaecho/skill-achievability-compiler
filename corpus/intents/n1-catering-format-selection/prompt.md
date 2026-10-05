@@ -1,0 +1,1 @@
+I need an event_manager and caterer to stage the selected catering format. Have the event_manager choose banquet or reception; in banquet use `stage_banquet`, and in reception use `stage_reception`. The catering should end up staged.

@@ -1,0 +1,1 @@
+Please publish a service latency snapshot for the operations review. Use `query_service_metrics`, then `compute_latency_snapshot`, targeting 15 refresh minutes or less. After that, run `publish_latency_snapshot`. Finish with the snapshot published and the freshness target met.

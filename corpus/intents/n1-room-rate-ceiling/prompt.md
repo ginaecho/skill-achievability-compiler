@@ -1,0 +1,1 @@
+Please book a hotel room for me with the nightly rate at or below 200. Use `quote_room`, then `reserve_room`, then `email_guest` so I have the reservation and guest email completed. I want the final result to include the reserved room and the rate ceiling.

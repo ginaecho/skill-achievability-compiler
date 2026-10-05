@@ -1,0 +1,1 @@
+I need a routed ticket resolved. Have a router choose path A and send `go_a`, with the handler using `fix_a`, or choose path B and send `go_b`, with the handler using `fix_b`. The router's declared behavior selects path C and sends `go_c`. I want the ticket resolved at the end.

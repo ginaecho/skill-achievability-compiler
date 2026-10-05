@@ -1,0 +1,1 @@
+Please book my flight and send me the confirmation. Use `search` to find options, then `filter` them for the trip I asked for. After that, use `book` for the selected flight and `email` the confirmation to me. I want the flight booked and the confirmation sent.

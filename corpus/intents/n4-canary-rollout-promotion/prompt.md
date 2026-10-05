@@ -1,0 +1,1 @@
+Promote the service through canary, please. Use `deploy_canary`, follow it with `run_probe`, and then use `promote_release`. The target state is a live release.

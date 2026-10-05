@@ -1,0 +1,1 @@
+Please finish this return case by issuing the refund and closing the case. Start with `locate_return`, then use `process_refund_record` for the refund step. After that, use `close_case`. I need the refund issued and the case closed.

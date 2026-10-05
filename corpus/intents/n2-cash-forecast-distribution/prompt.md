@@ -1,0 +1,1 @@
+Please prepare the cash forecast for the CFO. Use `ingest_bank_activity` to bring in activity, `forecast_cash_position` for the forecast, and `send_cfo_digest` to send the digest. I need the cash position forecasted and the CFO digest sent.

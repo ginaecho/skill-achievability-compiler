@@ -1,0 +1,1 @@
+I need this candidate panel interview set up. Please use `reserve_interview_panel` for the panel time, then `send_candidate_agenda` for the candidate details. Finish with the panel reserved and the agenda sent.

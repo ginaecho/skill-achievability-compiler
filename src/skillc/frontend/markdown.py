@@ -60,7 +60,9 @@ from .prose import INVOKE_RE, NEGATION_RE
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.S)
 FENCE_RE = re.compile(r"^(```+|~~~+)([^\n]*)\n(.*?)^\1\s*$\n?", re.S | re.M)
 TOOLS_LINE_RE = re.compile(
-    r"^\s*(?:\*\*)?tools(?:\s+available)?(?:\*\*)?\s*:\s*(.+)$", re.I | re.M)
+    r"^\s*(?:\*\*)?(?:required\s+)?tools?(?:\s+available)?(?:\*\*)?\s*:\s*(.+)$",
+    re.I | re.M,
+)
 
 AGENT_TOOL_RE = re.compile(r"\A(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Za-z0-9]*)\Z")
 SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")

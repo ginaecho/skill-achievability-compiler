@@ -28,5 +28,5 @@ Tools: answer, deliver, deliver_direct.
      result straight away with `deliver_direct`.
 3. The planner takes what comes back.
 
-The worker makes this choice internally; it does not announce which branch it
-took. The planner simply waits for something to come back.
+The branch choice is local to the worker. No branch-label message is sent
+before the planner's `answer` action.

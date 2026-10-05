@@ -1,0 +1,1 @@
+I want the task result delivered by a planner-worker setup. The worker decides whether to use the path where the planner performs `answer` and the worker performs `deliver`, or the direct path where the worker performs `deliver_direct`. Please complete the task result as delivered.

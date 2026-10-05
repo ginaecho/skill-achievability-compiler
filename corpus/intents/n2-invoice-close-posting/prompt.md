@@ -1,0 +1,1 @@
+Please handle the invoice accrual close for this batch. Start with `import_invoice_batch`, use `match_purchase_orders` for PO matching, then run `post_accruals`. After that, use `send_close_summary` so the accounting lead has the close summary. I want the accruals posted and the summary sent.

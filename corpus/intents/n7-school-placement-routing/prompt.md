@@ -1,0 +1,1 @@
+I need the placement lead and registrar to route one student record. The lead should choose standard or support. If standard is selected, send `standard_path` and use `place_standard_seat`; if support is selected, send `support_path` and use `place_support_seat`. The outcome should be a student record marked student_placed.

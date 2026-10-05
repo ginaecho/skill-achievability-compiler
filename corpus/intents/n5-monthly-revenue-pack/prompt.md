@@ -1,0 +1,1 @@
+I need the monthly revenue pack prepared for leadership. Start with `refresh_semantic_model`, then run `render_revenue_report`. After the report is rendered, use `distribute_revenue_pack`. Finish with the revenue pack distributed.

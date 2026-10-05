@@ -1,0 +1,1 @@
+I need this support ticket classified and resolved through the right queue. Please use `classify_ticket` first. If you choose the standard path, send `route_standard` to the case owner and have them use `resolve_standard`. If you choose the escalated path, send `route_escalated` to the case owner and have them use `resolve_escalated`. The end result should be a resolved ticket.

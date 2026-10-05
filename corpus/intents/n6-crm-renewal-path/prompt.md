@@ -1,0 +1,1 @@
+I need renewal work started for this CRM account. The account lead should choose the standard path or the save path. For standard, have the renewal specialist use `send_standard_offer`; for save, have the renewal specialist use `prepare_save_plan`. The result should be started renewal work.

@@ -1,0 +1,1 @@
+Please schedule a return pickup for this customer within two days. Use `lookup_return` to open the case, `schedule_pickup` to set the pickup window, and `notify_customer` to send the details. I need the pickup scheduled in that two-day window and the customer notified.

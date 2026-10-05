@@ -1,0 +1,1 @@
+I need grounded entities extracted from this sample text with LangExtract. Please use either `extract_hosted` or `extract_local`, following the supplied examples for classes and attributes. After the extraction, use `save_results` so I get a JSONL artifact I can inspect or visualize later. I care about grounded source spans and saved results, not a sketch of code.

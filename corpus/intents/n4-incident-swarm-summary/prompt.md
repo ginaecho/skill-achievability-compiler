@@ -1,0 +1,1 @@
+For this incident, start a responder participant during the run and then summarize the findings. Use `aggregate_findings` for the summary step. I need the summary ready at the end.

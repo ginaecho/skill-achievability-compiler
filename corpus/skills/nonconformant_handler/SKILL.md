@@ -28,6 +28,3 @@ Tools: resolve_simple, resolve_complex.
 
 The handler waits for `go_simple`, then resolves the ticket with
 `resolve_simple`.
-
-That is the whole of the handler's declared behaviour. It does not wait for
-`go_complex` and has nothing to do if that is what arrives.

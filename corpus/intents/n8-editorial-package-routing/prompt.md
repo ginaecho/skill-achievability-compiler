@@ -1,0 +1,1 @@
+I need an editorial package prepared. Have the editor choose either the rights route or the standard route. For rights, the producer should use `check_rights` and `build_rights_package`; for standard, the producer should use `build_standard_package`. The package needs to be ready.

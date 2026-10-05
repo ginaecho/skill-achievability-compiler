@@ -29,6 +29,3 @@ Loop:
 Once the loop has been left:
 
 3. Deliver the answer.
-
-This is tail-recursive retry: the block either goes round again or is done
-with, and being done with it is what reaches the goal.

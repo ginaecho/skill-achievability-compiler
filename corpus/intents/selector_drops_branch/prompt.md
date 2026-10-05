@@ -1,0 +1,1 @@
+I need a router agent to route a ticket to a handler. The contract lets the router choose route a, send `go_a`, and have the handler run `fix_a`, or choose route b, send `go_b`, and have the handler run `fix_b`. The router agent's declared behaviour selects route a and sends `go_a`. Please finish with the ticket resolved.

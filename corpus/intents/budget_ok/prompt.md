@@ -1,0 +1,1 @@
+I need a flight fare below 500 and I want the confirmation sent after it is booked. Please use `search` to find fares for my trip. Then use `book_fare` for a fare below 500 and use `email` to send me the confirmation. The outcome I want is a booked fare below 500 with confirmation sent.

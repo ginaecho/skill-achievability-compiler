@@ -1,0 +1,1 @@
+I need the accounting close posted using the reviewer route. The close reviewer should choose adjustment or standard posting. If adjustment is selected, have the controller use `prepare_adjustment_entry` and the accountant use `post_adjusted_close`. If standard is selected, have the accountant use `post_standard_close`. The goal is to post the close.

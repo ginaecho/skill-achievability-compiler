@@ -23,7 +23,3 @@ Tools: resolve_simple, resolve_complex.
      handler resolves the ticket with `resolve_simple`.
    - **complex path** — the router tells the handler `go_complex`, and the
      handler resolves the ticket with `resolve_complex`.
-
-The handler must be informed of the router's choice. It cannot guess which
-path was taken, so the router always announces its decision before the handler
-is expected to act.

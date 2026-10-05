@@ -71,7 +71,14 @@
         ]
       }
     },
-    "note": ""
+    "note": "",
+    "environment_grants": [
+      "search",
+      "filter",
+      "book",
+      "email"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "budget_ok",
@@ -148,7 +155,13 @@
         ]
       }
     },
-    "note": ""
+    "note": "",
+    "environment_grants": [
+      "search",
+      "book_cheap",
+      "email"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "detour_ok",
@@ -206,7 +219,12 @@
       ],
       "goal": "answered"
     },
-    "note": "extra status messages (payload-level detail) must not refute the goal"
+    "note": "extra status messages (payload-level detail) must not refute the goal",
+    "environment_grants": [
+      "search",
+      "deliver"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "choice_informed_ok",
@@ -274,13 +292,18 @@
       ],
       "goal": "resolved"
     },
-    "note": ""
+    "note": "",
+    "environment_grants": [
+      "resolve_simple",
+      "resolve_complex"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "hallucinated_email",
     "category": "HALLUCINATED_PLANNING",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Book a flight and confirm\nGoal: flight booked AND confirmation email sent.\nTools available: search, filter, book.   (No email tool is provided.)\nBut the plan still says: ...then send the confirmation email.",
+    "nl": "# Skill: Book a flight and confirm\nGoal: flight booked AND confirmation email sent.\nRequired tools: search, filter, book, send_email.\nPlan: search, filter, book, then send the confirmation email.",
     "pack": {
       "name": "hallucinated_email",
       "roles": [
@@ -305,6 +328,13 @@
           "pre": "filtered",
           "add": [
             "booked"
+          ]
+        },
+        "send_email": {
+          "owner": "agent",
+          "pre": "booked",
+          "add": [
+            "confirmation_sent"
           ]
         }
       },
@@ -341,13 +371,19 @@
         ]
       }
     },
-    "note": "plan invokes a tool that does not exist -> MISSING_CAPABILITY"
+    "note": "environment omits the required send_email grant -> MISSING_CAPABILITY",
+    "environment_grants": [
+      "search",
+      "filter",
+      "book"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "no_establisher",
     "category": "HALLUCINATED_PLANNING",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Book a flight and confirm\nGoal: flight booked AND confirmation sent.\nTools: search, filter, book.  No tool can send a confirmation, and the plan\nforgets that step entirely.",
+    "nl": "# Skill: Book a flight and confirm\nGoal: flight booked AND confirmation sent.\nRequired tools: search, filter, book, notify_customer.\nPlan: search, filter, book, then notify the customer.",
     "pack": {
       "name": "no_establisher",
       "roles": [
@@ -373,6 +409,13 @@
           "add": [
             "booked"
           ]
+        },
+        "notify_customer": {
+          "owner": "agent",
+          "pre": "booked",
+          "add": [
+            "notification_queued"
+          ]
         }
       },
       "protocol": [
@@ -393,6 +436,12 @@
             "cap": "book",
             "by": "agent"
           }
+        },
+        {
+          "act": {
+            "cap": "notify_customer",
+            "by": "agent"
+          }
         }
       ],
       "goal": {
@@ -402,7 +451,14 @@
         ]
       }
     },
-    "note": "no capability establishes confirmation_sent -> GOAL_UNSAT (Coq FlightInstance)"
+    "note": "the granted notifier only queues work; no capability establishes confirmation_sent",
+    "environment_grants": [
+      "search",
+      "filter",
+      "book",
+      "notify_customer"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "over_budget",
@@ -479,13 +535,19 @@
         ]
       }
     },
-    "note": "refinement on price is unsatisfiable along every run -> GOAL_UNSAT"
+    "note": "refinement on price is unsatisfiable along every run -> GOAL_UNSAT",
+    "environment_grants": [
+      "search",
+      "book_premium",
+      "email"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "blocked_precondition",
     "category": "INFINITE_LOOP",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Publish a report\nGoal: the report is published.\npublish requires the report to be APPROVED; but there is no approval tool and\nnothing in the plan ever approves it, so publish can never fire.",
+    "nl": "# Skill: Publish a report\nGoal: the report is published.\nTools: draft, publish.\nThe publish tool requires the report to be DRAFTED and APPROVED.\nPlan: draft, then publish.",
     "pack": {
       "name": "blocked_precondition",
       "roles": [
@@ -527,13 +589,18 @@
       ],
       "goal": "published"
     },
-    "note": "guard 'approved' never establishable -> BLOCKED_GUARD (the retry-forever cause)"
+    "note": "guard 'approved' never establishable -> BLOCKED_GUARD (the retry-forever cause)",
+    "environment_grants": [
+      "draft",
+      "publish"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "deadlock_unobserved",
     "category": "DEADLOCK",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Plan / worker collaboration\nGoal: the task result is delivered.\nThe worker decides whether to ASK a clarifying question or to DELIVER. In the\n'ask' branch the planner must answer -- but the planner is never told the\nworker chose to ask, so it just keeps waiting for a result. Classic freeze.",
+    "nl": "# Skill: Plan / worker collaboration\nGoal: the task result is delivered.\nThe worker decides whether to ASK a clarifying question or to DELIVER. In the\n'ask' branch the planner answers before the worker delivers. The branch choice\nis local to the worker; no branch-label message precedes the planner's action.",
     "pack": {
       "name": "deadlock_unobserved",
       "roles": [
@@ -594,13 +661,19 @@
       ],
       "goal": "delivered"
     },
-    "note": "planner must act in 'ask' branch with no distinguishing receive -> NON_PROJECTABLE"
+    "note": "planner must act in 'ask' branch with no distinguishing receive -> NON_PROJECTABLE",
+    "environment_grants": [
+      "answer",
+      "deliver",
+      "deliver_direct"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "missing_tool_chain",
     "category": "HALLUCINATED_PLANNING",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Refund a customer\nGoal: refund issued AND ledger updated.\nTools: lookup_order, issue_refund.   The plan also 'updates the ledger' but no\nledger tool exists.",
+    "nl": "# Skill: Refund a customer\nGoal: refund issued AND ledger updated.\nRequired tools: lookup, refund, update_ledger.\nPlan: look up the order, issue the refund, then update the ledger.",
     "pack": {
       "name": "missing_tool_chain",
       "roles": [
@@ -618,6 +691,13 @@
           "pre": "order_found",
           "add": [
             "refunded"
+          ]
+        },
+        "update_ledger": {
+          "owner": "agent",
+          "pre": "refunded",
+          "add": [
+            "ledger_updated"
           ]
         }
       },
@@ -648,13 +728,18 @@
         ]
       }
     },
-    "note": "MISSING_CAPABILITY on update_ledger"
+    "note": "environment omits the required update_ledger grant",
+    "environment_grants": [
+      "lookup",
+      "refund"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "spurious_payload",
     "category": "SPURIOUS",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Book a flight under $500\nGoal: booked under 500 and confirmed.\nThe 'filter_cheap' tool CLAIMS to keep only fares under 500, and the compaction\ntrusts that claim -- but in this market every real fare is >= 800, so no run\nactually succeeds. The structure is fine; the payload claim is false.",
+    "nl": "# Skill: Book a flight under $500\nGoal: booked under 500 and confirmed.\nTools: search, filter_cheap, book, email.\nThe filter_cheap tool keeps only fares under 500.\nPlan: search, filter, book, then email the confirmation.",
     "pack": {
       "name": "spurious_payload",
       "roles": [
@@ -738,13 +823,20 @@
         ]
       }
     },
-    "note": "FALSE ACHIEVABLE: payload faithfulness of filter_cheap is a Layer-C (runtime) obligation, not decided here. Expected incompleteness."
+    "note": "FALSE ACHIEVABLE: payload faithfulness of filter_cheap is a Layer-C (runtime) obligation, not decided here. Expected incompleteness.",
+    "environment_grants": [
+      "search",
+      "filter_cheap",
+      "book",
+      "email"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "spurious_intent",
     "category": "SPURIOUS",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Schedule a meeting\nGoal (what the USER meant): schedule with the RIGHT attendees next week.\nThe compacted goal only says 'meeting_scheduled'. A plan that schedules an\nempty meeting satisfies the formal goal but not the user's intent.",
+    "nl": "# Skill: Schedule a meeting\nThe user asks for a meeting with the right attendees next week.\nGoal: the meeting is scheduled.\nTool: create_event.\nPlan: create the calendar event for next week.",
     "pack": {
       "name": "spurious_intent",
       "roles": [
@@ -768,7 +860,11 @@
       ],
       "goal": "meeting_scheduled"
     },
-    "note": "FALSE ACHIEVABLE: intent fidelity (does the formal goal capture what the user meant) is the top-edge residue, surfaced for human review, not decided."
+    "note": "FALSE ACHIEVABLE: intent fidelity (does the formal goal capture what the user meant) is the top-edge residue, surfaced for human review, not decided.",
+    "environment_grants": [
+      "create_event"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "recursion_ok",
@@ -811,13 +907,18 @@
       ],
       "goal": "answered"
     },
-    "note": ""
+    "note": "",
+    "environment_grants": [
+      "search",
+      "deliver"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "two_goals_one_missing",
     "category": "HALLUCINATED_PLANNING",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Onboard employee\nGoal: account created AND badge issued.\nTools: create_account only. Badge system not integrated.",
+    "nl": "# Skill: Onboard employee\nGoal: account created AND badge issued.\nRequired tools: create_account, issue_badge.\nPlan: create the employee account, then issue the employee badge.",
     "pack": {
       "name": "two_goals_one_missing",
       "roles": [
@@ -829,12 +930,25 @@
           "add": [
             "account_created"
           ]
+        },
+        "issue_badge": {
+          "owner": "agent",
+          "pre": "account_created",
+          "add": [
+            "badge_issued"
+          ]
         }
       },
       "protocol": [
         {
           "act": {
             "cap": "create_account",
+            "by": "agent"
+          }
+        },
+        {
+          "act": {
+            "cap": "issue_badge",
             "by": "agent"
           }
         }
@@ -846,13 +960,17 @@
         ]
       }
     },
-    "note": "badge_issued has no establisher -> GOAL_UNSAT"
+    "note": "environment omits the required issue_badge grant",
+    "environment_grants": [
+      "create_account"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "choice_one_branch_ok",
     "category": "TOLERANCE",
     "ground_truth": "ACHIEVABLE",
-    "nl": "# Skill: Pay invoice by card or transfer\nGoal: invoice paid. Either branch (card or transfer) reaches it; the payer is\ninformed which rail to use.",
+    "nl": "# Skill: Pay invoice by card or transfer\nGoal: invoice paid.\nThe system chooses card or transfer, tells the payer which rail to use, and the\npayer completes the selected payment.",
     "pack": {
       "name": "choice_one_branch_ok",
       "roles": [
@@ -914,6 +1032,11 @@
       ],
       "goal": "paid"
     },
-    "note": ""
+    "note": "",
+    "environment_grants": [
+      "pay_card",
+      "pay_transfer"
+    ],
+    "input_type": "skill"
   }
 ]

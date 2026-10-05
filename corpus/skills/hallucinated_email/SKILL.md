@@ -10,12 +10,13 @@ been sent** to the customer.
 
 ## Tools
 
-Tools available: search, filter, book.
+Required tools: search, filter, book, send_email.
 
 - `search` marks the route **searched**.
 - `filter` requires the route **searched** and marks the shortlist
   **filtered**.
 - `book` requires the shortlist **filtered** and marks the flight **booked**.
+- `send_email` requires the flight **booked** and marks **confirmation sent**.
 
 ## Workflow
 
@@ -23,6 +24,3 @@ Tools available: search, filter, book.
 2. Filter down to the ones matching the customer's request.
 3. Book the chosen flight.
 4. Then write to the customer via `send_email`.
-
-Always confirm in writing — a reservation the customer never hears about is not
-a completed job.

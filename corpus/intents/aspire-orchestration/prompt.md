@@ -1,0 +1,1 @@
+Please run the local Aspire AppHost long enough to capture the target resource status. Use `aspire_start`, then `aspire_wait`, then `aspire_describe` to record the status. After that, use `aspire_stop` so the AppHost is stopped when the task is complete. Completion requires a recorded status and a closed Aspire run.

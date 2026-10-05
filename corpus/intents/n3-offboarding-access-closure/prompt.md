@@ -1,0 +1,1 @@
+Please complete the offboarding closure. Use `revoke_directory_access`, then `archive_employee_mailbox`, then `register_asset_return`. I need access revoked, the mailbox archived, and the asset return registered.

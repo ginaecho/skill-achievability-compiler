@@ -1,0 +1,1 @@
+Please process this new hire. Use `create_onboarding_profile`, then `provision_directory_account`, and then `sync_payroll_record`. I need the profile created, the directory account provisioned, and the payroll record synced.

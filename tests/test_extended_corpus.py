@@ -12,6 +12,7 @@ from importlib import resources
 import pytest
 
 from skillc import check
+from skillc.frontend.grants import bind_grants
 from skillc.pack import validate_pack
 
 
@@ -26,18 +27,29 @@ EXPECTED_REASONS = {
     "spin_forever": "GOAL_UNSAT",
     "spawn_with_ghost_tool": "MISSING_CAPABILITY",
     "nonconformant_handler": "NON_CONFORMANT",
+    "choice_uninformed_alert": "NON_PROJECTABLE",
+    "selector_drops_branch": "NON_CONFORMANT",
+    "selector_invents_label": "NON_CONFORMANT",
 }
 
 
+def check_case(case):
+    pack = bind_grants(
+        case["pack"],
+        case.get("environment_grants", case["pack"]["capabilities"]),
+    ).pack
+    return check(pack)
+
+
 def test_extended_corpus_well_formed():
-    assert len(CORPUS) == 6
+    assert len(CORPUS) == 9
     for c in CORPUS:
         validate_pack(c["pack"])
 
 
 @pytest.mark.parametrize("case", CORPUS, ids=lambda c: c["id"])
 def test_extended_verdicts_match_ground_truth(case):
-    v = check(case["pack"])
+    v = check_case(case)
     assert v.label == case["ground_truth"], (
         f"{case['id']}: expected {case['ground_truth']}, got {v.label} "
         f"[{v.reason}] {v.detail}")
@@ -50,7 +62,7 @@ def test_soundness_over_extended_corpus():
     """T1 over the extended set: nothing truly achievable is refuted, and
     nothing outside the fragment is answered definitively."""
     for c in CORPUS:
-        v = check(c["pack"])
+        v = check_case(c)
         if c["ground_truth"] == "ACHIEVABLE":
             assert v.achievable, f"false refutation on {c['id']}"
         if c["ground_truth"] == "UNKNOWN":

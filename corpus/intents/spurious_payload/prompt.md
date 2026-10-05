@@ -1,0 +1,1 @@
+Please book me a flight fare below 500 and send the confirmation. Use `search` to find fares first. Then use `filter_fares` for fares below 500, `book` the selected fare, and `email` the confirmation. I want the fare booked and confirmed.

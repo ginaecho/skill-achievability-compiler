@@ -1,0 +1,1 @@
+I want to inspect a public Hugging Face dataset through the Dataset Viewer API. Please use `get_splits` to discover the config and split, then use `get_rows` to fetch the first page of rows. Return the config, split, and a concise preview of the row data. No upload workflow is needed.

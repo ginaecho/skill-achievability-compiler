@@ -1,0 +1,1 @@
+The Aspire app has already been verified locally and stopped. Please use `aspire_publish` to generate deployment artifacts, then deploy to either Azure with `aspire_deploy_azure` or Kubernetes with `kubectl_apply`. Publishing artifacts alone is not the result I need; I want the app deployed to one permitted target. Tell me which target you used.

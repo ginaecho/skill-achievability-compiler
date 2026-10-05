@@ -1,0 +1,1 @@
+Please fan out this research to helper agents you spawn at run time, collect their findings, and deliver the final report. Use `deliver` for the completed report. I want the report delivered after the helper work is gathered.

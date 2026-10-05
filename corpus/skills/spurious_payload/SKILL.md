@@ -25,6 +25,3 @@ Tools: search, filter_cheap, book, email.
 2. Run the results through `filter_cheap` to drop anything at or above 500.
 3. Book one of the remaining fares.
 4. Send the confirmation email.
-
-Because step 2 has already removed every fare at or above 500, the reservation
-made in step 3 always satisfies the customer's ceiling.

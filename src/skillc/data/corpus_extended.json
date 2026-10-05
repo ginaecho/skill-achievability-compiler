@@ -60,13 +60,18 @@
       ],
       "goal": "answered"
     },
-    "note": "tail-recursive retry with an exit branch is inside the fragment"
+    "note": "tail-recursive retry with an exit branch is inside the fragment",
+    "environment_grants": [
+      "search",
+      "deliver"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "spin_forever",
     "category": "INFINITE_LOOP",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Publish a report (but the plan only ever re-drafts)\nGoal: published. The loop re-drafts forever; nothing establishes published.",
+    "nl": "# Skill: Publish a report\nGoal: published.\nRequired tools: draft, publish.\nPlan: repeatedly draft and review the report without reaching the publish step.",
     "pack": {
       "name": "spin_forever",
       "roles": [
@@ -77,6 +82,13 @@
           "owner": "agent",
           "add": [
             "drafted"
+          ]
+        },
+        "publish": {
+          "owner": "agent",
+          "pre": "drafted",
+          "add": [
+            "published"
           ]
         }
       },
@@ -100,7 +112,12 @@
       ],
       "goal": "published"
     },
-    "note": "predicate-state saturation terminates the loop search -> GOAL_UNSAT"
+    "note": "predicate-state saturation terminates the loop search -> GOAL_UNSAT",
+    "environment_grants": [
+      "draft",
+      "publish"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "spawn_helpers",
@@ -135,19 +152,30 @@
       ],
       "goal": "delivered"
     },
-    "note": "dynamic topology -> outside the decidable fragment (thm:undec)"
+    "note": "dynamic topology -> outside the decidable fragment (thm:undec)",
+    "environment_grants": [
+      "deliver"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "spawn_with_ghost_tool",
     "category": "AUTONOMY",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Fan out, then update the ledger\nGoal: ledger updated. Spawns helpers AND invokes a tool nobody has.",
+    "nl": "# Skill: Fan out, then update the ledger\nGoal: ledger updated.\nRequired tool: update_ledger.\nPlan: spawn helpers, collect their work, then update the ledger.",
     "pack": {
       "name": "spawn_with_ghost_tool",
       "roles": [
         "planner"
       ],
-      "capabilities": {},
+      "capabilities": {
+        "update_ledger": {
+          "owner": "planner",
+          "add": [
+            "ledger_updated"
+          ]
+        }
+      },
       "protocol": [
         {
           "spawn": {
@@ -163,13 +191,15 @@
       ],
       "goal": "ledger_updated"
     },
-    "note": "capability soundness survives autonomy: refute before degrading"
+    "note": "environment omits update_ledger; capability refutation precedes autonomy",
+    "environment_grants": [],
+    "input_type": "skill"
   },
   {
     "id": "nonconformant_handler",
     "category": "CONFORMANCE",
     "ground_truth": "IMPOSSIBLE",
-    "nl": "# Skill: Triage then handle -- but the declared handler only handles one path\nGoal: resolved. Contract informs the handler of go_simple/go_complex; the\ndeclared handler behaviour only receives go_simple.",
+    "nl": "# Skill: Triage then handle\nGoal: resolved.\nThe router may send go_simple or go_complex. The declared handler behaviour\nwaits for go_simple and then resolves the ticket.",
     "pack": {
       "name": "nonconformant_handler",
       "roles": [
@@ -249,13 +279,18 @@
         ]
       }
     },
-    "note": "S_handler drops an external choice -> S </= G|handler (Sub-Ext)"
+    "note": "S_handler drops an external choice -> S </= G|handler (Sub-Ext)",
+    "environment_grants": [
+      "resolve_simple",
+      "resolve_complex"
+    ],
+    "input_type": "skill"
   },
   {
     "id": "conformant_tolerant_handler",
     "category": "CONFORMANCE",
     "ground_truth": "ACHIEVABLE",
-    "nl": "# Skill: Triage then handle -- handler declared with an EXTRA receive\nGoal: resolved. The declared handler also accepts a go_escalate label the\ncontract never sends; extra external choices are safe (Sub-Ext).",
+    "nl": "# Skill: Triage then handle\nGoal: resolved.\nThe router may send go_simple or go_complex. The declared handler accepts\ngo_simple, go_complex, or go_escalate.",
     "pack": {
       "name": "conformant_tolerant_handler",
       "roles": [
@@ -349,6 +384,252 @@
         ]
       }
     },
-    "note": "interface slack in the safe direction must not refute (T2 flavour)"
+    "note": "interface slack in the safe direction must not refute (T2 flavour)",
+    "environment_grants": [
+      "resolve_simple",
+      "resolve_complex"
+    ],
+    "input_type": "skill"
+  },
+  {
+    "id": "choice_uninformed_alert",
+    "category": "NON_PROJECTABLE",
+    "ground_truth": "IMPOSSIBLE",
+    "nl": "# Skill: Route an alert\nGoal: the alert is handled.\nRequired tools: handle_now, handle_later.\nThe monitor privately chooses urgent or routine. The oncall must handle urgent\nalerts now and routine alerts later, but receives no branch label.",
+    "pack": {
+      "name": "choice_uninformed_alert",
+      "roles": [
+        "monitor",
+        "oncall"
+      ],
+      "capabilities": {
+        "handle_now": {
+          "owner": "oncall",
+          "add": [
+            "handled"
+          ]
+        },
+        "handle_later": {
+          "owner": "oncall",
+          "add": [
+            "handled"
+          ]
+        }
+      },
+      "protocol": [
+        {
+          "choice": {
+            "by": "monitor",
+            "branches": {
+              "urgent": [
+                {
+                  "act": {
+                    "cap": "handle_now",
+                    "by": "oncall"
+                  }
+                }
+              ],
+              "routine": [
+                {
+                  "act": {
+                    "cap": "handle_later",
+                    "by": "oncall"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "goal": "handled"
+    },
+    "note": "the acting role cannot observe which branch the monitor selected",
+    "environment_grants": [
+      "handle_now",
+      "handle_later"
+    ],
+    "input_type": "skill"
+  },
+  {
+    "id": "selector_drops_branch",
+    "category": "CONFORMANCE",
+    "ground_truth": "IMPOSSIBLE",
+    "nl": "# Agent: Route a ticket\nGoal: the ticket is resolved.\nRequired tools: fix_a, fix_b.\nThe contract permits routes A and B and notifies the handler with go_a or\ngo_b. The router agent declares only route A.",
+    "pack": {
+      "name": "selector_drops_branch",
+      "roles": [
+        "router",
+        "handler"
+      ],
+      "capabilities": {
+        "fix_a": {
+          "owner": "handler",
+          "add": [
+            "resolved"
+          ]
+        },
+        "fix_b": {
+          "owner": "handler",
+          "add": [
+            "resolved"
+          ]
+        }
+      },
+      "protocol": [
+        {
+          "choice": {
+            "by": "router",
+            "branches": {
+              "a": [
+                {
+                  "msg": {
+                    "from": "router",
+                    "to": "handler",
+                    "label": "go_a"
+                  }
+                },
+                {
+                  "act": {
+                    "cap": "fix_a",
+                    "by": "handler"
+                  }
+                }
+              ],
+              "b": [
+                {
+                  "msg": {
+                    "from": "router",
+                    "to": "handler",
+                    "label": "go_b"
+                  }
+                },
+                {
+                  "act": {
+                    "cap": "fix_b",
+                    "by": "handler"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "goal": "resolved",
+      "skills": {
+        "router": [
+          {
+            "select": {
+              "branches": {
+                "a": [
+                  {
+                    "send": {
+                      "to": "handler",
+                      "label": "go_a"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "note": "the declared sender behavior omits a contract branch",
+    "environment_grants": [
+      "fix_a",
+      "fix_b"
+    ],
+    "input_type": "agent"
+  },
+  {
+    "id": "selector_invents_label",
+    "category": "CONFORMANCE",
+    "ground_truth": "IMPOSSIBLE",
+    "nl": "Prompt: Resolve a routed ticket.\nRequired tools: fix_a, fix_b.\nThe protocol permits go_a and go_b. The router implementation instead selects\ngo_c, which is not a protocol label.",
+    "pack": {
+      "name": "selector_invents_label",
+      "roles": [
+        "router",
+        "handler"
+      ],
+      "capabilities": {
+        "fix_a": {
+          "owner": "handler",
+          "add": [
+            "resolved"
+          ]
+        },
+        "fix_b": {
+          "owner": "handler",
+          "add": [
+            "resolved"
+          ]
+        }
+      },
+      "protocol": [
+        {
+          "choice": {
+            "by": "router",
+            "branches": {
+              "a": [
+                {
+                  "msg": {
+                    "from": "router",
+                    "to": "handler",
+                    "label": "go_a"
+                  }
+                },
+                {
+                  "act": {
+                    "cap": "fix_a",
+                    "by": "handler"
+                  }
+                }
+              ],
+              "b": [
+                {
+                  "msg": {
+                    "from": "router",
+                    "to": "handler",
+                    "label": "go_b"
+                  }
+                },
+                {
+                  "act": {
+                    "cap": "fix_b",
+                    "by": "handler"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "goal": "resolved",
+      "skills": {
+        "router": [
+          {
+            "select": {
+              "branches": {
+                "c": [
+                  {
+                    "send": {
+                      "to": "handler",
+                      "label": "go_c"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    "note": "the declared sender behavior invents a label outside the protocol",
+    "environment_grants": [
+      "fix_a",
+      "fix_b"
+    ],
+    "input_type": "prompt"
   }
 ]
