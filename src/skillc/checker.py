@@ -39,6 +39,8 @@ verdicts only.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any
 from collections.abc import Callable
@@ -62,6 +64,26 @@ DEFERRED_OBLIGATIONS = ("intent_fidelity", "payload_faithfulness")
 # solver UNKNOWN, which _sat resolves toward satisfiable, i.e. away from
 # refutation.  A finite budget therefore costs completeness, never soundness.
 SOLVER_TIMEOUT_MS = 10_000
+_TRACE_OBSERVER: ContextVar[Callable[[str, dict], None] | None] = ContextVar(
+    "skillc_trace_observer",
+    default=None,
+)
+
+
+@contextmanager
+def observe_check(observer: Callable[[str, dict], None]):
+    """Observe trusted-check stage artifacts without changing checker results."""
+    token = _TRACE_OBSERVER.set(observer)
+    try:
+        yield
+    finally:
+        _TRACE_OBSERVER.reset(token)
+
+
+def trace_artifact(stage: str, payload: dict) -> None:
+    observer = _TRACE_OBSERVER.get()
+    if observer is not None:
+        observer(stage, payload)
 
 
 def _skillc_version() -> str:
@@ -360,8 +382,23 @@ class Checker:
         #    decided first and survives autonomy: a tool absent from Gamma
         #    stays absent no matter how many participants are spawned.
         missing = self._missing_caps(self.p.protocol)
+        required = sorted(
+            {step["act"]["cap"] for step in iter_steps(self.p.protocol)
+             if "act" in step}
+        )
+        trace_artifact("capability", {
+            "status": "refuted" if missing else "passed",
+            "required_by_protocol": required,
+            "available_definitions": sorted(self.p.capabilities),
+            "missing": sorted(missing),
+        })
         if missing:
             goal_refutation = self._gamma_refutation()
+            self._skip_traces(
+                "capability existence failed",
+                interaction=True,
+                reachability=True,
+            )
             return Verdict(False, "MISSING_CAPABILITY",
                            f"protocol invokes undeclared capabilities: {sorted(missing)}",
                            frontier=tuple(sorted(missing)),
@@ -370,10 +407,23 @@ class Checker:
         #     survives autonomy and is decided before degrading to UNKNOWN.
         gamma = self._gamma_refutation()
         if gamma:
+            self._skip_traces(
+                "capability context already refutes the goal",
+                interaction=True,
+                reachability=True,
+            )
             return gamma
         # 2. the autonomy boundary: dynamic spawning -> unbounded participants
         #    -> undecidable (thm:undec).  Degrade to a semi-decision.
         if has_spawn(self.p.protocol):
+            trace_artifact("interaction", {
+                "status": "unknown",
+                "reason": "dynamic participant spawning is outside the decidable fragment",
+            })
+            self._skip_traces(
+                "dynamic topology prevents finite interaction and reachability checks",
+                reachability=True,
+            )
             return Verdict(False, "DYNAMIC_TOPOLOGY",
                            "protocol spawns participants at run time; "
                            "achievability is undecidable outside the "
@@ -381,18 +431,47 @@ class Checker:
                            unknown=True)
         # 3. realizability: projection G|p defined for every role (Proj-Sel /
         #    Proj-Brn / Proj-Mrg).  Undefined = deadlocking handoff.
+        projections = {}
         for role in sorted(set(self.p.roles) | roles_acting(self.p.protocol)):
             try:
-                project(self.p.protocol, role)
+                projections[role] = _jsonable(project(self.p.protocol, role))
             except ProjectionError as e:
+                trace_artifact("interaction", {
+                    "status": "refuted",
+                    "check": "projection",
+                    "role": role,
+                    "failure": str(e),
+                    "projections": projections,
+                })
+                self._skip_traces(
+                    "protocol projection failed",
+                    reachability=True,
+                )
                 return Verdict(False, "NON_PROJECTABLE", str(e))
         # 4. conformance: every declared skill refines its projected contract
         #    (S_p <= G|p, Gay-Hole subtyping).  Refutes the *judgment*: the
         #    verdict on G cannot be transported to a non-conforming skill.
         rep = conformance_report(self.p.skills, self.p.protocol)
         if not rep.ok:
+            trace_artifact("interaction", {
+                "status": "refuted",
+                "check": "conformance",
+                "projections": projections,
+                "failure": rep.failure,
+                "assumed_conformant": list(rep.assumed),
+            })
+            self._skip_traces(
+                "declared role behavior is non-conformant",
+                reachability=True,
+            )
             return Verdict(False, "NON_CONFORMANT", rep.failure)
         self.assumed_conformant = rep.assumed
+        trace_artifact("interaction", {
+            "status": "passed",
+            "projections": projections,
+            "conformance": "passed",
+            "assumed_conformant": list(rep.assumed),
+        })
         # T-Comm quantifies over every protocol branch at the same pre-world;
         # T-Act and T-Goal then check guards/markers in lockstep.  Projection
         # alone only checks process shape, so decide these world premises too.
@@ -410,25 +489,62 @@ class Checker:
             ok, end_state = self._reach(
                 self.p.protocol, initial_state(self.p), {})
             if not ok:
+                trace_artifact("reachability", {
+                    "status": "refuted",
+                    "reason": "whole-session typing rejected every witness",
+                    "blocked": list(self.blocked),
+                    "defeated": list(self.defeated),
+                })
                 return Verdict(
                     False, "NON_CONFORMANT",
                     "a may-reachability witness exists, but the whole-session "
                     "T-Comm/T-Act/T-Goal judgment has no derivation from the "
                     "same initial world: the protocol-wide guards and goal "
                     "markers are inconsistent with the witness")
+            trace_artifact("reachability", {
+                "status": "passed",
+                "witness": _jsonable(end_state.path),
+                "terminal_predicates": sorted(end_state.true_preds),
+            })
             return Verdict(True, "OK", "goal reachable along witness path",
                            witness=end_state.path)
         if self.defeated:
             uniq = tuple(dict.fromkeys(self.defeated))
+            trace_artifact("reachability", {
+                "status": "refuted",
+                "reason": "external branch defeats the goal",
+                "frontier": list(uniq),
+            })
             return Verdict(False, "GOAL_UNSAT",
                            "adversarially unachievable: " + "; ".join(uniq),
                            frontier=uniq)
         if self.blocked:
             uniq = tuple(dict.fromkeys(self.blocked))
+            trace_artifact("reachability", {
+                "status": "refuted",
+                "reason": "mandatory action guard is blocked",
+                "frontier": list(uniq),
+            })
             return Verdict(False, "BLOCKED_GUARD", "; ".join(uniq), frontier=uniq)
+        trace_artifact("reachability", {
+            "status": "refuted",
+            "reason": "protocol terminates without satisfying the goal",
+        })
         return Verdict(False, "GOAL_UNSAT",
                        "protocol terminates but no run satisfies the goal "
                        "(goal predicate never established / refinement unsatisfiable)")
+
+    def _skip_traces(
+        self,
+        reason: str,
+        *,
+        interaction: bool = False,
+        reachability: bool = False,
+    ) -> None:
+        if interaction:
+            trace_artifact("interaction", {"status": "skipped", "reason": reason})
+        if reachability:
+            trace_artifact("reachability", {"status": "skipped", "reason": reason})
 
     def _fresh_typing_value(self, var: str) -> z3.ArithRef:
         self.typing_fresh += 1
@@ -636,6 +752,11 @@ def check(pack: dict | Pack, semantics: str = "may",
     if scope == "goal" and semantics != "may":
         raise ValueError("goal scope supports may semantics only")
     p = normalize(pack)
+    trace_artifact("schema", {
+        "status": "passed",
+        "pack": p.to_dict(),
+        "pack_digest": pack_digest(p),
+    })
     checker = Checker(p, semantics=semantics)
     certificate = checker._gamma_refutation(guard_closure=True) if scope == "goal" else None
     v = certificate if certificate is not None else checker.run()
@@ -650,3 +771,13 @@ def check(pack: dict | Pack, semantics: str = "may",
             f"alternative plans are not ruled out. {v.detail}")
     v.pack_digest = pack_digest(p)
     return v
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return repr(value)

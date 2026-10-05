@@ -518,3 +518,34 @@ def test_pack_digest_is_deterministic_across_dict_and_object():
     assert check(d).pack_digest == pack_digest(d)
     other = dict(d, goal="something_else")
     assert check(d).pack_digest != check(other).pack_digest
+
+
+def test_observed_choice_with_informing_messages_projects_on_the_messages():
+    from skillc import check
+
+    pack = {"name": "route", "roles": ["router", "owner"],
+            "capabilities": {"fix_a": {"owner": "owner", "add": ["done"]},
+                             "fix_b": {"owner": "owner", "add": ["done"]}},
+            "protocol": [{"choice": {"by": "router", "observed": True, "branches": {
+                "a": [{"msg": {"from": "router", "to": "owner", "label": "go_a"}},
+                      {"act": {"cap": "fix_a", "by": "owner"}}],
+                "b": [{"msg": {"from": "router", "to": "owner", "label": "go_b"}},
+                      {"act": {"cap": "fix_b", "by": "owner"}}]}}}],
+            "goal": "done",
+            "skills": {"owner": [{"branch": {"from": "router", "branches": {
+                "go_a": [{"act": {"cap": "fix_a"}}],
+                "go_b": [{"act": {"cap": "fix_b"}}]}}}]}}
+
+    assert check(pack).achievable
+
+
+def test_observed_choice_without_messages_still_projects_on_choice_labels():
+    from skillc.session import project
+
+    protocol = [{"choice": {"by": "router", "observed": True, "branches": {
+        "a": [{"act": {"cap": "fix_a", "by": "owner"}}],
+        "b": [{"act": {"cap": "fix_b", "by": "owner"}}]}}}]
+
+    local = project(protocol, "owner")
+
+    assert local[0] == "branch" and [label for label, _ in local[2]] == ["a", "b"]

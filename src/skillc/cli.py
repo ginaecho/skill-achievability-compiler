@@ -21,10 +21,15 @@ from dataclasses import replace
 from pathlib import Path
 
 from . import __version__
-from .checker import Verdict, check
+from .checker import Verdict, check, trace_artifact
 from .evaluate import evaluate, format_report, load_corpus
 from .frontend.ce import CEError
-from .frontend.markdown import CompileResult, compile_file
+from .frontend.markdown import (
+    CompileResult,
+    compaction_manifest,
+    compile_file,
+    result_from_manifest,
+)
 from .frontend.providers import PROVIDERS
 from .pack import PackError, pack_digest
 from .profiles import builtin_profiles, load_profile
@@ -53,6 +58,12 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
         if res is not None:
             res.pack = pack
             res.goal_source = "contract"
+    provenance_path = getattr(args, "compaction_provenance", None)
+    if provenance_path:
+        if res is not None:
+            raise ValueError("--compaction-provenance is only valid for a compiled JSON pack")
+        manifest = json.loads(Path(provenance_path).read_text(encoding="utf-8"))
+        res = result_from_manifest(pack, manifest)
     return pack, res
 
 
@@ -68,22 +79,76 @@ def _compact_with_llm(path: Path, args) -> dict:
         front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
     else:
         front = compact_ce if getattr(args, "via_ce", False) else compact
+    if getattr(args, "vocabulary", None):
+        if front is not compact:
+            raise ValueError("--vocabulary applies to JSON compaction, not --runtime or --via-ce")
+        kwargs["vocabulary"] = json.loads(Path(args.vocabulary).read_text(encoding="utf-8"))
     return front(path.read_text(encoding="utf-8"), model=args.model,
                  provider=args.llm_provider,
                  runtime_abilities=abilities or None, **kwargs)
 
 
 def _check_loaded(pack, res, args):
-    scope = "goal" if getattr(args, "goal_only", False) else "protocol"
-    if scope == "goal" and res is not None and res.goal_source == "tool_usage_only":
+    vocabulary = getattr(args, "vocabulary", None)
+    states = (
+        json.loads(Path(vocabulary).read_text(encoding="utf-8")).get("states")
+        if vocabulary else None
+    )
+    source = getattr(args, "source", None)
+    if source is None and getattr(args, "llm", False) and getattr(args, "file", None):
+        source = args.file          # an LLM-compacted intent grounds on its own text
+    evidence = [Path(source).read_text(encoding="utf-8")] if source else []
+    if evidence and getattr(args, "contract", None):
+        evidence.append(Path(args.contract).read_text(encoding="utf-8"))  # reviewed input
+    return check_compiled(
+        pack,
+        res,
+        scope="goal" if getattr(args, "goal_only", False) else "protocol",
+        semantics="adversarial" if getattr(args, "adversarial", False) else "may",
+        vocabulary_states=states,
+        source_text="\n".join(evidence) or None,
+    )
+
+
+def check_compiled(pack: dict, res: CompileResult | None, *,
+                   scope: str = "protocol", semantics: str = "may",
+                   vocabulary_states: dict | None = None,
+                   source_text: str | None = None) -> Verdict:
+    """Decide a compiled pack, abstaining when compaction established no task
+    or when a refutation rests only on names found in no input (the intent
+    text, the environment's state vocabulary, or deterministic extraction)."""
+    from .frontend.contracts import abstain_ungrounded
+
+    verdict = _decide(pack, res, scope, semantics)
+    extracted = {inv.tool for inv in res.invocations} if res else set()
+    return abstain_ungrounded(verdict, states=vocabulary_states,
+                              source_text=source_text, extracted=extracted, pack=pack)
+
+
+def _decide(pack: dict, res: CompileResult | None, scope: str, semantics: str) -> Verdict:
+    if (
+        res is not None
+        and res.goal_source == "tool_usage_only"
+        and (scope == "goal" or not res.invocations)
+    ):
+        digest = pack_digest(pack)
+        trace_artifact("schema", {
+            "status": "passed",
+            "pack": pack,
+            "pack_digest": digest,
+        })
+        skipped = {
+            "status": "skipped",
+            "reason": "compaction did not establish the task goal or required operations",
+        }
+        for stage in ("capability", "interaction", "reachability"):
+            trace_artifact(stage, skipped)
         return Verdict(
             False, "INCOMPLETE_COMPACTION",
             "deterministic extraction captured tool usage, not the task goal; "
             "supply a reviewed --contract, an embedded pack, or semantic compaction",
-            unknown=True, decision_scope=scope, pack_digest=pack_digest(pack))
-    return check(pack,
-                 semantics="adversarial" if getattr(args, "adversarial", False) else "may",
-                 scope=scope)
+            unknown=True, decision_scope=scope, pack_digest=digest)
+    return check(pack, semantics=semantics, scope=scope)
 
 
 def cmd_compile(args) -> int:
@@ -93,6 +158,13 @@ def cmd_compile(args) -> int:
         Path(args.output).write_text(out + "\n", encoding="utf-8")
     else:
         print(out)
+    if args.provenance_output:
+        source = "llm" if args.llm else "compiled"
+        manifest = compaction_manifest(res, goal_source=source)
+        Path(args.provenance_output).write_text(
+            json.dumps(manifest, indent=2) + "\n",
+            encoding="utf-8",
+        )
     if res is not None and not args.quiet:
         _print_provenance(res, file=sys.stderr)
     return 0
@@ -122,6 +194,7 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
 def cmd_check(args) -> int:
     pack, res = _load_result(Path(args.file), args)
     v = _check_loaded(pack, res, args)
+    trace_artifact("verdict", v.to_dict())
     if args.json:
         out = v.to_dict()
         out["pack_name"] = pack.get("name", "?")
@@ -613,6 +686,11 @@ def _add_compile_opts(sp) -> None:
     sp.add_argument("--via-ce", action="store_true",
                     help="with --llm: the model writes Controlled English, "
                          "which is parsed into the pack deterministically")
+    sp.add_argument("--vocabulary", metavar="JSON",
+                    help="environment manifest: with --llm the compacted pack reuses "
+                         "its tool and state names (contracts are not shown); a "
+                         "refutation resting only on conditions outside its states "
+                         "becomes UNKNOWN")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -625,6 +703,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("file")
     sp.add_argument("-o", "--output")
     sp.add_argument("-q", "--quiet", action="store_true")
+    sp.add_argument("--provenance-output", metavar="JSON",
+                    help="write compaction provenance beside the compiled pack")
     _add_compile_opts(sp)
     sp.set_defaults(fn=cmd_compile)
 
@@ -632,6 +712,11 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("file")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("-v", "--verbose", action="store_true")
+    sp.add_argument("--compaction-provenance", metavar="JSON",
+                    help="provenance emitted by compile --provenance-output")
+    sp.add_argument("--source", metavar="FILE",
+                    help="the original intent text: a refutation must name something "
+                         "it (or the --vocabulary environment) contains, else UNKNOWN")
     decisions = sp.add_mutually_exclusive_group()
     decisions.add_argument("--adversarial", action="store_true",
                     help="require the goal under EVERY resolution of choices "

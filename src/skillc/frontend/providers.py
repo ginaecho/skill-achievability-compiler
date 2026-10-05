@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import subprocess
+import urllib.error
 import urllib.request
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -162,8 +163,12 @@ def azure_openai_complete(system: str, user: str, model: str | None,
         data=json.dumps(payload).encode(),
         headers=headers,
     )
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        out = json.load(r)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            out = json.load(r)
+    except urllib.error.HTTPError as error:
+        raise RuntimeError(
+            f"Azure OpenAI request failed: {_azure_error(error)}") from error
     _record_usage(_azure_usage(out.get("usage")))
     choices = out.get("choices", [])
     if not choices:
@@ -179,19 +184,37 @@ def azure_openai_complete(system: str, user: str, model: str | None,
     raise ValueError("Azure OpenAI response message content was not text")
 
 
+def _azure_error(error) -> str:
+    """Summarize an Azure HTTP error from its JSON body, without headers."""
+    try:
+        detail = json.loads(error.read().decode("utf-8", errors="replace"))["error"]
+        return f"HTTP {error.code} {detail.get('code', '')}: {detail.get('message', '')}".strip()
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return f"HTTP {error.code} {error.reason}"
+
+
 def azure_cli_token() -> str:
-    """Get a short-lived Foundry token from the current Azure CLI login."""
+    """Get a short-lived Foundry token from the current Azure CLI login.
+
+    AZURE_SUBSCRIPTION_ID (or AZURE_TENANT_ID) selects the account that owns
+    the resource, so the global Azure CLI default need not match it.
+    """
     executable = shutil.which("az.cmd") or shutil.which("az")
     if not executable:
         raise RuntimeError(
             "AZURE_OPENAI_API_KEY is not set and Azure CLI is unavailable")
+    command = [
+        executable, "account", "get-access-token",
+        "--resource", "https://ai.azure.com",
+        "--query", "accessToken", "--output", "tsv",
+    ]
+    if os.environ.get("AZURE_SUBSCRIPTION_ID"):
+        command += ["--subscription", os.environ["AZURE_SUBSCRIPTION_ID"]]
+    elif os.environ.get("AZURE_TENANT_ID"):
+        command += ["--tenant", os.environ["AZURE_TENANT_ID"]]
     try:
         proc = subprocess.run(
-            [
-                executable, "account", "get-access-token",
-                "--resource", "https://ai.azure.com",
-                "--query", "accessToken", "--output", "tsv",
-            ],
+            command,
             text=True,
             encoding="utf-8",
             errors="replace",

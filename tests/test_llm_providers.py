@@ -152,6 +152,47 @@ def test_azure_openai_uses_azure_cli_when_key_is_absent(monkeypatch):
     assert "https://ai.azure.com" in seen["command"]
 
 
+def test_azure_cli_token_targets_the_configured_subscription(monkeypatch):
+    seen = {}
+
+    def fake_run(command, **kwargs):
+        seen["command"] = command
+
+        class Result:
+            returncode = 0
+            stdout = "token\n"
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setenv("AZURE_SUBSCRIPTION_ID", "sub-123")
+    monkeypatch.setattr("shutil.which", lambda name: "az.cmd")
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    from skillc.frontend.providers import azure_cli_token
+    assert azure_cli_token() == "token"
+    assert seen["command"][-2:] == ["--subscription", "sub-123"]
+
+
+def test_azure_http_error_reports_the_service_message(monkeypatch):
+    import io
+    import urllib.error
+
+    def fake_urlopen(req, timeout):
+        body = b'{"error":{"code":"TenantMismatch","message":"Token tenant does not match."}}'
+        raise urllib.error.HTTPError(req.full_url, 400, "BadRequest", {}, io.BytesIO(body))
+
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT",
+                       "https://example.openai.azure.com/openai/v1")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT", "gpt-demo")
+    monkeypatch.delenv("AZURE_OPENAI_API_VERSION", raising=False)
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="HTTP 400 TenantMismatch: Token tenant does not match"):
+        compact("# Skill", provider="azure-openai")
+
+
 def test_unknown_provider_is_rejected():
     with pytest.raises(RuntimeError, match="unsupported LLM provider"):
         compact("# Skill", provider="other")
@@ -241,3 +282,72 @@ def test_cost_command_reports_measured_only_for_reported_usage(tmp_path, capsys,
     assert main(["cost", str(skill), "--price-llm", "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["front_end"] == "LLM compaction (modelled)"
+
+def test_environment_vocabulary_is_given_to_the_compactor_without_contracts(monkeypatch):
+    seen = {}
+
+    def fake_complete(provider, system, user, model, timeout, **kwargs):
+        seen["system"] = system
+        return json.dumps(PACK)
+
+    monkeypatch.setattr("skillc.frontend.providers.complete", fake_complete)
+    vocabulary = {
+        "tools": {"book_fare": "books a fare costing at least 800"},
+        "states": {"booked": "a fare is booked", "price": "fare price"},
+        "contracts": {"book_fare": {"nondet": {"price": {"cmp": ["price", ">=", 800]}}}},
+    }
+
+    compact("# Skill", provider="anthropic", vocabulary=vocabulary)
+
+    assert "book_fare" in seen["system"] and "booked" in seen["system"]
+    assert "price" in seen["system"]
+    assert "800" not in seen["system"]
+
+def test_verdict_explanation_is_plain_text_grounded_in_the_checker_result(monkeypatch):
+    seen = {}
+
+    def fake_complete(provider, system, user, model, timeout, json_mode=True):
+        seen.update(system=system, user=user, json_mode=json_mode)
+        return "  The booking tool only sells fares of 800 or more.  "
+
+    monkeypatch.setattr("skillc.frontend.providers.complete", fake_complete)
+    from skillc.frontend.llm import explain_verdict
+
+    verdict = {"verdict": "IMPOSSIBLE", "reason": "GOAL_UNSAT",
+               "detail": "goal unsatisfiable", "frontier": ["price"], "witness": []}
+    text = explain_verdict("Book a fare under 500.", verdict,
+                           goal={"cmp": ["price", "<", 500]},
+                           environment={"unavailable": [], "contracts_applied": ["book_fare"]},
+                           provider="azure-openai", model="m")
+
+    assert text == "The booking tool only sells fares of 800 or more."
+    assert seen["json_mode"] is False
+    assert "GOAL_UNSAT" in seen["user"] and "price" in seen["user"]
+    assert "Book a fare under 500." in seen["user"]
+
+def test_vocabulary_mode_overrides_conservative_declaration(monkeypatch):
+    seen = {}
+
+    def fake_complete(provider, system, user, model, timeout, **kwargs):
+        seen["system"] = system
+        return json.dumps(PACK)
+
+    monkeypatch.setattr("skillc.frontend.providers.complete", fake_complete)
+    compact("# Skill", provider="anthropic", vocabulary={"tools": {"edit": ""}, "states": {}})
+
+    assert "Declare EVERY external operation" in seen["system"]
+    assert "own work" in seen["system"]
+
+
+def test_invalid_pack_is_repaired_once_with_the_validation_error(monkeypatch):
+    replies = iter([json.dumps({"name": "x"}), json.dumps(PACK)])
+    users = []
+
+    def fake_complete(provider, system, user, model, timeout, **kwargs):
+        users.append(user)
+        return next(replies)
+
+    monkeypatch.setattr("skillc.frontend.providers.complete", fake_complete)
+
+    assert compact("# Skill", provider="anthropic") == PACK
+    assert len(users) == 2 and "failed validation" in users[1]

@@ -136,6 +136,33 @@ RUNTIME_ABILITY_PROFILES = {
     "developer": DEVELOPER_ABILITIES,
 }
 
+ENVIRONMENT_VOCABULARY_NOTE = (
+    "\nIn this setting the environment, not you, decides which tools exist; "
+    "this overrides rule 1. Declare EVERY external operation the intent "
+    "requires as a capability, with the preconditions and effects the intent "
+    "describes, whether or not its name appears below. The agent's own work is "
+    "not an external operation: reasoning, reviewing, planning, drafting text, "
+    "presenting its answer, and talking with the user in the conversation need "
+    "no tool, so do not make them capabilities or acts, and keep only "
+    "conditions an external operation establishes in the goal."
+    "\nThe target environment names its operations and conditions with a closed "
+    "vocabulary. When the intent performs one of these operations, use exactly "
+    "this capability name: {tools}. When a goal condition, guard, or effect "
+    "means one of these conditions or values, use exactly this name: {states}. "
+    "If the intent needs an operation or condition that is not listed, keep it "
+    "under its own name: never drop a required operation or goal condition "
+    "because it is missing from the list.")
+
+
+def vocabulary_note(vocabulary: dict) -> str:
+    """Tool and state names only; never the environment's tool contracts."""
+    tools = ", ".join(sorted(vocabulary.get("tools", {}))) or "(none)"
+    states = "; ".join(
+        f"{name} ({meaning})" if meaning and meaning != name.replace("_", " ") else name
+        for name, meaning in sorted(vocabulary.get("states", {}).items())
+    ) or "(none)"
+    return ENVIRONMENT_VOCABULARY_NOTE.format(tools=tools, states=states)
+
 CE_DOC = """
 SkillC Controlled English (CE). One statement per line; identifiers are ALWAYS
 in backticks; nested steps are "- " bullets indented two spaces per level.

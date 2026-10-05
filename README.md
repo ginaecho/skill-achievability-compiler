@@ -56,6 +56,13 @@ Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (an
 abstention, including outside the decidable fragment) — so `skillc check` can
 gate CI for skill repositories.
 
+### Interactive execution architecture
+
+The [SkillC Execution Atlas](demo/skillc-architecture-app/README.md) is a local
+browser app for demonstrating how a `SKILL.md`, `agent.md`, or prompt moves
+through the real compiler. It streams the active Python modules and functions,
+generated formal pack, terminal commands, and final verdict while SkillC runs.
+
 ### Controlled English (CE)
 
 A pack can also be written, reviewed or generated in SkillC Controlled

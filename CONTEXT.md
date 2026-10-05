@@ -11,6 +11,23 @@ The formal declaration of capabilities, guarded effects, protocol, initial
 state, goal, and optional role behaviours that the checker judges.
 _Avoid_: Skill, real execution
 
+**Required capability**:
+A capability named by an intent artifact because its protocol may need that
+operation to reach the goal. Declaring a requirement does not grant it.
+_Avoid_: Available tool, granted capability
+
+**Granted capability**:
+A required capability that the selected execution environment authorizes and
+can supply. Grants come from the environment, independently of the intent
+artifact.
+_Avoid_: Required tool, declared tool
+
+**Capability context**:
+The environment-supplied set of granted capabilities against which a declared
+pack is judged. The same intent may be structurally admissible in one
+capability context and refuted in another.
+_Avoid_: Tool requirements, skill frontmatter
+
 **Concrete run**:
 An execution in the actual agent runtime with real tool behavior and payloads.
 It is not an artifact produced or observed by the checker.

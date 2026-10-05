@@ -10,8 +10,12 @@ purely deterministic, inspectable way -- no LLM required:
      ("Tools: a, b, c" / "Tools available: ...").
   2. **Invoked actions** are extracted from the prose: backticked identifiers
      governed by an invocation verb ("via `ask_user_input_v0`",
-     "use `str_replace`", "call `save_skill`", ...).  Fenced code blocks are
-     not scanned (their contents run through the shell capability).
+     "use `str_replace`", "call `save_skill`", ...), plus a small transparent
+     vocabulary of explicit external actions such as web search and flight
+     booking. An identifier the next words type as a code term ("use the
+     `required_providers` block", "the `pipeline_tag` parameter") is a value,
+     not an invocation. Fenced code blocks are not scanned (their contents run
+     through the shell capability).
   3. Identifiers are classified: declared tools and snake_case names act via
      their own capability; unix-ish commands, scripts, and undeclared
      CamelCase code symbols (`pdftotext`, `thumbnail.py`, `PositionalTab`)
@@ -59,7 +63,14 @@ from .prose import INVOKE_RE, negated_before
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.S)
 FENCE_RE = re.compile(r"^(```+|~~~+)([^\n]*)\n(.*?)^\1\s*$\n?", re.S | re.M)
 TOOLS_LINE_RE = re.compile(
-    r"^\s*(?:\*\*)?tools(?:\s+available)?(?:\*\*)?\s*:\s*(.+)$", re.I | re.M)
+    r"^\s*(?:\*\*)?(?:required\s+)?tools?(?:\s+available)?(?:\*\*)?\s*:\s*(.+)$",
+    re.I | re.M,
+)
+EXPLICIT_ACTION_RE = re.compile(
+    r"(?P<websearch>\bsearch\s+(?:for\s+)?(?:the\s+)?(?:internet|web)\b)"
+    r"|(?P<book_flight>\bbook\s+(?:a\s+)?(?:flight(?:\s+ticket)?|airline\s+ticket)\b)",
+    re.I,
+)
 
 AGENT_TOOL_RE = re.compile(r"\A(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Za-z0-9]*)\Z")
 SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
@@ -68,8 +79,19 @@ SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
 # request parameter or tool *type*, not a tool the agent calls.
 VERSIONED_RE = re.compile(r"[_-]\d{8}\Z")
 
+# The word(s) right after an identifier type it as a code term, not a tool:
+# "`required_providers` block", "`pipeline_tag` parameter",
+# "`microsoft_agents` import prefix", "`action_trigger` lifecycle blocks".
+CODE_TERM_AFTER_RE = re.compile(
+    r"\A`\s+(?:[\w-]+\s+)?(?:blocks?|parameters?|params?|fields?|arguments?|args?"
+    r"|prefix(?:es)?|attributes?|meta-arguments?|keys?|flags?|options?"
+    r"|propert(?:y|ies)|variables?|settings?|headers?|claims?|columns?)\b",
+    re.I,
+)
+
 SHELL_CAP = "bash"
 PACK_FENCE_TAG = "skillc-pack"
+COMPACTION_SCHEMA = "skillc.compaction/1"
 
 
 @dataclass
@@ -92,6 +114,90 @@ class CompileResult:
     warnings: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)   # semantic readings
     goal_source: str = "tool_usage_only"
+
+
+def compaction_manifest(
+    result: CompileResult | None,
+    goal_source: str = "llm",
+) -> dict:
+    """Serializable provenance that can travel beside a compiled pack."""
+    if result is None:
+        return {
+            "schema": COMPACTION_SCHEMA,
+            "goal_source": goal_source,
+            "embedded": False,
+            "declared": {},
+            "invocations": [],
+            "warnings": [],
+            "notes": [],
+        }
+    return {
+        "schema": COMPACTION_SCHEMA,
+        "goal_source": result.goal_source,
+        "embedded": result.embedded,
+        "declared": result.declared,
+        "invocations": [
+            {
+                "raw": invocation.raw,
+                "tool": invocation.tool,
+                "kind": invocation.kind,
+                "line": invocation.line,
+            }
+            for invocation in result.invocations
+        ],
+        "warnings": result.warnings,
+        "notes": result.notes,
+    }
+
+
+def result_from_manifest(pack: dict, manifest: dict) -> CompileResult:
+    """Reattach validated compaction provenance to a compiled JSON pack."""
+    if not isinstance(manifest, dict) or manifest.get("schema") != COMPACTION_SCHEMA:
+        raise ValueError(f"not a {COMPACTION_SCHEMA} document")
+    goal_source = manifest.get("goal_source")
+    if not isinstance(goal_source, str) or not goal_source:
+        raise ValueError("compaction manifest needs goal_source")
+    raw_invocations = manifest.get("invocations", [])
+    if not isinstance(raw_invocations, list):
+        raise ValueError("compaction manifest invocations must be a list")
+    invocations = []
+    for index, item in enumerate(raw_invocations):
+        if not (
+            isinstance(item, dict)
+            and all(isinstance(item.get(key), str) for key in ("raw", "tool", "kind"))
+            and isinstance(item.get("line"), int)
+        ):
+            raise ValueError(f"compaction manifest invocation {index} is malformed")
+        invocations.append(Invocation(
+            item["raw"],
+            item["tool"],
+            item["kind"],
+            item["line"],
+        ))
+    declared = manifest.get("declared", {})
+    warnings = manifest.get("warnings", [])
+    notes = manifest.get("notes", [])
+    if not (
+        isinstance(declared, dict)
+        and all(isinstance(key, str) and isinstance(value, str)
+                for key, value in declared.items())
+        and isinstance(warnings, list)
+        and all(isinstance(value, str) for value in warnings)
+        and isinstance(notes, list)
+        and all(isinstance(value, str) for value in notes)
+    ):
+        raise ValueError("compaction manifest contains malformed provenance")
+    return CompileResult(
+        pack=pack,
+        name=str(pack.get("name", "skill")),
+        profile="compiled",
+        declared=declared,
+        invocations=invocations,
+        embedded=bool(manifest.get("embedded", False)),
+        warnings=warnings,
+        notes=notes,
+        goal_source=goal_source,
+    )
 
 
 def parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -150,6 +256,12 @@ def _classify(raw: str) -> str | None:
     return None
 
 
+def _typed_as_value(body: str, end: int) -> bool:
+    """The words right after the identifier call it a code term (block,
+    parameter, field, prefix, ...): "use `X` block" sets a value, not a tool."""
+    return bool(CODE_TERM_AFTER_RE.match(body[end:end + 40]))
+
+
 def _names_a_value(raw: str, body: str) -> bool:
     """An undeclared identifier the document itself shows to be data, not a
     tool: it is date-version stamped, or the document writes it as a quoted
@@ -175,7 +287,7 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
         if norm in declared:
             out.append(Invocation(raw, norm, "agent-tool", line))
             continue
-        if _names_a_value(raw, body):
+        if _names_a_value(raw, body) or _typed_as_value(body, m.end(1)):
             continue
         kind = _classify(raw)
         if kind == "agent-tool" and raw[0].isupper():
@@ -189,6 +301,38 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
         elif kind == "shell":
             out.append(Invocation(raw, SHELL_CAP, "shell", line))
     return out
+
+
+def extract_explicit_actions(body: str) -> list[Invocation]:
+    """Extract unambiguous external actions stated directly in plain prose."""
+    out = []
+    for match in EXPLICIT_ACTION_RE.finditer(body):
+        if negated_before(body, match.start(), window=20):
+            continue
+        tool = match.lastgroup
+        if tool is None:
+            continue
+        out.append(Invocation(
+            match.group(0),
+            tool,
+            "intent-action",
+            body.count("\n", 0, match.start()) + 1,
+        ))
+    return out
+
+
+def _declared_action_target(action: str, declared: dict[str, str]) -> str | None:
+    """Reuse an author's declared operation instead of inventing an alias."""
+    candidates = {
+        "book_flight": ("book", "book_flight"),
+        "websearch": ("websearch", "web_search", "search_web", "search"),
+    }.get(action, (action,))
+    for candidate in candidates:
+        if candidate in declared:
+            return candidate
+    if action == "book_flight":
+        return next((name for name in declared if name.startswith("book_")), None)
+    return None
 
 
 def compile_markdown(text: str, profile: Profile,
@@ -205,7 +349,15 @@ def compile_markdown(text: str, profile: Profile,
                              goal_source="embedded")
 
     declared = _capability_context(meta, prose, profile)
-    invocations = extract(prose, set(declared))
+    explicit_actions = extract_explicit_actions(prose)
+    for action in explicit_actions:
+        target = _declared_action_target(action.tool, declared)
+        if target is not None:
+            action.tool = target
+        else:
+            declared[action.tool] = "prose:explicit-action"
+    invocations = explicit_actions + extract(prose, set(declared))
+    invocations.sort(key=lambda invocation: invocation.line)
 
     # If the document states what "finished" means and lists workflow steps,
     # compile what it actually claims (goal conditions, guards, budgets,

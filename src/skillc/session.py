@@ -179,19 +179,20 @@ def _proj(steps: list[dict], role: str) -> tuple:
             # Observed choice: the selection happens on a medium every role
             # perceives directly (a live call, a shared thread) -- an
             # implicit broadcast of the branch label.  A role whose behaviour
-            # does not depend on the branch merges as usual; otherwise
-            # project as an external choice on the choice labels themselves
-            # (Proj-Brn with the announcement made implicit).
+            # does not depend on the branch merges as usual. If every branch
+            # still informs the role with its own message, that message is the
+            # announcement (Proj-Brn on the message labels); otherwise project
+            # as an external choice on the choice labels themselves.
             if len(set(parts.values())) == 1:
                 return next(iter(parts.values()))
+            informed = _informing_branch(list(parts.values()))
+            if informed is not None:
+                return informed
             return ("branch", chooser, tuple(sorted(parts.items())))
         # Proj-Brn: every branch informs `role` with a distinguishing receive
-        heads = list(parts.values())
-        if (all(h[0] == "recv" for h in heads)
-                and len({h[2] for h in heads}) == len(heads)
-                and len({h[1] for h in heads}) == 1):
-            return ("branch", heads[0][1],
-                    tuple(sorted((h[2], h[3]) for h in heads)))
+        informed = _informing_branch(list(parts.values()))
+        if informed is not None:
+            return informed
         # Proj-Mrg: otherwise the branch behaviours must merge
         vals = list(parts.values())
         try:
@@ -206,6 +207,15 @@ def _proj(steps: list[dict], role: str) -> tuple:
                 f"branches, and the branch behaviours do not merge "
                 f"(unobserved choice -> deadlock/handoff failure)") from None
     raise ProjectionError(f"unknown step kind {kind!r}")
+
+
+def _informing_branch(heads: list[tuple]) -> tuple | None:
+    """Proj-Brn: every branch starts with a distinct receive from one sender."""
+    if (all(h[0] == "recv" for h in heads)
+            and len({h[2] for h in heads}) == len(heads)
+            and len({h[1] for h in heads}) == 1):
+        return ("branch", heads[0][1], tuple(sorted((h[2], h[3]) for h in heads)))
+    return None
 
 
 def _has_behavior(t: tuple) -> bool:

@@ -20,14 +20,15 @@ from ..tokens import Cost, measured_cost
 from . import providers
 from .ce import CEError, ParseResult, compile_ce, extract_ce, parse_ce_detailed
 from .prompts import (CE_RETRY_PROMPT, REPAIR_PROMPT, RUNTIME_ABILITIES_NOTE,
-                      SYSTEM, ce_messages, ce_runtime_messages)
+                      SYSTEM, ce_messages, ce_runtime_messages, vocabulary_note)
 from .providers import metered
 from .runtime import bind_runtime
 
 
 def compact(nl: str, model: str | None = None, timeout: int = 600,
             runtime_abilities: list[str] | None = None,
-            provider: str | None = None) -> dict:
+            provider: str | None = None,
+            vocabulary: dict | None = None) -> dict:
     """Compact natural language into a provider-neutral validated pack.
 
     runtime_abilities: general abilities the target runtime grants (the
@@ -37,17 +38,61 @@ def compact(nl: str, model: str | None = None, timeout: int = 600,
 
     provider: ``anthropic`` or ``azure-openai``. If omitted,
     SKILLC_LLM_PROVIDER is used, then ``anthropic``.
+
+    vocabulary: an environment manifest whose tool and state names the pack
+    should reuse, so environment contracts can be aligned with the goal.
     """
     selected = providers.resolve_provider(provider)
     system = SYSTEM
     if runtime_abilities:
         system += RUNTIME_ABILITIES_NOTE.format(
             abilities="; ".join(runtime_abilities))
+    if vocabulary:
+        system += vocabulary_note(vocabulary)
     user = f"Natural-language skill:\n```\n{nl}\n```\nJSON pack:"
     text = providers.complete(selected, system, user, model, timeout)
-    pack = providers.extract_json_object(text)
-    validate_pack(pack)          # deterministic gate on every provider output
-    return pack
+    try:
+        pack = providers.extract_json_object(text)
+        validate_pack(pack)      # deterministic gate on every provider output
+        return pack
+    except (PackError, ValueError) as error:
+        # One repair round: the gate's message, then the same gate again.
+        retry = (f"{user}\n{text}\n\nThat JSON failed validation: {error}\n"
+                 "Return the corrected JSON pack only.")
+        text = providers.complete(selected, system, retry, model, timeout)
+        pack = providers.extract_json_object(text)
+        validate_pack(pack)
+        return pack
+
+
+VERDICT_EXPLANATION_SYSTEM = (
+    "You explain a SkillC verdict to the person who wrote an intent. A formal "
+    "checker has already decided the verdict; never change, soften, or "
+    "second-guess it. In 2-4 plain sentences, explain in terms of the intent "
+    "and the environment why the checker reached this verdict, naming the "
+    "decisive tools or conditions from the frontier or witness. For UNKNOWN, "
+    "say what could not be established. Plain text only, no lists or markup.")
+
+
+def explain_verdict(nl: str, verdict: dict, *, goal=None, environment: dict | None = None,
+                    model: str | None = None, provider: str | None = None,
+                    timeout: int = 120) -> str:
+    """Untrusted plain-language reason for a verdict the checker decided."""
+    facts = {
+        "verdict": verdict.get("verdict"),
+        "reason": verdict.get("reason"),
+        "detail": verdict.get("detail"),
+        "frontier": verdict.get("frontier", []),
+        "witness": verdict.get("witness", []),
+        "formal_goal": goal,
+        "environment_binding": environment or {},
+    }
+    user = (f"Intent:\n```\n{nl}\n```\nChecker result:\n```json\n"
+            f"{json.dumps(facts, indent=1)}\n```\nExplanation:")
+    selected = providers.resolve_provider(provider)
+    text = providers.complete(selected, VERDICT_EXPLANATION_SYSTEM, user, model,
+                              timeout, json_mode=False)
+    return text.strip()
 
 
 def compact_with_repair(nl: str, model: str | None = None,
