@@ -247,6 +247,8 @@ files at the time of writing, mounted at `/mnt/skills`, or fetched with
 
 These are snapshot results, not a guarantee of concrete success.
 Full table: [real-skills report](docs/REAL_SKILLS_REPORT.md).
+Latest benchmark across skills, agents and prompts, with confusion matrices:
+[benchmark report](docs/BENCHMARK_REPORT.md).
 
 **Semantic level** ([`docs/SEMANTIC_VALIDATION.md`](docs/SEMANTIC_VALIDATION.md),
 `scripts/semantic_validation.py`; recorded with `skillc 0.2.0` and not yet
