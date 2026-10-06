@@ -76,7 +76,7 @@ class EnvironmentInventory:
             return None
         try:
             return Environment.load(path)
-        except (OSError, ValueError) as error:
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as error:
             self._last_error = f"could not load cached environment: {error}"
             return None
 

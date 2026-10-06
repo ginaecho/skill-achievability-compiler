@@ -46,6 +46,18 @@ def sha(b: bytes | str) -> str:
     return hashlib.sha256(b).hexdigest()
 
 
+def head_commit(repo: Path) -> str:
+    """The checked-out commit of a clone; collection stops if it cannot be resolved,
+    since every collected source must record where it came from."""
+    result = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                            capture_output=True, text=True)
+    commit = result.stdout.strip()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise RuntimeError(f"cannot resolve the git revision of {repo}: "
+                           f"{result.stderr.strip() or commit or 'no output'}")
+    return commit
+
+
 def shingles(text: str) -> set:
     w = re.findall(r"[a-z0-9]+", text.lower())
     return {" ".join(w[i:i + 5]) for i in range(max(0, len(w) - 4))}
@@ -93,8 +105,7 @@ def main(clones: Path) -> None:
     out = []
     for org_repo, cap in REPOS:
         repo = clones / org_repo.replace("/", "_")
-        commit = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
-                                capture_output=True, text=True).stdout.strip()
+        commit = head_commit(repo)
         cands = []
         for f in sorted(repo.rglob("SKILL.md")):
             rel = f.relative_to(repo)

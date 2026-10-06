@@ -16,13 +16,12 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.collect_ce_sources_ext import (COMPACTION, find_license, jaccard,  # noqa: E402
-                                            sha, shingles, spdx)
+                                            head_commit, sha, shingles, spdx)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "benchmark" / "ce_sources_gr"
@@ -77,8 +76,7 @@ def main(clones: Path) -> None:
     cands = []
     for org_repo in REPOS:
         repo = clones / org_repo.replace("/", "_")
-        commit = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
-                                capture_output=True, text=True).stdout.strip()
+        commit = head_commit(repo)
         for f in sorted(repo.rglob("SKILL.md")):
             rel = f.relative_to(repo)
             dom = domain(org_repo, rel)

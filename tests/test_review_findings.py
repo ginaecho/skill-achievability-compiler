@@ -1,6 +1,7 @@
 """Regression tests for the Copilot review findings on the eag-innovation PR."""
 import importlib.util
 import json
+import re
 import socket
 import ssl
 import urllib.request
@@ -591,3 +592,28 @@ def test_live_monitor_summary_matches_results_to_their_tool_calls():
 
     assert [(s["tool"], s["result"]) for s in steps] == [("Bash", "a.py"), ("Read", "print(1)")]
     assert final == "done"
+
+
+def test_inventory_treats_a_malformed_cache_as_absent(tmp_path):
+    app_dir = ROOT / "demo" / "skillc-architecture-app"
+    sys.path.insert(0, str(app_dir))
+    inventory_module = _load("environment_inventory_review", app_dir / "environment_inventory.py")
+    (tmp_path / LATEST).write_text(json.dumps(
+        {"schema": "skillc.env/1", "nodes": [], "edges": [], "sources": None}))
+    inventory = inventory_module.EnvironmentInventory(ROOT, tmp_path, refresh_seconds=0,
+                                                      probe=lambda source: Environment())
+
+    assert inventory._load_cached() is None
+    assert "could not load cached environment" in inventory._last_error
+
+
+def test_collectors_fail_when_the_revision_cannot_be_resolved(tmp_path):
+    from scripts.collect_ce_sources_ext import head_commit
+
+    with pytest.raises(RuntimeError, match="cannot resolve"):
+        head_commit(tmp_path)
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "f").write_text("x")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-q", "-m", "c")
+    assert re.fullmatch(r"[0-9a-f]{40}", head_commit(tmp_path))
