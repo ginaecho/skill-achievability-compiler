@@ -419,3 +419,50 @@ def test_runtime_manifest_with_malformed_fields_is_rejected(tmp_path, field, val
 
     with pytest.raises(RuntimeManifestError):
         load_runtime(str(path))
+
+
+def test_contract_binding_drops_init_constraints_outside_the_vocabulary():
+    from skillc import check
+
+    pack = {"name": "t", "roles": ["agent"],
+            "capabilities": {"book": {"owner": "agent", "add": ["booked"]}},
+            "protocol": [{"act": {"cap": "book", "by": "agent"}}], "goal": "booked",
+            "init_constraints": [{"cmp": ["budget", "<", 0]}, {"cmp": ["budget", ">", 0]},
+                                 {"not": "booked"}]}
+    assert check(pack).label == "IMPOSSIBLE"
+
+    binding = apply_contracts(pack, {"book": {"add": ["booked"]}}, {"booked": ""})
+
+    assert binding.applied == ("book",)
+    assert binding.pack["init_constraints"] == [{"not": "booked"}]
+    assert binding.dropped == ("budget",)
+    assert check(binding.pack).label == "ACHIEVABLE"
+
+
+def test_transcript_reader_keeps_a_partial_trailing_record(tmp_path):
+    from skillc.monitor import thinking_since
+
+    path = tmp_path / "t.jsonl"
+    record = json.dumps({"message": {"role": "assistant", "content": [
+        {"type": "thinking", "thinking": "now publish the package"}]}})
+    path.write_text(record[:25], encoding="utf-8")
+
+    first, offset = thinking_since(path, 0)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(record[25:] + "\n")
+    second, _ = thinking_since(path, offset)
+
+    assert first == "" and offset == 0
+    assert second == "now publish the package"
+
+
+def test_transcript_reader_accepts_a_complete_record_without_newline(tmp_path):
+    from skillc.monitor import thinking_since
+
+    path = tmp_path / "t.jsonl"
+    path.write_text(json.dumps({"message": {"role": "assistant", "content": [
+        {"type": "text", "text": "done"}]}}), encoding="utf-8")
+
+    text, offset = thinking_since(path, 0)
+
+    assert text == "done" and offset == path.stat().st_size

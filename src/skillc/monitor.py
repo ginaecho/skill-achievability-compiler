@@ -442,7 +442,8 @@ else:
 def thinking_since(transcript: Path, offset: int) -> tuple[str, int]:
     """Assistant reasoning text (thinking blocks, visible text) appended to a Claude Code
     transcript (JSONL) since `offset` bytes; returns (text, new offset). A transcript
-    shorter than `offset` was replaced or truncated, so it is read from the start."""
+    shorter than `offset` was replaced or truncated, so it is read from the start. A
+    trailing record the writer has not finished is left unread for the next call."""
     if not transcript.exists():
         return "", offset
     if offset > transcript.stat().st_size:
@@ -450,8 +451,15 @@ def thinking_since(transcript: Path, offset: int) -> tuple[str, int]:
     with transcript.open("rb") as f:
         f.seek(offset)
         data = f.read()
+    complete, _, tail = data.rpartition(b"\n")
+    records = complete.split(b"\n")
+    if tail and _is_json(tail):
+        records.append(tail)
+        consumed = len(data)
+    else:
+        consumed = len(data) - len(tail)
     parts = []
-    for line in data.decode("utf-8", "replace").splitlines():
+    for line in (r.decode("utf-8", "replace") for r in records):
         try:
             d = json.loads(line)
         except ValueError:
@@ -464,4 +472,12 @@ def thinking_since(transcript: Path, offset: int) -> tuple[str, int]:
                 parts.append(b["thinking"])
             elif isinstance(b, dict) and b.get("type") == "text" and b.get("text"):
                 parts.append(b["text"])
-    return "\n".join(parts), offset + len(data)
+    return "\n".join(parts), offset + consumed
+
+
+def _is_json(raw: bytes) -> bool:
+    try:
+        json.loads(raw.decode("utf-8"))
+    except ValueError:
+        return False
+    return True

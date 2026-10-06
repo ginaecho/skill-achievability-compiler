@@ -104,6 +104,7 @@ class ContractBinding:
     pack: dict
     applied: tuple[str, ...]
     unaligned: tuple[str, ...]
+    dropped: tuple[str, ...] = ()   # names of init constraints outside the vocabulary
 
 
 @dataclass(frozen=True)
@@ -136,7 +137,10 @@ def apply_contracts(pack: dict, contracts: dict, states: Iterable[str],
     """Substitute environment contracts for the pack's granted capabilities.
 
     `init_true` is the environment's initial state; it holds whenever the
-    environment's contracts are in force.
+    environment's contracts are in force. Under those contracts, an initial
+    constraint naming anything outside the state vocabulary is a compaction
+    artifact the environment cannot confirm, so it is dropped: removing a
+    constraint only widens the initial states and can never create a refutation.
     """
     validate_pack(pack)
     vocabulary = set(states)
@@ -158,7 +162,16 @@ def apply_contracts(pack: dict, contracts: dict, states: Iterable[str],
             **{key: deepcopy(contract[key]) for key in CONTRACT_FIELDS if key in contract},
         }
         applied.append(name)
+    dropped: set[str] = set()
     if applied:
         bound["init_true"] = sorted(set(bound.get("init_true", [])) | set(init_true))
+        kept = []
+        for constraint in bound.get("init_constraints", []):
+            outside = (atoms(constraint) | numeric_vars(constraint)) - vocabulary
+            dropped |= outside
+            if not outside:
+                kept.append(constraint)
+        if "init_constraints" in bound:
+            bound["init_constraints"] = kept
     validate_pack(bound)
-    return ContractBinding(bound, tuple(sorted(applied)), ())
+    return ContractBinding(bound, tuple(sorted(applied)), (), tuple(sorted(dropped)))
