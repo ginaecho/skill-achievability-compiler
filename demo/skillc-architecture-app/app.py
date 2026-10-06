@@ -33,6 +33,24 @@ APP_CONFIG = {
     "model": "",
 }
 MAX_INPUT_BYTES = 100_000
+ALLOWED_HOSTS: frozenset[str] = frozenset()
+
+
+def post_rejection(headers, allowed_hosts: frozenset[str]) -> str | None:
+    """Why a state-changing request must be refused, or None.
+
+    A JSON content type forces a CORS preflight this server never grants, and
+    the Host/Origin checks stop cross-site pages and DNS rebinding."""
+    content_type = (headers.get("Content-Type") or "").split(";")[0].strip().lower()
+    if content_type != "application/json":
+        return "Content-Type must be application/json"
+    host = (headers.get("Host") or "").lower()
+    if host not in allowed_hosts:
+        return f"untrusted Host {host!r}"
+    origin = headers.get("Origin")
+    if origin is not None and origin.lower() != f"http://{host}":
+        return "cross-origin requests are refused"
+    return None
 
 
 def parse_json_object(body: bytes) -> dict:
@@ -162,6 +180,10 @@ class Handler(BaseHTTPRequestHandler):
         request_path = urlparse(self.path).path
         if request_path not in {"/api/runs", "/api/environment/refresh"}:
             self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        rejection = post_rejection(self.headers, ALLOWED_HOSTS)
+        if rejection:
+            self._json_error(HTTPStatus.FORBIDDEN, rejection)
             return
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -349,7 +371,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    global CATALOG_ROOT, APP_CONFIG, ENVIRONMENT_INVENTORY
+    global CATALOG_ROOT, APP_CONFIG, ENVIRONMENT_INVENTORY, ALLOWED_HOSTS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
@@ -405,6 +427,8 @@ def main() -> None:
     )
     ENVIRONMENT_INVENTORY.start()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
+    ALLOWED_HOSTS = frozenset(
+        f"{host}:{args.port}" for host in (args.host.lower(), "127.0.0.1", "localhost"))
     url = f"http://{args.host}:{args.port}"
     print(f"SkillC architecture app: {url}")
     if not args.no_browser:

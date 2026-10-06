@@ -112,8 +112,10 @@ answers.
 
 **Facts.**
 
-* Egress is one HTTPS request per host. An answer from the host, even 404, is
-  "reachable". A 403/407 from the egress proxy is a refusal.
+* Egress is one HTTPS request per host. An answer from the host, even 404 or a
+  redirect, is "reachable". A 403/407 from the egress proxy is a refusal.
+  Hosts that resolve to loopback, private, link-local or reserved addresses
+  are refused without a request, and redirects are never followed.
 * A tool with no allow or deny rule is an assumption ("the user approves when
   asked"), never a refusal.
 * A credential that is set is assumed valid for the task.

@@ -99,10 +99,11 @@ def test_egress_classifies_proxy_refusals(monkeypatch):
     def not_found(*a, **k):
         raise urllib.error.HTTPError("https://h/", 404, "Not Found", {}, None)
 
-    monkeypatch.setattr(claude.urllib.request, "urlopen", refuse)
+    monkeypatch.setattr(claude, "_non_public_address", lambda hostname: None)
+    monkeypatch.setattr(claude, "_open", refuse)
     ok, why = claude.egress("h.example")
     assert ok is False and "egress policy" in why
-    monkeypatch.setattr(claude.urllib.request, "urlopen", not_found)
+    monkeypatch.setattr(claude, "_open", not_found)
     assert claude.egress("h.example") == (True, "HTTP 404 from the host")
 
 

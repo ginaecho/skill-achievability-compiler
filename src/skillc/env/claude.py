@@ -32,13 +32,16 @@ is definite.  Probing a host sends no credentials and changes nothing.
 from __future__ import annotations
 
 import importlib.util
+import ipaddress
 import json
 import os
 import platform as _platform
 import shutil
+import socket
 import ssl
 import subprocess
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Iterable
 from importlib import resources
@@ -200,14 +203,19 @@ def _importable(name: str) -> bool:
 def egress(host: str, timeout: float = 8.0) -> tuple[bool, str]:
     """One HTTPS request to `host` through the session's proxy settings.
 
-    Any HTTP answer from the host (even 404 or 401) proves the network path;
-    a 403/407 on the proxy tunnel is the egress policy refusing the host."""
+    Any HTTP answer from the host (even 404, 401 or a redirect) proves the
+    network path; a 403/407 on the proxy tunnel is the egress policy refusing
+    the host. Hosts can come from intent text, so destinations that resolve to
+    loopback, private, link-local or reserved addresses are never contacted and
+    redirects are not followed."""
     url = host if host.startswith("https://") else f"https://{host}/"
+    blocked = _non_public_address(urllib.parse.urlsplit(url).hostname or "")
+    if blocked:
+        return False, f"refused: {host} resolves to non-public address {blocked}"
     req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": "skillc-probe"})
     try:
-        with urllib.request.urlopen(req, timeout=timeout,
-                                    context=ssl.create_default_context(
-                                        cafile=os.environ.get("SSL_CERT_FILE"))) as r:
+        with _open(req, timeout, ssl.create_default_context(
+                cafile=os.environ.get("SSL_CERT_FILE"))) as r:
             return True, f"HTTP {r.status}"
     except urllib.error.HTTPError as e:
         return True, f"HTTP {e.code} from the host"
@@ -220,6 +228,34 @@ def egress(host: str, timeout: float = 8.0) -> tuple[bool, str]:
         return False, f"no answer within {timeout:g}s"
     except (OSError, ValueError) as e:
         return False, str(e)[:200]
+
+
+def _non_public_address(hostname: str) -> str | None:
+    """The first non-global address `hostname` resolves to, if any.
+
+    An unresolvable name is left to the proxy, which then decides egress."""
+    try:
+        infos = socket.getaddrinfo(hostname, 443, proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError):
+        return None
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not address.is_global:
+            return str(address)
+    return None
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None                     # the 3xx itself is the answer
+
+
+def _opener(context: ssl.SSLContext) -> urllib.request.OpenerDirector:
+    return urllib.request.build_opener(_NoRedirect, urllib.request.HTTPSHandler(context=context))
+
+
+def _open(req: urllib.request.Request, timeout: float, context: ssl.SSLContext):
+    return _opener(context).open(req, timeout=timeout)
 
 
 def _connectors(env: Environment, connectors: dict[str, list[str]],

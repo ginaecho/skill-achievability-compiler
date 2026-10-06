@@ -1,6 +1,9 @@
 """Regression tests for the Copilot review findings on the eag-innovation PR."""
 import importlib.util
 import json
+import socket
+import ssl
+import urllib.request
 import sys
 from pathlib import Path
 
@@ -238,3 +241,51 @@ def test_malformed_mcp_server_is_unknown_and_others_still_probed(tmp_path, spec)
 
     assert env.is_unknown("mcp_server:bad")
     assert [node["name"] for node in env.of_kind("mcp_server")] == ["good"]
+
+
+ALLOWED = frozenset({"127.0.0.1:8765", "localhost:8765"})
+
+
+@pytest.mark.parametrize("headers, rejected", [
+    ({"Content-Type": "text/plain", "Host": "127.0.0.1:8765"}, True),
+    ({"Content-Type": "application/json", "Host": "evil.example:8765"}, True),
+    ({"Content-Type": "application/json", "Host": "127.0.0.1:8765",
+      "Origin": "https://evil.example"}, True),
+    ({"Content-Type": "application/json; charset=utf-8", "Host": "127.0.0.1:8765",
+      "Origin": "http://127.0.0.1:8765"}, False),
+    ({"Content-Type": "application/json", "Host": "localhost:8765"}, False),
+])
+def test_app_post_requires_json_and_a_trusted_origin(headers, rejected):
+    app_dir = ROOT / "demo" / "skillc-architecture-app"
+    sys.path.insert(0, str(app_dir))
+    app = _load("atlas_app_csrf", app_dir / "app.py")
+
+    assert (app.post_rejection(headers, ALLOWED) is not None) is rejected
+
+
+@pytest.mark.parametrize("host, address", [
+    ("10.0.0.5", "10.0.0.5"), ("internal.example", "192.168.1.10"),
+    ("meta.example", "169.254.169.254"), ("loop.example", "127.0.0.1"),
+    ("v6.example", "::1"),
+])
+def test_egress_refuses_non_public_destinations(monkeypatch, host, address):
+    from skillc.env import claude
+
+    family = socket.AF_INET6 if ":" in address else socket.AF_INET
+    monkeypatch.setattr(claude.socket, "getaddrinfo",
+                        lambda *a, **k: [(family, socket.SOCK_STREAM, 6, "", (address, 443))])
+    monkeypatch.setattr(claude, "_open", lambda *a, **k: pytest.fail("request was sent"))
+
+    ok, why = claude.egress(host)
+
+    assert ok is False and "non-public" in why
+
+
+def test_egress_does_not_follow_redirects():
+    from skillc.env import claude
+
+    opener = claude._opener(ssl.create_default_context())
+    redirect = next(h for h in opener.handlers
+                    if isinstance(h, urllib.request.HTTPRedirectHandler))
+
+    assert redirect.redirect_request(None, None, 302, "Found", {}, "http://10.0.0.1/") is None
