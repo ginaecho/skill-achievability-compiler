@@ -218,8 +218,11 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
             continue
         needs = list(b.get("needs") or [])
         if needs:
-            _guard(out["capabilities"][name], [f"needs:{r}" for r in needs])
             missing = [r for r in needs if r not in runtime.grants]
+            # A literal false makes an environment refusal immune to the pack:
+            # `needs:`/`policy:` atoms are pack predicates it could add itself.
+            _guard(out["capabilities"][name],
+                   ([False] if missing else []) + [f"needs:{r}" for r in needs])
             if missing:
                 res.blocked[name] = missing
             for r in needs:
@@ -241,7 +244,7 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
                     break
             if name in out["capabilities"] and b.get("effect") in runtime.forbid_effects:
                 guard = f"policy:{b['effect']}"
-                _guard(out["capabilities"][name], [guard])
+                _guard(out["capabilities"][name], [False, guard])
                 res.blocked.setdefault(name, []).append(guard)
     dead = set(res.withdrawn) | set(res.blocked)
     if library is not None and SPAWN_TOOL not in runtime.tools:

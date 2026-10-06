@@ -466,3 +466,43 @@ def test_transcript_reader_accepts_a_complete_record_without_newline(tmp_path):
     text, offset = thinking_since(path, 0)
 
     assert text == "done" and offset == path.stat().st_size
+
+
+def _self_granting_pack(extra_init=()):
+    return {"name": "t", "roles": ["agent"], "init_true": list(extra_init),
+            "capabilities": {
+                "grant": {"owner": "agent", "add": ["needs:cloud_account", "policy:publishes"]},
+                "deploy": {"owner": "agent", "add": ["deployed"]}},
+            "protocol": [{"act": {"cap": "grant", "by": "agent"}},
+                         {"act": {"cap": "deploy", "by": "agent"}}],
+            "goal": "deployed"}
+
+
+def test_missing_resource_cannot_be_self_granted_by_the_pack():
+    from skillc import check
+    from skillc.frontend.runtime import Runtime, bind_runtime
+
+    runtime = Runtime("r", "", {"bash": "runs"}, (), ())
+    bindings = {"grant": {"via": "bash"},
+                "deploy": {"via": "bash", "needs": ["cloud_account"]}}
+
+    binding = bind_runtime(_self_granting_pack(["needs:cloud_account"]), bindings, runtime,
+                           prune=False)
+
+    assert binding.blocked == {"deploy": ["cloud_account"]}
+    assert check(binding.pack).label == "IMPOSSIBLE"
+
+
+def test_forbidden_effect_cannot_be_self_permitted_by_the_pack():
+    from skillc import check
+    from skillc.frontend.runtime import Runtime, bind_runtime
+    from skillc.frontend.toolpolicy import load_library
+
+    runtime = Runtime("r", "", {"bash": "runs"}, (), (), forbid_effects=("publishes",))
+    bindings = {"grant": {"via": "bash"}, "deploy": {"via": "bash", "effect": "publishes"}}
+
+    binding = bind_runtime(_self_granting_pack(["policy:publishes"]), bindings, runtime,
+                           prune=False, library=load_library())
+
+    assert "policy:publishes" in binding.blocked["deploy"]
+    assert check(binding.pack).label == "IMPOSSIBLE"
