@@ -7,7 +7,7 @@ Sources (licensed; `git clone --depth 1` checkouts named <org>_<repo> in CLONES_
   alirezarezvani/claude-skills (MIT).
 Engineering folders and mirrored copies (.gemini, .codex, ...) are skipped. Each skill gets a
 domain label from its folder. Candidates are de-duplicated (exact and near) against
-ce_sources, ce_sources_ext and compaction_sources, and 100 are taken round-robin over
+ce_sources, ce_sources_ext and compaction_sources, and N = 50 are taken round-robin over
 domains in a fixed sha256 order.
 
   python scripts/collect_ce_sources_gr.py CLONES_DIR
