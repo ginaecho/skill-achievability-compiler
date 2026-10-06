@@ -40,11 +40,20 @@ def load_catalog(repo_root: Path, data_root: Path | None = None) -> dict:
         _worktree_reader(data_root) if data_root else _branch_reader(repo_root)
     )
     entries = [*_topic_entries(read, list_topics()), *_real_entries(data_root)]
-    return {
+    catalog = {
         "branch": f"{CATALOG_BRANCH} (working tree)" if data_root else CATALOG_BRANCH,
         "count": len(entries),
         "entries": entries,
     }
+    if not entries:
+        catalog["hint"] = (
+            f"No tested intents found. Fetch {CATALOG_BRANCH} from the upstream "
+            "SkillC repository, or pass --catalog-root PATH_TO_DATA_CHECKOUT.")
+    return catalog
+
+
+class CatalogError(RuntimeError):
+    """The catalog data checkout or branch cannot be read."""
 
 
 def _topic_entries(read, topic_ids: list[str]) -> list[dict]:
@@ -141,21 +150,28 @@ def _worktree_reader(data_root: Path):
 
 
 def _branch_reader(repo_root: Path):
-    def git(*args: str) -> str:
-        result = subprocess.run(
+    ref = f"origin/{CATALOG_BRANCH}"
+
+    def git(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
             ["git", *args], cwd=repo_root, capture_output=True, text=True,
             encoding="utf-8", errors="replace", check=False,
         )
-        return result.stdout if result.returncode == 0 else ""
 
     def read(path: str) -> str:
-        return git("show", f"origin/{CATALOG_BRANCH}:{path}")
+        # `./` resolves from repo_root, so a SkillC copy vendored in a subfolder still works.
+        result = git("show", f"{ref}:./{path}")
+        if result.returncode != 0:
+            raise CatalogError(
+                f"cannot read {path} from {ref}; fetch the upstream data branch "
+                "or pass --catalog-root PATH_TO_DATA_CHECKOUT")
+        return result.stdout
 
     def list_topics() -> list[str]:
-        paths = git("ls-tree", "-r", "--name-only", f"origin/{CATALOG_BRANCH}", TOPICS_DIR)
+        result = git("ls-tree", "-r", "--name-only", ref, TOPICS_DIR)
         return sorted({
-            Path(path).parent.name for path in paths.splitlines()
+            Path(path).parent.name for path in result.stdout.splitlines()
             if path.endswith("/topic.json")
-        })
+        }) if result.returncode == 0 else []
 
     return read, list_topics

@@ -3,7 +3,9 @@
 Reads the standard configuration files -- `.mcp.json` (Claude Code project),
 `claude_desktop_config.json` / `~/.claude.json` (`mcpServers`), and
 `.vscode/mcp.json` (`servers`) -- and records one `mcp_server` node per
-server.  Only environment variable *names* are kept, never their values.
+server.  Only environment variable *names*, the executable name, the argument
+count and the URL without credentials or query are kept: argument and secret
+values never enter a snapshot.
 
 Listing a server's tools means starting it, which runs a program from the
 user's configuration, so it happens only on request (`list_tools=True`) and
@@ -21,6 +23,7 @@ import subprocess
 import threading
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from .. import __version__
 from .model import Environment
@@ -80,10 +83,12 @@ def probe(configs: list[str | Path], list_tools: bool = False,
 def _add_server(env: Environment, name: str, spec: dict, list_tools: bool,
                 timeout: float) -> None:
     transport = spec.get("type") or ("stdio" if "command" in spec else "http")
+    # Arguments and URL credentials/queries can carry secrets; keep only identifying metadata.
+    command = Path(str(spec.get("command") or "")).name or None
     server = env.add_node(f"mcp/{name}", "mcp_server", name, transport=transport,
-                          command=" ".join([spec.get("command", ""), *spec.get("args", [])]).strip()
-                          or None,
-                          url=spec.get("url"), env_vars=sorted(spec.get("env") or {}) or None)
+                          command=command, arg_count=len(spec.get("args") or []) or None,
+                          url=_public_url(spec.get("url")),
+                          env_vars=sorted(spec.get("env") or {}) or None)
     if not list_tools:
         env.mark_unknown(f"mcp_tools:{name}", "tools not listed (probe with --list-tools)")
         return
@@ -97,6 +102,16 @@ def _add_server(env: Environment, name: str, spec: dict, list_tools: bool,
             env.add_edge(server, node, "exposes")
     except (MCPProbeError, OSError) as e:
         env.mark_unknown(f"mcp_tools:{name}", str(e)[:300])
+
+
+def _public_url(url: Any) -> str | None:
+    """Scheme, host, port and path only: no user info, query or fragment."""
+    if not isinstance(url, str) or not url:
+        return None
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    netloc = f"{host}:{parts.port}" if parts.port else host
+    return urlunsplit((parts.scheme, netloc, parts.path, "", ""))
 
 
 def list_stdio_tools(spec: dict, timeout: float = 20.0) -> list[dict]:

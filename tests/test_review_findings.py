@@ -85,3 +85,69 @@ def test_watch_repairs_an_invalid_latest_snapshot(tmp_path, content):
 
     assert report["environment_changes"] is None
     Environment.load(tmp_path / LATEST)
+
+def _catalog_module():
+    app_dir = ROOT / "demo" / "skillc-architecture-app"
+    sys.path.insert(0, str(app_dir))
+    return _load("intent_catalog_review", app_dir / "intent_catalog.py")
+
+
+def _git(cwd: Path, *args: str) -> None:
+    import subprocess
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args],
+                   cwd=cwd, check=True, capture_output=True)
+
+
+def test_catalog_branch_reader_resolves_paths_from_a_vendored_subfolder(tmp_path):
+    catalog = _catalog_module()
+    vendored = tmp_path / "agentic-governance" / "skillc"
+    topic = vendored / catalog.TOPICS_DIR / "pay"
+    topic.mkdir(parents=True)
+    (topic / "topic.json").write_text(json.dumps({"title": "Pay", "category": "C"}))
+    (topic / "environment.json").write_text(json.dumps({"tools": {"pay": "pays"}}))
+    for name in catalog.FORM_FILES.values():
+        (topic / name).write_text(name)
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "add", ".")
+    _git(tmp_path, "commit", "-q", "-m", "data")
+    _git(tmp_path, "update-ref", f"refs/remotes/origin/{catalog.CATALOG_BRANCH}", "HEAD")
+
+    read, list_topics = catalog._branch_reader(vendored)
+    entries = catalog._topic_entries(read, list_topics())
+
+    assert [entry["content"] for entry in entries] == list(catalog.FORM_FILES.values())
+
+
+def test_catalog_without_data_branch_is_empty_with_a_hint(tmp_path):
+    catalog = _catalog_module()
+    _git(tmp_path, "init", "-q")
+
+    result = catalog.load_catalog(tmp_path)
+
+    assert result["count"] == 0
+    assert "--catalog-root" in result["hint"]
+
+
+def test_catalog_unreadable_topic_file_raises_a_clear_error(tmp_path):
+    catalog = _catalog_module()
+    read, _ = catalog._branch_reader(tmp_path)
+
+    with pytest.raises(catalog.CatalogError, match="--catalog-root"):
+        read("corpus/intents/missing/topic.json")
+
+
+def test_mcp_snapshot_keeps_no_command_arguments_or_url_secrets(tmp_path):
+    path = tmp_path / ".mcp.json"
+    path.write_text(json.dumps({"mcpServers": {
+        "local": {"command": "/usr/bin/npx", "args": ["server", "--api-key", "sk-SECRET"]},
+        "remote": {"type": "http", "url": "https://user:pw@example.com/mcp?token=SECRET#x"},
+    }}))
+
+    env = mcp.probe([path])
+    snapshot = json.dumps(env.to_dict())
+
+    assert "SECRET" not in snapshot and "pw@" not in snapshot
+    servers = {node["name"]: node["attrs"] for node in env.of_kind("mcp_server")}
+    assert servers["local"]["command"] == "npx"
+    assert servers["local"]["arg_count"] == 3
+    assert servers["remote"]["url"] == "https://example.com/mcp"
