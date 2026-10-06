@@ -35,6 +35,17 @@ APP_CONFIG = {
 MAX_INPUT_BYTES = 100_000
 
 
+def parse_json_object(body: bytes) -> dict:
+    """Decode a request body that must be a JSON object."""
+    try:
+        payload = json.loads(body)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("request body must be a valid JSON object") from error
+    if not isinstance(payload, dict):
+        raise ValueError("request body must be a valid JSON object")
+    return payload
+
+
 @dataclass
 class Run:
     events: queue.Queue[dict] = field(default_factory=queue.Queue)
@@ -164,9 +175,9 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
         try:
-            payload = json.loads(self.rfile.read(length))
-        except (UnicodeDecodeError, json.JSONDecodeError):
-            self._json_error(HTTPStatus.BAD_REQUEST, "request body must be valid JSON")
+            payload = parse_json_object(self.rfile.read(length))
+        except ValueError as error:
+            self._json_error(HTTPStatus.BAD_REQUEST, str(error))
             return
         if request_path == "/api/environment/refresh":
             contents = payload.get("contents", [])

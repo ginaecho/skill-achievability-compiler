@@ -143,8 +143,9 @@ def apply_contracts(pack: dict, contracts: dict, states: Iterable[str],
         contract = contracts.get(name)
         if contract is None:
             continue
+        owner = {"owner": capability["owner"]} if "owner" in capability else {}
         bound["capabilities"][name] = {
-            "owner": capability.get("owner"),
+            **owner,
             **{key: deepcopy(contract[key]) for key in CONTRACT_FIELDS if key in contract},
         }
         applied.append(name)

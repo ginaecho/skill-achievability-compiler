@@ -20,20 +20,32 @@ from skillc.pack import PackError, validate_pack
 from skillc.profiles import Profile
 
 
+class VerificationError(RuntimeError):
+    """Persisted benchmark evidence does not match its recorded hashes or verdicts."""
+
+
+def require(condition: bool, failure: str) -> None:
+    if not condition:
+        raise VerificationError(failure)
+
+
 def verify(directory: Path) -> dict:
     frozen = json.loads((directory / "frozen.json").read_text())
     results = json.loads((directory / "results.json").read_text())
     metrics = json.loads((directory / "metrics.json").read_text())
     calls = [json.loads(line) for line in
              (directory / "calls.jsonl").read_text().splitlines()]
-    assert len(results) == 6 * len(frozen["scenarios"])
-    assert len({(r["id"], r["mode"], r["variant"]) for r in results}) == len(results)
+    require(len(results) == 6 * len(frozen["scenarios"]), "expected six results per scenario")
+    require(len({(r["id"], r["mode"], r["variant"]) for r in results}) == len(results),
+            "duplicate (id, mode, variant) result rows")
     for relative, expected in frozen["implementation_sha256"].items():
-        assert sha(directory / "implementation" / relative) == expected, relative
+        require(sha(directory / "implementation" / relative) == expected,
+                f"implementation hash mismatch: {relative}")
     sources = json.loads((directory / "sources" / "sources.json").read_text())
     for source in sources:
         for filename, field in (("SKILL.md", "skill_md_sha256"), ("LICENSE", "license_sha256")):
-            assert sha(directory / "sources" / source["id"] / filename) == source[field]
+            require(sha(directory / "sources" / source["id"] / filename) == source[field],
+                    f"source hash mismatch: {source['id']}/{filename}")
     replayed = []
     witness_steps = 0
     for scenario in frozen["scenarios"]:
@@ -41,33 +53,41 @@ def verify(directory: Path) -> dict:
         for filename, field in (("input.md", "input_sha256"),
                                 ("contract.json", "contract_sha256"),
                                 ("oracle.json", "oracle_sha256")):
-            assert sha(case_dir / filename) == scenario[field]
+            require(sha(case_dir / filename) == scenario[field],
+                    f"{scenario['id']}: {filename} hash mismatch")
         contract = json.loads((case_dir / "contract.json").read_text())
         reference = {"name": scenario["source"], "protocol": [], **contract}
         oracle = json.loads((case_dir / "oracle.json").read_text())
-        assert audit_goal_reachability(reference)["truth"] == scenario["truth"]
+        require(audit_goal_reachability(reference)["truth"] == scenario["truth"],
+                f"{scenario['id']}: reference truth differs from the frozen truth")
         if oracle["truth"] == "ACHIEVABLE":
             world = World.initial(reference)
             for step in oracle["witness"]:
                 world, error = world.transition(contract["capabilities"][step["capability"]])
-                assert error is None
-                assert world.snapshot() == {key: step[key] for key in world.snapshot()}
+                require(error is None,
+                        f"{scenario['id']}: witness step {step['capability']} failed: {error}")
+                require(world.snapshot() == {key: step[key] for key in world.snapshot()},
+                        f"{scenario['id']}: witness state differs at {step['capability']}")
                 witness_steps += 1
-            assert holds(contract["goal"], world.predicates, world.values)
+            require(holds(contract["goal"], world.predicates, world.values),
+                    f"{scenario['id']}: witness does not reach the goal")
         text = (case_dir / "input.md").read_text(encoding="utf-8")
         compiled = compile_markdown(
             text, Profile(name="fixed-invocation", tools=frozenset(contract["capabilities"])),
             name=scenario["source"])
-        assert compiled.pack == json.loads((case_dir / "deterministic_pack.json").read_text())
+        require(compiled.pack == json.loads((case_dir / "deterministic_pack.json").read_text()),
+                f"{scenario['id']}: deterministic pack differs from the recorded pack")
         replayed.extend(assess(compiled.pack, contract, scenario, "deterministic",
                                compiled.goal_source))
         llm = json.loads((case_dir / "llm_result.json").read_text())
         case_calls = [call for call in calls if call["id"] == scenario["id"]]
-        assert len(case_calls) == llm["attempts"]
+        require(len(case_calls) == llm["attempts"],
+                f"{scenario['id']}: call count differs from recorded attempts")
         messages = [{"role": "system", "content": frozen["system"]},
                     {"role": "user", "content": text}]
         for attempt, call in enumerate(case_calls, 1):
-            assert call["attempt"] == attempt
+            require(call["attempt"] == attempt,
+                    f"{scenario['id']}: calls out of order at attempt {attempt}")
             payload = {
                 "model": call["requested_model"], "messages": messages,
                 "max_completion_tokens": 6000,
@@ -75,9 +95,12 @@ def verify(directory: Path) -> dict:
             }
             digest = hashlib.sha256(json.dumps(
                 payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-            assert digest == call["request_sha256"]
-            assert call["http_status"] == 200 and not call["error"]
-            assert call["usage"]["input"] + call["usage"]["output"] == call["usage"]["total"]
+            require(digest == call["request_sha256"],
+                    f"{scenario['id']}: request digest mismatch at attempt {attempt}")
+            require(call["http_status"] == 200 and not call["error"],
+                    f"{scenario['id']}: call {attempt} did not succeed")
+            require(call["usage"]["input"] + call["usage"]["output"] == call["usage"]["total"],
+                    f"{scenario['id']}: token usage does not add up at attempt {attempt}")
             try:
                 if call["finish_reason"] != "stop":
                     raise ValueError(f"incomplete output: {call['finish_reason']}")
@@ -90,7 +113,8 @@ def verify(directory: Path) -> dict:
                      f"Schema validation failed: {exc}. Return a valid pack; "
                      "do not weaken the task or change the contract."}]
             else:
-                assert pack == llm["pack"]
+                require(pack == llm["pack"],
+                        f"{scenario['id']}: replayed LLM pack differs from the recorded pack")
         if "error" in llm:
             replayed.extend(r for r in results
                             if r["id"] == scenario["id"] and r["mode"] == "llm")
@@ -99,12 +123,15 @@ def verify(directory: Path) -> dict:
     indexed = {(r["id"], r["mode"], r["variant"]): r for r in results}
     for row in replayed:
         previous = indexed[(row["id"], row["mode"], row["variant"])]
-        assert row["predicted"] == previous["predicted"]
-        assert row["reason"] == previous["reason"]
+        require(row["predicted"] == previous["predicted"],
+                f"{row['id']}: replayed verdict differs from the recorded verdict")
+        require(row["reason"] == previous["reason"],
+                f"{row['id']}: replayed reason differs from the recorded reason")
     for name, group in metrics.items():
         mode, variant = name.split("/")
         selected = [r for r in replayed if r["mode"] == mode and r["variant"] == variant]
-        assert score(selected) == group["overall"]
+        require(score(selected) == group["overall"],
+                f"{name}: recomputed metrics differ from the recorded metrics")
     report = {
         "scenarios_verified": len(frozen["scenarios"]),
         "verdicts_replayed": len(replayed), "source_documents_verified": len(sources),

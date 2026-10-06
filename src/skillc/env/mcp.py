@@ -33,14 +33,29 @@ class MCPProbeError(RuntimeError):
     """A server could not be started or did not answer like an MCP server."""
 
 
-def servers_in(config: dict) -> dict[str, dict]:
+class MCPConfigError(ValueError):
+    """A configuration file is valid JSON but not a recognised MCP shape."""
+
+
+def servers_in(config: Any) -> dict[str, dict]:
     """Server specs from any of the common configuration shapes."""
     out: dict[str, dict] = {}
     for key in ("mcpServers", "servers"):
-        out.update(config.get(key) or {})
-    for project in (config.get("projects") or {}).values():
-        out.update((project or {}).get("mcpServers") or {})
+        out.update(_object(config, key))
+    for project in _object(config, "projects").values():
+        out.update(_object({} if project is None else project, "mcpServers"))
     return {name: spec for name, spec in out.items() if isinstance(spec, dict)}
+
+
+def _object(container: Any, key: str) -> dict:
+    if not isinstance(container, dict):
+        raise MCPConfigError(f"expected an object around {key!r}")
+    value = container.get(key)
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise MCPConfigError(f"{key!r} must be an object")
+    return value
 
 
 def probe(configs: list[str | Path], list_tools: bool = False,
@@ -52,7 +67,7 @@ def probe(configs: list[str | Path], list_tools: bool = False,
             continue
         try:
             servers = servers_in(json.loads(p.read_text(encoding="utf-8")))
-        except (OSError, json.JSONDecodeError) as e:
+        except (OSError, json.JSONDecodeError, MCPConfigError) as e:
             env.mark_unknown(f"mcp_config:{p}", str(e)[:200])
             continue
         env.sources.append({"adapter": "mcp", "mode": "live" if list_tools else "config",

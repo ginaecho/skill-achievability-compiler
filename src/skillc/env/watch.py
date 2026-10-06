@@ -26,7 +26,7 @@ def watch_once(directory: str | Path, probe: Callable[[], Environment],
                intents: dict[str, dict]) -> dict:
     root = Path(directory)
     root.mkdir(parents=True, exist_ok=True)
-    previous = Environment.load(root / LATEST) if (root / LATEST).exists() else None
+    previous = _previous_snapshot(root / LATEST)
     env = probe()
     stamp = env.captured_at.replace(":", "").replace("-", "")
     env.save(root / f"env-{stamp}.json")
@@ -45,6 +45,14 @@ def watch_once(directory: str | Path, probe: Callable[[], Environment],
             report["status_changes"][name] = changed
         path.write_text(json.dumps(result.to_dict(), indent=1, default=str), encoding="utf-8")
     return report
+
+
+def _previous_snapshot(path: Path) -> Environment | None:
+    """The last snapshot, or None when absent or unreadable so a probe can repair it."""
+    try:
+        return Environment.load(path)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return None
 
 
 def watch(directory: str | Path, probe: Callable[[], Environment], intents: dict[str, dict],

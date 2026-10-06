@@ -12,6 +12,12 @@ from skillc import __version__, check, compile_file, load_profile
 PROFILES = ["claude-ai", "claude-code"]
 
 
+def verdict_cell(v) -> str:
+    if v.label == "IMPOSSIBLE":
+        return "IMPOSSIBLE (" + ", ".join(f"`{x}`" for x in v.frontier) + ")"
+    return v.label
+
+
 def main() -> int:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else "/mnt/skills")
     files = sorted(root.rglob("SKILL.md"))
@@ -41,12 +47,8 @@ def main() -> int:
         cells = []
         for n in PROFILES:
             v = check(compile_file(f, profiles[n]).pack)
-            if v.achievable:
-                stats[n] += 1
-                cells.append("ACHIEVABLE")
-            else:
-                missing = ", ".join(f"`{x}`" for x in v.frontier)
-                cells.append(f"IMPOSSIBLE ({missing})")
+            stats[n] += v.label == "ACHIEVABLE"
+            cells.append(verdict_cell(v))
         lines.append(f"| `{rel}` | " + " | ".join(cells) + " |")
     lines += ["",
               "**Totals:** " + ", ".join(
