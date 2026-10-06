@@ -629,3 +629,16 @@ def test_explicit_tool_invocation_survives_a_quoted_data_occurrence():
 
     assert [i.tool for i in extract(body, set())] == ["create_issue"]
     assert extract(parameter, set()) == []
+
+
+def test_composite_input_keeps_a_source_with_malformed_frontmatter():
+    sys.path.insert(0, str(ROOT / "demo" / "skillc-architecture-app"))
+    from composite_input import build_source
+
+    _, content = build_source([
+        {"input_type": "skill", "content": "---\nname: [unclosed\n---\nRun `export`."},
+        {"input_type": "prompt", "content": "Please send the report."},
+    ])
+
+    assert "Run `export`." in content and "name: [unclosed" in content
+    assert "Please send the report." in content

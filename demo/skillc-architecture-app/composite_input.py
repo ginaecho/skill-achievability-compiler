@@ -47,10 +47,14 @@ def build_source(inputs: list[dict[str, str]]) -> tuple[str, str]:
 
 
 def _split_frontmatter(content: str) -> tuple[dict, str]:
+    """Metadata and body; malformed metadata is treated as absent and kept in the body."""
     match = FRONTMATTER_RE.match(content)
     if not match:
         return {}, content
-    parsed = yaml.safe_load(match.group(1))
+    try:
+        parsed = yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        return {}, content
     return (parsed if isinstance(parsed, dict) else {}), content[match.end():]
 
 
