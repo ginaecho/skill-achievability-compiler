@@ -343,3 +343,48 @@ def test_well_formed_profile_still_loads(tmp_path):
     profile = load_profile(str(path))
 
     assert profile.tools == frozenset({"bash"}) and profile.shell is True
+
+
+def test_parallel_hooks_do_not_lose_state_updates(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    import threading
+    import time
+
+    from skillc import monitor_hook
+
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--root",
+                    str(tmp_path)], check=True, capture_output=True,
+                   env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+
+    def slow_post(mon, event):
+        mon.state.log.append({"signal": event["marker"]})
+        time.sleep(0.3)
+
+    monkeypatch.setitem(monitor_hook._HANDLERS, "post", slow_post)
+    threads = [threading.Thread(target=monitor_hook.handle,
+                                args=("post", {"cwd": str(tmp_path), "marker": m}))
+               for m in ("a", "b")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    state = json.loads(next((tmp_path / ".skillc").glob("state*.json")).read_text())
+    assert sorted(entry["signal"] for entry in state["log"]) == ["a", "b"]
+
+
+def test_monitor_state_is_written_atomically(tmp_path, monkeypatch):
+    import os
+
+    from skillc import monitor as monitor_module
+
+    replaced = []
+    real_replace = os.replace
+    monkeypatch.setattr(monitor_module.os, "replace",
+                        lambda src, dst: replaced.append(Path(dst).name) or real_replace(src, dst))
+    mon = monitor_module.Monitor(monitor_module.Config(), tmp_path)
+
+    mon.save()
+
+    assert replaced == [mon.state_path.name]

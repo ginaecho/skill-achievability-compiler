@@ -24,7 +24,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import sys
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -144,7 +149,9 @@ class Monitor:
     def save(self) -> None:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.state.log = self.state.log[-200:]
-        self.state_path.write_text(json.dumps(asdict(self.state), indent=1), encoding="utf-8")
+        temporary = self.state_path.with_name(f"{self.state_path.name}.{os.getpid()}.tmp")
+        temporary.write_text(json.dumps(asdict(self.state), indent=1), encoding="utf-8")
+        os.replace(temporary, self.state_path)
 
     def _record(self, signal: str, d: Decision, detail: str = "") -> Decision:
         self.state.log.append({"signal": signal, "action": d.action, "reason": d.reason[:500],
@@ -385,6 +392,49 @@ def plan_instructions(runtime: Runtime, plan_file: str) -> str:
         "change course, rewrite the plan first. If no achievable plan exists, stop and tell "
         "the user what is missing.\n" + CE_DOC + CE_RUNTIME_DOC + CE_SOFTWARE_DOC
         + runtime_note(runtime))
+
+
+@contextmanager
+def state_lock(state_path: Path, timeout: float = 30.0) -> Iterator[None]:
+    """Exclusive inter-process lock for one project's monitor state.
+
+    Hooks run in parallel, so each load/handle/save must be one transaction;
+    otherwise a stale writer can undo a revoked plan."""
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    with open(state_path.with_name(state_path.name + ".lock"), "a+b") as handle:
+        while True:
+            try:
+                _lock(handle)
+                break
+            except OSError:
+                if time.monotonic() > deadline:
+                    raise TimeoutError(f"monitor state is locked: {state_path}") from None
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            _unlock(handle)
+
+
+if sys.platform == "win32":
+    import msvcrt
+
+    def _lock(handle) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+
+    def _unlock(handle) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+else:
+    import fcntl
+
+    def _lock(handle) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def _unlock(handle) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def thinking_since(transcript: Path, offset: int) -> tuple[str, int]:

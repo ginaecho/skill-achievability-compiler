@@ -15,7 +15,8 @@ import sys
 from pathlib import Path
 
 from .frontend.toolpolicy import match, unmet
-from .monitor import ALLOW, DENY, Config, Monitor, plan_instructions, thinking_since
+from .monitor import (ALLOW, DENY, Config, Monitor, plan_instructions, state_lock,
+                      thinking_since)
 
 CONFIG = Path(".skillc") / "monitor.json"
 
@@ -38,11 +39,13 @@ def handle(kind: str, event: dict) -> int:
     handler = _HANDLERS.get(kind)
     if handler is None:
         raise ValueError(f"unknown hook kind {kind!r}")
-    mon = Monitor(Config.load(root / CONFIG), root)
-    try:
-        handler(mon, event)
-    finally:
-        mon.save()
+    config = Config.load(root / CONFIG)
+    with state_lock(root / config.state_file):
+        mon = Monitor(config, root)
+        try:
+            handler(mon, event)
+        finally:
+            mon.save()
     return 0
 
 
