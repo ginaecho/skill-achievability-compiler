@@ -310,11 +310,10 @@ class Monitor:
                 return self._record("action", Decision(
                     DENY, f"skillc: write the whole plan with Write to `{self.cfg.plan_file}`."))
             return self.submit_plan(tool_input.get("content", ""))
-        if tool in self.cfg.free_tools:
-            return self._record("action", Decision(ALLOW), tool)
-        if self.state.block:
+        free = tool in self.cfg.free_tools
+        if not free and self.state.block:
             return self._record("action", Decision(DENY, self.state.block), tool)
-        if self.cfg.require_plan and not self.state.plan:
+        if not free and self.cfg.require_plan and not self.state.plan:
             return self._record("action", Decision(
                 DENY, f"skillc: no approved plan. Before implementing, write your plan in "
                       f"Controlled English to `{self.cfg.plan_file}`; only a plan skillc "
@@ -322,7 +321,8 @@ class Monitor:
         text = self._action_text(tool_input)
         rt_tool = self.cfg.tool_map.get(tool, tool)
         problems = self._prohibited_text(text)
-        if rt_tool not in self.runtime.tools:
+        # Free local helpers (Glob, Grep, ...) have no runtime-vocabulary counterpart.
+        if rt_tool not in self.runtime.tools and not (free and tool not in self.cfg.tool_map):
             problems.append(f"`{tool}` is not a tool of runtime `{self.runtime.name}`")
         problems += [f"'{o.text}' needs {o.clause()}, not available in runtime "
                      f"`{self.runtime.name}`"
@@ -330,6 +330,8 @@ class Monitor:
         if problems:
             reason = "skillc: action blocked:\n  - " + "\n  - ".join(problems)
             return self._record("action", Decision(DENY, reason, problems), tool)
+        if free:
+            return self._record("action", Decision(ALLOW), tool)
         if self.cfg.plan_conformance and self.state.plan and rt_tool not in self._plan_via():
             return self._record("action", Decision(
                 DENY, f"skillc: `{tool}` (runtime tool `{rt_tool}`) is not used by any Tool "

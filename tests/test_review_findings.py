@@ -388,3 +388,34 @@ def test_monitor_state_is_written_atomically(tmp_path, monkeypatch):
     mon.save()
 
     assert replaced == [mon.state_path.name]
+
+
+def test_free_tools_still_respect_the_runtime_and_prohibitions(tmp_path):
+    from skillc.monitor import ALLOW, DENY, Config, Monitor, Rule
+
+    offline = Monitor(Config(runtime="offline-workstation"), tmp_path)
+    assert offline.pre_action("WebSearch", {"query": "release notes"}).action == DENY
+    assert offline.pre_action("Read", {"file_path": "a.py"}).action == ALLOW
+    assert offline.pre_action("Glob", {"pattern": "*.py"}).action == ALLOW
+
+    guarded = Monitor(Config(runtime="office-assistant", prohibited=[
+        Rule(id="secrets", description="never read secrets", pattern=r"\.env\b")]), tmp_path)
+    assert guarded.pre_action("Read", {"file_path": ".env"}).action == DENY
+    assert guarded.pre_action("WebSearch", {"query": "release notes"}).action == ALLOW
+
+
+@pytest.mark.parametrize("field, value", [
+    ("name", ""), ("description", 3), ("tools", ["bash"]), ("tools", {"bash": 1}),
+    ("grants", "bash"), ("lacks", [1]), ("forbid_effects", "publishes"),
+    ("software", "maybe"),
+])
+def test_runtime_manifest_with_malformed_fields_is_rejected(tmp_path, field, value):
+    from skillc.frontend.runtime import RuntimeManifestError, load_runtime
+
+    manifest = {"name": "r", "description": "", "tools": {"bash": "runs"},
+                "grants": [], "lacks": [], field: value}
+    path = tmp_path / "runtime.json"
+    path.write_text(json.dumps(manifest))
+
+    with pytest.raises(RuntimeManifestError):
+        load_runtime(str(path))

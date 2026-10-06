@@ -43,10 +43,39 @@ class Runtime:
 
     @staticmethod
     def from_dict(d: dict) -> Runtime:
+        _validate_manifest(d)
         return Runtime(d["name"], d.get("description", ""), dict(d["tools"]),
                        tuple(d.get("grants", [])), tuple(d.get("lacks", [])),
                        tuple(d.get("forbid_effects", [])),
                        d.get("software", "installable"))
+
+
+SOFTWARE_MODES = ("installable", "preinstalled", "none")
+
+
+class RuntimeManifestError(ValueError):
+    """A runtime manifest does not have the documented shape."""
+
+
+def _validate_manifest(d) -> None:
+    def strings(value) -> bool:
+        return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+    if not isinstance(d, dict):
+        raise RuntimeManifestError("a runtime manifest must be a JSON object")
+    if not isinstance(d.get("name"), str) or not d["name"].strip():
+        raise RuntimeManifestError("runtime name must be a non-empty string")
+    if not isinstance(d.get("description", ""), str):
+        raise RuntimeManifestError("runtime description must be a string")
+    tools = d.get("tools")
+    if not isinstance(tools, dict) or not all(
+            isinstance(k, str) and k and isinstance(v, str) for k, v in tools.items()):
+        raise RuntimeManifestError("runtime tools must map tool names to descriptions")
+    for key in ("grants", "lacks", "forbid_effects"):
+        if not strings(d.get(key, [])):
+            raise RuntimeManifestError(f"runtime {key} must be a list of strings")
+    if d.get("software", "installable") not in SOFTWARE_MODES:
+        raise RuntimeManifestError(f"runtime software must be one of {SOFTWARE_MODES}")
 
 
 def load_runtime(name_or_path: str) -> Runtime:
