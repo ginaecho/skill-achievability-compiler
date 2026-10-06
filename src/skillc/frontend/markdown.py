@@ -79,6 +79,10 @@ SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
 # request parameter or tool *type*, not a tool the agent calls.
 VERSIONED_RE = re.compile(r"[_-]\d{8}\Z")
 
+# The word right after an identifier names it as a tool: "use the `create_issue` tool".
+# That explicit reference outweighs data evidence elsewhere in the document.
+NAMED_TOOL_AFTER_RE = re.compile(r"\A`\s+(?:tools?|functions?|commands?)\b", re.I)
+
 # The word(s) right after an identifier type it as a code term, not a tool:
 # "`required_providers` block", "`pipeline_tag` parameter",
 # "`microsoft_agents` import prefix", "`action_trigger` lifecycle blocks".
@@ -287,7 +291,8 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
         if norm in declared:
             out.append(Invocation(raw, norm, "agent-tool", line))
             continue
-        if _names_a_value(raw, body) or _typed_as_value(body, m.end(1)):
+        if not NAMED_TOOL_AFTER_RE.match(body[m.end(1):m.end(1) + 40]) and (
+                _names_a_value(raw, body) or _typed_as_value(body, m.end(1))):
             continue
         kind = _classify(raw)
         if kind == "agent-tool" and raw[0].isupper():

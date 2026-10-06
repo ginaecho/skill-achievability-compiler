@@ -617,3 +617,15 @@ def test_collectors_fail_when_the_revision_cannot_be_resolved(tmp_path):
     _git(tmp_path, "add", ".")
     _git(tmp_path, "commit", "-q", "-m", "c")
     assert re.fullmatch(r"[0-9a-f]{40}", head_commit(tmp_path))
+
+
+def test_explicit_tool_invocation_survives_a_quoted_data_occurrence():
+    from skillc.frontend.markdown import extract
+
+    body = ('Example payload: {"action": "create_issue"}\n\n'
+            "Use the `create_issue` tool to file the bug.\n")
+    parameter = ('Send `{type: "between_tools"}` in the request.\n\n'
+                 "Then use `between_tools` for the next turn.\n")
+
+    assert [i.tool for i in extract(body, set())] == ["create_issue"]
+    assert extract(parameter, set()) == []
