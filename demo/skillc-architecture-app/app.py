@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import uuid
 import webbrowser
 from dataclasses import dataclass, field
@@ -64,19 +65,40 @@ def parse_json_object(body: bytes) -> dict:
     return payload
 
 
+MAX_QUEUED_EVENTS = 5_000
+RUN_TTL_SECONDS = 15 * 60
+
+
 @dataclass
 class Run:
-    events: queue.Queue[dict] = field(default_factory=queue.Queue)
+    events: queue.Queue[dict] = field(
+        default_factory=lambda: queue.Queue(maxsize=MAX_QUEUED_EVENTS))
     complete: bool = False
+    created: float = field(default_factory=time.monotonic)
 
     def publish(self, event: dict) -> None:
-        self.events.put(event)
-        if event.get("type") == "complete":
+        final = event.get("type") == "complete"
+        try:
+            self.events.put_nowait(event)
+        except queue.Full:
+            if not final:
+                return                       # an unread trace is dropped, never blocks
+            self.events.get_nowait()         # the completion event always gets through
+            self.events.put_nowait(event)
+        if final:
             self.complete = True
 
 
 RUNS: dict[str, Run] = {}
 RUNS_LOCK = threading.Lock()
+
+
+def prune_runs() -> None:
+    """Forget runs nobody streamed: a run older than the TTL is dropped."""
+    cutoff = time.monotonic() - RUN_TTL_SECONDS
+    with RUNS_LOCK:
+        for run_id in [k for k, run in RUNS.items() if run.created < cutoff]:
+            del RUNS[run_id]
 
 
 def _execute(
@@ -289,6 +311,7 @@ class Handler(BaseHTTPRequestHandler):
 
         run_id = uuid.uuid4().hex
         run = Run()
+        prune_runs()
         with RUNS_LOCK:
             RUNS[run_id] = run
         threading.Thread(

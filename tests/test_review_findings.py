@@ -1,9 +1,11 @@
 """Regression tests for the Copilot review findings on the eag-innovation PR."""
 import importlib.util
+import hashlib
 import json
 import re
 import socket
 import ssl
+import subprocess
 import urllib.request
 import sys
 from pathlib import Path
@@ -677,3 +679,76 @@ def test_inventory_snapshot_lists_only_executable_files(tmp_path, monkeypatch):
     assert "tool" in found and "__pycache__" not in found
     data = json.loads((ROOT / "src/skillc/data/runtimes/inventory.json").read_text())
     assert not {"__pycache__", "x11"} & set(data["executables"])
+
+
+def test_real_artifact_paths_must_stay_inside_their_pool(tmp_path):
+    sys.path.insert(0, str(ROOT / "demo" / "skillc-architecture-app"))
+    from real_artifacts import load_real_artifacts
+
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOP SECRET")
+    pool = tmp_path / "data" / "benchmark" / "copilot_sources"
+    pool.mkdir(parents=True)
+    (pool / "sources.json").write_text(json.dumps([{
+        "id": "evil", "kind": "agent", "path": "../../../secret.txt",
+        "sha256": hashlib.sha256(b"TOP SECRET").hexdigest(),
+        "repo_url": "u", "commit": "c", "path_in_repo": "p", "license_spdx": "MIT"}]))
+    for skill_pool in ("ce_sources", "ce_sources_ext", "ce_sources_div", "ce_sources_gr",
+                       "compaction_sources"):
+        (tmp_path / "data" / "benchmark" / skill_pool).mkdir()
+        (tmp_path / "data" / "benchmark" / skill_pool / "sources.json").write_text("[]")
+
+    verified, excluded = load_real_artifacts(tmp_path / "data")
+
+    assert verified == [] and [e["id"] for e in excluded] == ["evil"]
+    assert "TOP SECRET" not in json.dumps(excluded)
+
+
+def _link_dir(link: Path, target: Path) -> None:
+    import os
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError:
+        if os.name != "nt":
+            raise
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)],
+                       check=True, capture_output=True)
+
+
+def test_collectors_ignore_files_resolving_outside_the_clone(tmp_path):
+    from scripts.collect_ce_sources_ext import find_license, inside_repo
+
+    repo, outside = tmp_path / "repo", tmp_path / "outside"
+    repo.mkdir()
+    outside.mkdir()
+    (outside / "LICENSE").write_text("MIT License")
+    (outside / "SKILL.md").write_text("secret")
+    try:
+        _link_dir(repo / "skill", outside)
+    except (OSError, subprocess.CalledProcessError):
+        pytest.skip("directory links unavailable")
+
+    assert find_license(repo, repo / "skill") is None
+    assert inside_repo(repo / "skill" / "SKILL.md", repo) is None
+    (repo / "README.md").write_text("ok")
+    assert inside_repo(repo / "README.md", repo) == (repo / "README.md").resolve()
+
+
+def test_abandoned_runs_are_pruned_and_queues_bounded(monkeypatch):
+    app_dir = ROOT / "demo" / "skillc-architecture-app"
+    sys.path.insert(0, str(app_dir))
+    app = _load("atlas_app_runs", app_dir / "app.py")
+
+    run = app.Run()
+    for i in range(app.MAX_QUEUED_EVENTS + 50):
+        run.publish({"type": "trace", "i": i})
+    run.publish({"type": "complete", "exit_code": 0})
+    assert run.events.qsize() <= app.MAX_QUEUED_EVENTS
+    assert run.complete
+
+    stale, fresh = app.Run(), app.Run()
+    stale.created -= app.RUN_TTL_SECONDS + 1
+    app.RUNS.clear()
+    app.RUNS.update({"stale": stale, "fresh": fresh})
+    app.prune_runs()
+    assert set(app.RUNS) == {"fresh"}

@@ -77,11 +77,18 @@ def spdx(text: str) -> str | None:
     return None
 
 
+def inside_repo(path: Path, repo: Path) -> Path | None:
+    """`path` resolved, or None when it (e.g. via a symlink) points outside the clone:
+    a third-party checkout must never pull arbitrary local files into a corpus."""
+    resolved = path.resolve()
+    return resolved if resolved.is_relative_to(repo.resolve()) else None
+
+
 def find_license(repo: Path, skill_dir: Path) -> Path | None:
     d = skill_dir
     while True:
         for name in ("LICENSE", "LICENSE.txt", "LICENSE.md", "COPYING", "LICENSE-CC-BY-4.0"):
-            if (d / name).is_file():
+            if (d / name).is_file() and inside_repo(d / name, repo):
                 return d / name
         if d == repo:
             return None
@@ -111,7 +118,9 @@ def main(clones: Path) -> None:
             rel = f.relative_to(repo)
             if SKIP_DIRS & {p.lower() for p in rel.parts[:-1]}:
                 continue
-            real = f.resolve()
+            real = inside_repo(f, repo)
+            if real is None:
+                continue
             data = real.read_bytes()
             if not 300 <= len(data) <= 60_000 or sha(data) in seen_sha:
                 continue

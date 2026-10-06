@@ -76,6 +76,7 @@ def _skill_pool(pool_dir: Path, pool: str) -> list[dict]:
             commit=record.get("commit", ""),
             path_in_repo=record.get("path_in_repo") or record.get("path", ""),
             license_spdx=record.get("license_spdx") or record.get("license", ""),
+            root=pool_dir,
         )
         for record in records
     ]
@@ -97,6 +98,7 @@ def _copilot_pool(pool_dir: Path) -> list[dict]:
             commit=record["commit"],
             path_in_repo=record["path_in_repo"],
             license_spdx=record["license_spdx"],
+            root=pool_dir,
         )
         for record in records
     ]
@@ -104,9 +106,14 @@ def _copilot_pool(pool_dir: Path) -> list[dict]:
 
 def _artifact(*, kind: str, pool: str, identifier: str, path: Path, sha256: str,
               repo_url: str, commit: str, path_in_repo: str,
-              license_spdx: str) -> dict:
-    data = path.read_bytes()
-    actual = hashlib.sha256(data).hexdigest()
+              license_spdx: str, root: Path) -> dict:
+    resolved = path.resolve()
+    if not resolved.is_relative_to(root.resolve()):
+        # A manifest path that escapes its pool is never read (it could be any local file).
+        data, actual = b"", "path-outside-pool"
+    else:
+        data = resolved.read_bytes()
+        actual = hashlib.sha256(data).hexdigest()
     return {
         "id": identifier,
         "kind": kind,

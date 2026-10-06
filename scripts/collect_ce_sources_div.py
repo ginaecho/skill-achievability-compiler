@@ -20,7 +20,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.collect_ce_sources_ext import (COMPACTION, find_license, jaccard,  # noqa: E402
-                                            head_commit, sha, shingles, spdx)
+                                            head_commit, inside_repo, sha,
+                                            shingles, spdx)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "benchmark" / "ce_sources_div"
@@ -81,7 +82,10 @@ def main(clones: Path) -> None:
             dom = domain(org_repo, rel)
             if dom is None:
                 continue
-            data = f.resolve().read_bytes()
+            real = inside_repo(f, repo)
+            if real is None:
+                continue
+            data = real.read_bytes()
             if not 300 <= len(data) <= 60_000 or sha(data) in seen:
                 continue
             lic = find_license(repo, f.parent)

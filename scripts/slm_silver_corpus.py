@@ -23,7 +23,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT))
-from scripts.collect_ce_sources_ext import find_license, ident, jaccard, sha, shingles, spdx  # noqa: E402
+from scripts.collect_ce_sources_ext import (find_license, ident, inside_repo,  # noqa: E402
+                                            jaccard, sha, shingles, spdx)
 from skillc.frontend.policyindex import extract_terms  # noqa: E402
 
 OUT = ROOT / "benchmark" / "slm_silver"
@@ -98,7 +99,8 @@ def main() -> None:
         seen_sha.add(sha(t))
         corpus.add(shingles(t.decode("utf-8", "replace")))
 
-    kept, skipped = [], {"no_licence": 0, "dup": 0, "labelled": 0, "mirror": 0, "short": 0}
+    kept, skipped = [], {"no_licence": 0, "dup": 0, "labelled": 0, "mirror": 0, "short": 0,
+                     "outside": 0}
     for repo in sorted(d for d in a.clones.iterdir() if d.is_dir()):
         org_repo = repo.name.replace("_", "/", 1)
         for p in sorted(repo.rglob("SKILL.md")):
@@ -107,6 +109,9 @@ def main() -> None:
                 skipped["mirror"] += 1
                 continue
             sid = ident(org_repo, p.parent)
+            if inside_repo(p, repo) is None:
+                skipped["outside"] += 1
+                continue
             text = p.read_text(encoding="utf-8", errors="replace")
             if len(text) < 400:
                 skipped["short"] += 1
