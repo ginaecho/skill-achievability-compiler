@@ -14,6 +14,18 @@ from pathlib import Path
 OUT = Path(__file__).resolve().parents[1] / "src/skillc/data/runtimes/inventory.json"
 
 
+def path_executables() -> set[str]:
+    """Names of executable regular files on PATH (directories are not programs)."""
+    exe = set()
+    for p in os.environ.get("PATH", "").split(os.pathsep):
+        if os.path.isdir(p):
+            for f in os.listdir(p):
+                full = os.path.join(p, f)
+                if os.path.isfile(full) and os.access(full, os.X_OK):
+                    exe.add(f.lower())
+    return exe
+
+
 def main() -> None:
     py = set()
     for d in md.distributions():
@@ -22,11 +34,7 @@ def main() -> None:
             py.add(name)
         top = d.read_text("top_level.txt") or ""
         py.update(t.strip().lower() for t in top.splitlines() if t.strip())
-    exe = set()
-    for p in os.environ.get("PATH", "").split(os.pathsep):
-        if os.path.isdir(p):
-            exe.update(f.lower() for f in os.listdir(p)
-                       if os.access(os.path.join(p, f), os.X_OK))
+    exe = path_executables()
     npm = set()
     try:
         out = subprocess.run(["npm", "ls", "-g", "--depth=0", "--json"],

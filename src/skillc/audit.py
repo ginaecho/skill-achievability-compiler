@@ -90,10 +90,11 @@ def audit_bundle(path: str | Path) -> list[Finding]:
                         f"no SKILL.md found in bundle {bundle}", str(bundle))]
     text = skill_md.read_text(encoding="utf-8", errors="replace")
     meta, body = parse_frontmatter(text)
+    offset = text.count("\n", 0, len(text) - len(body))   # body line 1 = file line offset+1
     out = [*_manifest_findings(meta, bundle, rel),
-           *_poisoning_findings(text, body, meta.get("description"), rel),
-           *_code_findings(body, bundle, rel),
-           *_permission_findings(meta, body, rel)]
+           *_poisoning_findings(text, body, meta.get("description"), rel, offset),
+           *_code_findings(body, bundle, rel, offset),
+           *_permission_findings(meta, body, rel, offset)]
     order = {"error": 0, "warning": 1, "info": 2}
     out.sort(key=lambda f: (order[f.severity], f.file, f.line))
     return out
@@ -125,7 +126,8 @@ def _manifest_findings(meta: dict, bundle: Path, rel: str) -> list[Finding]:
     return out
 
 
-def _poisoning_findings(text: str, body: str, desc, rel: str) -> list[Finding]:
+def _poisoning_findings(text: str, body: str, desc, rel: str,
+                        offset: int = 0) -> list[Finding]:
     """Metadata poisoning: invisible characters, injection phrases, hidden
     HTML comments."""
     out = [Finding("error", "unicode-invisible",
@@ -142,20 +144,20 @@ def _poisoning_findings(text: str, body: str, desc, rel: str) -> list[Finding]:
         if INJECTION_RE.search(m.group(1)):
             sev, code = "error", "hidden-injection"
             msg = "instruction-injection pattern hidden in an HTML comment"
-        out.append(Finding(sev, code, msg, rel, _line_of(body, m.start())))
+        out.append(Finding(sev, code, msg, rel, offset + _line_of(body, m.start())))
     hit = INJECTION_RE.search(body)
     if hit:
         out.append(Finding("warning", "body-injection-pattern",
                            "instruction-injection-like phrase in the skill "
-                           "body", rel, _line_of(body, hit.start())))
+                           "body", rel, offset + _line_of(body, hit.start())))
     return out
 
 
-def _code_findings(body: str, bundle: Path, rel: str) -> list[Finding]:
+def _code_findings(body: str, bundle: Path, rel: str, offset: int = 0) -> list[Finding]:
     """Risky patterns in fenced code blocks and in the bundle's scripts."""
     out: list[Finding] = []
     for m in FENCE_RE.finditer(body):
-        _scan_code(m.group(3), rel, _line_of(body, m.start(3)), out)
+        _scan_code(m.group(3), rel, offset + _line_of(body, m.start(3)), out)
     for script in sorted(bundle.rglob("*")):
         if script.suffix in SCRIPT_SUFFIXES and script.is_file():
             _scan_code(script.read_text(encoding="utf-8", errors="replace"),
@@ -163,7 +165,7 @@ def _code_findings(body: str, bundle: Path, rel: str) -> list[Finding]:
     return out
 
 
-def _permission_findings(meta: dict, body: str, rel: str) -> list[Finding]:
+def _permission_findings(meta: dict, body: str, rel: str, offset: int = 0) -> list[Finding]:
     """Prose that invokes an agent tool the frontmatter does not allow."""
     key = next((k for k in ("allowed-tools", "allowed_tools", "tools")
                 if meta.get(k) is not None), None)
@@ -177,7 +179,7 @@ def _permission_findings(meta: dict, body: str, rel: str) -> list[Finding]:
     return [Finding("warning", "undeclared-tool-use",
                     f"prose invokes `{inv.raw}` but frontmatter allowed-tools "
                     f"does not declare it (permission-metadata inconsistency)",
-                    rel, inv.line)
+                    rel, offset + inv.line)
             for inv in extract(prose, declared)
             if inv.kind == "agent-tool" and inv.tool not in declared]
 
