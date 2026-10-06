@@ -555,3 +555,20 @@ def test_silver_rebuild_prunes_stale_generated_artifacts(tmp_path):
     assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["kept.json", "legacy.json"]
     assert sorted(p.name for p in (tmp_path / "items").iterdir()) == ["kept.json", "legacy.json"]
     assert not list(tmp_path.glob("batch_*.json"))
+
+
+def test_pack_rejects_an_act_by_a_role_other_than_the_declared_owner():
+    from skillc.pack import PackError, validate_pack
+
+    pack = {"name": "t", "roles": ["agent", "intruder"],
+            "capabilities": {"pay": {"owner": "agent", "add": ["paid"]}},
+            "protocol": [{"choice": {"by": "agent", "branches": {
+                "now": [{"act": {"cap": "pay", "by": "intruder"}}],
+                "later": [{"act": {"cap": "pay", "by": "agent"}}]}}}],
+            "goal": "paid"}
+
+    with pytest.raises(PackError, match="owned by 'agent'"):
+        validate_pack(pack)
+
+    ownerless = {**pack, "capabilities": {"pay": {"add": ["paid"]}}}
+    validate_pack(ownerless)

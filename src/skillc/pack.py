@@ -335,6 +335,18 @@ def _check_local_steps(steps: Any, path: str,
             raise PackError(f"{p}: unknown local step kind {kind!r}")
 
 
+def _check_owners(caps: dict, protocol: list) -> None:
+    """An act must be performed by its capability's declared owner, when one is declared."""
+    for step in iter_steps(protocol):
+        act = step.get("act")
+        if not isinstance(act, dict):
+            continue
+        owner = (caps.get(act.get("cap")) or {}).get("owner")
+        if owner not in (None, "?") and owner != act.get("by"):   # "?": no owner declared
+            raise PackError(f"act {act.get('cap')!r} by {act.get('by')!r}: capability is "
+                            f"owned by {owner!r}")
+
+
 def validate_pack(pack: Any) -> None:
     """Raise PackError if structurally malformed.  Returns None on success.
 
@@ -388,6 +400,7 @@ def validate_pack(pack: Any) -> None:
                 validate_formula(constr, f"cap[{cn}].nondet[{v}]")
         validate_formula(pack["goal"], "goal")
         _check_steps(pack["protocol"], "protocol", pack["goal"])
+        _check_owners(caps, pack["protocol"])
         skills = pack.get("skills", {})
         if not isinstance(skills, dict):
             raise PackError("skills must be a dict role -> local behaviour")
