@@ -67,8 +67,9 @@ def _on_prompt(mon: Monitor, event: dict) -> None:
 def _on_pre(mon: Monitor, event: dict) -> None:
     tool_input = event.get("tool_input") or {}
     if event.get("transcript_path"):
-        text, mon.state.transcript_offset = thinking_since(
-            Path(event["transcript_path"]), mon.state.transcript_offset)
+        transcript = Path(event["transcript_path"])
+        offsets = mon.state.transcript_offsets
+        text, offsets[str(transcript)] = thinking_since(transcript, offsets.get(str(transcript), 0))
         t = mon.observe_thinking(text)
         if t.action == DENY and not mon.is_plan_file(tool_input):
             _emit("PreToolUse", permissionDecision="deny",

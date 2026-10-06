@@ -37,8 +37,8 @@ def abstain_ungrounded(verdict, *, states=None, source_text=None, extracted=(), 
     A refutation is evidence only if it names something the inputs contain:
       * GOAL_UNSAT names goal conditions nothing establishes, and BLOCKED_GUARD
         names capabilities whose guard conditions nothing establishes. If the
-        environment publishes a state vocabulary, conditions are grounded in
-        it; otherwise in the intent text.
+        environment publishes a state vocabulary (even an empty one), conditions
+        are grounded only in it; otherwise in the intent text, as whole identifiers.
       * MISSING_CAPABILITY names absent tools. A tool is grounded if the intent
         text names it or deterministic extraction took it from the text.
     When no deciding name is grounded, a compactor invented it (e.g.
@@ -50,16 +50,15 @@ def abstain_ungrounded(verdict, *, states=None, source_text=None, extracted=(), 
 
     if not verdict.refuted or not verdict.frontier:
         return verdict
-    text = (source_text or "").lower()
     names = [str(name) for name in verdict.frontier]
     if verdict.reason == "BLOCKED_GUARD":
         names = _blocked_guard_conditions(names, pack)
-    if verdict.reason in CONDITION_REASONS and names and states:
+    if verdict.reason in CONDITION_REASONS and names and states is not None:
         grounded, reason = (lambda name: name in states), "UNALIGNED_CONDITION"
     elif verdict.reason in CONDITION_REASONS and names and source_text:
-        grounded, reason = (lambda name: name.lower() in text), "UNALIGNED_CONDITION"
+        grounded, reason = (lambda name: _mentions(source_text, name)), "UNALIGNED_CONDITION"
     elif verdict.reason == "MISSING_CAPABILITY" and source_text:
-        grounded = lambda name: name in extracted or name.lower() in text  # noqa: E731
+        grounded = lambda name: name in extracted or _mentions(source_text, name)  # noqa: E731
         reason = "UNGROUNDED_TOOL"
     else:
         return verdict
@@ -76,6 +75,12 @@ def abstain_ungrounded(verdict, *, states=None, source_text=None, extracted=(), 
 
 CONDITION_REASONS = ("GOAL_UNSAT", "BLOCKED_GUARD")
 _BLOCKED_CAPABILITY_RE = re.compile(r"capability '([^']+)'")
+
+
+def _mentions(text: str, name: str) -> bool:
+    """Whether `text` contains `name` as a whole identifier (case-insensitive)."""
+    pattern = rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])"
+    return re.search(pattern, text, re.IGNORECASE) is not None
 
 
 def _blocked_guard_conditions(frontier: list[str], pack: dict | None) -> list[str]:

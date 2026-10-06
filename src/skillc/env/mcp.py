@@ -76,8 +76,34 @@ def probe(configs: list[str | Path], list_tools: bool = False,
         env.sources.append({"adapter": "mcp", "mode": "live" if list_tools else "config",
                             "detail": str(p)})
         for name, spec in servers.items():
+            try:
+                _check_server(spec)
+            except MCPConfigError as e:
+                env.mark_unknown(f"mcp_server:{name}", str(e)[:200])
+                continue
             _add_server(env, name, spec, list_tools, timeout)
     return env
+
+
+def _check_server(spec: dict) -> None:
+    """Reject server specs whose fields have the wrong shape, before any is used."""
+    if not isinstance(spec.get("command", ""), str):
+        raise MCPConfigError("command must be a string")
+    args = spec.get("args", [])
+    if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+        raise MCPConfigError("args must be a list of strings")
+    if not isinstance(spec.get("env") or {}, dict):
+        raise MCPConfigError("env must be an object")
+    if not isinstance(spec.get("type", ""), str):
+        raise MCPConfigError("type must be a string")
+    url = spec.get("url")
+    if url is not None:
+        if not isinstance(url, str):
+            raise MCPConfigError("url must be a string")
+        try:
+            urlsplit(url).port
+        except ValueError as e:
+            raise MCPConfigError(f"invalid url: {e}") from None
 
 
 def _add_server(env: Environment, name: str, spec: dict, list_tools: bool,

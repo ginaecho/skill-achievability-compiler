@@ -119,7 +119,8 @@ class State:
     missing_programs: list = field(default_factory=list)
     missing_resources: list = field(default_factory=list)
     block: str | None = None         # reason actions are held (thinking, revoked plan)
-    transcript_offset: int = 0
+    transcript_offset: int = 0       # legacy single offset; superseded by transcript_offsets
+    transcript_offsets: dict = field(default_factory=dict)   # transcript path -> bytes read
     sessions: list = field(default_factory=list)   # sessions already given instructions
     log: list = field(default_factory=list)
 
@@ -388,9 +389,12 @@ def plan_instructions(runtime: Runtime, plan_file: str) -> str:
 
 def thinking_since(transcript: Path, offset: int) -> tuple[str, int]:
     """Assistant reasoning text (thinking blocks, visible text) appended to a Claude Code
-    transcript (JSONL) since `offset` bytes; returns (text, new offset)."""
+    transcript (JSONL) since `offset` bytes; returns (text, new offset). A transcript
+    shorter than `offset` was replaced or truncated, so it is read from the start."""
     if not transcript.exists():
         return "", offset
+    if offset > transcript.stat().st_size:
+        offset = 0
     with transcript.open("rb") as f:
         f.seek(offset)
         data = f.read()

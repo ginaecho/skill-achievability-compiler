@@ -151,3 +151,90 @@ def test_mcp_snapshot_keeps_no_command_arguments_or_url_secrets(tmp_path):
     assert servers["local"]["command"] == "npx"
     assert servers["local"]["arg_count"] == 3
     assert servers["remote"]["url"] == "https://example.com/mcp"
+
+
+def _refutation(reason: str, frontier: tuple) -> Verdict:
+    return Verdict(achievable=False, reason=reason, frontier=frontier)
+
+
+def test_empty_state_vocabulary_grounds_no_condition():
+    from skillc.frontend.contracts import abstain_ungrounded
+
+    verdict = abstain_ungrounded(_refutation("GOAL_UNSAT", ("approved",)),
+                                 states={}, source_text="Get it approved, then publish.")
+
+    assert verdict.label == "UNKNOWN" and verdict.reason == "UNALIGNED_CONDITION"
+
+
+def test_grounding_matches_whole_identifiers_not_substrings():
+    from skillc.frontend.contracts import abstain_ungrounded
+
+    invented = abstain_ungrounded(_refutation("MISSING_CAPABILITY", ("read",)),
+                                  source_text="Update the spreadsheet.")
+    named = abstain_ungrounded(_refutation("MISSING_CAPABILITY", ("read",)),
+                               source_text="Use `read` on the spreadsheet.")
+
+    assert invented.label == "UNKNOWN"
+    assert named.label == "IMPOSSIBLE"
+
+
+def _transcript(path: Path, thought: str) -> None:
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"message": {"role": "assistant", "content": [
+            {"type": "thinking", "thinking": thought}]}}) + "\n")
+
+
+def test_monitor_hook_reads_each_session_transcript_from_its_own_offset(tmp_path, monkeypatch):
+    from skillc import monitor_hook
+    from skillc.monitor import ALLOW, Decision
+
+    seen = []
+
+    def observe(self, text):
+        seen.append(text)
+        return Decision(ALLOW)
+
+    monkeypatch.setattr(monitor_hook.Monitor, "observe_thinking", observe)
+    monkeypatch.setattr(monitor_hook.Monitor, "pre_action",
+                        lambda self, tool, tool_input: Decision(ALLOW))
+    import subprocess
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--root",
+                    str(tmp_path)], check=True, capture_output=True,
+                   env={**__import__("os").environ, "PYTHONPATH": str(ROOT / "src")})
+    long_t, short_t = tmp_path / "long.jsonl", tmp_path / "short.jsonl"
+    _transcript(long_t, "first session " + "x" * 2000)
+    _transcript(short_t, "second session plan")
+
+    for sid, path in (("s1", long_t), ("s2", short_t)):
+        monitor_hook.handle("pre", {"session_id": sid, "cwd": str(tmp_path),
+                                    "transcript_path": str(path), "tool_name": "Bash",
+                                    "tool_input": {"command": "ls"}})
+
+    assert "second session plan" in seen[1]
+
+
+def test_transcript_reader_restarts_after_truncation(tmp_path):
+    from skillc.monitor import thinking_since
+
+    path = tmp_path / "t.jsonl"
+    _transcript(path, "x" * 500)
+    _, offset = thinking_since(path, 0)
+    path.write_text("")
+    _transcript(path, "fresh")
+
+    text, _ = thinking_since(path, offset)
+
+    assert text == "fresh"
+
+
+@pytest.mark.parametrize("spec", [{"command": "npx", "args": 1}, {"command": "npx", "env": "x"},
+                                  {"command": 3}, {"type": "http", "url": "https://h:99999/x"},
+                                  {"type": "http", "url": 5}])
+def test_malformed_mcp_server_is_unknown_and_others_still_probed(tmp_path, spec):
+    path = tmp_path / ".mcp.json"
+    path.write_text(json.dumps({"mcpServers": {"bad": spec, "good": {"command": "npx"}}}))
+
+    env = mcp.probe([path])
+
+    assert env.is_unknown("mcp_server:bad")
+    assert [node["name"] for node in env.of_kind("mcp_server")] == ["good"]
