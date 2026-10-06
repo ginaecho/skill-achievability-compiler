@@ -506,3 +506,52 @@ def test_forbidden_effect_cannot_be_self_permitted_by_the_pack():
 
     assert "policy:publishes" in binding.blocked["deploy"]
     assert check(binding.pack).label == "IMPOSSIBLE"
+
+
+def test_composite_input_keeps_each_source_description():
+    sys.path.insert(0, str(ROOT / "demo" / "skillc-architecture-app"))
+    from composite_input import build_source
+
+    _, content = build_source([
+        {"input_type": "skill", "content": "---\nname: a\ndescription: Must encrypt the export.\n"
+                                           "tools: [export]\n---\nRun `export`."},
+        {"input_type": "prompt", "content": "Please send the report."},
+    ])
+
+    assert "Must encrypt the export." in content
+    assert "Run `export`." in content and "Please send the report." in content
+
+
+def test_slm_context_matches_whole_identifiers():
+    from scripts.slm_dataset import context
+
+    text = "Update the spreadsheet.\nThen call read on the file."
+
+    assert context(text, "read") == "Then call read on the file."
+    assert context("Update the spreadsheet.", "read") == ""
+
+
+def test_silver_rebuild_prunes_stale_generated_artifacts(tmp_path):
+    from scripts.slm_silver_corpus import prune_stale
+
+    for folder in ("items", "out"):
+        (tmp_path / folder).mkdir()
+    (tmp_path / "items" / "kept.json").write_text(json.dumps({"sha256": "same"}))
+    (tmp_path / "out" / "kept.json").write_text("{}")
+    (tmp_path / "items" / "changed.json").write_text(json.dumps({"sha256": "old"}))
+    (tmp_path / "out" / "changed.json").write_text("{}")
+    (tmp_path / "items" / "gone.json").write_text(json.dumps({"sha256": "x"}))
+    (tmp_path / "out" / "gone.json").write_text("{}")
+    (tmp_path / "batch_000.json").write_text("[]")
+    legacy_doc = tmp_path / "legacy.md"
+    legacy_doc.write_text("legacy skill", encoding="utf-8")
+    (tmp_path / "items" / "legacy.json").write_text(json.dumps({"skill_path": str(legacy_doc)}))
+    (tmp_path / "out" / "legacy.json").write_text("{}")
+
+    from scripts.collect_ce_sources_ext import sha
+    prune_stale(tmp_path, {"kept": "same", "changed": "new",
+                           "legacy": sha("legacy skill".encode())})
+
+    assert sorted(p.name for p in (tmp_path / "out").iterdir()) == ["kept.json", "legacy.json"]
+    assert sorted(p.name for p in (tmp_path / "items").iterdir()) == ["kept.json", "legacy.json"]
+    assert not list(tmp_path.glob("batch_*.json"))

@@ -55,6 +55,34 @@ SKIP = {"template", "templates", "test", "tests", "fixtures", "evals", "node_mod
         "dist", "build"}  # mirrored copies (.claude, .codex, ...) are removed as duplicates
 
 
+def prune_stale(silver: Path, current: dict[str, str]) -> None:
+    """Make the generated silver artifacts match the corpus being written.
+
+    `current` maps each kept skill id to its SKILL.md sha256. Items and label outputs of
+    skills no longer kept, or whose document changed, are removed (labels of an unchanged
+    skill are kept, so they need not be paid for again); batches are always rebuilt."""
+    for item in sorted((silver / "items").glob("*.json")):
+        try:
+            data = json.loads(item.read_text(encoding="utf-8"))
+            recorded = data.get("sha256") or _document_sha(data.get("skill_path"))
+        except (OSError, ValueError, AttributeError):
+            recorded = None
+        if current.get(item.stem) != recorded:
+            item.unlink()
+    for label in sorted((silver / "out").glob("*.json")):
+        if not (silver / "items" / label.name).exists():
+            label.unlink()
+    for batch in silver.glob("batch_*.json"):
+        batch.unlink()
+
+
+def _document_sha(path) -> str | None:
+    """sha256 of an earlier item's document (items written before `sha256` was recorded)."""
+    if not path or not Path(path).is_file():
+        return None
+    return sha(Path(path).read_text(encoding="utf-8", errors="replace").encode())
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("clones", type=Path)
@@ -102,9 +130,10 @@ def main() -> None:
             kept.append({"id": sid, "repo": org_repo, "path": str(rel), "licence": lic_id,
                          "sha256": h, "text": text})
 
+    (SILVER / "items").mkdir(parents=True, exist_ok=True)
+    prune_stale(SILVER, {k["id"]: k["sha256"] for k in kept})
     if OUT.exists():
         shutil.rmtree(OUT)
-    (SILVER / "items").mkdir(parents=True, exist_ok=True)
     for k in kept:
         d = OUT / k["id"]
         d.mkdir(parents=True)
@@ -112,7 +141,8 @@ def main() -> None:
         cands = [c["term"] for c in extract_terms((d / "SKILL.md").read_text(encoding="utf-8"),
                                                   limit=30)]
         (SILVER / "items" / f"{k['id']}.json").write_text(json.dumps(
-            {"skill": k["id"], "skill_path": str(d / "SKILL.md"), "candidates": cands}, indent=1))
+            {"skill": k["id"], "skill_path": str(d / "SKILL.md"), "sha256": k["sha256"],
+             "candidates": cands}, indent=1))
     (OUT / "sources.json").write_text(json.dumps(kept, indent=1) + "\n")
     ids = sorted(k["id"] for k in kept)
     for i in range(0, len(ids), a.batch):

@@ -27,9 +27,10 @@ OUT = DIV / "slm"
 
 
 def context(text: str, term: str) -> str:
-    low = term.lower()
+    """The first line containing `term` as a whole identifier, not inside another word."""
+    pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(term)}(?![A-Za-z0-9_])", re.IGNORECASE)
     for line in text.splitlines():
-        if low in line.lower():
+        if pattern.search(line):
             return re.sub(r"\s+", " ", line.strip())[:300]
     return ""
 

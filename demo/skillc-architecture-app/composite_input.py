@@ -28,7 +28,10 @@ def build_source(inputs: list[dict[str, str]]) -> tuple[str, str]:
                 if tool not in tools:
                     tools.append(tool)
         filename = FILENAMES[item["input_type"]]
-        sections.append(f"## Source {index}: {filename}\n\n{body.strip()}")
+        description = metadata.get("description")
+        context = f"{description.strip()}\n\n" if isinstance(description, str) and \
+            description.strip() else ""
+        sections.append(f"## Source {index}: {filename}\n\n{context}{body.strip()}")
 
     metadata = {"name": "composite-intent"}
     if tools:

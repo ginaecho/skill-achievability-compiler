@@ -1,5 +1,7 @@
 # Semantic validation on real skills
 
+> **Recorded evidence, not yet re-run.** This report was generated with `skillc 0.2.0`; the current package is 0.3.0. It records that earlier run and is not evidence for the current code until it is regenerated with `python3 scripts/semantic_validation.py` (needs a configured LLM provider).
+
 `skillc 0.2.0`, LLM compaction model `claude-sonnet-5` (untrusted front-end; every verdict below is produced by the trusted checker on the schema-gated pack).  Regenerate with `python3 scripts/semantic_validation.py`.
 
 Protocol: compact each real skill into a semantic pack; the deployed skill must check ACHIEVABLE.  Then sabotage the pack two ways with a known ground truth -- drop a capability the plan invokes, and strip a goal conjunct's establishers -- and require the compiler to refute each mutant *and name the wound*.
