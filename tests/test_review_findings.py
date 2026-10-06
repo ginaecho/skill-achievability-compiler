@@ -572,3 +572,22 @@ def test_pack_rejects_an_act_by_a_role_other_than_the_declared_owner():
 
     ownerless = {**pack, "capabilities": {"pay": {"add": ["paid"]}}}
     validate_pack(ownerless)
+
+
+def test_live_monitor_summary_matches_results_to_their_tool_calls():
+    from scripts.monitor_live import condense
+
+    events = [
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "Bash", "input": {"command": "ls"}},
+            {"type": "tool_use", "id": "t2", "name": "Read", "input": {"file_path": "a.py"}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "tool_use_id": "t2", "content": "print(1)"},
+            {"type": "tool_result", "tool_use_id": "t1", "content": "a.py"}]}},
+        {"type": "result", "result": "done"},
+    ]
+
+    steps, final = condense(json.dumps(e) for e in events)
+
+    assert [(s["tool"], s["result"]) for s in steps] == [("Bash", "a.py"), ("Read", "print(1)")]
+    assert final == "done"

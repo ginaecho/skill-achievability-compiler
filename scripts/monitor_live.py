@@ -57,32 +57,45 @@ def run(work: Path, names: list[str]) -> None:
                            cwd=d, stdout=out, stderr=subprocess.DEVNULL, timeout=900)
 
 
+def condense(lines) -> tuple[list[dict], object]:
+    """Tool steps (each with its own result, matched by `tool_use_id`) and the final answer
+    from a `claude --output-format stream-json` run."""
+    steps, by_id, final = [], {}, None
+    for line in lines:
+        ev = json.loads(line)
+        msg = ev.get("message") or {}
+        content = msg.get("content") if isinstance(msg.get("content"), list) else []
+        if ev.get("type") == "assistant":
+            for b in content:
+                if b.get("type") == "tool_use":
+                    inp = b["input"]
+                    step = {"tool": b["name"], "input": {
+                        k: (v if k == "content" else str(v)[:200]) for k, v in inp.items()
+                        if k in ("command", "file_path", "content", "new_string")}}
+                    steps.append(step)
+                    if b.get("id"):
+                        by_id[b["id"]] = step
+        elif ev.get("type") == "user":
+            for b in content:
+                if b.get("type") != "tool_result":
+                    continue
+                step = by_id.get(b.get("tool_use_id")) or (steps[-1] if steps else None)
+                if step is not None:
+                    txt = b.get("content")
+                    txt = txt if isinstance(txt, str) else json.dumps(txt)
+                    step["result"] = txt[:400]
+        elif ev.get("type") == "result":
+            final = ev.get("result")
+    return steps, final
+
+
 def summarize(work: Path, out: Path) -> None:
     res = {}
     for n, (kind, prompt) in sorted(SCENARIOS.items()):
         d = work / n
         if not (d / "run.jsonl").exists():
             continue
-        steps, final = [], None
-        for line in (d / "run.jsonl").read_text().splitlines():
-            ev = json.loads(line)
-            msg = ev.get("message") or {}
-            content = msg.get("content") if isinstance(msg.get("content"), list) else []
-            if ev.get("type") == "assistant":
-                for b in content:
-                    if b.get("type") == "tool_use":
-                        inp = b["input"]
-                        steps.append({"tool": b["name"], "input": {
-                            k: (v if k == "content" else str(v)[:200]) for k, v in inp.items()
-                            if k in ("command", "file_path", "content", "new_string")}})
-            elif ev.get("type") == "user":
-                for b in content:
-                    if b.get("type") == "tool_result" and steps:
-                        txt = b.get("content")
-                        txt = txt if isinstance(txt, str) else json.dumps(txt)
-                        steps[-1]["result"] = txt[:400]
-            elif ev.get("type") == "result":
-                final = ev.get("result")
+        steps, final = condense((d / "run.jsonl").read_text().splitlines())
         state = json.loads((d / ".skillc" / "state.json").read_text())
         res[n] = {"kind": kind, "prompt": prompt, "steps": steps, "final_answer": final,
                   "monitor_log": state["log"], "plan_approved_at_end": bool(state["plan"]),
