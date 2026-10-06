@@ -84,14 +84,16 @@ def _mentions(text: str, name: str) -> bool:
 
 
 def _blocked_guard_conditions(frontier: list[str], pack: dict | None) -> list[str]:
-    """Condition names in the guards of the capabilities a BLOCKED_GUARD names."""
+    """Condition names (Boolean atoms and numeric variables) in the guards of the
+    capabilities a BLOCKED_GUARD names."""
     if not pack:
         return []
     capabilities = pack.get("capabilities", {})
     names = set()
     for entry in frontier:
         for capability in _BLOCKED_CAPABILITY_RE.findall(entry):
-            names |= atoms(capabilities.get(capability, {}).get("pre", True))
+            guard = capabilities.get(capability, {}).get("pre", True)
+            names |= atoms(guard) | numeric_vars(guard)
     return sorted(names)
 
 

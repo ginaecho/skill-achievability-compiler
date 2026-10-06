@@ -289,3 +289,16 @@ def test_egress_does_not_follow_redirects():
                     if isinstance(h, urllib.request.HTTPRedirectHandler))
 
     assert redirect.redirect_request(None, None, 302, "Found", {}, "http://10.0.0.1/") is None
+
+
+def test_numeric_only_guard_is_grounded_by_its_variables():
+    from skillc.frontend.contracts import abstain_ungrounded
+
+    pack = {"capabilities": {"buy": {"pre": {"cmp": ["price", "<", 500]}}}}
+    blocked = _refutation("BLOCKED_GUARD", ("capability 'buy' guard never satisfiable",))
+
+    invented = abstain_ungrounded(blocked, states={"booked": ""}, pack=pack)
+    published = abstain_ungrounded(blocked, states={"price": ""}, pack=pack)
+
+    assert invented.label == "UNKNOWN"
+    assert published.label == "IMPOSSIBLE"
