@@ -48,11 +48,13 @@ def abstain_ungrounded(verdict, *, states=None, source_text=None, extracted=(), 
     """
     from ..checker import Verdict
 
-    if not verdict.refuted or not verdict.frontier:
+    if not verdict.refuted:
         return verdict
     names = [str(name) for name in verdict.frontier]
     if verdict.reason == "BLOCKED_GUARD":
         names = _blocked_guard_conditions(names, pack)
+    elif verdict.reason == "GOAL_UNSAT" and not names and pack:
+        names = sorted(atoms(pack["goal"]) | numeric_vars(pack["goal"]))
     if verdict.reason in CONDITION_REASONS and names and states is not None:
         grounded, reason = (lambda name: name in states), "UNALIGNED_CONDITION"
     elif verdict.reason in CONDITION_REASONS and names and source_text:

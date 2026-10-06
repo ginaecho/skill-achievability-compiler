@@ -124,8 +124,8 @@ therefore **precision**: when SkillC said IMPOSSIBLE, how often was it right?
 
 | | Rule-based | gpt-5.4 |
 |---|---:|---:|
-| **Skills** | 50% (5 of 10) | 67% (6 of 9), plus 13 multi-step or blocked-step refutations not yet checked by hand |
-| **Agents** | 92% (22 of 24) | 76% (58 of 76), plus 8 not yet checked |
+| **Skills** | 50% (5 of 10) | 67% (6 of 9), plus 12 multi-step or blocked-step refutations not yet checked by hand |
+| **Agents** | 92% (22 of 24) | 76% (58 of 76), plus 7 not yet checked |
 | **Prompts** | 100% (5 of 5) | 60% (15 of 25), plus 9 not yet checked |
 
 ### All verdicts on the 429 real files
@@ -133,9 +133,9 @@ therefore **precision**: when SkillC said IMPOSSIBLE, how often was it right?
 | Form | Mode | ACHIEVABLE | IMPOSSIBLE | UNKNOWN | Error |
 |---|---|---:|---:|---:|---:|
 | Skills | Rule-based | 41 | 10 | 92 | 0 |
-| Skills | gpt-5.4 | 82 | 22 | 36 | 3 |
+| Skills | gpt-5.4 | 82 | 21 | 37 | 3 |
 | Agents | Rule-based | 27 | 24 | 92 | 0 |
-| Agents | gpt-5.4 | 41 | 84 | 18 | 0 |
+| Agents | gpt-5.4 | 41 | 83 | 19 | 0 |
 | Prompts | Rule-based | 27 | 5 | 111 | 0 |
 | Prompts | gpt-5.4 | 94 | 34 | 14 | 1 |
 
@@ -146,6 +146,10 @@ therefore **precision**: when SkillC said IMPOSSIBLE, how often was it right?
   SkillC checks against the documented list, so it reports these as missing.
 - **Invented tool names.** The LLM sometimes makes up an operation name, for example
   `create_dashboard_via_web_ui`. SkillC turns many of these into UNKNOWN, but not all.
+  The same check covers invented goal conditions. Since 2026-10-06 it also covers
+  refutations that name no condition directly, which moved 2 files from IMPOSSIBLE to
+  UNKNOWN (one skill and one agent), so these counts differ by one from the raw run
+  files.
 - **Few cases.** For skills, only 9 to 10 IMPOSSIBLE verdicts have been checked, so one
   verdict moves the percentage by about 10 points.
 

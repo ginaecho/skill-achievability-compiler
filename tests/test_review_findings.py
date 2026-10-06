@@ -302,3 +302,44 @@ def test_numeric_only_guard_is_grounded_by_its_variables():
 
     assert invented.label == "UNKNOWN"
     assert published.label == "IMPOSSIBLE"
+
+
+def test_goal_unsat_without_frontier_is_grounded_by_goal_variables():
+    from skillc.frontend.contracts import abstain_ungrounded
+
+    pack = {"goal": {"and": ["booked", {"cmp": ["refund_total", "<", 0]}]}}
+    unsat = _refutation("GOAL_UNSAT", ())
+
+    invented = abstain_ungrounded(unsat, states={"paid": ""}, pack=pack)
+    published = abstain_ungrounded(unsat, states={"refund_total": ""}, pack=pack)
+    from_text = abstain_ungrounded(unsat, source_text="Keep the refund_total low.", pack=pack)
+
+    assert invented.label == "UNKNOWN"
+    assert published.label == "IMPOSSIBLE"
+    assert from_text.label == "IMPOSSIBLE"
+
+
+@pytest.mark.parametrize("profile", [
+    [], {"tools": ["bash"]}, {"name": "", "tools": []}, {"name": "p", "tools": "bash"},
+    {"name": "p", "tools": ["bash", ""]}, {"name": "p", "tools": [1]},
+    {"name": "p", "shell": "false"}, {"name": "p", "description": 3},
+])
+def test_profile_with_malformed_fields_is_rejected(tmp_path, profile):
+    from skillc.profiles import ProfileError, load_profile
+
+    path = tmp_path / "bad.json"
+    path.write_text(json.dumps(profile))
+
+    with pytest.raises(ProfileError):
+        load_profile(str(path))
+
+
+def test_well_formed_profile_still_loads(tmp_path):
+    from skillc.profiles import load_profile
+
+    path = tmp_path / "ok.json"
+    path.write_text(json.dumps({"name": "p", "tools": ["Bash(git:*)"], "shell": True}))
+
+    profile = load_profile(str(path))
+
+    assert profile.tools == frozenset({"bash"}) and profile.shell is True

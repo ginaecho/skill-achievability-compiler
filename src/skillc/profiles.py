@@ -38,6 +38,25 @@ def normalize_tool(name: str) -> str:
     return name.strip().lower()
 
 
+class ProfileError(ValueError):
+    """A profile document does not have the documented shape."""
+
+
+def _validate(d) -> None:
+    if not isinstance(d, dict):
+        raise ProfileError("a profile must be a JSON object")
+    if not isinstance(d.get("name"), str) or not d["name"].strip():
+        raise ProfileError("profile name must be a non-empty string")
+    if not isinstance(d.get("description", ""), str):
+        raise ProfileError("profile description must be a string")
+    tools = d.get("tools", [])
+    if not isinstance(tools, list) or not all(
+            isinstance(tool, str) and normalize_tool(tool) for tool in tools):
+        raise ProfileError("profile tools must be a list of non-empty strings")
+    if not isinstance(d.get("shell", False), bool):
+        raise ProfileError("profile shell must be true or false")
+
+
 @dataclass
 class Profile:
     name: str
@@ -51,9 +70,10 @@ class Profile:
 
     @staticmethod
     def from_dict(d: dict) -> Profile:
+        _validate(d)
         tools = frozenset(normalize_tool(t) for t in d.get("tools", []))
         return Profile(name=d["name"], description=d.get("description", ""),
-                       tools=tools, shell=bool(d.get("shell", False)))
+                       tools=tools, shell=d.get("shell", False))
 
     def with_tools(self, extra: list[str]) -> Profile:
         return replace(self, tools=self.tools | {normalize_tool(t) for t in extra},
