@@ -551,23 +551,35 @@ def toolbox_tool(credential):
         )
 
 
-def skillc_middleware_and_tools() -> tuple[list, list]:
-    """skillc's monitor: middleware for every agent, plan tool(s) for the coordinator.
+PLAN_FILE = HERE / "skillc_plan.ce"   # staged by the predeploy hook from ../../protocol/
 
-    Removable as a unit: return ([], []) and the example runs unmonitored.
+
+def skillc_monitor_or_none():
+    """skillc's monitor with the protocol pack as the pre-approved plan, or None.
+
+    Removable as a unit: return None and the example runs unmonitored. Each role agent gets
+    `monitor.middleware_for(role)`, so a tool call is checked against the Tool's owner and
+    its precondition in the protocol state; the coordinator gets `middleware_for()` with the
+    six role handoffs declared as agent tools (always allowed, never state-changing).
     """
     if os.environ.get("SKILLC_MONITOR", "").lower() == "off":
         log.info("skillc monitor disabled by SKILLC_MONITOR=off")
-        return [], []
+        return None
     try:
         from skillc.integrations.agent_framework import skillc_monitor
     except ImportError:
         log.info("skillc[agent-framework] not installed; running without the skillc monitor")
-        return [], []
-    mw, extra_tools = skillc_monitor(
-        runtime="foundry-hosted", root=Path(os.environ.get("HOME", ".")) / ".skillc"
+        return None
+    monitor = skillc_monitor(
+        runtime="foundry-hosted",
+        root=Path(os.environ.get("HOME", ".")) / ".skillc",
+        plan_path=PLAN_FILE if PLAN_FILE.is_file() else None,
+        agent_tools=ROLES,
+        logger=log,
     )
-    return list(mw or []), list(extra_tools or [])
+    verdict = (monitor.plan_decision.action if monitor.plan_decision else "no plan")
+    log.info("skillc monitor active; plan %s: %s", PLAN_FILE.name, verdict)
+    return monitor
 
 
 def build() -> tuple[Agent, dict[str, Agent], dict[str, list[Any]]]:
@@ -577,7 +589,10 @@ def build() -> tuple[Agent, dict[str, Agent], dict[str, list[Any]]]:
     """
     credential = make_credential()
     client = make_client(credential)
-    mw, skillc_tools = skillc_middleware_and_tools()
+    monitor = skillc_monitor_or_none()
+    skillc_tools = list(monitor.tools) if monitor else []
+    mw_for = (lambda role=None: monitor.middleware_for(role) or None) if monitor \
+        else (lambda role=None: None)
     tbx = toolbox_tool(credential)
 
     roles: dict[str, Agent] = {}
@@ -592,7 +607,7 @@ def build() -> tuple[Agent, dict[str, Agent], dict[str, list[Any]]]:
             name=role,
             description=ROLE_DESCRIPTIONS[role],
             tools=tools,
-            middleware=mw or None,
+            middleware=mw_for(role),
         )
         tools_by_agent[role] = tools
 
@@ -611,7 +626,7 @@ def build() -> tuple[Agent, dict[str, Agent], dict[str, list[Any]]]:
         name="finance-report-agent",
         description="Coordinates the Quarterly Finance Report across six role agents.",
         tools=coordinator_tools,
-        middleware=mw or None,
+        middleware=mw_for(),
     )
     tools_by_agent["finance-report-agent"] = coordinator_tools
     return coordinator, roles, tools_by_agent

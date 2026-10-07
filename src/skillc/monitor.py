@@ -25,6 +25,15 @@ Adapters (Claude Code hooks, GitHub Copilot hooks, Agent Framework middleware) t
 their events into the five entry points `on_prompt`, `on_reasoning`, `pre_action`,
 `post_action` and `submit_plan`, and build the tool map of their runtime with
 `tool_map_from_names`.
+
+Protocol state from executions.  For a hosted agent the tools the model calls are the
+plan's own Tools (capabilities), and the plan is a protocol pack approved at deploy time
+(`load_plan`).  The monitor then tracks the protocol state: `State.facts` holds the
+predicates currently true (from the pack's `Initially true`), and every successful
+execution of a capability applies its `adds` and `removes`.  Before a capability runs,
+its `requires` formula is evaluated against the facts (three-valued: a comparison is
+unknown and never denies), and its owner is checked against the calling role.  A
+precondition that does not hold is refused with the Tools that would establish it.
 """
 from __future__ import annotations
 
@@ -41,13 +50,16 @@ from pathlib import Path
 from typing import Any
 
 from .checker import check
-from .frontend.ce import CEError, parse_ce_detailed
+from .frontend.ce import CEError, parse_ce_detailed, render_formula
 from .frontend.prompts import CE_DOC, CE_RUNTIME_DOC, CE_SOFTWARE_DOC
 from .frontend.runtime import Runtime, bind_runtime, load_runtime, runtime_note
 from .frontend.toolpolicy import Library, Obligation, load_library, match, unmet
 from .pack import PackError
 
 ALLOW, DENY, WARN = "allow", "deny", "warn"
+
+# first words of a string result that mean the tool did not do its work (is_failure)
+FAILURE_WORDS = frozenset({"error", "rejected", "refused", "failed", "denied"})
 
 # Claude Code tool -> runtime tool (the vocabulary of the runtime manifests)
 TOOL_MAP = {"Bash": "bash", "Write": "write", "Edit": "edit", "MultiEdit": "edit",
@@ -126,13 +138,15 @@ class Config:
     free_tools: tuple = FREE_TOOLS
     tool_map: dict = field(default_factory=lambda: dict(TOOL_MAP))
     plan_tools: tuple = ("Write",)   # tools whose write of the plan file submits the plan
+    # sub-agent handoffs (a coordinator's role tools): always allowed, never change state
+    agent_tools: tuple = ()
     prohibited: list = field(default_factory=list)   # list[Rule]
 
     @staticmethod
     def load(path: Path) -> Config:
         d = json.loads(path.read_text(encoding="utf-8"))
         rules = [Rule(**r) for r in d.pop("prohibited", [])]
-        for key in ("free_tools", "plan_tools"):
+        for key in ("free_tools", "plan_tools", "agent_tools"):
             if key in d:
                 d[key] = tuple(d[key])
         cfg = Config(**d)
@@ -143,6 +157,7 @@ class Config:
         d = asdict(self)
         d["free_tools"] = list(self.free_tools)
         d["plan_tools"] = list(self.plan_tools)
+        d["agent_tools"] = list(self.agent_tools)
         return d
 
     def for_session(self, session_id: str | None) -> Config:
@@ -163,6 +178,8 @@ class State:
     transcript_offsets: dict = field(default_factory=dict)   # transcript path -> bytes read
     sessions: list = field(default_factory=list)   # sessions already given instructions
     pending: list = field(default_factory=list)    # context to deliver at the next chance
+    facts: list = field(default_factory=list)      # predicates currently true (protocol state)
+    actions: list = field(default_factory=list)    # capabilities executed successfully, in order
     log: list = field(default_factory=list)
 
 
@@ -174,9 +191,10 @@ class Monitor:
       on_prompt(prompt, session_id)   the plan instructions once per session, then the
                                       intent check of the user's request
       on_reasoning(text)              reasoning text (alias of observe_thinking)
-      pre_action(tool, tool_input)    a tool call before it runs
-      post_action(tool, input, out)   a tool call after it ran
+      pre_action(tool, input, role)   a tool call before it runs
+      post_action(tool, input, out, role)   a tool call after it ran
       submit_plan(text)               a plan written through another channel
+      load_plan(text)                 a pre-approved plan at startup; resets the facts
 
     Fail-open contract.  The monitor never raises across an adapter boundary.  The
     methods above only raise on a programming error or an unreadable state file, and
@@ -200,6 +218,7 @@ class Monitor:
         self.library = library or load_library()
         self.state_path = self.root / self.cfg.state_file
         self.state = self._load_state()
+        self._plan_cache: tuple[str | None, dict, dict] | None = None   # sha, pack, bindings
 
     # ------------------------------------------------------------------ state
     def _load_state(self) -> State:
@@ -335,19 +354,103 @@ class Monitor:
             self.state.block = None
         return self._record("plan", d, json.dumps(info)[:200])
 
+    def load_plan(self, text: str) -> Decision:
+        """Submit a plan approved before the run (a protocol pack loaded at startup).
+
+        Same decision as `submit_plan`; on ALLOW the protocol state is also set: the facts
+        become the pack's `Initially true` predicates and the executed actions are
+        cleared.  Loading the plan that is already approved (the same text, as when a
+        hosted agent's process restarts within a session) keeps the facts and actions
+        recorded so far, so a resumed session continues where it stopped."""
+        sha = hashlib.sha256(text.encode()).hexdigest()[:16]
+        resumed = self.state.plan is not None and self.state.plan_sha == sha
+        d = self.submit_plan(text)
+        if d.action == ALLOW and not resumed:
+            pack = self.plan_pack() or {}
+            self.state.facts = list(pack.get("init_true", []))
+            self.state.actions = []
+        return d
+
     def _revoke(self, reason: str) -> None:
         """Hold every further action until a plan that passes is written."""
         self.state.block = reason
         self.state.plan = None
         self.state.plan_sha = None
 
-    def _plan_via(self) -> set:
+    def _parsed_plan(self) -> tuple[dict, dict] | None:
+        """The approved plan's (pack, bindings), parsed once per plan_sha."""
         if not self.state.plan:
-            return set()
-        try:
-            return {b.get("via") for b in parse_ce_detailed(self.state.plan).bindings.values()}
-        except CEError:
-            return set()
+            return None
+        if self._plan_cache is None or self._plan_cache[0] != self.state.plan_sha:
+            try:
+                parsed = parse_ce_detailed(self.state.plan)
+            except CEError:
+                return None
+            self._plan_cache = (self.state.plan_sha, parsed.pack, parsed.bindings)
+        return self._plan_cache[1], self._plan_cache[2]
+
+    def plan_pack(self) -> dict | None:
+        """The parsed pack of the approved plan (capabilities with owner, pre, add, del;
+        protocol; init_true), or None without an approved plan."""
+        parsed = self._parsed_plan()
+        return parsed[0] if parsed else None
+
+    def _capability(self, tool: str) -> dict | None:
+        pack = self.plan_pack()
+        cap = (pack or {}).get("capabilities", {}).get(tool)
+        return cap if isinstance(cap, dict) else None
+
+    def _capability_via(self, tool: str) -> str | None:
+        parsed = self._parsed_plan()
+        return (parsed[1].get(tool) or {}).get("via") if parsed else None
+
+    def _plan_via(self) -> set:
+        parsed = self._parsed_plan()
+        return {b.get("via") for b in parsed[1].values()} if parsed else set()
+
+    # ------------------------------------------------------------------ protocol state
+    def _owner_mismatch(self, tool: str, cap: dict, role: str | None) -> str | None:
+        owner = cap.get("owner")
+        if role and owner not in (None, "?") and owner != role:
+            return (f"skillc: `{tool}` is owned by role {owner}, not {role} "
+                    "(policy: separation of duties)")
+        return None
+
+    def _establishers(self, pred: str) -> str:
+        """The Tools of the plan whose `adds` contain `pred`, with their owners."""
+        caps = (self.plan_pack() or {}).get("capabilities", {})
+        names = [n for n, c in caps.items() if pred in c.get("add", [])]
+        if not names:
+            return "which no Tool of the plan establishes"
+        owners = sorted({caps[n].get("owner", "?") for n in names})
+        if len(owners) == 1:
+            tools = " or ".join(f"`{n}`" for n in names)
+            owner = f" (owner {owners[0]})" if owners[0] != "?" else ""
+            text = f"which only {tools}{owner} establish"
+        else:
+            text = "which only " + " or ".join(
+                f"`{n}` (owner {caps[n].get('owner', '?')})" for n in names) + " establish"
+        if not any(n in self.state.actions for n in names):
+            text += "; none has run"
+        return text
+
+    def _unmet_precondition(self, tool: str, cap: dict) -> str | None:
+        pre = cap.get("pre", True)
+        if eval_formula(pre, self.state.facts) is not False:
+            return None
+        unmet = unmet_atoms(pre, self.state.facts)
+        if unmet:
+            parts = [f"`{p}`, {self._establishers(p)}" for p in unmet]
+            return f"skillc: `{tool}` requires " + "; and ".join(parts) + "."
+        return (f"skillc: `{tool}` requires {render_formula(pre)}, which does not hold "
+                "in the protocol state (true now: "
+                + (", ".join(f"`{f}`" for f in self.state.facts) or "nothing") + ").")
+
+    def _apply_effects(self, tool: str, cap: dict) -> None:
+        facts = [f for f in self.state.facts if f not in cap.get("del", [])]
+        facts += [p for p in cap.get("add", []) if p not in facts]
+        self.state.facts = facts
+        self.state.actions.append(tool)
 
     # ------------------------------------------------------------------ thinking
     def observe_thinking(self, text: str) -> Decision:
@@ -407,13 +510,18 @@ class Monitor:
         except OSError:
             return False
 
-    def pre_action(self, tool: str, tool_input: dict) -> Decision:
+    def pre_action(self, tool: str, tool_input: dict, role: str | None = None) -> Decision:
+        """A tool call before it runs.  `role` is the role of the agent making the call,
+        when the adapter knows it (one middleware per role agent); a capability owned by
+        another role is then refused."""
         if self.is_plan_file(tool_input):
             if tool not in self.cfg.plan_tools:
                 return self._record("action", Decision(
                     DENY, f"skillc: write the whole plan with {' or '.join(self.cfg.plan_tools)} "
                           f"to `{self.cfg.plan_file}`."))
             return self.submit_plan(self.plan_text(tool_input))
+        if tool in self.cfg.agent_tools:            # a handoff to a sub-agent: its own
+            return self._record("action", Decision(ALLOW), tool)   # calls are monitored
         free = tool in self.cfg.free_tools
         if not free and self.state.block:
             return self._record("action", Decision(DENY, self.state.block), tool)
@@ -422,11 +530,22 @@ class Monitor:
                 DENY, f"skillc: no approved plan. Before implementing, write your plan in "
                       f"Controlled English to `{self.cfg.plan_file}`; only a plan skillc "
                       "judges ACHIEVABLE can be implemented."), tool)
+        cap = self._capability(tool)
+        if cap is not None:
+            reason = (self._owner_mismatch(tool, cap, role)
+                      or self._unmet_precondition(tool, cap))
+            if reason:
+                return self._record("action", Decision(DENY, reason, [tool]), tool)
         text = self._action_text(tool_input)
         rt_tool = self.cfg.tool_map.get(tool, tool)
+        if cap is not None:                         # the plan binds the Tool to its runtime tool
+            rt_tool = self._capability_via(tool) or rt_tool
         problems = self._prohibited_text(text)
-        # Free local helpers (Glob, Grep, ...) have no runtime-vocabulary counterpart.
-        if rt_tool not in self.runtime.tools and not (free and tool not in self.cfg.tool_map):
+        # Free local helpers (Glob, Grep, ...) have no runtime-vocabulary counterpart, and a
+        # Tool of the plan without a `via` is performed by the agent's own code.
+        if (rt_tool not in self.runtime.tools
+                and not (free and tool not in self.cfg.tool_map)
+                and not (cap is not None and self._capability_via(tool) is None)):
             problems.append(f"`{tool}` is not a tool of runtime `{self.runtime.name}`")
         problems += [f"'{o.text}' needs {o.clause()}, not available in runtime "
                      f"`{self.runtime.name}`"
@@ -434,7 +553,7 @@ class Monitor:
         if problems:
             reason = "skillc: action blocked:\n  - " + "\n  - ".join(problems)
             return self._record("action", Decision(DENY, reason, problems), tool)
-        if free:
+        if free or cap is not None:                 # a Tool of the plan conforms to the plan
             return self._record("action", Decision(ALLOW), tool)
         if self.cfg.plan_conformance and self.state.plan and rt_tool not in self._plan_via():
             return self._record("action", Decision(
@@ -442,8 +561,17 @@ class Monitor:
                       f"of the approved plan. Update `{self.cfg.plan_file}` first."), tool)
         return self._record("action", Decision(ALLOW), tool)
 
-    def post_action(self, tool: str, tool_input: dict, result: Any) -> Decision:
-        """Turn failures in a tool's output into runtime facts; re-check the plan."""
+    def post_action(self, tool: str, tool_input: dict, result: Any,
+                    role: str | None = None) -> Decision:
+        """A tool call after it ran.  A capability of the plan that did not fail (see
+        `is_failure`) applies its effects to the protocol state; then failures in the
+        output become runtime facts and the plan is re-checked."""
+        if tool in self.cfg.agent_tools:
+            return self._record("observe", Decision(ALLOW), tool)
+        cap = self._capability(tool)
+        if (cap is not None and not is_failure(result)
+                and self._owner_mismatch(tool, cap, role) is None):
+            self._apply_effects(tool, cap)
         out = result if isinstance(result, str) else json.dumps(result, default=str)
         new = self._observe(out, self._action_text(tool_input))
         if not new or not self.state.plan:
@@ -478,6 +606,85 @@ class Monitor:
                             self.state.missing_resources.append(o.value)
                             new.append(f"credential `{o.value}` was rejected")
         return new
+
+
+# ---------------------------------------------------------------------- protocol state
+
+def eval_formula(formula: Any, facts: list[str] | set[str] | tuple[str, ...]) -> bool | None:
+    """A pack formula (formula.py grammar) under the facts currently true: True, False, or
+    None for unknown.  A predicate is true when it is in `facts`; `and`, `or` and `not`
+    are three-valued (unknown propagates: an `and` with a False is False, an `and` with an
+    unknown and no False is unknown); a comparison is unknown, because the monitor tracks
+    no numeric variables; so is any shape the grammar does not define.  Unknown never
+    denies: only a formula that evaluates to False refuses an action."""
+    if formula is True or formula is False:
+        return formula
+    if isinstance(formula, str):
+        return formula in facts
+    if isinstance(formula, dict) and len(formula) == 1:
+        if "and" in formula and isinstance(formula["and"], list):
+            values = [eval_formula(x, facts) for x in formula["and"]]
+            if False in values:
+                return False
+            return None if None in values else True
+        if "or" in formula and isinstance(formula["or"], list):
+            values = [eval_formula(x, facts) for x in formula["or"]]
+            if True in values:
+                return True
+            return None if None in values else False
+        if "not" in formula:
+            v = eval_formula(formula["not"], facts)
+            return None if v is None else not v
+    return None                                     # cmp, or an undefined shape
+
+
+def unmet_atoms(formula: Any, facts: list[str] | set[str] | tuple[str, ...]) -> list[str]:
+    """The predicates a false formula is waiting for: atoms that occur positively and are
+    not in `facts`, in order of appearance.  (A negated atom that is in the facts cannot
+    be established by any Tool, so it is not listed.)"""
+    out: list[str] = []
+
+    def walk(f: Any, positive: bool) -> None:
+        if isinstance(f, str):
+            if positive and f not in facts and f not in out:
+                out.append(f)
+        elif isinstance(f, dict):
+            for x in f.get("and", []) + f.get("or", []):
+                walk(x, positive)
+            if "not" in f:
+                walk(f["not"], not positive)
+
+    walk(formula, True)
+    return out
+
+
+def is_failure(result: Any) -> bool:
+    """Whether a tool's result means it did not do its work, so that its effects on the
+    protocol state must not be applied.  The rule, by result type:
+
+      dict    a key "error" or "skillc" (the monitor's own blocked result);
+      str     the first word (case-insensitive, after whitespace, trailing punctuation
+              dropped) is one of Error, Rejected, Refused, Failed, Denied, or the text
+              starts with "Traceback"; a string that is a JSON object is read as a dict
+              (Agent Framework turns a dict return value into its JSON text).
+
+    Everything else, including None and an empty string, is success."""
+    if isinstance(result, dict):
+        return "error" in result or "skillc" in result
+    if isinstance(result, str):
+        text = result.lstrip()
+        if text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, dict):
+                return is_failure(parsed)
+        if text.startswith("Traceback"):
+            return True
+        first = text.split(None, 1)[0] if text else ""
+        return first.rstrip(":.,;!").lower() in FAILURE_WORDS
+    return False
 
 
 # ---------------------------------------------------------------------- tool map

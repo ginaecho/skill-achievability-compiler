@@ -113,6 +113,80 @@ steps:
   - run: pip install skillc        # or: pip install -e .  when this repo is the project
 ```
 
+## Agent Framework middleware (hosted agents)
+
+A Foundry hosted agent has no hooks; it is built with Microsoft Agent Framework, whose
+middleware is the attachment point (docs/HOSTED_AGENT.md section 2b). The adapter is
+`src/skillc/integrations/agent_framework.py`, installed with `pip install "skillc[agent-framework]"`
+(`agent-framework-core>=1.19,<2`, `mcp>=1.30,<2`); the tests are
+`tests/test_agent_framework_adapter.py`, skipped where the extra is absent. Nothing in it
+calls a model.
+
+```python
+from skillc.integrations.agent_framework import skillc_monitor
+
+monitor = skillc_monitor(
+    runtime="foundry-hosted",                 # or a manifest path
+    root=Path.home() / ".skillc",             # state: root/<session>/state.json
+    plan_path=Path("protocol/quarterly_finance_report.ce"),   # or plan_text=...
+    agent_tools=ROLES,                        # the coordinator's sub-agent handoffs
+    prohibited=[...], thinking="off", fail_open=True, session_id=None, logger=None)
+
+role_agent  = Agent(..., tools=[...], middleware=monitor.middleware_for("TaxVerifier"))
+coordinator = Agent(..., tools=[*role_tools, *monitor.tools], middleware=monitor.middleware_for())
+monitor.status()        # plan verdict, facts, actions, log tail
+```
+
+| API | what it does |
+|---|---|
+| `SkillcMonitor(...)` / `skillc_monitor(...)` | one monitor core for the process. With `plan_text` or `plan_path` the plan is loaded at construction (`Monitor.load_plan`) and its verdict logged; a plan that is not ACHIEVABLE is kept as the verdict and every action is refused with it (nothing is raised). The session is `session_id`, else `$FOUNDRY_AGENT_SESSION_ID`, else `default`. |
+| `middleware_for(role=None)` | `[SkillcFunctionMiddleware(role), SkillcAgentMiddleware(role)]` for one agent; the role makes the plan's Tool ownership enforceable. `SKILLC_MONITOR=off` makes it return `[]` (logged once). |
+| `tools` | `[]` with a pre-approved plan; `[skillc_write_plan]` otherwise (or with `enable_plan_tool=True`): the tool through which the agent submits its Controlled English plan and reads the verdict. |
+| `status()` | the plan verdict, `facts`, `actions`, the held reason, the log tail. |
+
+`SkillcFunctionMiddleware` runs `pre_action(name, arguments, role)` before every tool call,
+MCP toolbox tools included (spike fact F1). A DENY sets
+`context.result = {"skillc": "blocked", "reason": ...}` and does not call `call_next()`;
+`terminate` is never set, so the model reads the refusal as a normal tool result (F2). After
+`call_next()`, `post_action` sees the result's text; a WARN or DENY is appended to the
+result (`"\n\nskillc: ..."` on text, a `skillc` key on a dict, a text item on a content
+list). `SkillcAgentMiddleware` gives the last user message to the intent check (and to the
+plan instructions when the plan tool is enabled) and appends what there is to say as a
+user-role message; after the run it gives the response text to `on_reasoning`, observe-only.
+Every entry point is fail-open: an internal exception is logged at WARNING and the call is
+allowed (`fail_open=False` re-raises). After five identical denials in a session the reason
+is prefixed with "stop and tell the user what is missing; do not retry".
+
+**Protocol state from executions.** In a hosted agent the tools the model calls are the
+plan's own Tools (`fetch_financials`, `approve_audited`, ...), and the plan is the protocol
+pack approved at deploy time. The core therefore tracks the protocol state:
+
+- `State.facts` are the predicates currently true, starting from the pack's `Initially
+  true`; `State.actions` are the Tools executed successfully, in order.
+- Before a Tool of the plan runs, (a) with a `role`, the Tool's owner must be that role, else
+  DENY "`approve_audited` is owned by role TaxVerifier, not RevenueAnalyst (policy: separation
+  of duties)"; (b) its `requires` formula is evaluated against the facts with a three-valued
+  evaluator (`eval_formula`): a predicate is true when it is in the facts, `and`/`or`/`not`
+  propagate unknown, a comparison is unknown. Only False denies, naming the unmet
+  predicates and the Tools that establish them: "`write_revenue_analysis` requires `approved`,
+  which only `approve_audited` or `approve_standard` (owner TaxVerifier) establish; none has
+  run". A Tool of the plan passes plan conformance by definition; its `via` is the runtime
+  tool checked against the manifest, and a Tool without `via` is performed by the agent's
+  own code.
+- After a Tool of the plan runs, if its result is not a failure, its `adds` and `removes`
+  are applied to the facts and its name is appended to the actions. The failure rule
+  (`is_failure`): a dict with a key `error` or `skillc`; a string whose first word
+  (case-insensitive, trailing punctuation dropped) is Error, Rejected, Refused, Failed or
+  Denied, or that starts with `Traceback`; a string that is a JSON object is read as a dict
+  (the framework renders a dict return value as its JSON text). Everything else is success.
+- Tools that are not Tools of the plan keep the behaviour above: runtime tool map (built
+  lazily from the names seen, through `tool_map_from_names`), free tools, plan conformance.
+  Names in `Config.agent_tools` (the coordinator's role handoffs) are always allowed and
+  never change the state; the sub-agent's own calls are monitored by its own middleware.
+- `Monitor.load_plan(text)` is `submit_plan` for a pre-approved plan: on ALLOW the facts
+  are reset to `Initially true`, except when the same plan is already approved in this
+  session's state (a process restart), which keeps the facts and actions recorded so far.
+
 ## Live test: a real headless Claude Code agent
 
 `python scripts/monitor_live.py run DIR` then `summarize DIR OUT`; the evidence is in

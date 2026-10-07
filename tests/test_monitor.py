@@ -5,9 +5,14 @@ import subprocess
 import sys
 
 
+from pathlib import Path
+
 from skillc.frontend.runtime import load_runtime
-from skillc.monitor import (ALLOW, DENY, WARN, Config, Monitor, Rule, thinking_since,
-                            tool_map_from_names)
+from skillc.monitor import (ALLOW, DENY, WARN, Config, Monitor, Rule, eval_formula, is_failure,
+                            thinking_since, tool_map_from_names, unmet_atoms)
+
+FINANCE_CE = (Path(__file__).resolve().parent.parent / "examples" / "hosted-agent-finance"
+              / "protocol" / "quarterly_finance_report.ce").read_text(encoding="utf-8")
 
 GOOD = """Skill `fix-tests`.
 Roles: `agent`.
@@ -265,6 +270,157 @@ def test_session_installable_software_depends_on_an_observed_registry(tmp_path):
     assert "no package registry is reachable from this sandbox" in d.reason
     assert "package_registries" in m.state.missing_resources
     assert m.pre_action("code_interpreter", {"code": "print(1)"}).action == DENY
+
+
+# ---------------------------------------------------------------------- protocol state from executions
+
+def finance(tmp_path, **kw) -> Monitor:
+    """A hosted-agent monitor: the pre-approved finance pack, every tool of the pack a
+    capability, the coordinator's role handoffs as agent tools."""
+    m = Monitor(Config(runtime="foundry-hosted", free_tools=(), agent_tools=("Fetcher", "Writer"),
+                       **kw), tmp_path)
+    assert m.load_plan(FINANCE_CE).action == ALLOW
+    return m
+
+
+def test_load_plan_approves_the_pack_and_sets_the_initial_facts(tmp_path):
+    m = finance(tmp_path)
+    assert m.state.plan == FINANCE_CE and m.state.facts == [] and m.state.actions == []
+    pack = m.plan_pack()
+    assert pack["capabilities"]["approve_audited"]["owner"] == "TaxVerifier"
+    assert m.plan_pack() is pack                                # cached by plan_sha
+    # a resumed session keeps its progress: loading the same plan again is not a reset
+    m.post_action("fetch_financials", {}, '{"quarter": "2026-Q3"}')
+    assert m.load_plan(FINANCE_CE).action == ALLOW
+    assert m.state.facts == ["revenue_fetched", "expenses_fetched"]
+    assert m.state.actions == ["fetch_financials"]
+
+
+def test_capability_precondition_is_enforced_from_the_facts(tmp_path):
+    m = finance(tmp_path)
+    assert m.pre_action("fetch_financials", {"quarter": "2026-Q3"}).action == ALLOW
+    m.post_action("fetch_financials", {"quarter": "2026-Q3"}, '{"revenue_total": 1}')
+    d = m.pre_action("write_revenue_analysis", {"revenue_total": 1})
+    assert d.action == DENY
+    assert "`write_revenue_analysis` requires `approved`" in d.reason
+    assert "`approve_audited` or `approve_standard` (owner TaxVerifier) establish" in d.reason
+    assert "none has run" in d.reason
+    assert "`expense_analysis`, which only `analyze_expenses` (owner ExpenseAnalyst)" in d.reason
+
+
+def test_failed_execution_does_not_change_the_state(tmp_path):
+    m = finance(tmp_path)
+    m.post_action("fetch_financials", {}, '{"revenue_total": 90000}')
+    m.post_action("analyze_expenses", {}, "Expense analysis: ...")
+    m.post_action("classify_revenue", {}, "high: revenue 90,000.00 is above the threshold")
+    assert m.pre_action("approve_standard", {"revenue_total": 90000}).action == ALLOW
+    m.post_action("approve_standard", {"revenue_total": 90000},
+                  "Rejected: revenue 90,000.00 is above the 50,000.00 threshold")
+    assert "approved" not in m.state.facts and "approve_standard" not in m.state.actions
+    assert m.pre_action("write_revenue_analysis", {}).action == DENY
+    # a failure reported as JSON (Agent Framework's rendering of a dict result) is a failure
+    m.post_action("approve_standard", {}, '{"error": "no"}')
+    assert "approved" not in m.state.facts
+    m.post_action("approve_standard", {"revenue_total": 40000}, "Approved: at or below")
+    assert "approved" in m.state.facts and m.state.actions[-1] == "approve_standard"
+    assert m.pre_action("write_revenue_analysis", {}).action == ALLOW
+    m.post_action("write_revenue_analysis", {}, "# Revenue analysis")
+    assert m.pre_action("compose_report", {}).action == ALLOW
+
+
+def test_capability_owned_by_another_role_is_refused(tmp_path):
+    m = finance(tmp_path)
+    m.post_action("fetch_financials", {}, "{}")
+    m.post_action("classify_revenue", {}, "high")
+    m.post_action("lookup_tax_rules", {}, "rules")
+    m.post_action("audit_high_revenue", {}, "Audit report: ok")
+    d = m.pre_action("approve_audited", {"audit_report": "x"}, role="RevenueAnalyst")
+    assert d.action == DENY
+    assert d.reason == ("skillc: `approve_audited` is owned by role TaxVerifier, not "
+                        "RevenueAnalyst (policy: separation of duties)")
+    assert m.pre_action("approve_audited", {"audit_report": "x"}, role="TaxVerifier").action == ALLOW
+    assert m.pre_action("approve_audited", {"audit_report": "x"}).action == ALLOW   # role unknown
+    # effects are not applied for a result the wrong role produced
+    m.post_action("approve_audited", {}, "Approved: ok", role="RevenueAnalyst")
+    assert "approved" not in m.state.facts
+    m.post_action("approve_audited", {}, "Approved: ok", role="TaxVerifier")
+    assert "approved" in m.state.facts
+
+
+def test_tools_outside_the_pack_keep_the_old_behaviour(tmp_path):
+    m = finance(tmp_path)
+    # bound by the plan's `via`: allowed; its output is still observed
+    assert m.pre_action("code_interpreter", {"code": "print(1)"}).action == ALLOW
+    # a runtime tool no Tool of the plan binds: plan conformance
+    d = m.pre_action("web_fetch", {"url": "https://example.com"})
+    assert d.action == DENY and "not used by any Tool of the approved plan" in d.reason
+    # not a tool of the runtime at all
+    d = m.pre_action("Bash", {"command": "ls"})
+    assert d.action == DENY and "not a tool of runtime `foundry-hosted`" in d.reason
+    assert m.state.facts == [] and m.state.actions == []
+
+
+def test_sub_agent_handoffs_are_allowed_and_change_nothing(tmp_path):
+    m = finance(tmp_path)
+    assert m.pre_action("Fetcher", {"task": "fetch 2026-Q3"}).action == ALLOW
+    assert m.post_action("Fetcher", {"task": "x"}, "bash: pandoc: command not found").action == ALLOW
+    assert m.state.facts == [] and m.state.actions == [] and m.state.missing_programs == []
+    m.state.block = "held"
+    assert m.pre_action("Writer", {"task": "x"}).action == ALLOW        # always allowed
+    cfg = Config(agent_tools=("Fetcher",))
+    assert cfg.dump()["agent_tools"] == ["Fetcher"]
+    path = tmp_path / "monitor.json"
+    path.write_text(json.dumps(cfg.dump()), encoding="utf-8")
+    assert Config.load(path).agent_tools == ("Fetcher",)
+
+
+def test_formula_evaluator_is_three_valued():
+    facts = ["a", "b"]
+    assert eval_formula(True, facts) is True and eval_formula(False, facts) is False
+    assert eval_formula("a", facts) is True and eval_formula("z", facts) is False
+    assert eval_formula({"and": ["a", "b"]}, facts) is True
+    assert eval_formula({"and": ["a", "z"]}, facts) is False
+    assert eval_formula({"or": ["z", "b"]}, facts) is True
+    assert eval_formula({"or": ["z", "y"]}, facts) is False
+    assert eval_formula({"not": "z"}, facts) is True and eval_formula({"not": "a"}, facts) is False
+    cmp = {"cmp": ["x", ">", 1]}
+    assert eval_formula(cmp, facts) is None                             # numeric: unknown
+    assert eval_formula({"and": ["a", cmp]}, facts) is None             # unknown propagates
+    assert eval_formula({"and": ["z", cmp]}, facts) is False            # a False decides
+    assert eval_formula({"or": ["a", cmp]}, facts) is True              # a True decides
+    assert eval_formula({"or": ["z", cmp]}, facts) is None
+    assert eval_formula({"not": cmp}, facts) is None
+    assert eval_formula({"and": [{"cmp": [{"+": ["x", 1]}, "<=", "y"]}]}, facts) is None
+    assert eval_formula({"xor": ["a"]}, facts) is None                  # undefined shape: unknown
+    assert unmet_atoms({"and": ["a", "z", {"or": ["y", "b"]}, {"not": "a"}]}, facts) == ["z", "y"]
+
+
+def test_unknown_precondition_never_denies(tmp_path):
+    ce = """Skill `budget`.
+Roles: `agent`.
+Tool `spend` (owner `agent`): via `write`; requires `funded` and `budget` > 0; adds `spent`.
+Tool `fund` (owner `agent`): via `write`; adds `funded`.
+Goal: `spent`.
+Protocol:
+  - `agent` uses `fund`.
+  - `agent` uses `spend`.
+"""
+    m = Monitor(Config(runtime="foundry-hosted", free_tools=()), tmp_path)
+    assert m.load_plan(ce).action == ALLOW
+    d = m.pre_action("spend", {})
+    assert d.action == DENY and "`spend` requires `funded`, which only `fund`" in d.reason
+    m.post_action("fund", {}, "ok")
+    assert m.pre_action("spend", {}).action == ALLOW                    # budget > 0 is unknown
+
+
+def test_failure_detection_rule():
+    assert is_failure({"error": "x"}) and is_failure({"skillc": "blocked"})
+    assert not is_failure({"ok": True})
+    assert is_failure("error: refused") and is_failure("  Rejected: no") and is_failure("FAILED.")
+    assert is_failure("Refused, no approval") and is_failure("Denied") and is_failure("Traceback (most")
+    assert is_failure('{"error": "no data"}') and not is_failure('{"quarter": "2026-Q3"}')
+    assert not is_failure("Approved: fine") and not is_failure("An error occurred later")
+    assert not is_failure("") and not is_failure(None) and not is_failure(["Error"]) and not is_failure(0)
 
 
 def test_transcript_reader(tmp_path):
