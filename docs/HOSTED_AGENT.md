@@ -8,6 +8,9 @@ design. It is provider-neutral; the targets are the **Copilot cloud agent**
 (reachable today through the hooks) and **Microsoft Foundry Agent Service
 hosted agents** (which need the environment work below).
 
+The ordered implementation plan, with the decision not to fork Agent
+Framework, is in `docs/HOSTED_AGENT_IMPLEMENTATION_PLAN.md`.
+
 ## 0. Constraint: no model API, hooks only
 
 skillc never needs a model to decide anything: the checker, the plan gate,
