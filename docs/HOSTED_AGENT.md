@@ -70,6 +70,122 @@ Dependencies are installed by `copilot-setup-steps.yml` before the job.
 Copilot CLI uses the same hooks on a developer machine, so one
 configuration serves both.
 
+## 2b. How a hosted agent is actually built and deployed (investigated 2026-10-07)
+
+This section is the result of reading the Agent Framework hosting guide, the
+`azure.yaml` reference, the hosted-agent and toolbox quickstarts, the
+`foundry-samples` layout and the Agent Framework middleware guide. It changes
+the design: **the unit of achievability is the `azd` project, and the
+capability context is declared in `azure.yaml` before anything exists in
+Azure.**
+
+### The build unit: an `azd` project
+
+```
+my-agent/
+  azure.yaml                 # the whole declaration (project, model, connections,
+                             # toolbox, skills, agent, protocols, env, resources)
+  src/my-agent/
+    main.py                  # Agent Framework: Agent(...) wrapped by ResponsesHostServer
+    requirements.txt | pyproject.toml
+    Dockerfile               # only in --deploy-mode container
+    .env                     # local run only
+  skills/*.md                # azure.ai.skill instructions (markdown)
+```
+
+`azure.yaml` is a graph of services joined by `uses`:
+
+| host | what it declares | skillc reads it as |
+|---|---|---|
+| `azure.ai.project` | the Foundry project, `deployments` (model, version, SKU, capacity), `network` (`isolationMode: AllowInternetOutbound \| AllowOnlyApprovedOutbound`, `agentSubnet`) | model availability; **egress mode** |
+| `azure.ai.connection` | `category` (`RemoteTool`, `CognitiveSearch`, `AzureOpenAI`, ...), `target`, `authType` (`ApiKey`, `AAD`, `ManagedIdentity`, `OAuth2`), `credentials: ${VAR}` | **credential / connection facts** (name and auth mode only) |
+| `azure.ai.toolbox` | `tools: [{type: azure_ai_search, connection: ...}, {type: code_interpreter}, {type: mcp, ...}, web_search, openapi, a2a, skills]` | **the granted tool types**, each with its connection |
+| `azure.ai.skill` | `instructions: ./skills/x.md`, optional allowed tools | **an intent artifact** (a SKILL.md) |
+| `azure.ai.agent` | `kind: hosted`, `protocols`, `env`, `container.resources` (`cpu` 0.25 to 4.0, `memory` 0.5Gi to 8Gi), `toolboxes`, `uses`, `policies` (`rai_policy`), `codeConfiguration` or `image`, `agentCard.skills` | **the sandbox**, the toolboxes it may reach, the policies |
+
+The platform injects `FOUNDRY_PROJECT_ENDPOINT`, `AZURE_AI_MODEL_DEPLOYMENT_NAME`,
+`APPLICATIONINSIGHTS_CONNECTION_STRING` and `FOUNDRY_AGENT_SESSION_ID` at
+runtime; `FOUNDRY_` and `AGENT_` prefixes are reserved. The toolbox is
+reached from code as one MCP endpoint
+(`{project}/toolboxes/{name}/versions/{v}/mcp?api-version=v1`, bearer token
+scoped to `https://ai.azure.com/.default`), passed in by convention as
+`TOOLBOX_ENDPOINT` or `TOOLBOX_NAME`.
+
+### The code: Agent Framework
+
+```python
+client = FoundryChatClient(project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+                           model=os.environ["AZURE_AI_MODEL_DEPLOYMENT_NAME"],
+                           credential=DefaultAzureCredential())
+agent = Agent(client=client, instructions="...", tools=[...], middleware=[...])
+ResponsesHostServer(agent).run()        # or InvocationsHostServer; port 8088 locally
+```
+
+The extension points that matter to skillc, all in `agent_framework`:
+
+* **function middleware** `async def mw(context: FunctionInvocationContext, call_next)`:
+  runs before and after every tool call the agent loop makes, including MCP
+  tools the agent connected to itself (the toolbox, when consumed client-side).
+  `context.function.name`, `context.arguments`, `context.result`; **deny by
+  not calling `call_next()` and setting `context.result`**; `context.terminate
+  = True` stops the whole tool loop.
+* **agent middleware** `async def mw(context: AgentContext, call_next)`: sees
+  the run's input messages and, after `call_next()`, the response text: the
+  prompt and the reasoning-text signals.
+* **chat middleware**: every model request and response, if finer grain is needed.
+* host-level `prepare_options(request, options)` and the session stores
+  (`AgentSessionStoreProvider`, Foundry State Store when hosted, file-backed
+  locally).
+
+Middleware is registered with `Agent(middleware=[...])` or per run; the
+samples use exactly this for guardrails ("SecurityAgentMiddleware" blocks a
+request by overriding `context.result`). This is the attachment skillc needs,
+with no hook protocol and no model API.
+
+**One limit to verify:** toolbox tools can also be executed *server-side* by
+the model service (the C# "foundry-toolbox-server-side" sample). Those calls
+never pass through the agent loop, so middleware cannot see them; only the
+toolbox's `require_approval` policy can gate them. The Python toolbox
+sample connects client-side over MCP, where middleware does fire.
+
+### The deploy path
+
+| step | command | what happens | skillc moment |
+|---|---|---|---|
+| scaffold | `azd ai agent init -m <sample azure.yaml> --deploy-mode code` | writes `azure.yaml`, `src/<agent>/` | compile `azure.yaml` to a **declared** environment |
+| provision | `azd provision` | project, model deployments, **connections** (identity and auth exist now) | probe the control plane for the first time |
+| local run | `azd ai agent run` (port 8088), `azd ai agent invoke --local` | the real code against the real project, from the laptop | the monitor middleware runs here first; the self-probe can run here |
+| deploy | `azd deploy` | **toolbox versions, skill versions, agent version**: ZIP upload with remote build (`codeConfiguration`) or a Dockerfile build pushed to ACR; the agent identity is created; one immutable version routed at 100 % | **the gate**: an `azd` `predeploy` hook that refuses an IMPOSSIBLE intent |
+| SDK path | `project_client.agents.create_version_from_code(definition=HostedAgentDefinition(cpu, memory, code_configuration, environment_variables, protocol_versions), code=zip)`; `agents.get_version`; `agents.update_details(agent_endpoint=...)`; `toolboxes.create_version(tools=[...])` | the same, programmatically | the control-plane probe reads back exactly these objects |
+| observe | `azd ai agent monitor --follow`, App Insights | OpenTelemetry traces | verdicts as events |
+
+Two more facts shape the design. **Microsoft's own "Foundry Skill"** (the
+`azure-skills` repository) is a SKILL.md workflow that a coding agent
+(Copilot, Claude Code) follows to scaffold, run and deploy a hosted agent,
+and **Foundry Skills** (`azure.ai.skill`) are markdown instruction files
+attached to agents. Both are exactly the artifacts skillc already compiles.
+
+### What this means for skillc
+
+1. **Γ is declared before it is observed.** `azure.yaml` names the toolbox
+   tool types, the connections and their auth modes, the egress mode, the
+   sandbox size and the policies. skillc can compile it deterministically,
+   with every fact marked *declared* (an assumption until a probe observes
+   it). That makes `skillc check` useful at scaffold time, offline, before
+   `azd provision` spends anything.
+2. **The intent is in the same project.** The agent's `instructions`, the
+   `azure.ai.skill` markdown files, and `agentCard.skills` are the intent
+   artifacts; `skillc intent` reads them unchanged.
+3. **The gate belongs in `azd deploy`**, as a `predeploy` hook in
+   `azure.yaml`, because that is the only moment a version is created.
+4. **The monitor belongs in `main.py`** as Agent Framework middleware
+   (`middleware=[SkillcMonitor(...)]`), tested with `azd ai agent run`
+   before deploy, state under `$HOME/.skillc`.
+5. **The observed Γ** comes from the same objects the deploy created:
+   `agents.get_version`, the toolbox's MCP `tools/list`, the connections, the
+   agent identity's RBAC. The control-plane probe is a reader of the deploy
+   path, not a separate discovery mechanism.
+
 ## 3. The difficulties, one by one
 
 ### D1. Two environments, not one
@@ -187,6 +303,33 @@ a way to *attach* the monitor; none touches the checker.
   say which half a fact came from, and `unknown` entries name the half that
   could not be read.
 
+### P1a. Declared environment from the build unit: `skillc env from-azd azure.yaml`
+
+Deterministic, offline, no Azure call. Walks the `services` graph and emits
+`skillc.env/1` with `sources: [{"adapter": "azd", "mode": "declared"}]`:
+
+* `azure.ai.project.deployments` → `service model/<deployment>` (declared);
+  `network.isolationMode` / `agentSubnet` → egress mode: `AllowInternetOutbound`
+  leaves public egress **unknown-assumed**, `AllowOnlyApprovedOutbound` or a
+  customer subnet makes public hosts **unknown** until the self-probe measures
+  them, and never refused;
+* `azure.ai.connection` → `service connection/<name>` with `category` and
+  `authType` (never `credentials`);
+* `azure.ai.toolbox.tools[]` → one `tool` node per entry, typed
+  (`code_interpreter`, `web_search`, `azure_ai_search`, `mcp`, `openapi`,
+  `a2a`, `skills`), under an `mcp_server toolbox/<name>` node; an `mcp` entry
+  whose server is not listed is an **unknown** tool set, as today;
+* `azure.ai.agent` → `principal` (identity mode `agent`), `sandbox` attrs from
+  `container.resources`, `toolboxes` as `exposes` edges, `policies` as
+  `policy` nodes (uninterpreted deny, an assumption), `env` names only;
+* `azure.ai.skill.instructions` and the agent's instructions → the list of
+  intent artifacts the gate must check.
+
+A declared fact is an assumption. The reach report says "achievable if the
+toolbox really exposes `azure_ai_search`", and P1/P2 later replace the
+assumption by an observation. This is the same three-valued logic the Azure
+adapter already uses; only the source differs.
+
 ### P1. Control-plane adapter: `skillc env probe --foundry`
 
 ```
@@ -261,10 +404,23 @@ skillc gate agent/ --env env.json [--runtime foundry-hosted] [--json]
 
 Walks the agent's instructions and every attached Skill (`SKILL.md`), runs
 `skillc intent` + `skillc reach` for each against the merged environment,
-and exits `0 / 1 / 3 / 2` like `skillc reach`. Packaged as a GitHub Actions
-step and an `azd` pre-deploy hook so an `IMPOSSIBLE` skill cannot be shipped
-in a new version. The report names the fix (the RBAC role at the scope, the
-toolbox tool to connect, the host to allow in the VNet).
+and exits `0 / 1 / 3 / 2` like `skillc reach`. The natural home is an `azd`
+hook in `azure.yaml`, because `azd deploy` is the only moment a version is
+created:
+
+```yaml
+hooks:
+  predeploy:
+    shell: sh
+    run: skillc gate . --env .skillc/env/latest.json --declared azure.yaml
+```
+
+With no probed environment yet (first deploy), the gate runs on the declared
+environment alone and refuses only what the declaration already rules out;
+with a probe, declared facts are replaced by observed ones. The same command
+is a GitHub Actions step for repositories that deploy from CI. The report
+names the fix (the toolbox tool to add to `azure.yaml`, the connection or
+RBAC role, the host to allow in the VNet).
 
 ### P4. Runtime monitor attached through hooks and middleware
 
@@ -287,9 +443,20 @@ against the Copilot cloud agent today: commit `.skillc/monitor.json` and
   * `monitor_hook.py` (Claude Code) and `monitor_copilot.py` (GitHub
     Copilot): the two stdin/stdout hook protocols, both without any model
     API.
-  * `skillc.monitor.agent_framework`: a function-invocation middleware that
-    calls `pre_action` before and `post_action` after every tool, and a
-    chat middleware that feeds streamed assistant text to `on_reasoning`.
+  * `skillc.monitor.agent_framework`: the adapter that matches how hosted
+    agents are built. A `FunctionMiddleware` whose `process(context, call_next)`
+    calls `pre_action(context.function.name, context.arguments)`; on DENY it
+    sets `context.result` to the refusal text and returns without
+    `call_next()`, so the model sees the reason as the tool result and
+    re-plans; on ALLOW it calls `call_next()` and then
+    `post_action(..., context.result)`, appending a WARN/DENY as context. An
+    `AgentMiddleware` feeds the run's user message to the intent check and,
+    after `call_next()`, the response text to `on_reasoning`. The plan is
+    submitted through a registered `write_plan` tool rather than a file
+    write, since the agent has no file tool unless given one. Registration
+    is one line in `main.py`: `Agent(..., middleware=[SkillcMonitor(root=Path.home() / ".skillc")])`.
+    The tool map is built from the toolbox `tools/list` the agent itself
+    performed. Testable locally with `azd ai agent run` before any deploy.
   * `skillc.monitor.langgraph`: a wrapper around the tool node.
   * `skillc.monitor.mcp`: `skillc monitor serve` exposes
     `skillc_plan`, `skillc_check_action`, `skillc_observe` as an MCP server
@@ -326,8 +493,8 @@ which case the assumption is discharged or the capability is withdrawn.
 
 | step | deliverable | proves |
 |---|---|---|
-| 1 | P0 schema + `foundry-hosted` manifest + generated profile | existing `check` works for a hosted agent from a static snapshot |
-| 2 | P1 control-plane probe with `--from-raw` replay and tests on a recorded export | tool list, RBAC of the agent identity, connections observed; refutations possible |
+| 1 | P0 schema + `foundry-hosted` manifest + **P1a `skillc env from-azd azure.yaml`** + generated profile | `skillc check` and `reach` work at scaffold time, offline, from the declaration; tests on the `foundry-samples` `azure.yaml` files |
+| 2 | P1 control-plane probe with `--from-raw` replay and tests on a recorded export | declared facts become observed: tool list, RBAC of the agent identity, connections; refutations possible |
 | 3 | HTTP MCP `tools/list` with bearer token (used by P1 and P2) | toolbox tools stop being "unknown" |
 | 4 | P2 self-probe + `merge` rules + `examples/hosted-agent/` (Agent Framework, Responses protocol, runs locally with the protocol library's dev server) | the two halves combine; egress and software facts come from inside |
 | 5 | P4 core split + `claude_hooks` + `agent_framework` adapters, state in `$HOME` | the monitor gates a hosted agent's tool calls; live test like `scripts/monitor_live.py` but against the example container |
@@ -373,6 +540,20 @@ thing to try live on the `foundary-tzuc06` project.
   https://learn.microsoft.com/en-us/agent-framework/hosting/foundry-hosted-agent
 * Hosted MCP tools (Agent Framework):
   https://learn.microsoft.com/en-us/agent-framework/agents/tools/hosted-mcp-tools
+* `azure.yaml` reference for hosted agents:
+  https://learn.microsoft.com/en-us/azure/foundry/agents/concepts/azure-yaml-reference
+* Quickstart: deploy your first hosted agent (azd, Python SDK, VS Code, Foundry Skill):
+  https://learn.microsoft.com/en-us/azure/foundry/agents/quickstarts/quickstart-hosted-agent
+* Quickstart: build a toolbox and use it with a hosted agent:
+  https://learn.microsoft.com/en-us/azure/foundry/agents/quickstarts/quickstart-toolbox-agent
+* Agent Framework: adding middleware to agents:
+  https://learn.microsoft.com/en-us/agent-framework/agents/middleware/defining-middleware
+* foundry-samples, Python hosted agents:
+  https://github.com/microsoft-foundry/foundry-samples/tree/main/samples/python/hosted-agents
+* Microsoft Foundry Skill for coding agents (create-hosted):
+  https://github.com/microsoft/azure-skills/blob/main/skills/microsoft-foundry/foundry-agent/create/create-hosted.md
+* GitHub Copilot hooks reference:
+  https://docs.github.com/en/copilot/reference/hooks-reference
 * Claude Managed Agents overview:
   https://platform.claude.com/docs/en/managed-agents/overview
 * Claude Agent SDK overview (hook events):
