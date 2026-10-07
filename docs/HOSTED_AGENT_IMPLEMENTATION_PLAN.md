@@ -55,7 +55,7 @@ Each package lists goal, files, behaviour, tests, and the exit criterion.
 Order matters: WP0 before anything, WP1 to WP3 can be parallel, WP4 needs
 WP1 to WP3, WP5 and WP6 are independent of WP4 but come after it in value.
 
-### WP0. Spike: confirm the four facts the adapter rests on (1 day)
+### WP0. Spike: confirm the four facts the adapter rests on (S1)
 
 No skillc code. A throw-away script against the `foundary-tzuc06` project
 (or any Foundry project with a chat deployment), results written to
@@ -76,7 +76,7 @@ plain middleware, because it is GA-documented and framework-neutral.
 Exit: a short table in the doc with F1 to F4 answered, with the installed
 package versions.
 
-### WP1. Monitor core: finish making it transport-neutral (2 days)
+### WP1. Monitor core: finish making it transport-neutral (S1, lane A)
 
 Files: `src/skillc/monitor.py`, `src/skillc/data/runtimes/foundry-hosted.json`,
 `src/skillc/frontend/runtime.py`.
@@ -109,7 +109,7 @@ state path, `session-installable` resolution). All existing tests stay green.
 Exit: `Monitor` has no reference to Claude Code or Copilot tool names
 outside the two hook adapters.
 
-### WP2. The Agent Framework adapter (3 days)
+### WP2. The Agent Framework adapter (S2, lane A)
 
 New package `src/skillc/integrations/agent_framework.py`, optional extra
 `skillc[agent-framework]` → `agent-framework-core>=<pinned>,<next-minor>`.
@@ -173,7 +173,7 @@ observation; prohibited pattern in response text → plan revoked.
 Exit: the four scenarios pass offline; `ruff` clean; the module imports
 only when the extra is present.
 
-### WP3. Declared environment and the deploy gate (3 days)
+### WP3. Declared environment and the deploy gate (S1 to S2, lane B)
 
 Files: `src/skillc/env/azd.py`, `src/skillc/cli.py` (`env from-azd`,
 `gate`), tests with fixture `azure.yaml` files copied from
@@ -203,7 +203,7 @@ LangGraph sample) produce a sensible declared environment; a skill that
 needs `azure_ai_search` is ACHIEVABLE only in the project whose toolbox
 declares it.
 
-### WP4. Example hosted agent, local run, first live deploy (3 days)
+### WP4. Example hosted agent, local run, first live deploy (S2 to S4, lane C)
 
 Files: `examples/hosted-agent/` with `azure.yaml` (toolbox with
 `web_search` + Microsoft Learn MCP, the `predeploy` hook, one
@@ -230,7 +230,7 @@ Sequence, strictly in this order:
 Exit: the deployed agent refuses a disallowed tool call with skillc's
 reason, visible in the Responses output and in App Insights.
 
-### WP5. Control-plane probe (4 days)
+### WP5. Control-plane probe (S5)
 
 Optional extra `skillc[foundry]` → `azure-ai-projects>=2.3.0`,
 `azure-identity`. `env probe --foundry --project URL --agent NAME[:VERSION]`:
@@ -285,20 +285,32 @@ timer job.
 | R7 | skillc bug stops a production agent | fail-open everywhere, logged and traced; `SKILLC_MONITOR=off` env switch |
 | R8 | remote build cannot fetch skillc | publish to an index first; fall back to `container` deploy mode with a Dockerfile that installs from a wheel |
 
-## 5. Timeline and ownership
+## 5. Schedule: agent-executed, in sessions
 
-| package | effort | depends on |
-|---|---|---|
-| WP0 spike | 1 day | a Foundry project |
-| WP1 core | 2 days | none |
-| WP2 adapter | 3 days | WP0, WP1 |
-| WP3 declared env + gate | 3 days | none |
-| WP4 example + live | 3 days | WP1 to WP3, PyPI publish |
-| WP5 control-plane probe | 4 days | WP3 |
-| WP6 self-probe, OTel, watcher | later | WP4 |
+The work is done by Claude Code with subagents, so the unit is a working
+session (one conversation, roughly one to two hours), not a day. Code
+packages run in parallel lanes; only the steps marked **you** wait on a
+human, because they need your Azure sign-in, a deploy approval, or a
+publish credential.
 
-About three weeks of focused work to a live, gated, monitored hosted agent
-(WP0 to WP4), with WP5 and WP6 following.
+| session | lane A (core and adapter) | lane B (build unit) | lane C (live) | waits on you |
+|---|---|---|---|---|
+| **S1** | WP1 core: tool-map builder, session-scoped state, `foundry-hosted` manifest, `session-installable` mode, tests | WP3a `env from-azd`: walker, fixtures from `foundry-samples`, tests | WP0 spike script written and ready to run | `az login` / `azd auth login` once, then run the spike (5 minutes) |
+| **S2** | WP2 adapter from the spike's answers: two middleware classes, plan tool, fail-open, denial guard, offline tests with a scripted chat client | WP3b `gate` command, `--install-hook`, report and exit codes, tests | example project scaffolded (`azd ai agent init`), skillc wired in, `gate` green locally | nothing |
+| **S3** | review pass over S1 and S2 (`/code-review`), fixes | pyproject extras, README and doc updates | WP4 steps 1 to 3: `azd provision` against the existing project, `azd ai agent run`, the four local scenarios recorded | approve `azd provision`; publish skillc to PyPI or the private feed (or choose `container` mode, see R8) |
+| **S4** | | | WP4 steps 4 to 5: hook blocks the bad skill, `azd deploy`, four remote scenarios, App Insights check, live-test section written | approve `azd deploy` |
+| **S5** | WP5 control-plane probe with recorded export and replay tests | | | one recorded export of your project (`--save-raw`), 5 minutes signed in |
+| later | WP6 self-probe, OTel events, watcher job | | | |
+
+So: **S1 to S4 give a live, gated, monitored hosted agent in four
+sessions**, with S1 and S2 fully parallel across subagents and only four
+short human actions in total (sign in, approve provision, publish, approve
+deploy). WP5 is one more session. The day estimates in earlier drafts
+assumed a human writing the code and are withdrawn.
+
+What stays sequential no matter how many agents run: WP2 cannot start
+until the WP0 spike has answered F1 to F4, and nothing deploys before the
+package is on an index (or the container fallback is chosen).
 
 ## 6. Governance
 
