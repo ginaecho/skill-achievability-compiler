@@ -145,6 +145,31 @@ samples use exactly this for guardrails ("SecurityAgentMiddleware" blocks a
 request by overriding `context.result`). This is the attachment skillc needs,
 with no hook protocol and no model API.
 
+### Spike results (WP0, run 2026-10-07 against `foundary-tzuc06`, `gpt-5.4`)
+
+`scripts/spike_agent_framework.py`, findings in
+`runs/20261007_hosted_agent_spike/findings.json`. The MCP server was the
+public Microsoft Learn endpoint, which stands in for a toolbox (both are
+streamable-HTTP MCP endpoints).
+
+| fact | result | consequence for the adapter |
+|---|---|---|
+| F1 function middleware fires for MCP tools | **yes**: one `FunctionMiddleware` saw `microsoft_docs_search` from the MCP server | the per-call gate works for client-side toolbox tools |
+| F2 a denied call reaches the model | **yes**: `context.result` set and `call_next()` skipped; the model's answer contained the requested acknowledgement and it did not retry | deny as a normal tool result, never `terminate` |
+| F3 the shape of a call | `context.function.name` is the MCP tool name; `context.function` is a `FunctionTool`; `context.arguments` is a **plain `dict`** (`{"query": "..."}`), not a pydantic model; `context.kwargs` empty | pass `context.arguments` straight to `pre_action`; do not call `model_dump()` |
+| F4 tool names before the first run | the agent has **no `tools` attribute**; it has `agent.mcp_tools` (a list); each connected MCP tool exposes `.functions` with names (`microsoft_docs_search`, `microsoft_code_sample_search`, `microsoft_docs_fetch`) | build the tool map from `agent.mcp_tools[*].functions` plus the agent's own function tools, after the MCP tools have connected |
+
+Versions that worked together: `agent-framework-core 1.19.0`,
+`agent-framework-foundry 1.13.1`, `mcp 1.30.0`, `azure-identity 1.26.0`.
+Two findings outside the four questions:
+
+* `agent-framework-core` does not pull in `mcp`, and **`mcp` 2.x breaks it**
+  (`InitializeResult` lost `protocolVersion`); the extra must pin `mcp<2`
+  until the framework moves.
+* `AzureCliCredential` times out on this Windows machine at its 10 s default;
+  local runs need `process_timeout` raised. Hosted runs use the agent identity
+  and are not affected.
+
 **One limit to verify:** toolbox tools can also be executed *server-side* by
 the model service (the C# "foundry-toolbox-server-side" sample). Those calls
 never pass through the agent loop, so middleware cannot see them; only the

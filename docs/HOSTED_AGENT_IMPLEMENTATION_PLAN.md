@@ -256,9 +256,10 @@ timer job.
 
 ## 3. Packaging and deployment rules
 
-* `pyproject.toml` extras: `agent-framework = ["agent-framework-core>=X,<Y"]`,
-  `foundry = ["azure-ai-projects>=2.3.0", "azure-identity>=1.17"]`. Core
-  dependencies unchanged.
+* `pyproject.toml` extras: `agent-framework = ["agent-framework-core>=1.19,<2",
+  "mcp>=1.30,<2"]` (the spike showed `mcp` 2.x breaks the framework and is not
+  pulled in by it), `foundry = ["azure-ai-projects>=2.3.0",
+  "azure-identity>=1.26"]`. Core dependencies unchanged.
 * Publish skillc to PyPI (or the organisation's private feed) before WP4
   step 4: the remote build resolves `requirements.txt` from an index, not
   from a git URL.
