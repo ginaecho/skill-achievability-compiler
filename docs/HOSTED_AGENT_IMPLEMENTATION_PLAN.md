@@ -214,6 +214,14 @@ variant that is IMPOSSIBLE without an email connection),
 agents as tools, `skillc_monitor` wired behind a guarded import),
 `requirements.txt`, `data/*.csv`, `README.md` with the verdict table.
 
+**Status 2026-10-07:** steps 2 and 4's deploy half were pulled forward and
+are done: `finance-report-agent:1` is active in `firstProject`, invoked
+remotely on both branches, with the predeploy hook running the protocol
+check. The example README section 6 records three deploy facts the docs
+lacked (project resource id, azd's own sign-in, stray machine variables).
+What remains of WP4 is the monitored run (after WP2) and the "impossible
+skill blocks the deploy" step (after WP3b).
+
 Sequence, strictly in this order:
 
 1. `azd ai agent init` from the sample, then add skillc; `skillc env from-azd`

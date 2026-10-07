@@ -64,7 +64,9 @@ log = logging.getLogger("finance-agent")
 
 HERE = Path(__file__).resolve().parent
 EXAMPLE_ROOT = HERE.parent.parent  # examples/hosted-agent-finance
-SKILLS_DIR = EXAMPLE_ROOT / "skills"
+# Only `project` (this folder) is uploaded on deploy; the predeploy hook stages ../../skills
+# and ../../data here, so the staged copies win and the example root is the local fallback.
+SKILLS_DIR = HERE / "skills" if (HERE / "skills").is_dir() else EXAMPLE_ROOT / "skills"
 REVENUE_THRESHOLD = 50_000.0  # RevenueAnalyst: high if revenue > this
 DEFAULT_QUARTER = "2026-Q3"
 ROLES = ("Fetcher", "ExpenseAnalyst", "RevenueAnalyst", "TaxSpecialist", "TaxVerifier", "Writer")
@@ -79,9 +81,12 @@ def home_dir() -> Path:
 
 
 def data_dir() -> Path:
-    """$HOME/finance-data when it exists (hosted sandbox), else ../../data next to the example."""
-    hosted = home_dir() / "finance-data"
-    return hosted if hosted.is_dir() else EXAMPLE_ROOT / "data"
+    """The staged ./data next to main.py (deploy), else $HOME/finance-data (uploaded per
+    session), else ../../data next to the example (local run)."""
+    for candidate in (HERE / "data", home_dir() / "finance-data"):
+        if candidate.is_dir():
+            return candidate
+    return EXAMPLE_ROOT / "data"
 
 
 def writable_dir(name: str) -> Path:

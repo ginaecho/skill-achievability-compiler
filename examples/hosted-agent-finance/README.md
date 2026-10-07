@@ -207,3 +207,63 @@ extension versions before `azd provision`:
 * `authType: AAD` on the CognitiveSearch connection without `credentials`.
 * whether `azd` reads `azure.search.yaml` / `azure.isolated.yaml` by name, or
   the variant must be copied over `azure.yaml`.
+
+## 6. Deploy log (2026-10-07, project `firstProject`, Germany West Central)
+
+The first live deployment of this example, done before the skillc adapter
+existed, so the agent runs unmonitored and the predeploy hook is the pure
+protocol check (`skillc check protocol/quarterly_finance_report.ce`, which
+also stages `skills/` and `data/` into `src/finance-agent/`, the only folder
+that is uploaded).
+
+```console
+$ azd env new finance
+$ azd env set FOUNDRY_PROJECT_ENDPOINT https://<account>.services.ai.azure.com/api/projects/<project>
+$ azd env set AZURE_AI_PROJECT_ID /subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.CognitiveServices/accounts/<account>/projects/<project>
+$ azd env set AZURE_SUBSCRIPTION_ID <sub>; azd env set AZURE_LOCATION <region>; azd env set AZURE_RESOURCE_GROUP <rg>
+$ azd provision --no-prompt        # resolves the existing project, creates nothing
+$ azd deploy --no-prompt           # hook, toolbox, six skills, agent version 1 (1 min 24 s)
+$ azd ai agent show finance-report-agent
+$ azd ai agent invoke finance-report-agent "Produce the quarterly finance report for 2026-Q3. ..."
+```
+
+Result: `finance-report-agent:1` active, with its own Entra agent identity, a
+playground URL and a Responses endpoint. The Q3 invocation took the **high**
+branch (revenue 72,000 > 50,000), TaxVerifier answered "Approved: high-revenue
+audit reviewed and recorded", and the report landed at
+`/home/session/files/quarterly_report.md` in the sandbox; 62 s end to end,
+8.5 s of it cold-start platform latency.
+
+The Q2 invocation (revenue 41,000) took the **standard** branch, but
+TaxVerifier answered "Rejected: missing the revenue total required to confirm
+the standard branch threshold" and the coordinator stopped without a report
+(30 s, warm). That is correct behaviour by the verifier and a data-flow defect
+in the coordinator: a role agent exposed through `as_tool()` receives one
+`task` string, and the coordinator did not include the revenue total in it.
+The fix is in the coordinator's instructions (always pass the figures the
+callee's tools need), and it is the kind of run-time fact the monitor will
+observe once attached: a tool result starting with `Rejected:` on the
+approval step.
+
+Three things the documentation did not say, each of which stopped a deploy:
+
+1. **`AZURE_AI_PROJECT_ID` is required** when the project is existing: the agent
+   extension does not derive the ARM resource id from `FOUNDRY_PROJECT_ENDPOINT`.
+   From Git Bash, set it with `MSYS_NO_PATHCONV=1` or the leading `/` becomes a
+   Windows path.
+2. **azd must hold its own sign-in.** In `useAzCliAuth` mode every token goes
+   through the Azure CLI (16 s on this machine) and the Foundry extensions'
+   credential gives up at 10 s (`AzureDeveloperCLICredential: exit status 1`).
+   `azd config set auth.useAzCliAuth false` then `azd auth login` (the browser
+   flow; a device-code login is refused by a managed-device Conditional Access
+   rule because it carries no device identity).
+3. **Stray system variables win.** The skills extension read
+   `AZURE_SUBSCRIPTION_ID`, `AZURE_TENANT_ID` and `AZURE_CLIENT_ID` from the
+   machine environment (left by another project) before the azd environment,
+   and failed on a subscription this user cannot see. Export the right values
+   (and unset the client id) in the shell that runs `azd deploy`.
+
+These belong in `skillc env probe --self` and the gate's preflight: a declared
+project with no resource id, a credential that cannot answer in time, and a
+principal variable that names a different tenant are all facts the environment
+graph can hold.
