@@ -51,6 +51,18 @@ Versions are deployed in sequence (the endpoint routes 100% to one version):
 v1 bare gpt-5.4 (done), v2 bare gpt-5.4 + Q4 data, v3 bare gpt-5-mini,
 v4 skillc gpt-5.4, v5 skillc gpt-5-mini.
 
+### A validity defect found and fixed during the first arms
+
+`azd ai agent invoke` **reuses the previous conversation and sandbox
+session** unless `--new-session` is passed. The first 36 runs (bare
+`gpt-5.4` on v1 and v2, bare `gpt-5-mini` on v3) therefore ran inside one
+conversation per arm: each prompt saw the earlier prompts and answers,
+later runs were faster, and `gpt-5-mini` referred to "data already fetched
+earlier in this session". Those results are kept under
+`runs/20261007_comparison/*-SHARED-CONVERSATION/` for transparency and are
+**not** used in section 5. Every arm from here on runs with
+`--new-session`, verified by distinct conversation and session ids per run.
+
 ## 3. What is measured, per run
 
 From the agent's final text and, where available, the Application Insights

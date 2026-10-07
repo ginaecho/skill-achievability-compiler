@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 # Run the comparison scenarios against the deployed hosted agent and save every answer.
 #   sh scripts/run_scenarios.sh <arm-label> <repetitions>
-# Each scenario is one fresh conversation (azd ai agent invoke starts a new session), so
-# runs are independent. Output: ../../runs/<date>_comparison/<arm>/<scenario>-r<k>.txt with the
+# Each run is a fresh conversation and sandbox session (--new-session; without it azd reuses the
+# previous conversation, which confounded the first arms). Output: ../../runs/<date>_comparison/<arm>/<scenario>-r<k>.txt with the
 # trace id (for App Insights), the elapsed time and the agent's final text.
 set -u
 ARM="${1:-bare}"
@@ -19,7 +19,7 @@ run() {   # run <scenario-id> <prompt>   (ONLY=P7 restricts to ids starting with
     f="$OUT/$sid-r$k.txt"
     if [ -s "$f" ]; then k=$((k+1)); continue; fi
     start=$(date +%s)
-    (cd "$HERE" && azd ai agent invoke finance-report-agent "$prompt") > "$f.tmp" 2>&1
+    (cd "$HERE" && azd ai agent invoke finance-report-agent "$prompt" --new-session) > "$f.tmp" 2>&1
     end=$(date +%s)
     { echo "scenario: $sid"; echo "arm: $ARM"; echo "rep: $k"; echo "elapsed_s: $((end-start))";
       echo "prompt: $prompt"; echo "---"; cat "$f.tmp"; } > "$f"
