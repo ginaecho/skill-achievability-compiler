@@ -216,3 +216,87 @@ def test_post_tool_hook_reports_observed_runtime_facts(tmp_path):
     out = _hook("post", {**clean, "tool_response": "bash: pandoc: command not found"},
                 tmp_path)
     assert "program `pandoc` is missing" in out["hookSpecificOutput"]["additionalContext"]
+
+
+# ---------------------------------------------------------------------- GitHub Copilot hooks
+
+def _copilot(event_name, event, cwd):
+    p = subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "hook", "copilot",
+                        event_name], input=json.dumps(event), capture_output=True, text=True,
+                       cwd=cwd)
+    out = p.stdout.strip()
+    return (json.loads(out) if out.startswith("{") else out), p.returncode, p.stderr
+
+
+def test_copilot_hook_protocol_end_to_end(tmp_path):
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--copilot",
+                    "--root", str(tmp_path)], check=True, capture_output=True)
+    hooks = json.loads((tmp_path / ".github" / "hooks" / "skillc.json").read_text("utf-8"))
+    assert hooks["version"] == 1
+    assert set(hooks["hooks"]) >= {"sessionStart", "preToolUse", "postToolUse", "agentStop"}
+    assert hooks["hooks"]["preToolUse"][0]["bash"].endswith("hook copilot preToolUse")
+    cfg = json.loads((tmp_path / ".skillc" / "monitor.json").read_text("utf-8"))
+    assert cfg["plan_tools"] == ["create"] and cfg["tool_map"]["create"] == "write"
+
+    ev = {"sessionId": "s1", "cwd": str(tmp_path), "timestamp": 1}
+    out, code, _ = _copilot("sessionStart", {**ev, "source": "startup",
+                                             "initialPrompt": "deploy it with eas build"}, tmp_path)
+    assert code == 0
+    assert "SKILLC RUNTIME MONITOR" in out["additionalContext"]
+    assert "create tool" in out["additionalContext"] and "expo_account" in out["additionalContext"]
+
+    bash = {**ev, "toolName": "bash", "toolArgs": json.dumps({"command": "pytest"})}
+    out, code, _ = _copilot("preToolUse", bash, tmp_path)
+    assert code == 0 and out["permissionDecision"] == "deny"
+    assert "no approved plan" in out["permissionDecisionReason"]
+
+    plan = str(tmp_path / ".skillc" / "plan.ce")
+    create = {**ev, "toolName": "create", "toolArgs": json.dumps({"path": plan, "content": GOOD})}
+    out, code, _ = _copilot("preToolUse", create, tmp_path)
+    assert (out, code) == ("", 0)              # allowed: no decision, Copilot's own rules apply
+    out, _, _ = _copilot("postToolUse", {**create, "toolResult": {
+        "resultType": "success", "textResultForLlm": "created"}}, tmp_path)
+    assert "ACHIEVABLE" in out["additionalContext"]       # delivered at the next chance
+    assert _copilot("preToolUse", bash, tmp_path)[:2] == ("", 0)
+
+    # an `edit` of the plan file is refused: the whole plan is written with `create`
+    out, _, _ = _copilot("preToolUse", {**ev, "toolName": "edit", "toolArgs": json.dumps(
+        {"path": plan, "old_str": "x", "new_str": "y"})}, tmp_path)
+    assert out["permissionDecision"] == "deny" and "create" in out["permissionDecisionReason"]
+
+    # a failure's text is observed; exit 2 turns stdout into context
+    out, code, _ = _copilot("postToolUseFailure", {**ev, "toolName": "bash",
+                            "toolArgs": json.dumps({"command": "pandoc x.md"}),
+                            "error": "bash: pandoc: command not found"}, tmp_path)
+    assert code == 2 and "program `pandoc` is missing" in out
+
+    # reasoning towards the prohibited, read from the transcript at the end of the turn
+    t = tmp_path / "t.jsonl"
+    t.write_text(json.dumps({"role": "assistant",
+                             "content": "All green; now `npm publish` the package."}) + "\n")
+    out, code, _ = _copilot("agentStop", {**ev, "transcriptPath": str(t),
+                                          "stopReason": "end_turn", "stop_hook_active": False},
+                            tmp_path)
+    assert code == 0 and out["decision"] == "block" and "writes_external" in out["reason"]
+    out, _, _ = _copilot("preToolUse", {**ev, "toolName": "bash",
+                                        "toolArgs": json.dumps({"command": "ls"})}, tmp_path)
+    assert out["permissionDecision"] == "deny"             # the plan was revoked
+
+
+def test_copilot_snake_case_events_and_string_results(tmp_path):
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--copilot",
+                    "--root", str(tmp_path)], check=True, capture_output=True)
+    ev = {"session_id": "s2", "cwd": str(tmp_path), "hook_event_name": "PreToolUse"}
+    out, _, _ = _copilot("PreToolUse", {**ev, "tool_name": "create", "tool_input": {
+        "path": str(tmp_path / ".skillc" / "plan.ce"), "file_text": GOOD}}, tmp_path)
+    assert out == ""
+    out, _, _ = _copilot("PostToolUse", {**ev, "tool_name": "create", "tool_input": {},
+                                         "tool_result": "ok"}, tmp_path)
+    assert "ACHIEVABLE" in out["additionalContext"]
+
+
+def test_copilot_hooks_inactive_without_config_and_fail_open(tmp_path):
+    assert _copilot("preToolUse", {"cwd": str(tmp_path), "toolName": "bash",
+                                   "toolArgs": "{\"command\": \"rm -rf x\"}"}, tmp_path)[:2] == ("", 0)
+    out, code, err = _copilot("noSuchEvent", {"cwd": str(tmp_path)}, tmp_path)
+    assert (out, code) == ("", 0) and "unknown Copilot hook event" in err

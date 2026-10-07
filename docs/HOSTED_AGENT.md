@@ -1,10 +1,22 @@
 # skillc for hosted agents: difficulties and a proposal
 
-**Status:** proposal (branch `gc/hosted_agent`). Nothing in this document is
-implemented yet. The design is deliberately provider-neutral; the primary
-target is **Microsoft Foundry Agent Service hosted agents**, and the same
-design covers Claude Managed Agents and GitHub Copilot's cloud agent with
-thinner adapters.
+**Status:** proposal (branch `gc/hosted_agent`), with one part implemented:
+the runtime monitor now attaches through **GitHub Copilot hooks** (Copilot
+CLI and the Copilot cloud agent), with no Claude or other model API in the
+loop; see `docs/RUNTIME_MONITOR.md`, "GitHub Copilot hooks". The rest is
+design. It is provider-neutral; the targets are the **Copilot cloud agent**
+(reachable today through the hooks) and **Microsoft Foundry Agent Service
+hosted agents** (which need the environment work below).
+
+## 0. Constraint: no model API, hooks only
+
+skillc never needs a model to decide anything: the checker, the plan gate,
+the action and observation checks are deterministic. The only place a model
+API appears is the optional LLM front-end for compaction, which the hosted
+path does not use. The attachment to a hosted agent is therefore **the
+agent platform's hooks**: GitHub Copilot hooks for Copilot CLI and the
+Copilot cloud agent (implemented), and the equivalent middleware for
+frameworks that have no hook protocol (proposed in P4).
 
 ## 1. What skillc does today, and where it assumes a local machine
 
@@ -47,11 +59,16 @@ From the Foundry documentation (hosted agents concept page, updated
 * Observability is **OpenTelemetry into Application Insights**, injected by
   the platform.
 
-Claude Managed Agents are analogous: Anthropic runs the loop, tools execute
-in a sandboxed container (or a self-hosted sandbox), the tool set is
-declared (`agent_toolset_20260401` plus custom/MCP tools), and the Agent SDK
-exposes `PreToolUse` / `PostToolUse` / `UserPromptSubmit` hooks with the same
-event shapes skillc already consumes.
+The **GitHub Copilot cloud agent** is the other hosted target, and the one
+with a hook protocol skillc can use directly (GitHub Copilot hooks reference):
+hooks are configuration-file commands in `.github/hooks/*.json`, loaded from
+the cloned repository; the sandbox is Linux, non-interactive, with an
+ephemeral filesystem and outbound network limited to GitHub and Copilot
+hosts; `preToolUse` can deny a tool with a reason, `sessionStart` and
+`postToolUse` can add context, `agentStop` can block the end of a turn.
+Dependencies are installed by `copilot-setup-steps.yml` before the job.
+Copilot CLI uses the same hooks on a developer machine, so one
+configuration serves both.
 
 ## 3. The difficulties, one by one
 
@@ -249,9 +266,17 @@ step and an `azd` pre-deploy hook so an `IMPOSSIBLE` skill cannot be shipped
 in a new version. The report names the fix (the RBAC role at the scope, the
 toolbox tool to connect, the host to allow in the VNet).
 
-### P4. Runtime monitor as middleware (the main code change)
+### P4. Runtime monitor attached through hooks and middleware
 
-Split `monitor_hook.py` into a transport-neutral core and adapters:
+**Done on this branch:** the Copilot hooks adapter (`monitor_copilot.py`,
+`skillc monitor init --copilot`, `skillc monitor hook copilot <event>`),
+with the core generalised for a second protocol (configurable plan-writing
+tool, tool-input keys of both protocols, context queued for events that
+cannot carry it, a tolerant transcript reader). This is enough to run skillc
+against the Copilot cloud agent today: commit `.skillc/monitor.json` and
+`.github/hooks/skillc.json`, install skillc in `copilot-setup-steps.yml`.
+
+**Remaining:** split the rest into a transport-neutral core and adapters:
 
 * **core** (already mostly there): `Monitor.on_prompt(text)`,
   `on_reasoning(text)`, `pre_action(tool, input) -> Decision`,
@@ -259,9 +284,9 @@ Split `monitor_hook.py` into a transport-neutral core and adapters:
   The state backend becomes pluggable: file in `$HOME/.skillc` (default, it
   survives idle/resume) or the Foundry state store (durable across sessions).
 * **adapters**, each a few dozen lines:
-  * `skillc.monitor.claude_hooks`: the existing stdin/stdout protocol,
-    unchanged; it also serves the Claude Agent SDK and Claude Managed Agents
-    hooks, whose event shapes are the same.
+  * `monitor_hook.py` (Claude Code) and `monitor_copilot.py` (GitHub
+    Copilot): the two stdin/stdout hook protocols, both without any model
+    API.
   * `skillc.monitor.agent_framework`: a function-invocation middleware that
     calls `pre_action` before and `post_action` after every tool, and a
     chat middleware that feeds streamed assistant text to `on_reasoning`.

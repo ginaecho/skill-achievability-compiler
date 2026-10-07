@@ -469,14 +469,29 @@ def cmd_monitor(args) -> int:
     root = Path(args.root)
     cfg_path = root / ".skillc" / "monitor.json"
     if args.action == "init":
-        cfg = Config(runtime=args.runtime, thinking=args.thinking)
+        if args.copilot:
+            from .monitor_copilot import HOOKS_FILE, copilot_config, copilot_hooks
+            cfg = copilot_config(args.runtime, args.thinking)
+        else:
+            cfg = Config(runtime=args.runtime, thinking=args.thinking)
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(json.dumps(cfg.dump(), indent=1) + "\n", encoding="utf-8")
         print(f"wrote {cfg_path}")
+        if args.copilot:
+            hooks_path = root / HOOKS_FILE
+            hooks_path.parent.mkdir(parents=True, exist_ok=True)
+            hooks_path.write_text(json.dumps(copilot_hooks(), indent=1) + "\n",
+                                  encoding="utf-8")
+            print(f"wrote {hooks_path} (Copilot CLI and the Copilot cloud agent read it; "
+                  "the cloud agent needs skillc installed in copilot-setup-steps)")
+            return 0
         print("add to .claude/settings.json:")
         print(json.dumps(HOOKS_SNIPPET, indent=1))
         return 0
     if args.action == "hook":
+        if args.arg == "copilot":
+            from .monitor_copilot import main as copilot_main
+            return copilot_main(args.event or "")
         from .monitor_hook import main as hook_main
         return hook_main(args.arg)
     mon = Monitor(Config.load(cfg_path), root)
@@ -782,7 +797,14 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("monitor", help="runtime monitor: gate an agent's plan, "
                                         "reasoning and actions (docs/RUNTIME_MONITOR.md)")
     sp.add_argument("action", choices=("init", "hook", "plan", "status", "reset"))
-    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post) or plan file")
+    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post for Claude Code, "
+                                           "copilot for GitHub Copilot) or plan file")
+    sp.add_argument("event", nargs="?", help="with `hook copilot`: the Copilot hook event "
+                                             "(sessionStart, userPromptSubmitted, preToolUse, "
+                                             "postToolUse, postToolUseFailure, agentStop)")
+    sp.add_argument("--copilot", action="store_true",
+                    help="init: configure for GitHub Copilot hooks (CLI and cloud agent) and "
+                         "write .github/hooks/skillc.json instead of Claude Code hooks")
     sp.add_argument("--root", default=".", help="project directory (default: .)")
     sp.add_argument("--runtime", default="developer-sandbox",
                     help="init: runtime manifest name or JSON path")

@@ -93,7 +93,9 @@ All of this is **optional**: the default `skillc check` / `compile` path and the
 original JSON LLM front-end (`--llm`) are unchanged. CE is used only for `.ce`
 inputs, `skillc ce`, `--via-ce` or `--runtime`; the runtime monitor
 (`skillc monitor`, [`docs/RUNTIME_MONITOR.md`](docs/RUNTIME_MONITOR.md)) is active
-only in a project that runs `skillc monitor init` and installs its hooks.
+only in a project that runs `skillc monitor init` and installs its hooks: Claude Code
+hooks by default, or GitHub Copilot hooks (Copilot CLI and the Copilot cloud agent)
+with `skillc monitor init --copilot`, which writes `.github/hooks/skillc.json`.
 The experiment data behind these documents (`runs/`, `benchmark/` corpora)
 lives on the branch `gc/data_train_test`; the scripts under `scripts/` that
 reproduce the experiments expect that branch.

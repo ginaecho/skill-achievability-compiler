@@ -58,6 +58,61 @@ The hook commands are `skillc monitor hook prompt|pre|post`. They read the hook 
 stdin and answer with `hookSpecificOutput` (`permissionDecision: "deny"` plus a reason, or
 `additionalContext`). Where `.skillc/monitor.json` is absent, the hooks do nothing.
 
+## GitHub Copilot hooks: Copilot CLI and the Copilot cloud agent
+
+The monitor speaks a second hook protocol, GitHub Copilot's, with no model API in the
+loop: the adapter is `src/skillc/monitor_copilot.py`, the tests are the `copilot` cases in
+`tests/test_monitor.py`.
+
+```bash
+skillc monitor init --copilot --runtime developer-sandbox
+# writes .skillc/monitor.json (Copilot tool names) and .github/hooks/skillc.json
+```
+
+`.github/hooks/skillc.json` installs one command hook per event; Copilot CLI reads it from
+the repository, and the Copilot cloud agent reads the same file from the cloned repository.
+
+| Copilot event | what skillc does | answer |
+|---|---|---|
+| `sessionStart` | plan protocol + CE grammar once per session; intent check of `initialPrompt` (or `$COPILOT_AGENT_PROMPT` in the cloud agent) | `additionalContext` |
+| `userPromptSubmitted` | intent check; configuration-file hooks cannot add context on this event, so the result is queued and delivered with the next `postToolUse` | nothing |
+| `preToolUse` | the action: no approved plan, tool not in the runtime, unmet requirement, prohibited behaviour, plan conformance | `{"permissionDecision": "deny", "permissionDecisionReason": ...}`; an allowed action prints nothing, so Copilot's own permission rules still apply |
+| `postToolUse` | observe `toolResult.textResultForLlm`, re-check the plan, deliver queued context | `additionalContext` |
+| `postToolUseFailure` | observe the error text (`command not found`, resolver errors, 401/403) | the text on stdout with exit code 2, which Copilot appends as context |
+| `agentStop` | the turn's reasoning, read from `transcriptPath` since the last check; a requirement the runtime cannot meet, or a prohibited behaviour, revokes the plan | `{"decision": "block", "reason": ...}` once per turn (`stop_hook_active` is respected) |
+
+Differences from the Claude Code adapter, all forced by the protocol:
+
+- The plan is written with Copilot's `create` tool (`toolArgs.path`, whole content); an
+  `edit` of the plan file is refused. `toolArgs` arrives as a JSON string and is parsed;
+  the VS Code-compatible snake_case events (`tool_name`, `tool_input`) are accepted too.
+- Tool names map as `bash`/`powershell` → `bash`, `create` → `write`, `edit` → `edit`,
+  `view` → `read`, `web_fetch`, `web_search`, `task` → `agent_spawn`. `view`, `grep`, `glob`,
+  `web_search`, `update_todo` and `ask_user` need no approved plan.
+- `preToolUse` has no context channel, so "plan approved" is delivered on the following
+  `postToolUse`.
+- Reasoning is only reachable at the end of a turn, through the transcript, so the
+  thinking signal acts one turn late; the plan file and the per-action check are the
+  reliable channels, as with Claude Code. The transcript reader accepts JSONL records with
+  `role: assistant` and string or block content; a transcript in another format yields
+  nothing, never a refusal.
+- Copilot treats a crashing `preToolUse` hook as a denial, so an internal error in skillc
+  is reported on stderr and exits 0: the monitor never stops the agent by crashing.
+
+For the **cloud agent**, three facts matter: the sandbox filesystem is ephemeral (so
+`.skillc/monitor.json` and `.github/hooks/skillc.json` must be committed, and
+`.skillc/state.json` lives for one job); outbound network is restricted to GitHub and
+Copilot hosts (skillc needs none); and skillc must be installed before the job runs, in
+`.github/workflows/copilot-setup-steps.yml`:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+  - uses: actions/setup-python@v5
+    with: { python-version: "3.12" }
+  - run: pip install skillc        # or: pip install -e .  when this repo is the project
+```
+
 ## Live test: a real headless Claude Code agent
 
 `python scripts/monitor_live.py run DIR` then `summarize DIR OUT`; the evidence is in

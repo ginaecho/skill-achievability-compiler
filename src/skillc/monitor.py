@@ -99,14 +99,16 @@ class Config:
     plan_conformance: bool = True    # actions must use a runtime tool the plan binds
     free_tools: tuple = FREE_TOOLS
     tool_map: dict = field(default_factory=lambda: dict(TOOL_MAP))
+    plan_tools: tuple = ("Write",)   # tools whose write of the plan file submits the plan
     prohibited: list = field(default_factory=list)   # list[Rule]
 
     @staticmethod
     def load(path: Path) -> Config:
         d = json.loads(path.read_text(encoding="utf-8"))
         rules = [Rule(**r) for r in d.pop("prohibited", [])]
-        if "free_tools" in d:
-            d["free_tools"] = tuple(d["free_tools"])
+        for key in ("free_tools", "plan_tools"):
+            if key in d:
+                d[key] = tuple(d[key])
         cfg = Config(**d)
         cfg.prohibited = rules
         return cfg
@@ -114,6 +116,7 @@ class Config:
     def dump(self) -> dict:
         d = asdict(self)
         d["free_tools"] = list(self.free_tools)
+        d["plan_tools"] = list(self.plan_tools)
         return d
 
 
@@ -127,6 +130,7 @@ class State:
     transcript_offset: int = 0       # legacy single offset; superseded by transcript_offsets
     transcript_offsets: dict = field(default_factory=dict)   # transcript path -> bytes read
     sessions: list = field(default_factory=list)   # sessions already given instructions
+    pending: list = field(default_factory=list)    # context to deliver at the next chance
     log: list = field(default_factory=list)
 
 
@@ -290,13 +294,25 @@ class Monitor:
         return self._record("thinking", Decision(WARN, reason, hits))
 
     # ------------------------------------------------------------------ actions
-    @staticmethod
-    def _action_text(tool_input: dict) -> str:
-        keys = ("command", "content", "new_string", "url", "query", "prompt", "file_path")
-        return "\n".join(tool_input[k] for k in keys if isinstance(tool_input.get(k), str))
+    # tool-input keys of the hook protocols the monitor speaks (Claude Code, Copilot)
+    PATH_KEYS = ("file_path", "notebook_path", "path")
+    CONTENT_KEYS = ("content", "file_text", "contents", "text")
+
+    @classmethod
+    def _action_text(cls, tool_input: dict) -> str:
+        keys = ("command", *cls.CONTENT_KEYS, "new_string", "new_str", "url", "query",
+                "prompt", *cls.PATH_KEYS)
+        return "\n".join(tool_input[k] for k in dict.fromkeys(keys)
+                         if isinstance(tool_input.get(k), str))
+
+    @classmethod
+    def plan_text(cls, tool_input: dict) -> str:
+        return next((tool_input[k] for k in cls.CONTENT_KEYS
+                     if isinstance(tool_input.get(k), str)), "")
 
     def is_plan_file(self, tool_input: dict) -> bool:
-        p = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
+        p = next((tool_input[k] for k in self.PATH_KEYS
+                  if isinstance(tool_input.get(k), str) and tool_input[k]), "")
         if not p:
             return False
         try:
@@ -306,10 +322,11 @@ class Monitor:
 
     def pre_action(self, tool: str, tool_input: dict) -> Decision:
         if self.is_plan_file(tool_input):
-            if tool != "Write":
+            if tool not in self.cfg.plan_tools:
                 return self._record("action", Decision(
-                    DENY, f"skillc: write the whole plan with Write to `{self.cfg.plan_file}`."))
-            return self.submit_plan(tool_input.get("content", ""))
+                    DENY, f"skillc: write the whole plan with {' or '.join(self.cfg.plan_tools)} "
+                          f"to `{self.cfg.plan_file}`."))
+            return self.submit_plan(self.plan_text(tool_input))
         free = tool in self.cfg.free_tools
         if not free and self.state.block:
             return self._record("action", Decision(DENY, self.state.block), tool)
@@ -378,11 +395,11 @@ class Monitor:
 
 # ---------------------------------------------------------------------- instructions
 
-def plan_instructions(runtime: Runtime, plan_file: str) -> str:
+def plan_instructions(runtime: Runtime, plan_file: str, write_tool: str = "Write") -> str:
     """What the agent is told once per session: the plan protocol and the CE grammar."""
     return (
         "SKILLC RUNTIME MONITOR is active. Before you implement anything (run commands, "
-        f"write or edit files), write your plan to `{plan_file}` with the Write tool, in "
+        f"write or edit files), write your plan to `{plan_file}` with the {write_tool} tool, in "
         "SkillC Controlled English (CE): one Tool per operation that changes the world or "
         "reaches beyond the conversation, bound with 'via' to the RUNTIME tool that "
         "performs it; 'needs' for any account, credential or paid service; 'runs' for "
@@ -464,8 +481,14 @@ def thinking_since(transcript: Path, offset: int) -> tuple[str, int]:
             d = json.loads(line)
         except ValueError:
             continue
-        msg = d.get("message") or {}
-        if msg.get("role") != "assistant" or not isinstance(msg.get("content"), list):
+        msg = d.get("message") if isinstance(d.get("message"), dict) else d
+        if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            continue
+        if isinstance(msg.get("content"), str):
+            if msg["content"]:
+                parts.append(msg["content"])
+            continue
+        if not isinstance(msg.get("content"), list):
             continue
         for b in msg["content"]:
             if isinstance(b, dict) and b.get("type") == "thinking" and b.get("thinking"):
