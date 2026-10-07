@@ -214,6 +214,54 @@ attached to agents. Both are exactly the artifacts skillc already compiles.
    agent identity's RBAC. The control-plane probe is a reader of the deploy
    path, not a separate discovery mechanism.
 
+## 2c. A group of hosted agents: the verified interaction model (2026-10-07)
+
+The first deployment of the finance example is **one** hosted agent with six
+in-process sub-agents. The use case is six participants exchanging messages,
+so the faithful deployment is a group of hosted agents talking over A2A.
+What follows is verified against the Foundry and Agent Framework
+documentation, not assumed.
+
+### How one hosted agent calls another
+
+| element | fact (source: Foundry A2A tool and incoming-A2A pages) |
+|---|---|
+| the callee | must expose the A2A protocol on its endpoint: `agent_endpoint.protocol_configuration.a2a` plus an `agent_card` (in `azure.yaml`: `agentEndpoint.protocols: [responses, a2a]` and `agentCard`). Incoming A2A requires the Responses protocol. The A2A base path is `{project}/agents/{agent}/endpoint/protocols/a2a`; the v1.0 card is at `.../agentCard/v1.0`. |
+| the edge | a project connection, category `RemoteA2A`, `target` = the callee's A2A base path, `authType: AgenticIdentityToken` (the caller's own agent identity; `azd ai connection create --kind remote-a2a --auth-type agentic-identity --audience https://ai.azure.com`). |
+| the caller's tool | an `a2a` tool (`a2a_version: "1.0"`, `project_connection_id`) in a toolbox the caller consumes over MCP, or `A2AAgent(url=..., auth_interceptor=BearerAuth(token))` from `agent-framework-a2a` in code. |
+| authorization | all A2A URLs require Entra; the caller's **instance identity** needs the **Foundry Agent Consumer** role (`eed3b665-ab3a-47b6-8f48-c9382fb1dad6`) on the callee's project or on the callee agent itself. Role assignments live outside `azure.yaml`. |
+| limits | text modality only, no streaming, JSON-RPC only for v1.0; each call creates an A2A task and context, retained 60 days. A2A is request and reply, so a protocol "tells" becomes a request whose reply may carry the next message. |
+| identity | every hosted agent has its own Entra instance identity (seen in `azd ai agent show`: Instance Identity Principal ID), so per-role RBAC and non-self-approval become properties of the deployment, not conventions. |
+
+For the finance protocol the ordered edges are F→RA, F→EA, EA→RA, EA→W,
+RA→TV, RA→W, RA→TS, TS→TV, TV→RA, W→F: ten connections and ten `a2a`
+tools, and every agent that is ever a callee (all six) exposes `a2a`. The
+A2A paths are deterministic from the agent names, so the connections can be
+declared before the agents exist; the card is fetched at call time.
+
+### What skillc validates, and when
+
+skillc never deploys and never calls a model. It judges declarations and
+observations, and its refutations are sound relative to them.
+
+| moment | input | what is decided | status |
+|---|---|---|---|
+| **before `azd provision`**, offline | `protocol/*.ce` | the global protocol is achievable; the high/standard choice is realizable; each declared role behaviour conforms to its projection (TaxVerifier today) | **done**, ran as the predeploy hook on the first deploy |
+| before provision, offline | `protocol/*.ce` + a runtime manifest | which tools the runtime withdraws or blocks (`email_report` needs `email_account`: IMPOSSIBLE) | **done** (`skillc monitor plan`) |
+| before provision, offline | `azure.yaml` → `skillc env from-azd` | the declared environment: toolboxes, connections, egress, policies, sandbox | **done** |
+| before provision, offline | `azure.yaml` + `protocol/*.ce` | **topology against protocol**: every `A tells B L` needs a `RemoteA2A` connection from A targeting B, an `a2a` tool in A's toolbox, and `a2a` on B's endpoint; a missing edge refutes that message with the exact fix | **next** (gate, S2): `from-azd` must read `RemoteA2A` targets back to agent names and `a2a` toolbox entries |
+| before provision | `azure.yaml` | **authorization**: Foundry Agent Consumer for A's identity on B is not declared anywhere, so it is an assumption, reported as "achievable if ..." | gate, S2 |
+| after provision, before deploy | control-plane probe | the assumption above becomes an observation: role assignments of each instance identity, the callee's protocol configuration, the connection's auth type | WP5 |
+| **at `azd deploy`** | the predeploy hook | refuse a version whose protocol, skills or topology are IMPOSSIBLE | **hook in place**, gate command next |
+| at run time | per-agent middleware | the `a2a` tool is an MCP tool, so function middleware sees every message send (spike fact F1); each agent carries its own local behaviour (the MPST projection), so RevenueAnalyst's monitor denies `FinalRevenueAnalysis` before `Approval` arrived, and a 403 from a callee becomes a "no Foundry Agent Consumer on B" fact that revokes the plan | WP2 |
+
+So the answer to "does skillc validate before the hosted agents are deployed"
+is yes, and it already did on the first deploy: the protocol was checked in
+the hook before the version was created. What the group deployment adds is
+that the **topology and authorization** of the group become declared facts
+skillc can check offline, which the single-agent deployment could not
+express at all.
+
 ## 3. The difficulties, one by one
 
 ### D1. Two environments, not one
