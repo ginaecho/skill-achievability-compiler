@@ -5,7 +5,9 @@ import subprocess
 import sys
 
 
-from skillc.monitor import ALLOW, DENY, WARN, Config, Monitor, Rule, thinking_since
+from skillc.frontend.runtime import load_runtime
+from skillc.monitor import (ALLOW, DENY, WARN, Config, Monitor, Rule, thinking_since,
+                            tool_map_from_names)
 
 GOOD = """Skill `fix-tests`.
 Roles: `agent`.
@@ -153,6 +155,116 @@ def test_state_persists_across_processes(tmp_path):
     m.submit_plan(GOOD)
     m.save()
     assert mon(tmp_path).state.plan == GOOD
+
+
+# ---------------------------------------------------------------------- transport-neutral core
+
+def test_on_prompt_gives_instructions_once_per_session_then_the_intent_check(tmp_path):
+    m = mon(tmp_path)
+    ctx = m.on_prompt("deploy it with eas build", "s1")
+    assert len(ctx) == 2 and "SKILLC RUNTIME MONITOR" in ctx[0] and "Write tool" in ctx[0]
+    assert "intent check" in ctx[1] and "expo_account" in ctx[1]
+    assert m.on_prompt("fix the tests", "s1") == []              # same session, no gap
+    assert m.on_prompt("", "s1") == []                           # an empty prompt says nothing
+    assert "SKILLC RUNTIME MONITOR" in m.on_prompt("fix the tests", "s2")[0]
+    assert m.state.sessions == ["s1", "s2"]
+    # the instructions name the configured plan tool; a gap may be a missing runtime tool
+    copilot = Monitor(Config(plan_tools=("create",)), tmp_path)
+    assert "create tool" in copilot.on_prompt("x", "s3")[0]
+    assert "via `agent_spawn`" in m.intent_gaps("dispatch a fresh subagent to do it")
+
+
+def test_on_reasoning_is_observe_thinking(tmp_path):
+    m = mon(tmp_path)
+    m.submit_plan(GOOD)
+    assert Monitor.on_reasoning is Monitor.observe_thinking
+    assert m.on_reasoning("Now I'll run `eas build` to ship.").action == DENY
+
+
+def test_tool_map_from_names():
+    rt = load_runtime("foundry-hosted")
+    names = ["Code_Interpreter", "bing_grounding", "fetch_url", "azure_ai_search",
+             "contoso_docs_search", "create_file", "str_replace", "view", "ask_user",
+             "run_subagent", "mcp", "github_create_issue"]
+    tm = tool_map_from_names(names, rt)
+    assert tm == {"Code_Interpreter": "code_interpreter", "bing_grounding": "web_search",
+                  "fetch_url": "web_fetch", "azure_ai_search": "search",
+                  "contoso_docs_search": "search", "create_file": "write", "view": "read",
+                  "mcp": "mcp"}
+    # foundry-hosted has no edit, ask_user or agent_spawn: those names stay unmapped, and
+    # an unknown name is never guessed
+    assert not {"str_replace", "ask_user", "run_subagent", "github_create_issue"} & set(tm)
+    # execute-like names fall back to bash where there is no code interpreter; a target
+    # the runtime lacks (developer-sandbox has no agent_spawn) is not mapped
+    dev = load_runtime("developer-sandbox")
+    assert tool_map_from_names(["python", "powershell", "Task"], dev) == {
+        "python": "bash", "powershell": "bash"}
+    assert tool_map_from_names(["python"], load_runtime("office-assistant")) == {}
+
+
+def test_unmapped_tool_is_denied_as_not_a_runtime_tool(tmp_path):
+    rt = load_runtime("foundry-hosted")
+    cfg = Config(runtime="foundry-hosted", require_plan=False, free_tools=(),
+                 tool_map=tool_map_from_names(["code_interpreter", "github_create_issue"], rt))
+    m = Monitor(cfg, tmp_path)
+    d = m.pre_action("github_create_issue", {"title": "x"})
+    assert d.action == DENY and "not a tool of runtime `foundry-hosted`" in d.reason
+
+
+def test_session_scoped_state_and_plan(tmp_path):
+    cfg = Config(state_file=".skillc/{session}/state.json", plan_file=".skillc/{session}/plan.ce")
+    a = Monitor(cfg, tmp_path, session_id="a")
+    b = Monitor(cfg, tmp_path, session_id="b")
+    assert a.state_path != b.state_path and a.cfg.plan_file.endswith("a/plan.ce")
+    assert cfg.state_file == ".skillc/{session}/state.json"      # the config is not mutated
+    plan = str(tmp_path / ".skillc" / "a" / "plan.ce")
+    assert a.pre_action("Write", {"file_path": plan, "content": GOOD}).action == ALLOW
+    assert not b.is_plan_file({"file_path": plan})
+    a.save()
+    assert Monitor(cfg, tmp_path, session_id="a").state.plan == GOOD
+    assert Monitor(cfg, tmp_path, session_id="b").state.plan is None
+    assert Monitor(cfg, tmp_path).state_path == tmp_path / ".skillc" / "default" / "state.json"
+
+
+def test_default_config_is_not_session_scoped(tmp_path):
+    assert Monitor(Config(), tmp_path).state_path == tmp_path / ".skillc" / "state.json"
+    assert Monitor(Config(), tmp_path, session_id="x").state_path == \
+        tmp_path / ".skillc" / "state.json"
+    assert Config().for_session("x") == Config()
+
+
+FOUNDRY = """Skill `report`.
+Roles: `agent`.
+Tool `convert` (owner `agent`): via `code_interpreter`; runs `pandoc`; adds `converted`.
+Tool `save` (owner `agent`): via `write`; requires `converted`; adds `saved`.
+Goal: `saved`.
+Protocol:
+  - `agent` uses `convert`.
+  - `agent` uses `save`.
+"""
+
+
+def test_foundry_hosted_manifest_loads():
+    rt = load_runtime("foundry-hosted")
+    assert rt.software == "session-installable" and rt.forbid_effects == ()
+    assert {"code_interpreter", "web_search", "web_fetch", "search", "mcp", "openapi", "a2a",
+            "read", "write"} == set(rt.tools)
+    assert "package_registries" in rt.grants and "shell" not in rt.grants
+
+
+def test_session_installable_software_depends_on_an_observed_registry(tmp_path):
+    rt = load_runtime("foundry-hosted")
+    cfg = Config(runtime="foundry-hosted", plan_tools=("write",), free_tools=("read",),
+                 tool_map=tool_map_from_names(list(rt.tools), rt))
+    m = Monitor(cfg, tmp_path)
+    assert m.submit_plan(FOUNDRY).action == ALLOW            # pandoc: installable this session
+    assert m.pre_action("code_interpreter", {"code": "import subprocess"}).action == ALLOW
+    d = m.post_action("code_interpreter", {"code": "pip install pandoc"},
+                      "WARNING: Could not resolve host: pypi.org")
+    assert d.action == DENY and m.state.plan is None
+    assert "no package registry is reachable from this sandbox" in d.reason
+    assert "package_registries" in m.state.missing_resources
+    assert m.pre_action("code_interpreter", {"code": "print(1)"}).action == DENY
 
 
 def test_transcript_reader(tmp_path):

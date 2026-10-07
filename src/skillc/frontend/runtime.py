@@ -39,7 +39,7 @@ class Runtime:
     grants: tuple          # resources the runtime provides
     lacks: tuple           # human-readable list of what it does not provide
     forbid_effects: tuple = ()   # effect classes the runtime's policy forbids
-    software: str = "installable"  # installable | preinstalled | none (see resolve_software)
+    software: str = "installable"  # one of SOFTWARE_MODES (see resolve_software)
 
     @staticmethod
     def from_dict(d: dict) -> Runtime:
@@ -50,7 +50,7 @@ class Runtime:
                        d.get("software", "installable"))
 
 
-SOFTWARE_MODES = ("installable", "preinstalled", "none")
+SOFTWARE_MODES = ("installable", "preinstalled", "none", "session-installable")
 
 
 class RuntimeManifestError(ValueError):
@@ -112,16 +112,27 @@ def _variants(name: str) -> set:
 def resolve_software(name: str, runtime: Runtime) -> tuple[bool, str]:
     """Whether a Tool that `runs` this software can run in the runtime.
 
-    installable  -> always (a registry is reachable; absence on the machine is
-                    never evidence that software cannot be installed);
-    preinstalled -> only if the machine's inventory has it (no installs);
-    none         -> never (the runtime cannot execute software at all)."""
+    installable         -> always (a registry is reachable; absence on the machine
+                           is never evidence that software cannot be installed);
+    preinstalled        -> only if the machine's inventory has it (no installs);
+    none                -> never (the runtime cannot execute software at all);
+    session-installable -> only while the runtime grants `package_registries` (a
+                           per-session sandbox: the install does not survive the
+                           session, and a network-isolated project has no registry).
+                           Monitor.effective() removes a grant observed missing
+                           during a run, so an install that failed for lack of a
+                           registry makes every `runs` of that plan unavailable."""
     if runtime.software == "none":
         return False, "this runtime cannot run software"
     if runtime.software == "preinstalled":
         if _variants(name) & inventory():
             return True, "installed on the machine"
         return False, "not installed, and this runtime cannot install software"
+    if runtime.software == "session-installable":
+        if "package_registries" in runtime.grants:
+            return True, ("installable from public registries into this session only; "
+                          "the install does not survive the session")
+        return False, "no package registry is reachable from this sandbox"
     return True, "installable from public registries"
 
 

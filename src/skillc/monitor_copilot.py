@@ -31,9 +31,7 @@ import os
 import sys
 from pathlib import Path
 
-from .frontend.toolpolicy import match, unmet
-from .monitor import (ALLOW, DENY, WARN, Config, Monitor, plan_instructions, state_lock,
-                      thinking_since)
+from .monitor import ALLOW, DENY, WARN, Config, Monitor, state_lock, thinking_since
 from .monitor_hook import CONFIG, _root
 
 # Copilot tool -> runtime tool (the vocabulary of the runtime manifests)
@@ -104,26 +102,6 @@ def normalize(event: dict) -> dict:
 # a string as is, None prints nothing.
 # --------------------------------------------------------------------------
 
-def _instructions(mon: Monitor, sid: str) -> list[str]:
-    if sid in mon.state.sessions:
-        return []
-    mon.state.sessions.append(sid)
-    return [plan_instructions(mon.runtime, mon.cfg.plan_file, write_tool=mon.cfg.plan_tools[0])]
-
-
-def _intent_gaps(mon: Monitor, prompt: str) -> str | None:
-    if not prompt.strip():
-        return None
-    rt, lib = mon.effective()
-    gaps = [o for o in match(prompt, lib) if unmet(o, rt, lib)]
-    if not gaps:
-        return None
-    return ("skillc intent check: the request mentions requirements runtime "
-            f"`{rt.name}` cannot meet: "
-            + "; ".join(f"'{o.text}' needs {o.clause()}" for o in gaps)
-            + ". Plan around them or tell the user.")
-
-
 def _flush(mon: Monitor) -> list[str]:
     ctx, mon.state.pending = list(mon.state.pending), []
     return ctx
@@ -134,21 +112,15 @@ def _context(ctx: list[str]) -> tuple[dict | None, int]:
 
 
 def _on_session_start(mon: Monitor, ev: dict) -> tuple[dict | None, int]:
-    ctx = _instructions(mon, ev["session_id"])
-    gap = _intent_gaps(mon, ev["prompt"] or os.environ.get("COPILOT_AGENT_PROMPT", ""))
-    if gap:
-        ctx.append(gap)
-    return _context(ctx)
+    prompt = ev["prompt"] or os.environ.get("COPILOT_AGENT_PROMPT", "")
+    return _context(mon.on_prompt(prompt, ev["session_id"]))
 
 
 def _on_prompt(mon: Monitor, ev: dict) -> tuple[None, int]:
     # Configuration-file hooks cannot add context on this event (only SDK hooks may
-    # rewrite the prompt), so what we have to say waits for the next postToolUse.
-    ctx = _instructions(mon, ev["session_id"])          # in case sessionStart was not hooked
-    gap = _intent_gaps(mon, ev["prompt"])
-    if gap:
-        ctx.append(gap)
-    mon.state.pending.extend(ctx)
+    # rewrite the prompt), so what we have to say waits for the next postToolUse.  The
+    # instructions are included in case sessionStart was not hooked.
+    mon.state.pending.extend(mon.on_prompt(ev["prompt"], ev["session_id"]))
     return None, 0
 
 
@@ -209,11 +181,12 @@ def handle(event_name: str, event: dict) -> int:
     root = _root(event)
     if root is None:
         return 0                                   # monitor not configured here
-    config = Config.load(root / CONFIG)
+    ev = normalize(event)
+    config = Config.load(root / CONFIG).for_session(ev["session_id"])
     with state_lock(root / config.state_file):
-        mon = Monitor(config, root)
+        mon = Monitor(config, root, session_id=ev["session_id"])
         try:
-            payload, code = handler(mon, normalize(event))
+            payload, code = handler(mon, ev)
         finally:
             mon.save()
     if isinstance(payload, dict):

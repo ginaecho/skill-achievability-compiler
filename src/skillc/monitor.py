@@ -19,6 +19,12 @@ on three signals (docs/RUNTIME_MONITOR.md):
 
 Everything here is deterministic and costs zero model tokens.  The state lives in one
 JSON file so that separate hook processes share it.
+
+The monitor itself knows nothing about the transport that carries the signals to it.
+Adapters (Claude Code hooks, GitHub Copilot hooks, Agent Framework middleware) translate
+their events into the five entry points `on_prompt`, `on_reasoning`, `pre_action`,
+`post_action` and `submit_plan`, and build the tool map of their runtime with
+`tool_map_from_names`.
 """
 from __future__ import annotations
 
@@ -49,6 +55,23 @@ TOOL_MAP = {"Bash": "bash", "Write": "write", "Edit": "edit", "MultiEdit": "edit
             "WebSearch": "web_search", "Task": "agent_spawn", "Agent": "agent_spawn"}
 # tools that only look around: allowed before a plan exists (planning needs them)
 FREE_TOOLS = ("Read", "Glob", "Grep", "LS", "WebSearch", "TodoWrite", "ToolSearch")
+
+# Names agents of various kinds give their tools -> the runtime tools they stand for, in
+# order of preference (the first one the runtime has wins).  See tool_map_from_names.
+TOOL_ALIASES: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("code_interpreter", "python", "execute", "run_code", "run_python"),
+     ("code_interpreter", "bash")),
+    (("bash", "shell", "powershell", "terminal"), ("bash",)),
+    (("web_search", "search_web", "bing_search", "bing_grounding"), ("web_search",)),
+    (("web_fetch", "fetch", "fetch_url", "http_get", "browse"), ("web_fetch",)),
+    (("azure_ai_search", "file_search"), ("search",)),
+    (("create", "write_file", "create_file"), ("write",)),
+    (("edit", "str_replace", "edit_file", "replace_string_in_file"), ("edit",)),
+    (("view", "read_file", "cat"), ("read",)),
+    (("ask_user", "ask_question", "askuserquestion"), ("ask_user",)),
+    (("task", "run_subagent", "delegate", "agent"), ("agent_spawn",)),
+)
+SESSION_PLACEHOLDER = "{session}"
 
 # words that make a matched requirement in reasoning text not an intention
 NEGATION = re.compile(r"\b(no|not|without|cannot|can't|won't|don't|never|avoid|"
@@ -91,6 +114,9 @@ class Rule:
 
 @dataclass
 class Config:
+    """How one project runs the monitor.  `plan_file` and `state_file` may contain the
+    placeholder `{session}`, which `for_session` fills with the session id, so that the
+    sessions of a hosted agent that share one filesystem do not share one plan."""
     runtime: str = "developer-sandbox"
     plan_file: str = ".skillc/plan.ce"
     state_file: str = ".skillc/state.json"
@@ -119,6 +145,12 @@ class Config:
         d["plan_tools"] = list(self.plan_tools)
         return d
 
+    def for_session(self, session_id: str | None) -> Config:
+        """A copy whose plan and state paths name this session (or "default")."""
+        sid = session_id or "default"
+        return replace(self, plan_file=self.plan_file.replace(SESSION_PLACEHOLDER, sid),
+                       state_file=self.state_file.replace(SESSION_PLACEHOLDER, sid))
+
 
 @dataclass
 class State:
@@ -135,13 +167,38 @@ class State:
 
 
 class Monitor:
+    """The transport-neutral core: one instance per (project root, session).
+
+    Entry points, each returning a Decision or the context to give the agent:
+
+      on_prompt(prompt, session_id)   the plan instructions once per session, then the
+                                      intent check of the user's request
+      on_reasoning(text)              reasoning text (alias of observe_thinking)
+      pre_action(tool, tool_input)    a tool call before it runs
+      post_action(tool, input, out)   a tool call after it ran
+      submit_plan(text)               a plan written through another channel
+
+    Fail-open contract.  The monitor never raises across an adapter boundary.  The
+    methods above only raise on a programming error or an unreadable state file, and
+    an adapter must treat any exception as "allow": catch it, write one line to stderr,
+    and let the agent's call go through.  A monitor that crashes must not deny every
+    tool of the agent, and must not stop the agent by crashing the hook or middleware.
+    Decisions the monitor cannot make (an unparsable plan, an unknown tool) are DENY
+    with a reason, not exceptions.
+
+    `session_id` fills the `{session}` placeholder of the configured plan and state
+    paths (see Config); without one the paths use "default".
+    """
+
     def __init__(self, config: Config, root: Path | str = ".",
-                 runtime: Runtime | None = None, library: Library | None = None):
-        self.cfg = config
+                 runtime: Runtime | None = None, library: Library | None = None,
+                 session_id: str | None = None):
+        self.cfg = config.for_session(session_id)
+        self.session_id = session_id
         self.root = Path(root)
         self.runtime = runtime or load_runtime(config.runtime)
         self.library = library or load_library()
-        self.state_path = self.root / config.state_file
+        self.state_path = self.root / self.cfg.state_file
         self.state = self._load_state()
 
     # ------------------------------------------------------------------ state
@@ -187,6 +244,34 @@ class Monitor:
             if r.pattern and re.search(r.pattern, text, re.IGNORECASE):
                 out.append(f"{r.id}: {r.description}")
         return out
+
+    # ------------------------------------------------------------------ prompt
+    def intent_gaps(self, prompt: str) -> str | None:
+        """The intent check of a request: requirements the library finds in it that the
+        effective runtime cannot meet, as one message for the agent, or None."""
+        if not prompt.strip():
+            return None
+        rt, lib = self.effective()
+        gaps = [o for o in match(prompt, lib) if unmet(o, rt, lib)]
+        if not gaps:
+            return None
+        return ("skillc intent check: the request mentions requirements runtime "
+                f"`{rt.name}` cannot meet: "
+                + "; ".join(f"'{o.text}' needs {o.clause()}" for o in gaps)
+                + ". Plan around them or tell the user.")
+
+    def on_prompt(self, prompt: str, session_id: str) -> list[str]:
+        """Context to give the agent when the user's request arrives: the plan protocol
+        the first time this session is seen, then the intent check of the request."""
+        ctx = []
+        if session_id not in self.state.sessions:
+            self.state.sessions.append(session_id)
+            ctx.append(plan_instructions(self.runtime, self.cfg.plan_file,
+                                         write_tool=self.cfg.plan_tools[0]))
+        gap = self.intent_gaps(prompt)
+        if gap:
+            ctx.append(gap)
+        return ctx
 
     # ------------------------------------------------------------------ plan
     def check_plan(self, text: str) -> tuple[Decision, dict]:
@@ -293,6 +378,8 @@ class Monitor:
             return self._record("thinking", Decision(DENY, reason, hits))
         return self._record("thinking", Decision(WARN, reason, hits))
 
+    on_reasoning = observe_thinking
+
     # ------------------------------------------------------------------ actions
     # tool-input keys of the hook protocols the monitor speaks (Claude Code, Copilot)
     PATH_KEYS = ("file_path", "notebook_path", "path")
@@ -300,7 +387,7 @@ class Monitor:
 
     @classmethod
     def _action_text(cls, tool_input: dict) -> str:
-        keys = ("command", *cls.CONTENT_KEYS, "new_string", "new_str", "url", "query",
+        keys = ("command", "code", *cls.CONTENT_KEYS, "new_string", "new_str", "url", "query",
                 "prompt", *cls.PATH_KEYS)
         return "\n".join(tool_input[k] for k in dict.fromkeys(keys)
                          if isinstance(tool_input.get(k), str))
@@ -391,6 +478,34 @@ class Monitor:
                             self.state.missing_resources.append(o.value)
                             new.append(f"credential `{o.value}` was rejected")
         return new
+
+
+# ---------------------------------------------------------------------- tool map
+
+def tool_map_from_names(names: list[str] | tuple[str, ...], runtime: Runtime) -> dict[str, str]:
+    """A Config.tool_map for an agent that exposes `names`, in the vocabulary of `runtime`.
+
+    A name that is (ignoring case) a tool of the runtime maps to that tool.  Otherwise
+    the alias table TOOL_ALIASES is consulted, and a name ending in `_search` stands
+    for `search`.  A name maps only when the runtime has the target tool; every other
+    name is left out, so that pre_action denies it as not a tool of this runtime.
+    """
+    by_lower = {t.lower(): t for t in runtime.tools}
+    aliases = {alias: targets for group, targets in TOOL_ALIASES for alias in group}
+    out: dict[str, str] = {}
+    for name in names:
+        key = name.lower()
+        if key in by_lower:
+            out[name] = by_lower[key]
+            continue
+        targets = aliases.get(key, ())
+        if not targets and key.endswith("_search"):
+            targets = ("search",)
+        for target in targets:
+            if target in runtime.tools:
+                out[name] = target
+                break
+    return out
 
 
 # ---------------------------------------------------------------------- instructions
