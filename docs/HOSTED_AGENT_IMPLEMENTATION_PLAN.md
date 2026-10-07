@@ -205,11 +205,14 @@ declares it.
 
 ### WP4. Example hosted agent, local run, first live deploy (S2 to S4, lane C)
 
-Files: `examples/hosted-agent/` with `azure.yaml` (toolbox with
-`web_search` + Microsoft Learn MCP, the `predeploy` hook, one
-`azure.ai.skill`), `src/agent/main.py` (Agent Framework + `skillc_monitor`),
-`requirements.txt` (`skillc[agent-framework]`, pinned), `skills/*.md`
-(one achievable, one impossible on purpose), `README.md`.
+Files: `examples/hosted-agent-finance/` (built in S1 from the
+session-typed-agents finance case): `azure.yaml` plus the `azure.search.yaml`
+and `azure.isolated.yaml` variants, the `predeploy` hook, six `azure.ai.skill`
+role skills, `protocol/*.ce` (the global protocol as a pack, and the email
+variant that is IMPOSSIBLE without an email connection),
+`src/finance-agent/main.py` (Agent Framework: a coordinator with the six role
+agents as tools, `skillc_monitor` wired behind a guarded import),
+`requirements.txt`, `data/*.csv`, `README.md` with the verdict table.
 
 Sequence, strictly in this order:
 

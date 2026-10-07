@@ -1,0 +1,33 @@
+# Variant: the Writer's deliverable is to email the report to the stakeholders.
+# `email_report` runs through an email MCP tool and needs an email account the
+# hosted agent only has if azure.yaml declares such a connection. Without it the
+# runtime-bound check withdraws the tool and the goal is IMPOSSIBLE.
+Skill `quarterly-finance-report-by-email`.
+Roles: `Fetcher`, `RevenueAnalyst`, `ExpenseAnalyst`, `Writer`, `TaxVerifier`, `TaxSpecialist`.
+Tool `fetch_financials` (owner `Fetcher`): via `code_interpreter`; adds `revenue_fetched`, `expenses_fetched`; effect `local`.
+Tool `analyze_expenses` (owner `ExpenseAnalyst`): via `code_interpreter`; requires `expenses_fetched`; adds `expense_analysis`; effect `local`.
+Tool `classify_revenue` (owner `RevenueAnalyst`): via `code_interpreter`; requires `revenue_fetched`; adds `revenue_classified`; effect `local`.
+Tool `approve_standard` (owner `TaxVerifier`): via `write`; requires `revenue_classified`; adds `approved`; effect `local`.
+Tool `write_revenue_analysis` (owner `RevenueAnalyst`): via `write`; requires `approved` and `expense_analysis`; adds `revenue_analysis`; effect `local`.
+Tool `compose_report` (owner `Writer`): via `code_interpreter`; requires `expense_analysis` and `revenue_analysis`; adds `report_written`; effect `local`.
+Tool `email_report` (owner `Writer`): via `mcp`; needs `email_account`; requires `report_written`; adds `report_emailed`; effect `writes_external`.
+Initially true: none.
+Goal: `report_emailed` and `approved`.
+Protocol:
+  - `Fetcher` uses `fetch_financials`.
+  - `Fetcher` tells `RevenueAnalyst` `RawRevenueData`.
+  - `Fetcher` tells `ExpenseAnalyst` `RawExpenseData`.
+  - `ExpenseAnalyst` uses `analyze_expenses`.
+  - `ExpenseAnalyst` tells `RevenueAnalyst` `ExpenseData`.
+  - `ExpenseAnalyst` tells `Writer` `ExpenseAnalysis`.
+  - `RevenueAnalyst` uses `classify_revenue`.
+  - `RevenueAnalyst` tells `TaxVerifier` `StandardRevenueNotification`.
+  - `RevenueAnalyst` tells `Writer` `StandardBranchNotification`.
+  - `RevenueAnalyst` tells `TaxSpecialist` `NotifyStandardRole`.
+  - `TaxVerifier` uses `approve_standard`.
+  - `TaxVerifier` tells `RevenueAnalyst` `Approval`.
+  - `RevenueAnalyst` uses `write_revenue_analysis`.
+  - `RevenueAnalyst` tells `Writer` `FinalRevenueAnalysis`.
+  - `Writer` uses `compose_report`.
+  - `Writer` uses `email_report`.
+  - `Writer` tells `Fetcher` `GenerateReport`.

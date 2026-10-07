@@ -1,0 +1,142 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# Quarterly Finance Report: six roles (Fetcher, RevenueAnalyst, ExpenseAnalyst,
+# Writer, TaxVerifier, TaxSpecialist) run as ONE Foundry hosted agent built with
+# Microsoft Agent Framework. This is the BASE environment: a toolbox with
+# code_interpreter and web_search, no search connection (so `lookup_tax_rules`
+# has nothing to run through) and no email connection.
+#
+# The project is EXISTING: it is reached through FOUNDRY_PROJECT_ENDPOINT
+# (`azd env set FOUNDRY_PROJECT_ENDPOINT https://<account>.services.ai.azure.com/api/projects/<project>`)
+# and already has the gpt-5.4 deployment, so no `deployments` are declared here.
+
+requiredVersions:
+  azd: '>=1.32.0'
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.17'
+    azure.ai.toolboxes: '>=1.0.0-beta.8'
+
+name: finance-report-agent
+
+services:
+  ai-project:
+    host: azure.ai.project
+    # Connect to the existing project instead of provisioning one.
+    # verify against azd: the exact key for an existing project (`endpoint` vs `resourceId`).
+    endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
+
+  finance-tools:
+    host: azure.ai.toolbox
+    uses:
+      - ai-project
+    description: Sandboxed Python for the fetch, analysis, audit and report steps, plus public web search
+    tools:
+      - type: code_interpreter
+        name: code_interpreter
+        require_approval: never
+      - type: web_search
+        name: web_search
+        require_approval: never
+
+  # One azure.ai.skill per role. Each `instructions` file is an intent artifact
+  # that `skillc intent` and `skillc gate` read unchanged.
+  fetcher:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/Fetcher.md
+  revenue-analyst:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/RevenueAnalyst.md
+  expense-analyst:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/ExpenseAnalyst.md
+  writer:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/Writer.md
+  tax-verifier:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/TaxVerifier.md
+  tax-specialist:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/TaxSpecialist.md
+
+  finance-report-agent:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-report-agent
+    description: >-
+      Coordinator for the Quarterly Finance Report. Six role agents (Fetcher,
+      RevenueAnalyst, ExpenseAnalyst, Writer, TaxVerifier, TaxSpecialist) are
+      exposed to the coordinator as tools; each role has its own instructions
+      and its own tools. Tool calls pass through skillc's monitor middleware.
+    metadata:
+      tags:
+        - Agent Framework
+        - AI Agent Hosting
+        - Responses Protocol
+        - skillc
+    project: src/finance-agent
+    language: python
+    # Code deploy mode (no Dockerfile): ZIP upload, remote build.
+    # verify against azd: `dependencyResolution` and `startupCommand` field names.
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - finance-tools
+    toolboxes:
+      - name: finance-tools
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    env:
+      # FOUNDRY_PROJECT_ENDPOINT is injected by the platform; never declare it here.
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: gpt-5.4
+      TOOLBOX_NAME: finance-tools
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        Produces a Quarterly Finance Report from fetched revenue and expense
+        data. Revenue above $50,000 is audited by TaxSpecialist; every revenue
+        analysis is explicitly approved by TaxVerifier before Writer delivers
+        the report.
+      skills:
+        - id: fetcher
+          name: Fetcher
+          description: Reads the quarter's revenue and expense totals (fetch_financials) and receives the finished report.
+        - id: revenue-analyst
+          name: RevenueAnalyst
+          description: Classifies revenue above or below $50,000 (classify_revenue), routes the branch, and writes the approved revenue analysis (write_revenue_analysis).
+        - id: expense-analyst
+          name: ExpenseAnalyst
+          description: Analyzes the quarter's expenses (analyze_expenses) for RevenueAnalyst and Writer.
+        - id: writer
+          name: Writer
+          description: Composes the quarterly report (compose_report) and delivers it to Fetcher (deliver_report).
+        - id: tax-verifier
+          name: TaxVerifier
+          description: Issues the single explicit approval (approve_audited or approve_standard); the only role that may approve.
+        - id: tax-specialist
+          name: TaxSpecialist
+          description: Looks up the tax rules (lookup_tax_rules) and audits high revenue (audit_high_revenue) for TaxVerifier.
+
+# The deploy gate: `azd deploy` is the only moment an agent version is created,
+# so skillc refuses an IMPOSSIBLE intent here, against the declared environment.
+hooks:
+  predeploy:
+    shell: sh
+    run: skillc gate . --declared azure.yaml
+
+infra:
+  provider: microsoft.foundry

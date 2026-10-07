@@ -1,0 +1,149 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# Quarterly Finance Report, SEARCH variant: the base project plus an Azure AI
+# Search connection `tax-rules-search` exposed through the toolbox as an
+# `azure_ai_search` tool. This is the environment in which TaxSpecialist's
+# `lookup_tax_rules` is possible, so the high-revenue branch is reachable.
+#
+# Use with: azd deploy --from azure.search.yaml   (or copy over azure.yaml)
+# verify against azd: whether azd reads an alternate file name, or the file
+# must be renamed to azure.yaml before `azd provision` / `azd deploy`.
+
+requiredVersions:
+  azd: '>=1.32.0'
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.17'
+    azure.ai.connections: '>=1.0.0-beta.8'
+    azure.ai.toolboxes: '>=1.0.0-beta.8'
+
+name: finance-report-agent
+
+services:
+  ai-project:
+    host: azure.ai.project
+    # verify against azd: the exact key for an existing project (`endpoint` vs `resourceId`).
+    endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
+
+  tax-rules-search:
+    host: azure.ai.connection
+    uses:
+      - ai-project
+    category: CognitiveSearch
+    target: https://tax-rules.search.windows.net
+    authType: AAD
+    # No credentials: the agent identity reads the index through Entra ID.
+
+  finance-tools:
+    host: azure.ai.toolbox
+    uses:
+      - ai-project
+      - tax-rules-search
+    description: Sandboxed Python, public web search, and the tax-rules search index
+    tools:
+      - type: code_interpreter
+        name: code_interpreter
+        require_approval: never
+      - type: web_search
+        name: web_search
+        require_approval: never
+      - type: azure_ai_search
+        connection: tax-rules-search
+        require_approval: never
+
+  fetcher:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/Fetcher.md
+  revenue-analyst:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/RevenueAnalyst.md
+  expense-analyst:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/ExpenseAnalyst.md
+  writer:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/Writer.md
+  tax-verifier:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/TaxVerifier.md
+  tax-specialist:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/TaxSpecialist.md
+
+  finance-report-agent:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-report-agent
+    description: >-
+      Coordinator for the Quarterly Finance Report. Six role agents (Fetcher,
+      RevenueAnalyst, ExpenseAnalyst, Writer, TaxVerifier, TaxSpecialist) are
+      exposed to the coordinator as tools; each role has its own instructions
+      and its own tools. Tool calls pass through skillc's monitor middleware.
+    metadata:
+      tags:
+        - Agent Framework
+        - AI Agent Hosting
+        - Responses Protocol
+        - skillc
+    project: src/finance-agent
+    language: python
+    # verify against azd: `dependencyResolution` and `startupCommand` field names.
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - finance-tools
+      - tax-rules-search
+    toolboxes:
+      - name: finance-tools
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    env:
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: gpt-5.4
+      TOOLBOX_NAME: finance-tools
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        Produces a Quarterly Finance Report from fetched revenue and expense
+        data. Revenue above $50,000 is audited by TaxSpecialist against the
+        tax-rules search index; every revenue analysis is explicitly approved
+        by TaxVerifier before Writer delivers the report.
+      skills:
+        - id: fetcher
+          name: Fetcher
+          description: Reads the quarter's revenue and expense totals (fetch_financials) and receives the finished report.
+        - id: revenue-analyst
+          name: RevenueAnalyst
+          description: Classifies revenue above or below $50,000 (classify_revenue), routes the branch, and writes the approved revenue analysis (write_revenue_analysis).
+        - id: expense-analyst
+          name: ExpenseAnalyst
+          description: Analyzes the quarter's expenses (analyze_expenses) for RevenueAnalyst and Writer.
+        - id: writer
+          name: Writer
+          description: Composes the quarterly report (compose_report) and delivers it to Fetcher (deliver_report).
+        - id: tax-verifier
+          name: TaxVerifier
+          description: Issues the single explicit approval (approve_audited or approve_standard); the only role that may approve.
+        - id: tax-specialist
+          name: TaxSpecialist
+          description: Looks up the tax rules in the tax-rules index (lookup_tax_rules) and audits high revenue (audit_high_revenue) for TaxVerifier.
+
+hooks:
+  predeploy:
+    shell: sh
+    run: skillc gate . --declared azure.yaml
+
+infra:
+  provider: microsoft.foundry
