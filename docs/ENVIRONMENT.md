@@ -230,6 +230,39 @@ names come from `MicrosoftDocs/azure-docs` `permissions/internet-of-things.md`
 and related pages, which are cited in the file. Add operations, or a whole new
 provider, as data.
 
+## Declared environment from an azd project
+
+A Foundry hosted agent is built from an `azd` project whose `azure.yaml`
+declares, before anything exists in Azure, what the agent will have. That
+declaration compiles to a `skillc.env/1` document offline, with no Azure call:
+
+```console
+$ skillc env from-azd azure.yaml -o env.json        # the intent artifacts go to stderr
+$ skillc env from-azd azure.yaml --json
+$ skillc reach skills/cite-sources.md --env env.json
+```
+
+The walk over `services` is deterministic; `$ref` includes are resolved
+relative to the containing file (local YAML or JSON only; a URL or a cycle is
+recorded as unknown), and `${VAR}` references stay as written, each recorded
+as an unknown `value:VAR`.
+
+| `host` | nodes |
+|---|---|
+| `azure.ai.project` | `service model/<deployment>` (model, version, SKU; `available`); `service egress/public` with `mode` and `isolated`, availability unknown: `AllowInternetOutbound` is an assumption to measure from inside the sandbox, `AllowOnlyApprovedOutbound` or an `agentSubnet` leaves public hosts unknown until probed |
+| `azure.ai.connection` | `service connection/<name>` with `category`, `auth_type`, `target` (scheme and host only) and env var names; `credentials` are never read |
+| `azure.ai.toolbox` | `mcp_server toolbox/<name>` exposing one `tool toolbox/<name>/<type>[/<connection>]` per `tools[]` entry; an `mcp` entry without `allowed_tools` is an unknown tool set (`mcp_tools:...`) |
+| `azure.ai.agent` | `principal principal/agent/<name>` (`identity_mode: agent`, `agent_kind`, `protocols`, `cpu`, `memory`, env var names, `toolboxes` from `toolboxes` and `uses`); each `policies[]` entry is a `policy` node with an uninterpreted deny applied to `/` |
+| `azure.ai.skill` | no node; its `instructions` file is an intent artifact |
+| anything else | `unknown service:<name>` |
+
+Every node carries `declared: true`. **A declared fact is an assumption until a
+probe observes it**: `reach` reports "achievable if the toolbox really exposes
+`azure_ai_search`", never a refutation that rests on the declaration alone.
+The intent artifacts (`azure.ai.skill` instructions, an agent `instructions`
+that names a file, `skills/*.md` beside the `azure.yaml`) are listed by
+`skillc.env.azd.intent_artifacts()`.
+
 ## Limits
 
 * The probe covers one subscription per run. Merge several with `env merge`.

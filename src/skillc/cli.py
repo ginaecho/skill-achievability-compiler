@@ -578,6 +578,21 @@ def cmd_env(args) -> int:
         merge(*(Environment.load(f) for f in args.files)).save(args.output)
         print(f"wrote {args.output}")
         return 0
+    if args.action == "from-azd":
+        from .env.azd import from_azure_yaml, intent_artifacts
+        env = from_azure_yaml(args.azure_yaml)
+        if args.output:
+            env.save(args.output)
+        if args.json:
+            print(json.dumps(env.to_dict(), indent=1))
+        elif not args.output:
+            print(env_summary(env))
+        if args.output:
+            print(f"wrote {args.output}")
+        artifacts = intent_artifacts(args.azure_yaml)
+        print("intent artifacts: " + (", ".join(str(a) for a in artifacts) or "(none)"),
+              file=sys.stderr)
+        return 0
     from .env.reach import load_intent
     from .env.watch import watch
     intents = {Path(i).stem: load_intent(i) for i in args.intent or []}
@@ -827,6 +842,11 @@ def main(argv: list[str] | None = None) -> int:
     e = env_sub.add_parser("merge", help="combine environment files (e.g. Azure + MCP)")
     e.add_argument("files", nargs="+")
     e.add_argument("-o", "--output", required=True)
+    e = env_sub.add_parser("from-azd", help="the environment an azd project declares in its "
+                                            "azure.yaml (offline; every fact is declared)")
+    e.add_argument("azure_yaml", metavar="AZURE_YAML")
+    e.add_argument("-o", "--output", help="write the skillc.env/1 document here")
+    e.add_argument("--json", action="store_true", help="print the document to stdout")
     e = env_sub.add_parser("watch", help="re-probe on a schedule; report what changed")
     _add_probe_opts(e)
     e.add_argument("--dir", default=".skillc/env", help="where snapshots are kept")

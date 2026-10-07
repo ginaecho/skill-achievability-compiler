@@ -3,6 +3,7 @@
     model    the provider-neutral graph (skillc.env/1), merge and diff
     facts    three-valued permission / policy / service / tool facts
     azure    read-only Azure probe (live az, or replayed from an export)
+    azd      the environment an azd project declares in its azure.yaml (offline)
     mcp      MCP servers and their tools
     reach    intent -> achievable conditions, verified plan, blockers
     report   text, English plan, HTML
