@@ -222,8 +222,12 @@ lacked (project resource id, azd's own sign-in, stray machine variables).
 **Status 2026-10-08:** WP2 is done (adapter with protocol-state tracking,
 decision spans) and the monitored runs are done: versions 4, 5 and 8 ran
 the seven-scenario comparison with skillc on, versions 3, 6 and 7 without
-(`docs/HOSTED_AGENT_COMPARISON.md`). What remains of WP4 is the
-"impossible skill blocks the deploy" step, which needs the gate (WP3b).
+(`docs/HOSTED_AGENT_COMPARISON.md`). WP3b, WP5 and WP6 landed on 2026-10-08
+(`skillc gate`, `env probe --foundry`, `env probe --self`, merge rules,
+watcher doc, telemetry), and WP4's last step is done: with the email pack
+flipped into `protocol/`, `azd deploy` was refused by the predeploy hook
+with the gate's IMPOSSIBLE verdict and fix text, and the live agent stayed
+at version 8 (`runs/20261007_hosted_agent_deploy/azd-deploy-refused-by-gate.log`).
 
 Sequence, strictly in this order:
 

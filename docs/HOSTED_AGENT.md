@@ -259,7 +259,7 @@ observations, and its refutations are sound relative to them.
 | before provision, offline | `azure.yaml` + `protocol/*.ce` | **topology against protocol**: every `A tells B L` needs a `RemoteA2A` connection from A targeting B, an `a2a` tool in A's toolbox, and `a2a` on B's endpoint; a missing edge refutes that message with the exact fix | **next** (gate, S2): `from-azd` must read `RemoteA2A` targets back to agent names and `a2a` toolbox entries |
 | before provision | `azure.yaml` | **authorization**: Foundry Agent Consumer for A's identity on B is not declared anywhere, so it is an assumption, reported as "achievable if ..." | gate, S2 |
 | after provision, before deploy | control-plane probe | the assumption above becomes an observation: role assignments of each instance identity, the callee's protocol configuration, the connection's auth type | WP5 |
-| **at `azd deploy`** | the predeploy hook | refuse a version whose protocol, skills or topology are IMPOSSIBLE | **hook in place**, gate command next |
+| **at `azd deploy`** | the predeploy hook | refuse a version whose protocol, skills or topology are IMPOSSIBLE | **done**: `skillc gate` in the hook; a deploy with the email pack in place was refused on 2026-10-08 |
 | at run time | per-agent middleware | the `a2a` tool is an MCP tool, so function middleware sees every message send (spike fact F1); each agent carries its own local behaviour (the MPST projection), so RevenueAnalyst's monitor denies `FinalRevenueAnalysis` before `Approval` arrived, and a 403 from a callee becomes a "no Foundry Agent Consumer on B" fact that revokes the plan | WP2 |
 
 So the answer to "does skillc validate before the hosted agents are deployed"

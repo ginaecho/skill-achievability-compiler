@@ -274,3 +274,22 @@ These belong in `skillc env probe --self` and the gate's preflight: a declared
 project with no resource id, a credential that cannot answer in time, and a
 principal variable that names a different tenant are all facts the environment
 graph can hold.
+
+### The gate refusing a deploy (2026-10-08)
+
+With `protocol-variants/quarterly_finance_report.email.ce` copied into
+`protocol/`, `azd deploy finance-report-agent` stopped in the predeploy hook
+before packaging anything:
+
+```text
+ERROR: failed running pre hooks: 'predeploy' hook failed with exit code: '1'
+pack quarterly_finance_report.email.ce: IMPOSSIBLE MISSING_CAPABILITY: Tool `email_report`
+  needs `email_account`, which the runtime does not grant; Tool `email_report` cannot run
+  here: `mcp` is not declared in azure.yaml
+    fix: declare in azure.yaml a connection that provides `email_account` for
+         `email_report`, or make the step skippable
+gate: IMPOSSIBLE
+```
+
+The live agent stayed at version 8. The log is
+`runs/20261007_hosted_agent_deploy/azd-deploy-refused-by-gate.log`.
