@@ -268,11 +268,14 @@ class SkillcFunctionMiddleware(FunctionMiddleware):
             await call_next()
             return
         d = self.monitor._pre(name, args, self.role)
+        telemetry_span("pre", name, self.role, d)
         if d.action == DENY:
             context.result = {"skillc": "blocked", "reason": d.reason}
             return
         await call_next()
         post = self.monitor._post(name, args, context.result, self.role)
+        if post.action != ALLOW:
+            telemetry_span("post", name, self.role, post)
         if post.action != ALLOW and post.reason:
             try:
                 context.result = annotate(context.result, post.reason)
@@ -302,6 +305,29 @@ class SkillcAgentMiddleware(AgentMiddleware):
                     self.monitor._reasoning(text)
         except Exception as e:  # noqa: BLE001
             self.monitor._fail("agent result", e)
+
+
+# ---------------------------------------------------------------------- telemetry
+
+def telemetry_span(phase: str, tool: str, role: str | None, decision: Decision) -> None:
+    """One OpenTelemetry span per decision, `skillc.decision <phase> <allow|deny|warn> <tool>`,
+    so a hosted agent's decisions appear next to its tool spans in Application Insights
+    (the platform configures the exporter). A no-op when OpenTelemetry is not installed;
+    never raises."""
+    try:
+        from opentelemetry import trace
+    except ImportError:
+        return
+    try:
+        tracer = trace.get_tracer("skillc")
+        with tracer.start_as_current_span(f"skillc.decision {phase} {decision.action} {tool}") as span:
+            span.set_attribute("skillc.phase", phase)
+            span.set_attribute("skillc.tool", tool)
+            span.set_attribute("skillc.role", role or "")
+            span.set_attribute("skillc.action", decision.action)
+            span.set_attribute("skillc.reason", (decision.reason or "")[:500])
+    except Exception:  # noqa: BLE001 - telemetry must never affect the decision
+        return
 
 
 # ---------------------------------------------------------------------- shapes
