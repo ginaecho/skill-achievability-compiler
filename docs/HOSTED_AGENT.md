@@ -9,7 +9,14 @@ design. It is provider-neutral; the targets are the **Copilot cloud agent**
 hosted agents** (which need the environment work below).
 
 The ordered implementation plan, with the decision not to fork Agent
-Framework, is in `docs/HOSTED_AGENT_IMPLEMENTATION_PLAN.md`.
+Framework, is in `docs/HOSTED_AGENT_IMPLEMENTATION_PLAN.md`. The run-time
+integration with Microsoft Agent Framework is now implemented
+(`skillc.integrations.agent_framework`), deployed to Foundry as versions 4,
+5 and 8 of the finance example, and compared with the bare agent in
+`docs/HOSTED_AGENT_COMPARISON.md`: with the policy in the prompt no model
+violated the protocol and skillc denied nothing; with the policy removed
+from the prompt the bare agent delivered unapproved reports and skillc
+refused them every time, with the reason visible in Application Insights.
 
 ## 0. Constraint: no model API, hooks only
 

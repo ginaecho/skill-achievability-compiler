@@ -219,8 +219,11 @@ are done: `finance-report-agent:1` is active in `firstProject`, invoked
 remotely on both branches, with the predeploy hook running the protocol
 check. The example README section 6 records three deploy facts the docs
 lacked (project resource id, azd's own sign-in, stray machine variables).
-What remains of WP4 is the monitored run (after WP2) and the "impossible
-skill blocks the deploy" step (after WP3b).
+**Status 2026-10-08:** WP2 is done (adapter with protocol-state tracking,
+decision spans) and the monitored runs are done: versions 4, 5 and 8 ran
+the seven-scenario comparison with skillc on, versions 3, 6 and 7 without
+(`docs/HOSTED_AGENT_COMPARISON.md`). What remains of WP4 is the
+"impossible skill blocks the deploy" step, which needs the gate (WP3b).
 
 Sequence, strictly in this order:
 
