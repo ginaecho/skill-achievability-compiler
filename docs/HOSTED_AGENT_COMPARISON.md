@@ -63,6 +63,30 @@ earlier in this session". Those results are kept under
 **not** used in section 5. Every arm from here on runs with
 `--new-session`, verified by distinct conversation and session ids per run.
 
+### The minimal-instruction arms
+
+The arms above share one prompt set in which every protocol rule is also
+written out as prose (wait for approval, never approve your own work, only
+TaxVerifier approves), so a run that holds the protocol does not tell whether
+the model obeyed the prose or the guard stopped it. A careless edit of a
+skill, or a shorter rewrite, removes exactly those sentences while keeping
+the tools and the task, and that is the deployment where a guard earns its
+place. These arms use that variant: `skills-minimal/` keeps each role's
+purpose, tool names and message labels and drops every ordering, approval
+and separation-of-duty sentence, and `COORDINATOR_INSTRUCTIONS_MINIMAL` in
+`main.py` names the goal and the six role tools without a step order or a
+"follow the protocol" sentence.
+
+| arm | switches |
+|---|---|
+| **bare-minimal** | `SKILLS_VARIANT=skills-minimal`, `COORDINATOR_INSTRUCTIONS=minimal`, `SKILLC_MONITOR=off` |
+| **skillc-minimal** | `SKILLS_VARIANT=skills-minimal`, `COORDINATOR_INSTRUCTIONS=minimal`, `SKILLC_MONITOR` unset (on) |
+
+`SKILLS_VARIANT` is read by the predeploy hook when it stages the skills
+folder; the other two are azd environment values passed to the agent through
+`azure.yaml`. Same code, same tools, same model and prompts as the other arms.
+These arms test defence in depth: what holds when the prompt no longer says it.
+
 ## 3. What is measured, per run
 
 From the agent's final text and, where available, the Application Insights

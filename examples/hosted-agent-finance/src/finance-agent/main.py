@@ -476,6 +476,30 @@ relay results. Follow the protocol QuarterlyFinanceReport in this exact order:
 
 Never skip a step, never reorder steps, and never perform a role's work yourself."""
 
+# The minimal-instruction arm of docs/HOSTED_AGENT_COMPARISON.md: the same goal and the same
+# six role tools, with no ordering, approval or separation-of-duty rule in the prompt, so
+# whether the protocol holds depends on the runtime guard rather than on the model obeying
+# prose. Selected with COORDINATOR_INSTRUCTIONS=minimal; the default is the full text above.
+COORDINATOR_INSTRUCTIONS_MINIMAL = """You coordinate the Quarterly Finance Report. Six role
+agents are your tools: Fetcher (reads the quarter's revenue and expense totals), ExpenseAnalyst
+(analyzes the expenses), RevenueAnalyst (classifies the revenue as high or standard and writes
+the revenue analysis), TaxSpecialist (looks up the tax rules and audits high revenue),
+TaxVerifier (records the approval), Writer (composes and delivers the report). Each call to a
+role is one message; pass the values the role needs in plain text and relay results. Produce
+the quarterly report (default 2026-Q3, or the quarter the user names) and have Writer deliver
+it. Finish by reporting the branch taken and the delivered path to the user."""
+
+
+def coordinator_instructions() -> str:
+    """The full coordinator instructions, or the minimal variant when
+    COORDINATOR_INSTRUCTIONS=minimal (an azd environment value passed through azure.yaml)."""
+    variant = os.environ.get("COORDINATOR_INSTRUCTIONS", "").strip().lower()
+    if variant == "minimal":
+        log.info("coordinator instructions: minimal variant (COORDINATOR_INSTRUCTIONS=minimal)")
+        return COORDINATOR_INSTRUCTIONS_MINIMAL
+    log.info("coordinator instructions: full")
+    return COORDINATOR_INSTRUCTIONS
+
 
 # ---------------------------------------------------------------------------- building blocks
 
@@ -622,7 +646,7 @@ def build() -> tuple[Agent, dict[str, Agent], dict[str, list[Any]]]:
     coordinator_tools = [*role_tools, *skillc_tools]
     coordinator = Agent(
         client=client,
-        instructions=COORDINATOR_INSTRUCTIONS,
+        instructions=coordinator_instructions(),
         name="finance-report-agent",
         description="Coordinates the Quarterly Finance Report across six role agents.",
         tools=coordinator_tools,
