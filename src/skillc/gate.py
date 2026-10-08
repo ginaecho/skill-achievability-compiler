@@ -442,15 +442,22 @@ class _Topology:
         out += [u for u in _strings(spec.get("uses")) if u in self.toolboxes and u not in out]
         return out
 
-    def a2a_connection_to(self, agent_key: str) -> str | None:
+    def a2a_connections_to(self, agent_key: str) -> list[str]:
+        """Every RemoteA2A connection whose target is `agent_key`'s A2A path. Several
+        callers usually have one each, so the sender decides which one counts."""
         suffix = A2A_SUFFIX.format(agent=self.agent_name(agent_key)).lower()
+        out = []
         for key, spec in self.connections.items():
             category = str(spec.get("category") or "").lower()
             target = spec.get("target")
             if category == "remotea2a" and isinstance(target, str) \
                     and target.rstrip("/").lower().endswith(suffix):
-                return key
-        return None
+                out.append(key)
+        return out
+
+    def a2a_connection_to(self, agent_key: str) -> str | None:
+        found = self.a2a_connections_to(agent_key)
+        return found[0] if found else None
 
     def a2a_tool(self, agent_key: str, connection: str) -> bool:
         """Whether a toolbox `agent_key` uses has an a2a tool over `connection`."""
@@ -509,19 +516,23 @@ def _edge_entry(topo: _Topology, pack_name: str, sender: str, receiver: str,
     reasons, fixes = [], []
     b_name = topo.agent_name(b)
     path = A2A_SUFFIX.format(agent=b_name)
-    connection = topo.a2a_connection_to(b)
-    if connection is None:
+    candidates = topo.a2a_connections_to(b)
+    used = [c for c in candidates if topo.a2a_tool(a, c)]
+    connection = used[0] if used else None
+    if not candidates:
         reasons.append(f"no RemoteA2A connection targets {path}")
         fixes.append(f"declare an azure.ai.connection `{a}-to-{b}` with category RemoteA2A, "
                      f"authType AgenticIdentityToken and target <project endpoint>{path}")
         fixes.append(f"add `- type: a2a` with `a2a_version: \"1.0\"` and `connection: "
                      f"{a}-to-{b}` to a toolbox agent {a} uses")
-    elif not topo.a2a_tool(a, connection):
+    elif connection is None:
         boxes = ", ".join(topo.toolboxes_of(a)) or "none"
+        # prefer the connection named after this edge, else the first one targeting b
+        preferred = next((c for c in candidates if c == f"{a}-to-{b}"), candidates[0])
         reasons.append(f"no toolbox agent {a} uses (toolboxes: {boxes}) has an a2a tool over "
-                       f"connection {connection}")
+                       f"a connection to {b} (declared: {', '.join(candidates)})")
         fixes.append(f"add `- type: a2a` with `a2a_version: \"1.0\"` and `connection: "
-                     f"{connection}` to a toolbox agent {a} uses")
+                     f"{preferred}` to a toolbox agent {a} uses")
     if not topo.exposes_a2a(b):
         reasons.append(f"agent {b} does not expose a2a on its endpoint")
         fixes.append(f"add `a2a` to agentEndpoint.protocols of agent {b}")

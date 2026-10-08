@@ -1,0 +1,589 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/Azure/azure-dev/main/schemas/v1.0/azure.yaml.json
+#
+# Quarterly Finance Report as a GROUP of six Foundry hosted agents, one per role
+# (Fetcher, ExpenseAnalyst, RevenueAnalyst, TaxSpecialist, TaxVerifier, Writer),
+# talking to each other over A2A. All six are built from ONE source folder
+# (src/finance-agent-group/main.py) and differ only in the ROLE environment value.
+# There is no coordinator: the user invokes finance-fetcher (Responses endpoint)
+# and the other five are reached through RemoteA2A connections.
+#
+# The project is EXISTING: it is reached through FOUNDRY_PROJECT_ENDPOINT
+# (`azd env set FOUNDRY_PROJECT_ENDPOINT https://<account>.services.ai.azure.com/api/projects/<project>`)
+# and already has the gpt-5.4 deployment, so no `deployments` are declared here.
+# AZURE_AI_PROJECT_ID (the ARM id) is also required by the agent extension and by
+# scripts/grant_a2a.sh (the role assignments live outside this file).
+#
+# Topology (the ten edges of protocols/v1.scr, caller -> callee), declared three ways:
+#   1. azure.ai.connection  <caller>-to-<callee>   category RemoteA2A, target = callee's A2A path
+#   2. azure.ai.toolbox     <caller>-a2a           one `a2a` entry per connection (declaration only:
+#                                                  the code calls A2AAgent directly, see README)
+#   3. azure.ai.agent.uses  the caller lists its connections and its a2a toolbox
+#   F->RA, F->EA, EA->RA, EA->W, RA->TV, RA->W, RA->TS, TS->TV, TV->RA, W->F
+
+requiredVersions:
+  azd: '>=1.27.1'
+  extensions:
+    azure.ai.agents: '>=1.0.0-beta.17'
+    azure.ai.projects: '>=1.0.0-beta.4'
+    azure.ai.connections: '>=1.0.0-beta.8'
+    azure.ai.toolboxes: '>=1.0.0-beta.8'
+
+name: finance-report-group
+
+services:
+  ai-project:
+    host: azure.ai.project
+    # Connect to the existing project instead of provisioning one.
+    # verify against azd: the exact key for an existing project (`endpoint` vs `resourceId`).
+    endpoint: ${FOUNDRY_PROJECT_ENDPOINT}
+
+  # ------------------------------------------------------------------ shared toolbox
+  finance-tools:
+    host: azure.ai.toolbox
+    uses:
+      - ai-project
+    description: Sandboxed Python for the fetch, analysis, audit and report steps, plus public web search
+    tools:
+      - type: code_interpreter
+        name: code_interpreter
+        require_approval: never
+      - type: web_search
+        name: web_search
+        require_approval: never
+
+  # ------------------------------------------------------------------ A2A edges (connections)
+  # One RemoteA2A connection per protocol edge. The target is the callee's A2A base path,
+  # deterministic from the agent name, so the connections can be declared before the agents
+  # exist. authType AgenticIdentityToken: the CALLER's own instance identity is the token.
+  # verify against azd: azd's connection extension may spell the auth type `agentic-identity`
+  # (`azd ai connection create --kind remote-a2a --auth-type agentic-identity`), and may name
+  # the kind `remote-a2a` instead of the category `RemoteA2A`.
+  fetcher-to-revenue-analyst:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-revenue-analyst/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  fetcher-to-expense-analyst:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-expense-analyst/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  expense-analyst-to-revenue-analyst:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-revenue-analyst/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  expense-analyst-to-writer:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-writer/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  revenue-analyst-to-tax-verifier:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-tax-verifier/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  revenue-analyst-to-writer:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-writer/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  revenue-analyst-to-tax-specialist:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-tax-specialist/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  tax-specialist-to-tax-verifier:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-tax-verifier/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  tax-verifier-to-revenue-analyst:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-revenue-analyst/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+  writer-to-fetcher:
+    host: azure.ai.connection
+    uses: [ai-project]
+    category: RemoteA2A
+    target: ${FOUNDRY_PROJECT_ENDPOINT}/agents/finance-fetcher/endpoint/protocols/a2a
+    authType: AgenticIdentityToken
+    audience: https://ai.azure.com
+
+  # ------------------------------------------------------------------ A2A edges (toolboxes)
+  # One per caller, with an `a2a` entry per outgoing edge. The code does NOT consume these
+  # (main.py builds an A2AAgent per edge and calls the callee directly); they are declared so
+  # that the topology is checkable offline by `skillc env from-azd` and the gate: every
+  # `A tells B L` in the pack needs an a2a entry in A's toolbox whose connection targets B.
+  # verify against azd: the toolbox extension may only accept `type: a2a_preview` today, and
+  # the connection key may be `project_connection_id` rather than `connection`.
+  finance-fetcher-a2a:
+    host: azure.ai.toolbox
+    uses: [ai-project, fetcher-to-revenue-analyst, fetcher-to-expense-analyst]
+    description: Fetcher's outgoing edges (RawRevenueData to RevenueAnalyst, RawExpenseData to ExpenseAnalyst)
+    tools:
+      - type: a2a
+        name: RevenueAnalyst
+        a2a_version: "1.0"
+        connection: fetcher-to-revenue-analyst
+        require_approval: never
+      - type: a2a
+        name: ExpenseAnalyst
+        a2a_version: "1.0"
+        connection: fetcher-to-expense-analyst
+        require_approval: never
+  finance-expense-analyst-a2a:
+    host: azure.ai.toolbox
+    uses: [ai-project, expense-analyst-to-revenue-analyst, expense-analyst-to-writer]
+    description: ExpenseAnalyst's outgoing edges (ExpenseData to RevenueAnalyst, ExpenseAnalysis to Writer)
+    tools:
+      - type: a2a
+        name: RevenueAnalyst
+        a2a_version: "1.0"
+        connection: expense-analyst-to-revenue-analyst
+        require_approval: never
+      - type: a2a
+        name: Writer
+        a2a_version: "1.0"
+        connection: expense-analyst-to-writer
+        require_approval: never
+  finance-revenue-analyst-a2a:
+    host: azure.ai.toolbox
+    uses: [ai-project, revenue-analyst-to-tax-verifier, revenue-analyst-to-writer, revenue-analyst-to-tax-specialist]
+    description: RevenueAnalyst's outgoing edges (notifications to TaxVerifier, Writer, TaxSpecialist; FinalRevenueAnalysis to Writer)
+    tools:
+      - type: a2a
+        name: TaxVerifier
+        a2a_version: "1.0"
+        connection: revenue-analyst-to-tax-verifier
+        require_approval: never
+      - type: a2a
+        name: Writer
+        a2a_version: "1.0"
+        connection: revenue-analyst-to-writer
+        require_approval: never
+      - type: a2a
+        name: TaxSpecialist
+        a2a_version: "1.0"
+        connection: revenue-analyst-to-tax-specialist
+        require_approval: never
+  finance-tax-specialist-a2a:
+    host: azure.ai.toolbox
+    uses: [ai-project, tax-specialist-to-tax-verifier]
+    description: TaxSpecialist's outgoing edge (AuditReport to TaxVerifier)
+    tools:
+      - type: a2a
+        name: TaxVerifier
+        a2a_version: "1.0"
+        connection: tax-specialist-to-tax-verifier
+        require_approval: never
+  finance-tax-verifier-a2a:
+    host: azure.ai.toolbox
+    uses: [ai-project, tax-verifier-to-revenue-analyst]
+    description: TaxVerifier's outgoing edge (Approval to RevenueAnalyst)
+    tools:
+      - type: a2a
+        name: RevenueAnalyst
+        a2a_version: "1.0"
+        connection: tax-verifier-to-revenue-analyst
+        require_approval: never
+  finance-writer-a2a:
+    host: azure.ai.toolbox
+    uses: [ai-project, writer-to-fetcher]
+    description: Writer's outgoing edge (GenerateReport to Fetcher)
+    tools:
+      - type: a2a
+        name: Fetcher
+        a2a_version: "1.0"
+        connection: writer-to-fetcher
+        require_approval: never
+
+  # ------------------------------------------------------------------ skills (intent artifacts)
+  # One azure.ai.skill per role. Each `instructions` file is an intent artifact that
+  # `skillc intent` and `skillc gate` read unchanged. SKILLS_VARIANT=skills-minimal swaps
+  # the staged copies in the predeploy hook, not these declarations.
+  fetcher:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/Fetcher.md
+  expense-analyst:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/ExpenseAnalyst.md
+  revenue-analyst:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/RevenueAnalyst.md
+  tax-specialist:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/TaxSpecialist.md
+  tax-verifier:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/TaxVerifier.md
+  writer:
+    host: azure.ai.skill
+    uses: [ai-project]
+    instructions: ./skills/Writer.md
+
+  # ------------------------------------------------------------------ the six hosted agents
+  # Identical build (same project folder, same codeConfiguration, same container); they
+  # differ in ROLE, in the connections they use, in the agentCard and in the a2a toolbox.
+  # Every agent exposes `a2a` on its endpoint (all six are callees of some edge) next to
+  # `responses` (incoming A2A requires the Responses protocol). Entra on every endpoint: the
+  # caller's instance identity needs Foundry Agent Consumer on the callee (scripts/grant_a2a.sh).
+  # verify against azd: `agentEndpoint.protocols` / `authorizationSchemes` spelling, and
+  # whether the a2a protocol is listed under `protocols:` as `{protocol: a2a, version: 1.0}`.
+  finance-fetcher:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-fetcher
+    description: >-
+      Fetcher of the Quarterly Finance Report group: the entry point. Reads the
+      quarter's totals, calls ExpenseAnalyst then RevenueAnalyst over A2A, and
+      returns the delivered report (GenerateReport) to the user.
+    metadata:
+      tags: [Agent Framework, AI Agent Hosting, Responses Protocol, A2A, skillc]
+    project: src/finance-agent-group
+    language: python
+    # Code deploy mode (no Dockerfile): ZIP upload, remote build.
+    # verify against azd: `dependencyResolution` and `startupCommand` field names.
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - fetcher              # this role's azure.ai.skill: the gate maps role -> agent through it
+      - finance-tools
+      - finance-fetcher-a2a
+      - fetcher-to-revenue-analyst
+      - fetcher-to-expense-analyst
+    toolboxes:
+      - name: finance-tools
+      - name: finance-fetcher-a2a
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    agentEndpoint:
+      protocols: [responses, a2a]
+      authorizationSchemes:
+        - type: Entra
+    env:
+      # FOUNDRY_PROJECT_ENDPOINT is injected by the platform; never declare it here.
+      ROLE: Fetcher
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_NAME}
+      SKILLC_MONITOR: ${SKILLC_MONITOR}
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        Fetcher role of the Quarterly Finance Report protocol. Reads the quarter's
+        revenue and expense totals and drives the report through ExpenseAnalyst and
+        RevenueAnalyst; the reply is the delivered report.
+      skills:
+        - id: fetcher
+          name: Fetcher
+          description: Reads the quarter's revenue and expense totals (fetch_financials), sends RawExpenseData and RawRevenueData, and receives the finished report (GenerateReport).
+
+  finance-expense-analyst:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-expense-analyst
+    description: >-
+      ExpenseAnalyst of the Quarterly Finance Report group. Analyzes the quarter's
+      expenses; its A2A reply carries ExpenseData (for RevenueAnalyst) and
+      ExpenseAnalysis (for Writer).
+    metadata:
+      tags: [Agent Framework, AI Agent Hosting, Responses Protocol, A2A, skillc]
+    project: src/finance-agent-group
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - expense-analyst
+      - finance-tools
+      - finance-expense-analyst-a2a
+      - expense-analyst-to-revenue-analyst
+      - expense-analyst-to-writer
+    toolboxes:
+      - name: finance-tools
+      - name: finance-expense-analyst-a2a
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    agentEndpoint:
+      protocols: [responses, a2a]
+      authorizationSchemes:
+        - type: Entra
+    env:
+      ROLE: ExpenseAnalyst
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_NAME}
+      SKILLC_MONITOR: ${SKILLC_MONITOR}
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        ExpenseAnalyst role of the Quarterly Finance Report protocol. Receives
+        RawExpenseData and replies with ExpenseData and ExpenseAnalysis.
+      skills:
+        - id: expense-analyst
+          name: ExpenseAnalyst
+          description: Analyzes the quarter's expenses (analyze_expenses) for RevenueAnalyst and Writer.
+
+  finance-revenue-analyst:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-revenue-analyst
+    description: >-
+      RevenueAnalyst of the Quarterly Finance Report group. Classifies the revenue,
+      obtains TaxVerifier's approval (through TaxSpecialist's audit on the high
+      path), writes the approved revenue analysis and has Writer deliver the report.
+    metadata:
+      tags: [Agent Framework, AI Agent Hosting, Responses Protocol, A2A, skillc]
+    project: src/finance-agent-group
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - revenue-analyst
+      - finance-tools
+      - finance-revenue-analyst-a2a
+      - revenue-analyst-to-tax-verifier
+      - revenue-analyst-to-writer
+      - revenue-analyst-to-tax-specialist
+    toolboxes:
+      - name: finance-tools
+      - name: finance-revenue-analyst-a2a
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    agentEndpoint:
+      protocols: [responses, a2a]
+      authorizationSchemes:
+        - type: Entra
+    env:
+      ROLE: RevenueAnalyst
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_NAME}
+      SKILLC_MONITOR: ${SKILLC_MONITOR}
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        RevenueAnalyst role of the Quarterly Finance Report protocol. Receives
+        RawRevenueData and ExpenseData, classifies above or below $50,000, routes
+        the branch to TaxSpecialist and TaxVerifier, and replies with the delivered
+        report after Writer.
+      skills:
+        - id: revenue-analyst
+          name: RevenueAnalyst
+          description: Classifies revenue above or below $50,000 (classify_revenue), routes the branch, and writes the approved revenue analysis (write_revenue_analysis).
+
+  finance-tax-specialist:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-tax-specialist
+    description: >-
+      TaxSpecialist of the Quarterly Finance Report group. Looks up the tax rules
+      and audits high revenue; its A2A reply is the AuditReport for TaxVerifier.
+    metadata:
+      tags: [Agent Framework, AI Agent Hosting, Responses Protocol, A2A, skillc]
+    project: src/finance-agent-group
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - tax-specialist
+      - finance-tools
+      - finance-tax-specialist-a2a
+      - tax-specialist-to-tax-verifier
+    toolboxes:
+      - name: finance-tools
+      - name: finance-tax-specialist-a2a
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    agentEndpoint:
+      protocols: [responses, a2a]
+      authorizationSchemes:
+        - type: Entra
+    env:
+      ROLE: TaxSpecialist
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_NAME}
+      SKILLC_MONITOR: ${SKILLC_MONITOR}
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        TaxSpecialist role of the Quarterly Finance Report protocol. Receives
+        NotifyTaxSpecialist or NotifyStandardRole and replies with the AuditReport
+        (high path) or an acknowledgement.
+      skills:
+        - id: tax-specialist
+          name: TaxSpecialist
+          description: Looks up the tax rules (lookup_tax_rules) and audits high revenue (audit_high_revenue) for TaxVerifier.
+
+  finance-tax-verifier:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-tax-verifier
+    description: >-
+      TaxVerifier of the Quarterly Finance Report group: the only role that approves.
+      Its A2A reply is the Approval (or rejection) for RevenueAnalyst. Its approval
+      tools exist only in this process, under this agent's own identity.
+    metadata:
+      tags: [Agent Framework, AI Agent Hosting, Responses Protocol, A2A, skillc]
+    project: src/finance-agent-group
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - tax-verifier
+      - finance-tools
+      - finance-tax-verifier-a2a
+      - tax-verifier-to-revenue-analyst
+    toolboxes:
+      - name: finance-tools
+      - name: finance-tax-verifier-a2a
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    agentEndpoint:
+      protocols: [responses, a2a]
+      authorizationSchemes:
+        - type: Entra
+    env:
+      ROLE: TaxVerifier
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_NAME}
+      SKILLC_MONITOR: ${SKILLC_MONITOR}
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        TaxVerifier role of the Quarterly Finance Report protocol. Receives
+        HighRevenueNotification with the AuditReport, or StandardRevenueNotification,
+        and replies with the single explicit Approval.
+      skills:
+        - id: tax-verifier
+          name: TaxVerifier
+          description: Issues the single explicit approval (approve_audited or approve_standard); the only role that may approve.
+
+  finance-writer:
+    host: azure.ai.agent
+    kind: hosted
+    name: finance-writer
+    description: >-
+      Writer of the Quarterly Finance Report group. Composes and delivers the report
+      from the expense analysis and the approved revenue analysis; its A2A reply is
+      GenerateReport for Fetcher.
+    metadata:
+      tags: [Agent Framework, AI Agent Hosting, Responses Protocol, A2A, skillc]
+    project: src/finance-agent-group
+    language: python
+    codeConfiguration:
+      runtime: python_3_13
+      entryPoint: main.py
+      dependencyResolution: remote_build
+    startupCommand: python main.py
+    uses:
+      - ai-project
+      - writer
+      - finance-tools
+      - finance-writer-a2a
+      - writer-to-fetcher
+    toolboxes:
+      - name: finance-tools
+      - name: finance-writer-a2a
+    protocols:
+      - protocol: responses
+        version: 2.0.0
+    agentEndpoint:
+      protocols: [responses, a2a]
+      authorizationSchemes:
+        - type: Entra
+    env:
+      ROLE: Writer
+      MICROSOFT_FOUNDRY_MODEL_DEPLOYMENT_NAME: ${FOUNDRY_MODEL_NAME}
+      SKILLC_MONITOR: ${SKILLC_MONITOR}
+    container:
+      resources:
+        cpu: '1.0'
+        memory: 2Gi
+    agentCard:
+      description: >-
+        Writer role of the Quarterly Finance Report protocol. Receives the branch
+        notification, ExpenseAnalysis and FinalRevenueAnalysis, and replies with
+        GenerateReport (the delivered report).
+      skills:
+        - id: writer
+          name: Writer
+          description: Composes the quarterly report (compose_report) and delivers it to Fetcher (deliver_report).
+
+# The deploy gate: `azd deploy` is the only moment agent versions are created, so skillc
+# refuses an IMPOSSIBLE protocol or topology here. The hook stages the skills
+# (SKILLS_VARIANT=skills-minimal for the minimal-instruction arm), the data, the vendored
+# skillc and the pack into the deployable folder, since only `project` is uploaded; the
+# same folder serves all six agents.
+# The gate is `skillc gate . --declared azure.yaml`: the pack, the six skills and the
+# topology of every message (each edge needs its RemoteA2A connection, an a2a tool on the
+# sender and a2a on the receiver), with the Foundry Agent Consumer role recorded as an
+# assumption per edge because role assignments live outside azure.yaml.
+hooks:
+  predeploy:
+    shell: sh
+    run: >-
+      rm -rf src/finance-agent-group/skills src/finance-agent-group/data src/finance-agent-group/skillc &&
+      cp -r "${SKILLS_VARIANT:-skills}" src/finance-agent-group/skills && cp -r data src/finance-agent-group/ &&
+      cp -r ../../src/skillc src/finance-agent-group/skillc &&
+      cp protocol/quarterly_finance_report.ce src/finance-agent-group/skillc_plan.ce &&
+      skillc gate . --declared azure.yaml
+
+infra:
+  provider: microsoft.foundry

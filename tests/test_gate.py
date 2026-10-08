@@ -433,7 +433,8 @@ def test_two_agents_missing_toolbox_tool_names_the_toolbox_edit(two_agents: Path
     report = gate(two_agents)
     forward = entry(report, "topology", "report.ce: Fetcher -> Writer (Data)")
     assert forward.verdict == "IMPOSSIBLE"
-    assert "has an a2a tool over connection fetcher-to-writer" in forward.reason
+    assert "has an a2a tool over a connection to writer-agent (declared: fetcher-to-writer)" \
+        in forward.reason
     assert forward.fixes[0] == ("add `- type: a2a` with `a2a_version: \"1.0\"` and "
                                 "`connection: fetcher-to-writer` to a toolbox agent "
                                 "fetcher-agent uses")
@@ -449,3 +450,21 @@ def test_two_agents_unmapped_role_is_unknown(two_agents: Path):
     back = entry(report, "topology", "report.ce: Writer -> Fetcher (Done)")
     assert back.verdict == "UNKNOWN" and "role `Writer` maps to no declared agent" in back.reason
     assert report.verdict == "UNKNOWN"
+
+
+GROUP = Path(__file__).resolve().parent.parent / "examples" / "hosted-agent-finance-group"
+
+
+def test_group_example_edges_resolve_to_the_senders_own_connection():
+    """Several callers target the same callee, each over its own RemoteA2A connection. The
+    sender's toolbox decides which connection counts; the first connection to the callee
+    must not be mistaken for the sender's (that was a bug)."""
+    report = gate(GROUP)
+    edges = [e for e in report.entries if e.kind == "topology"]
+    assert len(edges) == 10
+    assert all(e.verdict == "ACHIEVABLE" for e in edges), [
+        (e.name, e.reason) for e in edges if e.verdict != "ACHIEVABLE"]
+    ea_ra = entry(report, "topology",
+                  "quarterly_finance_report.ce: ExpenseAnalyst -> RevenueAnalyst (ExpenseData)")
+    assert "over connection expense-analyst-to-revenue-analyst" in ea_ra.reason
+    assert report.verdict == "ACHIEVABLE"
