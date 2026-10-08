@@ -315,17 +315,9 @@ def telemetry_span(phase: str, tool: str, role: str | None, decision: Decision) 
     (the platform configures the exporter). A no-op when OpenTelemetry is not installed;
     never raises."""
     try:
-        from opentelemetry import trace
-    except ImportError:
-        return
-    try:
-        tracer = trace.get_tracer("skillc")
-        with tracer.start_as_current_span(f"skillc.decision {phase} {decision.action} {tool}") as span:
-            span.set_attribute("skillc.phase", phase)
-            span.set_attribute("skillc.tool", tool)
-            span.set_attribute("skillc.role", role or "")
-            span.set_attribute("skillc.action", decision.action)
-            span.set_attribute("skillc.reason", (decision.reason or "")[:500])
+        from ..telemetry import event
+        event(f"skillc.decision {phase} {decision.action} {tool}", phase=phase, tool=tool,
+              role=role or "", action=decision.action, reason=(decision.reason or "")[:500])
     except Exception:  # noqa: BLE001 - telemetry must never affect the decision
         return
 

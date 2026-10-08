@@ -12,9 +12,10 @@ examples/hosted-agent-finance/
   azure.search.yaml          + Azure AI Search connection `tax-rules-search`
   azure.isolated.yaml        + network isolation (AllowOnlyApprovedOutbound)
   skills/<Role>.md           one azure.ai.skill per role (the intent artifacts)
-  skills/Writer.email.md     the Writer variant that emails the report (IMPOSSIBLE on purpose)
-  protocol/quarterly_finance_report.ce         the pack in Controlled English
-  protocol/quarterly_finance_report.email.ce   the email variant of the pack
+  skills-variants/Writer.email.md   the Writer variant that emails the report (IMPOSSIBLE on purpose)
+  protocol/quarterly_finance_report.ce         the pack in Controlled English (the gate reads protocol/*.ce)
+  protocol-variants/quarterly_finance_report.search.ce   the same pack with `lookup_tax_rules` via `search`
+  protocol-variants/quarterly_finance_report.email.ce    the email variant of the pack
   src/finance-agent/main.py  Agent Framework coordinator + skillc middleware
 ```
 
@@ -75,7 +76,7 @@ the role's tool call inserted before each message it produces.
 | `fetch_financials` | Fetcher | `code_interpreter` (reads the quarter's CSV under `$HOME`) | `revenue_fetched`, `expenses_fetched` |
 | `analyze_expenses` | ExpenseAnalyst | `code_interpreter` | `expense_analysis` |
 | `classify_revenue` | RevenueAnalyst | `code_interpreter` (threshold $50,000) | `revenue_classified` |
-| `lookup_tax_rules` | TaxSpecialist | `search` (Azure AI Search index of tax rules, through the toolbox) | `tax_rules_found` |
+| `lookup_tax_rules` | TaxSpecialist | `code_interpreter` (built-in rules in the deployed pack); `search` (the toolbox's Azure AI Search index) in `protocol-variants/quarterly_finance_report.search.ce` | `tax_rules_found` |
 | `audit_high_revenue` | TaxSpecialist | `code_interpreter` | `audit_report` |
 | `approve_audited` | TaxVerifier | `write` (records the approval under `$HOME/approvals`) | `approved` |
 | `approve_standard` | TaxVerifier | `write` | `approved` |
@@ -158,24 +159,30 @@ example; the others are to be filled by the run.
 | declared environment, isolated | `skillc env from-azd azure.isolated.yaml -o .skillc/env/declared.isolated.json` | 6 nodes, 3 unknowns; egress "network-isolated project; public hosts unknown until probed from inside" | run 2026-10-07: see summaries below |
 | pure pack: realizability and the branch | `skillc check protocol/quarterly_finance_report.ce` | ACHIEVABLE; witness through the `HighRevenueNotification` branch; TaxVerifier's behaviour conforms, the five other roles assumed conformant | run 2026-10-07: **ACHIEVABLE** (`-v` witness: `fetch_financials -> RawRevenueData -> ... -> approve_audited -> Approval -> write_revenue_analysis -> FinalRevenueAnalysis -> compose_report -> deliver_report -> GenerateReport`) |
 | runtime-bound: bind the monitor | `skillc monitor init --runtime foundry-hosted` | writes `.skillc/monitor.json` with the `foundry-hosted` runtime manifest | run 2026-10-07: written |
-| runtime-bound: which tools are withdrawn | `skillc monitor plan protocol/quarterly_finance_report.ce` | ACHIEVABLE via `code_interpreter`, `search`, `write`; nothing withdrawn by the runtime manifest (the manifest grants `search`; whether the *project* exposes it is the declared environment's business, see below) | run 2026-10-07: **ACHIEVABLE**, `via: [code_interpreter, search, write]`, `withdrawn: {}` |
-| email variant | `skillc monitor plan protocol/quarterly_finance_report.email.ce` | **IMPOSSIBLE**: `email_report` needs `email_account`, which no connection declares | run 2026-10-07: **IMPOSSIBLE**, `action: deny`, `reason: BLOCKED_GUARD`, `blocked: {email_report: [email_account]}`, exit 1 |
+| runtime-bound: which tools are withdrawn | `skillc monitor plan protocol/quarterly_finance_report.ce` | ACHIEVABLE via `code_interpreter`, `write`; nothing withdrawn by the runtime manifest (whether the *project* exposes a tool is the gate's business, see below) | run 2026-10-07 (then still `via search`): **ACHIEVABLE**, `withdrawn: {}` |
+| email variant | `skillc monitor plan protocol-variants/quarterly_finance_report.email.ce` | **IMPOSSIBLE**: `email_report` needs `email_account`, which no connection declares | run 2026-10-07: **IMPOSSIBLE**, `action: deny`, `reason: BLOCKED_GUARD`, `blocked: {email_report: [email_account]}`, exit 1 |
 | intent of one role | `skillc intent skills/TaxSpecialist.md` | the role's needs from its runtime | run 2026-10-07: `tax-specialist` needs `deliverable` (the natural-language front-end extracts no tool or connection need from these skills yet) |
 | reach, per variant | `skillc reach skills/TaxSpecialist.md --env .skillc/env/declared.json` (and `.search`, `.isolated`) | base: `lookup_tax_rules` has no `search` tool to run through; search: achievable under the assumption the toolbox really exposes `azure_ai_search`; isolated: egress unknown | run 2026-10-07: `1/1 conditions achievable` in all three (only `deliverable` is extracted today, so `reach` does not yet separate the variants; the pack-level checks above do) |
-| the deploy gate (predeploy hook) | `skillc gate . --declared azure.yaml` | exit 0 with the six role skills; non-zero once `skills/Writer.email.md` is the Writer | to be filled by the run: `gate` lands in S2 of the implementation plan; check `skillc --help` for it (absent in the build used here, 2026-10-07) |
+| the deploy gate, base | `skillc gate . --declared azure.yaml` | **ACHIEVABLE**, exit 0: the runtime keeps `code_interpreter`, `web_search`, `web_fetch`, `read`, `write` and withdraws `search`, `mcp`, `openapi`, `a2a` (not declared); the deployed pack uses only `code_interpreter` and `write`; six skills ACHIEVABLE; single agent, so messages are in-process | run 2026-10-08: **ACHIEVABLE**, exit 0 |
+| the deploy gate, search | `skillc gate . --declared azure.search.yaml` | **ACHIEVABLE**, exit 0: `search` is kept (`azure_ai_search` in the toolbox) | run 2026-10-08: **ACHIEVABLE**, exit 0 |
+| the deploy gate, isolated | `skillc gate . --declared azure.isolated.yaml` | **ACHIEVABLE**, exit 0: `web_fetch` is kept only as an assumption (egress unknown), and nothing in the project uses it; a pack `via web_fetch` would make the gate UNKNOWN, exit 3 | run 2026-10-08: **ACHIEVABLE**, exit 0 |
+| flip the impossible pack in: email | `cp protocol-variants/quarterly_finance_report.email.ce protocol/ && skillc gate . --declared azure.yaml` | **IMPOSSIBLE**, exit 1: `email_report` is blocked, the runtime does not grant `email_account`; `azd deploy` is refused | run 2026-10-08: **IMPOSSIBLE**, exit 1 |
+| flip the impossible pack in: search under base | `cp protocol-variants/quarterly_finance_report.search.ce protocol/ && skillc gate . --declared azure.yaml` | **IMPOSSIBLE**, exit 1: `lookup_tax_rules` cannot run, `search` is not declared; fix "add `azure_ai_search` to a toolbox the agent uses"; the same command with `--declared azure.search.yaml` is ACHIEVABLE | run 2026-10-08: **IMPOSSIBLE**, exit 1 |
+| flip the impossible skill in | `cp skills-variants/Writer.email.md skills/ && skillc gate . --declared azure.yaml` | the skill is picked up as a seventh artifact; its prose names no tool or connection the front-end can refute, so it stays ACHIEVABLE; a skill whose frontmatter says `tools: [azure_ai_search]` is **IMPOSSIBLE** under base, exit 1 | run 2026-10-08: as expected |
 
-Note on the gate and `skills/Writer.email.md`: `intent_artifacts()` lists
-every `skills/*.md` beside `azure.yaml`, so the email variant is picked up by
-the gate as a seventh artifact. That is the "flip the impossible skill in"
-step of WP4; move it out of `skills/` (or point the `writer` service at it and
-remove `Writer.md`) to switch between the achievable and the refused deploy.
+Note on the variants folders: `protocol-variants/` and `skills-variants/` are
+the "flip the impossible skill in" material. The gate reads every
+`protocol/*.ce` and every `skills/*.md` beside `azure.yaml` (through
+`intent_artifacts()`), and nothing under the variants folders. Copy a variant
+into `protocol/` or `skills/` and `azd deploy` is refused by the predeploy
+hook (exit 1); remove it and the deploy goes through again.
 
 ### `skillc env from-azd` summaries (run 2026-10-07)
 
 All three files load (`exit 0`, `schema: skillc.env/1`), and each prints the
 same intent artifacts to stderr: `skills/Fetcher.md`, `RevenueAnalyst.md`,
-`ExpenseAnalyst.md`, `Writer.md`, `TaxVerifier.md`, `TaxSpecialist.md`, plus
-`Writer.email.md` (see the note above).
+`ExpenseAnalyst.md`, `Writer.md`, `TaxVerifier.md`, `TaxSpecialist.md`
+(`Writer.email.md` only while it is copied into `skills/`, see the note above).
 
 | file | nodes | by kind | unknowns |
 |---|---|---|---|

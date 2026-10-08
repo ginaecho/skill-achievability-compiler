@@ -514,7 +514,15 @@ def _probe_env(args):
     from .env import azure, mcp
     from .env.model import merge
     envs = []
-    if args.from_raw:
+    foundry_env = None
+    if getattr(args, "foundry", False) or args.from_raw:
+        # the Foundry control plane, live or from one of its exports; a --from-raw DIR that
+        # is not a Foundry export falls through to the Azure replay below
+        from .env import foundry
+        foundry_env = foundry.probe_from_args(args)
+        if foundry_env is not None:
+            envs.append(foundry_env)
+    if args.from_raw and foundry_env is None:
         envs.append(azure.probe(azure.replay_runner(args.from_raw), args.subscription,
                                 mode="replay"))
     elif args.azure:
@@ -523,9 +531,12 @@ def _probe_env(args):
         envs.append(mcp.probe(args.mcp_config, list_tools=args.list_tools))
     if args.claude:
         envs.append(_probe_claude(args, args.needs_from or []))
+    if getattr(args, "self", False):
+        from .env import selfprobe
+        envs.append(selfprobe.self_probe_from_args(args))
     if not envs:
-        raise ValueError("say what to probe: --azure, --from-raw DIR, --claude "
-                         "and/or --mcp-config FILE")
+        raise ValueError("say what to probe: --azure, --from-raw DIR, --claude, --foundry, "
+                         "--self and/or --mcp-config FILE")
     return merge(*envs)
 
 
@@ -665,6 +676,17 @@ def _add_probe_opts(sp) -> None:
     sp.add_argument("--needs-from", action="append", metavar="INTENT",
                     help="with --claude: probe what these intents' operations need")
     _add_claude_opts(sp)
+    # hosted-agent probes (docs/HOSTED_AGENT.md): the Foundry control plane and the sandbox
+    try:
+        from .env import foundry
+        foundry.add_probe_opts(sp)
+    except ImportError:
+        pass
+    try:
+        from .env import selfprobe
+        selfprobe.add_self_opts(sp)
+    except ImportError:
+        pass
 
 
 def _add_claude_opts(sp) -> None:
@@ -875,6 +897,12 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--json", action="store_true")
     sp.add_argument("-o", "--output", help="write the skillc.intent/1 JSON here")
     sp.set_defaults(fn=cmd_intent)
+
+    try:
+        from .gate import add_parser as _add_gate_parser
+        _add_gate_parser(sub)              # `skillc gate`: the deploy gate (docs/ENVIRONMENT.md)
+    except ImportError:
+        pass
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)

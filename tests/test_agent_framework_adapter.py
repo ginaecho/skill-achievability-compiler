@@ -227,7 +227,7 @@ def test_repeated_denials_tell_the_model_to_stop(tmp_path):
 
 
 def test_not_achievable_plan_denies_with_its_verdict(tmp_path, caplog):
-    bad = FINANCE_CE.replace("via `search`", "via `bash`")      # foundry-hosted has no bash
+    bad = FINANCE_CE.replace("via `code_interpreter`", "via `bash`", 1)   # no bash in foundry-hosted
     with caplog.at_level(logging.WARNING, logger="skillc.agent_framework"):
         m = monitor(tmp_path, plan_text=bad)
     assert m.plan_decision.action == DENY and "IMPOSSIBLE" in caplog.text
