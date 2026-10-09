@@ -8,14 +8,22 @@ on three signals (docs/RUNTIME_MONITOR.md):
             prohibited behaviour, is approved; implementation is gated on it.
   thinking  the agent's reasoning text (thinking summaries, progress notes, visible
             text), scanned deterministically with the tool-policy library: a requirement
-            the runtime cannot meet, or a prohibited behaviour, blocks further actions
-            until a plan that passes is written.
+            the runtime cannot meet, or a prohibited behaviour, is put to the agent as a
+            question (mode `ask`, the default); mode `stop` instead blocks further
+            actions until a plan that passes is written.
   action    every tool call, before it runs: it needs an approved plan, must use a
             runtime tool the plan binds, and must not show an unmet requirement or a
             prohibited behaviour.  After it runs, failures in its output (a missing
             program, a rejected credential, no network) become runtime facts and the
             approved plan is re-checked from them; a plan that becomes IMPOSSIBLE is
             revoked.
+
+Stop, explain, re-plan.  A refusal is never the end of the run.  Every refusal says what
+skillc found and who can fix it (`Decision.next`): the agent, by changing the plan
+("replan"), or only the user, because the runtime lacks an account, a credential, a
+program or the network ("ask_user", with the missing items in `Decision.user_needs`).
+After `Config.max_replans` refused plans in a row the agent is told to stop re-planning
+and ask the user.
 
 Everything here is deterministic and costs zero model tokens.  The state lives in one
 JSON file so that separate hook processes share it.
@@ -94,6 +102,8 @@ OBSERVATIONS = [
     (re.compile(r"(?:^|\n|: )([A-Za-z0-9_.+-]+): command not found"), "program"),
     (re.compile(r"command not found: ([A-Za-z0-9_.+-]+)"), "program"),
     (re.compile(r"No module named '([A-Za-z0-9_.]+)'"), "program"),
+    # PowerShell (Windows hosts such as Microsoft Scout)
+    (re.compile(r"The term '([A-Za-z0-9_.+-]+)' is not recognized"), "program"),
     (re.compile(r"(Could not resolve host|Network is unreachable|Temporary failure in "
                 r"name resolution|getaddrinfo ENOTFOUND)"), "network"),
     (re.compile(r"(\b401\b|\b403\b|[Uu]nauthori[sz]ed|[Aa]uthentication (failed|required)"
@@ -102,11 +112,16 @@ OBSERVATIONS = [
 ]
 
 
+REPLAN, ASK_USER = "replan", "ask_user"
+
+
 @dataclass
 class Decision:
     action: str                 # allow | deny | warn
     reason: str = ""
     witness: list = field(default_factory=list)
+    next: str = ""              # who can fix a refusal: replan (the agent) | ask_user
+    user_needs: list = field(default_factory=list)   # what only the user can provide
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -132,7 +147,8 @@ class Config:
     runtime: str = "developer-sandbox"
     plan_file: str = ".skillc/plan.ce"
     state_file: str = ".skillc/state.json"
-    thinking: str = "stop"           # stop | warn | off
+    thinking: str = "ask"            # ask | stop | warn | off
+    max_replans: int = 3             # refused plans in a row before the agent must ask the user
     require_plan: bool = True
     plan_conformance: bool = True    # actions must use a runtime tool the plan binds
     free_tools: tuple = FREE_TOOLS
@@ -180,6 +196,7 @@ class State:
     pending: list = field(default_factory=list)    # context to deliver at the next chance
     facts: list = field(default_factory=list)      # predicates currently true (protocol state)
     actions: list = field(default_factory=list)    # capabilities executed successfully, in order
+    rejections: int = 0              # plans refused in a row since the last approval
     log: list = field(default_factory=list)
 
 
@@ -276,7 +293,7 @@ class Monitor:
             return None
         return ("skillc intent check: the request mentions requirements runtime "
                 f"`{rt.name}` cannot meet: "
-                + "; ".join(f"'{o.text}' needs {o.clause()}" for o in gaps)
+                + "; ".join(f"'{o.text}' ({o.clause()})" for o in gaps)
                 + ". Plan around them or tell the user.")
 
     def on_prompt(self, prompt: str, session_id: str) -> list[str]:
@@ -331,20 +348,24 @@ class Monitor:
         lines = [f"skillc: plan {v.label} ({v.reason}) in runtime `{rt.name}`."]
         if v.detail:
             lines.append(f"detail: {v.detail}")
+        needs: list[str] = []
         for t, why in b.withdrawn.items():
             lines.append(f"Tool `{t}` cannot run here: {why}.")
+            if why.startswith(("program:", "software:")):
+                needs.append(why.split(" ", 1)[0])
         for t, res in b.blocked.items():
             lines.append(f"Tool `{t}` is blocked: the runtime does not grant "
                          + ", ".join(res) + ".")
+            needs += [r for r in res if not r.startswith("policy:")]
+        needs = sorted(set(needs))
         if v.label == "IMPOSSIBLE":
-            lines.append("Do not implement this. Either change the plan to one that the "
-                         "runtime can carry out (make optional work skippable, use a runtime "
-                         "tool that really performs the step) or stop and tell the user "
-                         "what is missing.")
+            lines.append("Do not implement this plan.")
+            lines.append(next_step(needs))
         else:
             lines.append("skillc cannot decide this plan; simplify it or ask the user.")
-        return Decision(DENY, "\n".join(lines),
-                        sorted(set(b.withdrawn) | set(b.blocked))), info
+        return Decision(DENY, "\n".join(lines), sorted(set(b.withdrawn) | set(b.blocked)),
+                        next=ASK_USER if needs or v.label != "IMPOSSIBLE" else REPLAN,
+                        user_needs=needs), info
 
     def submit_plan(self, text: str) -> Decision:
         d, info = self.check_plan(text)
@@ -352,6 +373,13 @@ class Monitor:
             self.state.plan = text
             self.state.plan_sha = hashlib.sha256(text.encode()).hexdigest()[:16]
             self.state.block = None
+            self.state.rejections = 0
+        else:
+            self.state.rejections += 1
+            if self.state.rejections >= self.cfg.max_replans:
+                d = replace(d, next=ASK_USER, reason=d.reason + (
+                    f"\nskillc has refused {self.state.rejections} plans in a row. Stop "
+                    "re-planning: tell the user what skillc found and ask how to proceed."))
         return self._record("plan", d, json.dumps(info)[:200])
 
     def load_plan(self, text: str) -> Decision:
@@ -458,28 +486,39 @@ class Monitor:
         behaviour, that the agent states as an intention (not negated)."""
         if self.cfg.thinking == "off" or not text.strip():
             return Decision(ALLOW)
-        hits = []
+        hits, needs = [], []
         lines = text.splitlines()
         for o in self._unmet(match(text, self.library)):
             line = lines[o.line - 1] if 0 < o.line <= len(lines) else ""
             if NEGATION.search(line):
                 continue
-            hits.append(f"'{o.text}' needs {o.clause()}, which runtime "
+            hits.append(f"'{o.text}' ({o.clause()}), which runtime "
                         f"`{self.runtime.name}` does not provide")
+            if o.kind in USER_KINDS:
+                needs.append(o.value)
         for ln in lines:
             if NEGATION.search(ln):
                 continue
             hits += self._prohibited_text(ln)
         if not hits:
             return self._record("thinking", Decision(ALLOW))
+        found = "\n  - " + "\n  - ".join(sorted(set(hits)))
+        needs = sorted(set(needs))
+        nxt = ASK_USER if needs else REPLAN
+        if self.cfg.thinking == "ask":
+            reason = ("skillc question: your reasoning mentions something that cannot be done "
+                      "or is prohibited here:" + found + "\nIs this part of what you intend "
+                      "to do? If not (you were only weighing it), carry on. If it is, do not "
+                      f"act on it: rewrite your plan in `{self.cfg.plan_file}` without it"
+                      + (", or ask the user for " + ", ".join(f"`{n}`" for n in needs)
+                         if needs else "") + ".")
+            return self._record("thinking", Decision(WARN, reason, hits, nxt, needs))
         reason = ("skillc: your reasoning heads towards something that cannot be done or "
-                  "is prohibited here:\n  - " + "\n  - ".join(sorted(set(hits)))
-                  + f"\nWrite a plan that avoids it to `{self.cfg.plan_file}` (it must pass "
-                    "skillc), or stop and tell the user.")
+                  "is prohibited here:" + found + "\n" + next_step(needs, self.cfg.plan_file))
         if self.cfg.thinking == "stop":
             self._revoke(reason)       # the approved plan no longer describes the intent
-            return self._record("thinking", Decision(DENY, reason, hits))
-        return self._record("thinking", Decision(WARN, reason, hits))
+            return self._record("thinking", Decision(DENY, reason, hits, nxt, needs))
+        return self._record("thinking", Decision(WARN, reason, hits, nxt, needs))
 
     on_reasoning = observe_thinking
 
@@ -541,18 +580,24 @@ class Monitor:
         if cap is not None:                         # the plan binds the Tool to its runtime tool
             rt_tool = self._capability_via(tool) or rt_tool
         problems = self._prohibited_text(text)
+        needs: list[str] = []
         # Free local helpers (Glob, Grep, ...) have no runtime-vocabulary counterpart, and a
         # Tool of the plan without a `via` is performed by the agent's own code.
         if (rt_tool not in self.runtime.tools
                 and not (free and tool not in self.cfg.tool_map)
                 and not (cap is not None and self._capability_via(tool) is None)):
             problems.append(f"`{tool}` is not a tool of runtime `{self.runtime.name}`")
-        problems += [f"'{o.text}' needs {o.clause()}, not available in runtime "
-                     f"`{self.runtime.name}`"
-                     for o in (self._unmet(match(text, self.library)) if text else [])]
+        for o in (self._unmet(match(text, self.library)) if text else []):
+            problems.append(f"'{o.text}' ({o.clause()}), not available in runtime "
+                            f"`{self.runtime.name}`")
+            if o.kind in USER_KINDS:
+                needs.append(o.value)
         if problems:
-            reason = "skillc: action blocked:\n  - " + "\n  - ".join(problems)
-            return self._record("action", Decision(DENY, reason, problems), tool)
+            needs = sorted(set(needs))
+            reason = ("skillc: action blocked:\n  - " + "\n  - ".join(problems) + "\n"
+                      + next_step(needs, self.cfg.plan_file))
+            return self._record("action", Decision(DENY, reason, problems,
+                                                   ASK_USER if needs else REPLAN, needs), tool)
         if free or cap is not None:                 # a Tool of the plan conforms to the plan
             return self._record("action", Decision(ALLOW), tool)
         if self.cfg.plan_conformance and self.state.plan and rt_tool not in self._plan_via():
@@ -583,7 +628,9 @@ class Monitor:
                       "ACHIEVABLE."), "; ".join(new))
         self._revoke("skillc: the approved plan is no longer achievable after what the "
                      "run showed (" + "; ".join(new) + ").\n" + d.reason)
-        return self._record("observe", Decision(DENY, self.state.block, new), "; ".join(new))
+        needs = sorted(set(d.user_needs) | {n.split("`")[1] for n in new if "`" in n})
+        return self._record("observe", Decision(DENY, self.state.block, new, ASK_USER, needs),
+                            "; ".join(new))
 
     def _observe(self, out: str, cmd: str) -> list[str]:
         """Record the runtime facts a tool's output shows; describe the new ones."""
@@ -685,6 +732,24 @@ def is_failure(result: Any) -> bool:
         first = text.split(None, 1)[0] if text else ""
         return first.rstrip(":.,;!").lower() in FAILURE_WORDS
     return False
+
+
+# ---------------------------------------------------------------------- refusals
+
+# obligation kinds only the user can satisfy: an account or credential, a program to install
+USER_KINDS = ("resource", "program")
+
+
+def next_step(user_needs: list[str], plan_file: str = "") -> str:
+    """The last line of a refusal: who can fix it, and how."""
+    where = f" in `{plan_file}`" if plan_file else ""
+    if user_needs:
+        return ("Only the user can provide " + ", ".join(f"`{n}`" for n in user_needs)
+                + " (access, sign-in or installation); re-planning cannot create it. Ask the "
+                f"user for it, or rewrite the plan{where} to a route that does not need it.")
+    return (f"You can fix this: rewrite the plan{where} so that it avoids this (make optional "
+            "work skippable, or use a runtime tool that really performs the step), then "
+            "continue.")
 
 
 # ---------------------------------------------------------------------- tool map

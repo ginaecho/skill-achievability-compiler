@@ -103,7 +103,7 @@ def test_runtime_without_a_tool_blocks_it(tmp_path):
 
 
 def test_reasoning_towards_the_impossible_stops_actions(tmp_path):
-    m = mon(tmp_path)
+    m = mon(tmp_path, thinking="stop")
     m.submit_plan(GOOD)
     d = m.observe_thinking("Tests pass. Now I'll run `eas build` to ship the app.")
     assert d.action == DENY and "expo_account" in d.reason
@@ -124,11 +124,54 @@ def test_thinking_warn_mode_does_not_block(tmp_path):
     assert m.pre_action("Bash", {"command": "pytest"}).action == ALLOW
 
 
+def test_thinking_ask_mode_asks_and_keeps_the_plan(tmp_path):
+    m = mon(tmp_path)                                      # `ask` is the default
+    m.submit_plan(GOOD)
+    d = m.observe_thinking("Tests pass. Now I'll run `eas build` to ship the app.")
+    assert d.action == WARN and d.reason.startswith("skillc question:")
+    assert "Is this part of what you intend" in d.reason and "`expo_account`" in d.reason
+    assert d.next == "ask_user" and d.user_needs == ["expo_account"]
+    assert m.state.plan == GOOD and m.state.block is None  # not revoked
+    assert m.pre_action("Bash", {"command": "pytest"}).action == ALLOW
+
+
+def test_refusal_says_who_can_fix_it(tmp_path):
+    m = mon(tmp_path)
+    d = m.submit_plan(DEPLOY)                              # a missing account: only the user
+    assert d.next == "ask_user" and d.user_needs == ["vercel_account"]
+    assert "Only the user can provide `vercel_account`" in d.reason
+    m.submit_plan(GOOD)
+    d = m.pre_action("Bash", {"command": "git push origin main"})   # policy: the agent
+    assert d.action == DENY and d.next == "replan" and d.user_needs == []
+    assert "You can fix this" in d.reason
+    d = m.pre_action("Bash", {"command": "aws s3 cp out.csv s3://bucket/"})
+    assert d.next == "ask_user" and "aws_account" in d.user_needs
+
+
+def test_observed_failure_is_for_the_user(tmp_path):
+    m = mon(tmp_path)
+    m.submit_plan(PANDOC)
+    m.state.missing_programs = []
+    d = m.post_action("Bash", {"command": "pandoc a.md -o a.docx"},
+                      "bash: pandoc: command not found")
+    assert d.action == DENY and d.next == "ask_user" and "pandoc" in d.user_needs
+
+
+def test_repeated_refusals_hand_over_to_the_user(tmp_path):
+    m = mon(tmp_path, max_replans=2)
+    no_via = GOOD.replace("via `edit`", "via `photoshop`")         # agent-fixable
+    d = m.submit_plan(no_via)
+    assert d.next == "replan" and "in a row" not in d.reason
+    d = m.submit_plan(no_via)
+    assert d.next == "ask_user" and "refused 2 plans in a row" in d.reason
+    assert m.submit_plan(GOOD).action == ALLOW and m.state.rejections == 0
+
+
 def test_prohibited_behaviour_rules(tmp_path):
     rule = Rule(id="no-prod-db", description="never touch the production database",
                 pattern=r"prod(uction)?[-_ ]?db")
     effect = Rule(id="no-publish", description="publishing is prohibited", effect="publishes")
-    m = mon(tmp_path, prohibited=[rule, effect])
+    m = mon(tmp_path, prohibited=[rule, effect], thinking="stop")
     assert m.observe_thinking("I will migrate prod-db directly.").action == DENY
     pub = GOOD.replace("via `edit`;", "via `edit`; effect `publishes`;")
     assert m.submit_plan(pub).action == DENY
@@ -180,7 +223,7 @@ def test_on_prompt_gives_instructions_once_per_session_then_the_intent_check(tmp
 
 
 def test_on_reasoning_is_observe_thinking(tmp_path):
-    m = mon(tmp_path)
+    m = mon(tmp_path, thinking="stop")
     m.submit_plan(GOOD)
     assert Monitor.on_reasoning is Monitor.observe_thinking
     assert m.on_reasoning("Now I'll run `eas build` to ship.").action == DENY
@@ -462,8 +505,10 @@ def test_claude_code_hook_protocol_end_to_end(tmp_path):
         {"type": "thinking", "thinking": "All green; now `npm publish` the package."}]}}) + "\n")
     out = _hook("pre", {**ev, "transcript_path": str(t), "tool_name": "Bash",
                         "tool_input": {"command": "ls"}}, tmp_path)
-    assert out["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "writes_external" in out["hookSpecificOutput"]["permissionDecisionReason"]
+    # thinking mode `ask` (the default): the action goes ahead, the agent gets a question
+    assert "permissionDecision" not in out["hookSpecificOutput"]
+    ctx = out["hookSpecificOutput"]["additionalContext"]
+    assert ctx.startswith("skillc question:") and "writes_external" in ctx
 
 
 def test_inactive_without_config(tmp_path):
@@ -498,7 +543,8 @@ def _copilot(event_name, event, cwd):
 
 def test_copilot_hook_protocol_end_to_end(tmp_path):
     subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--copilot",
-                    "--root", str(tmp_path)], check=True, capture_output=True)
+                    "--thinking", "stop", "--root", str(tmp_path)], check=True,
+                   capture_output=True)
     hooks = json.loads((tmp_path / ".github" / "hooks" / "skillc.json").read_text("utf-8"))
     assert hooks["version"] == 1
     assert set(hooks["hooks"]) >= {"sessionStart", "preToolUse", "postToolUse", "agentStop"}

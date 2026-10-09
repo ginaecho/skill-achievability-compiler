@@ -488,6 +488,11 @@ def cmd_monitor(args) -> int:
         print("add to .claude/settings.json:")
         print(json.dumps(HOOKS_SNIPPET, indent=1))
         return 0
+    if args.action == "mcp":
+        from .monitor_mcp import serve
+        serve(root if args.root != "." else Path.home() / ".skillc-mcp", args.runtime,
+              args.thinking)
+        return 0
     if args.action == "hook":
         if args.arg == "copilot":
             from .monitor_copilot import main as copilot_main
@@ -833,7 +838,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sp = sub.add_parser("monitor", help="runtime monitor: gate an agent's plan, "
                                         "reasoning and actions (docs/RUNTIME_MONITOR.md)")
-    sp.add_argument("action", choices=("init", "hook", "plan", "status", "reset"))
+    sp.add_argument("action", choices=("init", "hook", "mcp", "plan", "status", "reset"),
+                    help="mcp: serve the monitor as MCP tools over stdio, for hosts "
+                         "without hooks (state under --root, default ~/.skillc-mcp)")
     sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post for Claude Code, "
                                            "copilot for GitHub Copilot) or plan file")
     sp.add_argument("event", nargs="?", help="with `hook copilot`: the Copilot hook event "
@@ -845,8 +852,10 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--root", default=".", help="project directory (default: .)")
     sp.add_argument("--runtime", default="developer-sandbox",
                     help="init: runtime manifest name or JSON path")
-    sp.add_argument("--thinking", choices=("stop", "warn", "off"), default="stop",
-                    help="init: what reasoning that heads to the impossible does")
+    sp.add_argument("--thinking", choices=("ask", "stop", "warn", "off"), default="ask",
+                    help="init: what reasoning that heads to the impossible does (ask: put "
+                         "it to the agent as a question; stop: hold actions until a new "
+                         "plan passes)")
     sp.set_defaults(fn=cmd_monitor)
 
     sp = sub.add_parser("env", help="environment topology: probe, show, diff, merge, watch "

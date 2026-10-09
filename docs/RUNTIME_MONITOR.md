@@ -28,7 +28,7 @@ adapter). The tests are in `tests/test_monitor.py`.
 |---|---|---|
 | **intent** | the user's prompt (`UserPromptSubmit`) | Sends the plan protocol and CE grammar once per session. Warns about requirements the runtime cannot meet (tool-policy library). |
 | **plan** | the agent's `Write` to `.skillc/plan.ce` | Parse → bind to the runtime (withdraw, block, prune the agent's dead branches) → check. **Approve only on ACHIEVABLE.** Otherwise deny with the counterexample and the witness Tools. |
-| **reasoning** | assistant thinking and visible text added to the transcript since the last check (`PreToolUse` reads `transcript_path`) | Library scan: a requirement the runtime cannot meet, or a prohibited-behaviour rule, stated as an intention (lines with negation are ignored). In `stop` mode: revoke the plan and **hold all actions until a plan that passes is written**. `warn` and `off` modes also exist. |
+| **reasoning** | assistant thinking and visible text added to the transcript since the last check (`PreToolUse` reads `transcript_path`) | Library scan: a requirement the runtime cannot meet, or a prohibited-behaviour rule, stated as an intention (lines with negation are ignored). In `ask` mode (the default): **put it to the agent as a question** and keep the plan; a false alarm costs nothing. In `stop` mode: revoke the plan and hold all actions until a plan that passes is written. `warn` and `off` modes also exist. |
 | **action** (before) | tool name + input (`PreToolUse`) | Deny when: no approved plan; the tool is not a tool of the runtime; the command or content shows an unmet requirement or a prohibited behaviour; or (plan conformance) the runtime tool is bound by no Tool of the plan. Looking around (`Read`, `Glob`, `Grep`, `WebSearch`, …) needs no approved plan, but a looking tool that maps to a runtime tool (`Read`, `WebSearch`) must still be a tool of the runtime, and every looking tool's input is still checked for prohibited behaviour and unmet requirements. |
 | **observation** (after) | tool output (`PostToolUse`) | `command not found` / `No module named` → missing program; resolver or network errors → no network; 401/403/auth errors → the credential the command needed is rejected. **Re-check the approved plan with these facts.** If it is now IMPOSSIBLE, revoke it and hold all actions. |
 
@@ -43,6 +43,18 @@ adapter). The tests are in `tests/test_monitor.py`.
   ```
   A rule matches plan text, reasoning and action text (by `pattern`), or a plan Tool's
   `effect`, `needs` or `via`.
+
+## Stop, explain, re-plan
+
+A refusal never ends the run. Each refusal says what skillc found and **who can fix it**:
+
+| `Decision.next` | when | what the agent is told |
+|---|---|---|
+| `replan` | the agent can route around it: a tool the runtime lacks, a prohibited behaviour, optional work that could be skipped | "You can fix this: rewrite the plan …" |
+| `ask_user` | only the user can: an account or credential the runtime does not grant, a missing program, no network, a rejected credential (`Decision.user_needs` lists them) | "Only the user can provide `aws_account` …; re-planning cannot create it. Ask the user …" |
+
+After `max_replans` refused plans in a row (default 3) the refusal adds: stop re-planning,
+tell the user what skillc found and ask how to proceed. An approved plan resets the count.
 
 ## Use
 
@@ -112,6 +124,36 @@ steps:
     with: { python-version: "3.12" }
   - run: pip install skillc        # or: pip install -e .  when this repo is the project
 ```
+
+## MCP server: hosts without hooks (Microsoft Scout)
+
+Some hosts give a plugin no hook before a tool call and no view of the reasoning.
+Microsoft Scout is one: it embeds the Copilot CLI in server mode, which does not load
+Copilot extensions (tested 2026-10-09 on Scout 0.23.779, Copilot CLI 1.0.70: an extension
+in either extension directory was never started). There the monitor is offered as MCP
+tools the agent calls itself, and a skill tells it when:
+
+```bash
+skillc monitor mcp --runtime scout-desktop --root ~/.skillc-mcp     # stdio MCP server
+```
+
+| tool | monitor entry point |
+|---|---|
+| `skillc_start(request)` | new session; plan protocol + intent check |
+| `skillc_check_plan(plan)` | `submit_plan` |
+| `skillc_check_reasoning(text)` | `on_reasoning`, on the agent's own summary of its intent |
+| `skillc_check_action(tool, details)` | `pre_action` |
+| `skillc_report_result(tool, details, output)` | `post_action` |
+| `skillc_status()` | state |
+
+Every answer starts with `DECISION: … NEXT: … USER_NEEDS: …`. Every call and answer is
+appended to `<root>/.skillc/calls.jsonl`, to evaluate a run afterwards. The runtime
+manifest `scout-desktop` describes Scout on Windows: PowerShell, files, web, a browser,
+the user's Microsoft 365 data through WorkIQ, Teams messages, Azure DevOps.
+
+This is **advisory**: nothing forces the agent to call the tools or to obey them. The
+calls log shows how often it did. Enforcement on Scout needs the host to load Copilot
+extensions (an `onPreToolUse` hook can deny with a reason), which it does not today.
 
 ## Agent Framework middleware (hosted agents)
 
