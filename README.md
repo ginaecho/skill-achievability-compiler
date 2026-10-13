@@ -301,6 +301,7 @@ has three paths, none of which puts an LLM in the trusted decision:
 |---|---|
 | Deterministic frontend | Supported markdown/prose patterns; zero LLM tokens |
 | `skillc compile --llm` | Unrestricted prose via Anthropic or Azure OpenAI |
+| `skillc check --llm --llm-when needed` | Deterministic front-end first; the LLM is called only if it does not already refute (default `always`) |
 | Embedded `skillc-pack` | Author-reviewed formal capabilities and protocol |
 
 For the `deadlock_unobserved` corpus case, the published token model estimates

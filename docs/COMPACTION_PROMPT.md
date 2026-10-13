@@ -91,6 +91,19 @@ bounded repair round. For a median real skill the *modelled* cost
 the same skill, against a doomed run it avoids entirely.
 See [`TOKEN_ECONOMICS.md`](TOKEN_ECONOMICS.md) and `skillc cost`.
 
+### Tiered compaction (`--llm-when needed`)
+
+`--llm-when always` (the default) calls the model for every markdown skill, as
+`--llm` always has. With `--llm --llm-when needed` the deterministic front-end
+runs first; if it already refutes the skill (IMPOSSIBLE, not an abstention) that
+verdict is returned and the model is not called. Anything else, including an
+error in the deterministic front-end, goes to the LLM exactly as before. The
+verdict reports `front_end: "deterministic" | "llm"` (`--json` and text), plus
+the note "LLM not called: deterministic front-end refuted" on a short-circuit;
+`scan` prints "LLM calls: k of n (saved m)". This is tier T2 of
+[`COMPACTION_TIERING.md`](COMPACTION_TIERING.md): lossless on the labelled
+benchmark, about 9% fewer calls and tokens.
+
 ## Live vs. reference compaction
 
 `src/skillc/frontend/providers.py` supports Anthropic (`ANTHROPIC_API_KEY`) and Azure

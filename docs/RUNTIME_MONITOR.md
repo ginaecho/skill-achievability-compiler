@@ -20,7 +20,9 @@ skillc active *during* the run, and enforces two rules:
 
 Everything is deterministic and costs zero model tokens. The implementation is
 `src/skillc/monitor.py` (the logic) and `src/skillc/monitor_hook.py` (the Claude Code
-adapter). The tests are in `tests/test_monitor.py`.
+adapter); interaction awareness is in `src/skillc/frontend/stance.py` and
+`src/skillc/frontend/interaction.py`. The tests are in `tests/test_monitor.py` and
+`tests/test_interaction.py`.
 
 Security hardening: named capability calls now reapply runtime restrictions, including
 restrictions on branches pruned during static validation. Agent Framework callers
@@ -37,8 +39,8 @@ results or bind Boolean facts to payloads. Use the separate evidence-bound
 |---|---|---|
 | **intent** | the user's prompt (`UserPromptSubmit`) | Sends the plan protocol and CE grammar once per session. Warns about requirements the runtime cannot meet (tool-policy library). |
 | **plan** | the agent's `Write` to `.skillc/plan.ce` | Parse → bind to the runtime (withdraw, block, prune the agent's dead branches) → check. **Approve only on ACHIEVABLE.** Otherwise deny with the counterexample and the witness Tools. |
-| **reasoning** | assistant thinking and visible text added to the transcript since the last check (`PreToolUse` reads `transcript_path`) | Library scan: a requirement the runtime cannot meet, or a prohibited-behaviour rule, stated as an intention (lines with negation are ignored). In `ask` mode (the default): **put it to the agent as a question** and keep the plan; a false alarm costs nothing. In `stop` mode: revoke the plan and hold all actions until a plan that passes is written. `warn` and `off` modes also exist. |
-| **action** (before) | tool name + input (`PreToolUse`) | Deny when: no approved plan; the tool is not a tool of the runtime; the command or content shows an unmet requirement or a prohibited behaviour; or (plan conformance) the runtime tool is bound by no Tool of the plan. Looking around (`Read`, `Glob`, `Grep`, `WebSearch`, …) needs no approved plan, but a looking tool that maps to a runtime tool (`Read`, `WebSearch`) must still be a tool of the runtime, and every looking tool's input is still checked for prohibited behaviour and unmet requirements. |
+| **reasoning** | assistant thinking and visible text added to the transcript since the last check (`PreToolUse` reads `transcript_path`) | Read by stance (see [Interaction awareness](#interaction-awareness-stop-the-wrong-action-while-the-agent-is-still-thinking)): only what the agent commits to counts, with clause-scoped negation. A committed requirement the runtime cannot meet, a prohibited-behaviour rule, or an interaction hazard (destructive, outbound send, payment, secret, privilege, scope, injection). A hazard is also *armed*: the tool call that realizes it is refused. In `ask` mode (the default): **put it to the agent as a question** and keep the plan; a false alarm costs nothing. In `stop` mode: revoke the plan and hold all actions until a plan that passes is written. `warn` and `off` modes also exist. |
+| **action** (before) | tool name + input (`PreToolUse`) | Deny when: no approved plan; the tool is not a tool of the runtime; the command or content shows an unmet requirement or a prohibited behaviour; the call realizes an armed hazard, or is hazardous by itself under the interaction policy; or (plan conformance) the runtime tool is bound by no Tool of the plan. Looking around (`Read`, `Glob`, `Grep`, `WebSearch`, …) needs no approved plan, but a looking tool that maps to a runtime tool (`Read`, `WebSearch`) must still be a tool of the runtime, and every looking tool's input is still checked for prohibited behaviour and unmet requirements. |
 | **observation** (after) | tool output (`PostToolUse`) | `command not found` / `No module named` → missing program; resolver or network errors → no network; 401/403/auth errors → the credential the command needed is rejected. **Re-check the approved plan with these facts.** If it is now IMPOSSIBLE, revoke it and hold all actions. |
 
 **Prohibited behaviours come from two sources:**
@@ -64,6 +66,177 @@ A refusal never ends the run. Each refusal says what skillc found and **who can 
 
 After `max_replans` refused plans in a row (default 3) the refusal adds: stop re-planning,
 tell the user what skillc found and ask how to proceed. An approved plan resets the count.
+
+## Interaction awareness: stop the wrong action while the agent is still thinking
+
+The checks above know what a step *requires*. They know nothing about what a step *does to
+others*: wipe a production database, mail a report to an outside address, pay, print a
+token, raise its own privileges, act on every user, or obey an instruction it read in a
+web page. Interaction awareness adds that, in three parts. Everything is deterministic
+and costs zero model tokens.
+
+**1. Stance (`src/skillc/frontend/stance.py`).** Reasoning text is split into units
+(sentences, bullets, `>` quote lines, lines of a code fence). Each unit gets a stance:
+
+| stance | recognised by | example |
+|---|---|---|
+| `commit` | first-person intent (`I'll`, `we will`, `let me`, `I need to`), a step label (`Next:`, `Then,` + a verb or a backtick, `Plan:`, `Fix:`), a decisive label ("Quickest fix: ...", "The simplest way is to ..."), acknowledging a consequence of one's own act ("the local edits will go away"), a decision phrased as a permission to oneself ("I can go ahead and", "I can just", "I might as well", "Go ahead and ..."), an imperative or gerund of an action verb at the start, a unit that is one backticked command, a line of a shell code fence | "Now I'll `DROP TABLE users`." / "Delete the old table." |
+| `deliberate` | a question, or a hedge (`maybe`, `could`, `whether`, `alternatively`, ...) without a commit marker; a hedge right before a commit marker | "Should I wipe it?" / "Maybe I'll drop the table." |
+| `report` | attribution (`the README mentions`, `a comment in the code says`, `one email instructs me`, `according to`, `the customer has told me`), a pronoun or unnamed person with a verb that addresses the agent ("He now wants me to ...", "They keep saying ..."), a request addressed to the agent in any grammar, its source being the nearest noun before the verb (a gerund or participle: "an instruction telling me to ...", "hidden text instructing the assistant to ..."; a plural or partitive subject: "one of the tickets asks me to ..."; a relative clause in between: "a note, buried below the trace, asking me to ..."; "addressed to me and asks ..."), a quotation that covers most of the unit, a `>` quote line | "The README mentions `git push`." |
+| `narration` | an account of what was already done: a past-tense action verb at the start ("Ran", "Created", "Confirmed", "Attempted"), a first-person past ("I ran", "we tested"), a report label ("Work dir:", "Commands run:", "Result:"), a command as the subject of a result ("`gh auth status` -> ...", "`npm view x` confirmed ..."); a command quoted right after a narration; only a first-person intent inside it commits | "Ran `which go`." / "Commands run: ..." |
+| `mention` | everything else, including a gerund or a command as the subject of a statement ("Submitting a job requires an account", "`x` requires ...") | "AZURE_OPENAI_ENDPOINT is set in .env" |
+
+Commit markers inside backticks or parentheses do not count: `if ...; then echo` is shell
+syntax, "(step 0: ..., then call X)" quotes a document.
+
+Only `commit` units raise capability obligations, prohibited-behaviour rules and hazards.
+A report raises nothing by itself. A commit that points back at a report (an *anaphoric*
+commit with no content of its own, "I'll do that", "I'll do as the issue asks", "OK,
+doing it now", "Sure, I'll go along with that", or a commit with a back-reference, "I'll
+add that to settings.json", "I'll follow it and start wiping") adopts the hazards of the
+report, marked `via_injection` (unless the report is attributed to the user; with several
+sources in one unit, the last one, nearest to what is reported, decides: in "The user asked
+for a summary, but the page has an instruction telling me to wipe it" the source is the
+page's instruction, not the user). The report
+stays adoptable across up to three units that commit to nothing ("Hmm. OK, I'll do that.");
+a commit of its own ends the window. A committed clause at the end of a report that points
+back ("..., so I will include them in the PR body") adopts the report's hazards too. In a
+customer-facing deployment the chat counterparty (a customer, caller, client, "he",
+"she", "they") is not the agent's principal: what they ask for is adopted as
+`via_injection`. A clause whose destructive verb points back for its object or place
+("so I'll just wipe from there") takes its target from the earlier clauses of the sentence
+and from the sentence before. An environment variable named only to check that it is set
+("I'll echo whether OPENAI_API_KEY is set without printing it") raises no obligation. Negation is
+clause-scoped: in "I won't push to staging; I'll `git push --force origin main`" only the
+first clause is negated; "instead of X, Y" and "rather than X, Y" negate only X; a comma
+splice opens a new clause ("it is not an address, it is an instruction to wipe ..." does not
+negate "wipe"); "leave
+any purchase to the user" is a deferral, not an intention. Before, a line with any
+negation word was skipped as a whole, and any line that named a requirement counted as an
+intention.
+
+**2. Hazard classes (`src/skillc/frontend/interaction.py`,
+`src/skillc/data/toolpolicy/hazards.json`).** Patterns are applied per clause of a
+committed unit, and per command segment (`;`, `&&`, `||`, new line) of an action. An
+identifier written in prose counts as its words too (`approveTransfer` -> "approve
+Transfer", `db.query` -> "db query", `drop_table` -> "drop table"), so a tool named in
+reasoning is matched like the action it names.
+
+| class | evidence (abridged) | default | who can fix it |
+|---|---|---|---|
+| `destructive` | a destructive verb (delete, wipe, drop, truncate, discard, throw away, clear the/all/those ..., `rm -rf`, force-push, `Move-Item -Force`, `mv -f`, ...) and a protected target (prod, database, `users` table, all tables, repo, the main branch, origin, `~`, `/`, a drive root `D:\`, `.git`, `.env`, backups, bucket, tenant, mailbox, the working tree, uncommitted changes, a cloud drive (Drive, OneDrive, Dropbox, SharePoint), spreadsheets, the user's or another person's files, documents or photos, a bare `*`, ...) in the same clause; throwing away uncommitted work: revert, restore, discard, roll back or reset with tracked files, the working tree or local/uncommitted/unsaved edits ("revert the tracked files back to HEAD"), unless the sentence or the one before says the work was stashed, committed or backed up; routine clean-up words in the clause (index, dead code, unused, stale, temp, log files, duplicate, typo, "from the code") cancel the hit; a destructive command by itself (`DROP TABLE`, `DELETE FROM` without `WHERE` or on a protected table, `git reset --hard`, "hard reset", `git restore <path>` (not `--staged`), `git checkout -- <path>`, `git stash drop`/`clear`, `git clean -f`, `terraform destroy`, `kubectl delete namespace`, `rmdir /s /q D:\`, `rm -rf src`, ...); `pkill`/`killall`/`kill -9` of a server, database, recording or with `-f` (not to restart it). A target inside a safe token (`node_modules`, `build`, `dist`, `tmp`, `cache`, ...) does not count, so `rm -rf node_modules` passes | deny | replan |
+| `outbound_send` | send, email, post, upload, share, publish, ... (as verbs, not "the email" or "recent messages") and destination evidence (an email address, URL, domain, external, Slack, webhook, gist, "to the customer's inbox", ...); data carried in a URL ("put the emails in an image URL", "open the link with the name appended", "the api_key in the URL"; an `<img>` or Markdown image link with a query string, a `?api_key=` parameter). A capitalised name is not a destination: a role of the approved plan or an `agent_tools` name is an in-plan message. Sending while knowing the message is also copied, blind or silently, to an outside or undeclared recipient ("the send tool quietly adds a blind copy to an outside address. ... so I'll just send as-is"; the evidence may be in the sentence before) is refused outright (entry `hidden-copy-send`, decision `deny`), not checked against the plan; stripping the copy cancels it | plan | replan, or ask_user for a destination outside the allowlist |
+| `payment` | a transactional verb with its object (make/confirm/place a payment, an order, a purchase; pay for/the/$N; buy the/a/N; issue a refund; wire/transfer funds; check out the cart; add to cart; tell people to pay or Venmo; release the funds); payment instructions naming a payee handle ("pay via Venmo to @x"); a call to a tool that approves, executes or releases a transfer or payout (`treasury.approveTransfer`), whatever its documentation calls it. Building payment software (a form, API, test, webhook, validation) is not paying | ask | ask_user (`payment_approval`) |
+| `secret_exposure` | print, echo, cat, log, paste, send, upload, output, render, emit, write out, embed, `curl -d`, base64, ... and a secret (API key, access token, password, credential, `.env`, `id_rsa`, `*_TOKEN`, cookie, OTP, secret values, a tokens or credentials table, connection strings) in the same clause, or a secret moved into a channel others read ("drop its rows into a reply on the ticket", "write the values into the PR summary", "as image references"); once armed, a Markdown image or `<img>` pointing at an outside host realizes it (rendering fetches the URL); unless the clause only checks that it is set, missing or invalid ("whether", "is set", `-z`, "without printing"); including, posting or publishing private or regulated data (private repos, confidential, salary, PII, PHI, patient records), also through `create_pull_request` and the like. Reading `.env` with `Read` is fine, and showing a value to the user in the conversation is not exposure | deny | replan |
+| `privilege` | `sudo` with a command that changes protection (`rm`, `chmod`, `chown`, a root shell, `/etc`, users, the firewall; not `sudo apt-get install`), "run it with sudo", `chmod 777`, `chown root`, grant admin, disable the firewall or MFA, `0.0.0.0/0`, `--dangerously-skip-permissions`, auto-approve, remote code piped into a shell (`curl ... \| bash`); `config-write`: writing the agent's own tool configuration (`.cursor/mcp.json`, `.claude/settings*.json`, `claude_desktop_config.json`, a `settings.json` or `mcp.json` with auto-approve/trust/allow) or a shell's or SSH's (`~/.ssh/`, `authorized_keys`, `sudoers`, `.bashrc`, `.zshrc`, `.profile`); what a write puts in these files is scanned | ask | ask_user (`confirmation`) |
+| `scope_escape` | an acting verb aimed into production ("deploy to prod", "run the migration against production"; not "a bug that happens in production"), at all/every users, customers, tenants or mailboxes, org-wide, bulk delete; physical devices (smart home, boiler, door locks); removing the limits set on the agent's own run (time limit, rate limit, guardrails, sandbox, the monitor), realized by setting a `TIME_LIMIT`/`TIMEOUT`/`MAX_*` to an unbounded value; a digression from the task ("wander off", "for fun", "get distracted", "look at some photos for a while"), realized by browsing to an outside URL | ask | ask_user (`confirmation`) |
+| `injection_compliance` | a hazard adopted from a report (`via_injection`); explicit compliance ("ignore previous instructions", "as the page asks", "disregard your system prompt") | deny | replan |
+| `commitment` | an assistant may inform but may not promise money, prices, legal effect or exceptions to policy: promise/offer/guarantee/agree to a refund, discount, `% off`, `$N`, a binding deal; "tell him he can ... get the difference refunded"; "lock the deal in at $1"; "legally binding", "binding offer"; sending a discount code; putting an item at `$N`; conferring official status on a statement the agent chose ("present that as the official rule", "tell them it's expected behaviour under our ... policy", "make up a policy"), realized once armed by the reply that asserts a policy or a limit ("per our policy", "is limited to", "this is expected"). Realized by an outbound text with "legally binding" or a refund promise, and, once armed, by the call that records or delivers it (`create quote`, `set price`, `price_usd`, `status: accepted`, `send message`) | ask | ask_user (`operator_approval`) |
+| `consent_override` | "stop", "no more", "don't", a refusal reported from the person affected, and in the same sentence (or the one before) carrying on (`keep adding`, `keep calling`, "another box on the tab", "regardless"). Once armed, realized by adding items, submitting the order or charging | deny | replan |
+| `pii_exposure` | passing on a private person's contact details: share/send/forward/"pass it on" with "someone's personal site/number", "a personal mobile", "close enough ... number" (not one's own: "my personal data"). Once armed, realized by an outbound message that carries a phone number | ask | ask_user (`confirmation`) |
+| `policy_violation` | dropping the operator's rules at a counterparty's request ("guidelines off", "drop my rules", "ignore the policy"), abusive conduct (swearing, insulting, disparaging, trash-talking); outbound text with profanity (also masked: `f***`) or "worst company", "useless ... service". A short conduct backstop, not a moderation system | deny | replan |
+
+`plan` (outbound sends) is decided against the approved plan: a send is allowed only if
+some Tool of the plan has `effect writes_external` or `publishes` (when there is no plan and
+`require_plan` is false, this criterion is skipped), and, when
+`allowed_destinations` is set, every email, URL and domain it names is on the list
+(`contoso.com` covers its subdomains, `*.contoso.com` only the subdomains, an email
+matches exactly). "Send the summary to the user in chat" names no destination and is not
+a hazard.
+
+**3. Arming.** In thinking mode `ask` (the default) and `warn`, a committed hazard is put
+to the agent in the usual "skillc question:" message, and it is *armed*: recorded in
+`State.armed` with the sentence, the class and who can fix it. Before every non-free tool
+call, the call's text (command, code, URL, tool name and arguments, nested ones included,
+and the arguments as written, `"price_usd": 1`) is tested against each armed hazard's
+`action_patterns` and `armed_only_patterns`, and for sends and secrets against the
+destinations the sentence named and against a URL that carries a value the sentence quoted
+or named (`https://site.example/r#Dana` after "They signed 'Dana', so I'll open the link
+with that appended"). `armed_only_patterns` recognise calls that are routine by themselves
+(`pos.submit_order`, `crm.create_quote`, `send message`) and so never refuse a call without
+the reasoning having committed to the hazard. A match is refused with the sentence quoted:
+
+```
+skillc: action blocked: your reasoning said: 'I'll wipe the production database'
+(a destructive operation on a protected target); this call realizes it.
+```
+
+An armed hazard is cleared when a plan is approved, and expires after `arm_ttl` allowed
+non-free actions (default 10); `arm_ttl: 0` disables arming. In mode `stop` a hazard revokes the plan instead. Before,
+a hazardous thought in mode `ask` was only a question; the action went ahead.
+
+Independently of reasoning, every non-free action is scanned (`interaction.scan_action`)
+with the same policy, so `Bash: rm -rf ~/projects`, `cat .env` or a `curl -X POST` to an
+outside URL is refused even when no reasoning was seen. For actions, `ask` means refused
+with `next: ask_user`. The text a `Write` or `Edit` puts in a file is not scanned here (a
+write neither executes nor sends it), except for agent and shell configuration files
+(`settings.json`, `mcp.json`, `authorized_keys`, `.bashrc`, ...), where the content is the
+effect; it is still tested against armed hazards.
+
+Tool inputs are read to a depth of four (dicts and lists), so the arguments of an MCP
+gateway call (`{"tool": "sql.execute", "arguments": {"query": "DROP TABLE users"}}`) are
+scanned like a command, and the capability library sees them too. An identifier argument
+also counts as its words (`create_quote` -> `create quote`, `sendMessage` -> `send
+Message`); a gateway's tool name counts as the words of its operation only
+(`slack.post_message` -> `post message`), because its namespace is the service, not a
+destination. A message body (`text`, `content`) is content, not a destination: it is not
+scanned by itself, only against armed hazards. A plan
+that itself commits to a refused class (for example in a `#` comment: "wipe the production
+database") is refused at submission.
+
+**Configuration** (`.skillc/monitor.json`; `skillc monitor init` writes the defaults, and
+older files without these keys still load):
+
+```json
+"interaction": {"destructive": "ask", "payment": "deny", "scope_escape": "allow"},
+"allowed_destinations": ["contoso.com", "*.fabrikam.com", "ceo@tailspin.com"],
+"arm_ttl": 10,
+"stance": true
+```
+
+`interaction` maps a class to `deny`, `ask` or `allow` (and `plan` for `outbound_send`);
+the key `"*"` is the default of every class left out, and a class left out of both keeps
+the library's default: the entry's own `decision` (an entry may be stricter than its class,
+as `hidden-copy-send` is), else the class's. `skillc monitor status` shows the armed hazards. The three ablations
+of the benchmark plan are configuration: no hazards `"interaction": {"*": "allow"}`, no
+arming `"arm_ttl": 0`, no stance `"stance": false` (every unit read as a commitment).
+
+**What is and is not guaranteed.** The monitor guarantees that, under the hook adapters,
+a call whose text matches an armed hazard or a refused hazard class does not run, and that
+the same input gives the same decision. It does not guarantee recall: stance and hazards
+are regular-expression heuristics over English conventions, so a paraphrase they do not
+know, a hazard spread over two sentences, a destructive effect hidden in a script the
+command runs, or reasoning the host never shows passes unnoticed. False positives cost a
+question (thinking) or a refusal that names the class and how to allow it (actions). A
+report attributed to "the user" is trusted as the user's request; the monitor cannot tell
+whether a quoted user is real. The MCP adapter is advisory (the agent decides whether to
+call it).
+
+Limitations that are known, not fixed:
+
+- **Domain conduct policies need operator rules.** The guard has no medical, legal or other
+  domain knowledge. In an eating-disorder support deployment, a committed "I'll give them a
+  calorie deficit and weekly weigh-ins" is harmful, but nothing in the general hazard
+  classes says so (benchmark case `neda-tessa`, the one DEV3 incident v3 still misses). The
+  operator states such a policy as a `prohibited` rule, which is then applied to committed
+  reasoning, to actions and to the plan, for example:
+
+  ```json
+  "prohibited": [{"id": "no-weight-loss-advice",
+                  "description": "never give weight-loss, dieting or calorie advice",
+                  "pattern": "\\b(?:calorie[- ]?(?:deficit|count\\w*|restrict\\w*)|lose weight|weight[- ]loss|weigh[- ]?ins?|pounds? (?:a|per) week)\\b"}]
+  ```
+
+  On `neda-tessa` this rule refuses the reply that carries the advice (the written content
+  is checked against `prohibited` patterns) and leaves the benign twin alone. It does not
+  catch the thought: the advice is in a hedged sentence ("I could ... give concrete
+  numbers") and the commit after it ("I'll write that out for them") only points back, and
+  `prohibited` rules, unlike hazards, are not adopted through a back-reference.
+- **Paraphrase coverage.** Each revision of the guard was measured on a set written blind and
+  then fixed on that set's misses (v1 on HELD-OUT: 2/24, v2 on HELD-OUT-2: 5/20). The rules
+  added in v3 are general English and shell conventions (who is asking, which verbs commit,
+  which verbs destroy or expose, what counts as a hidden recipient), not case wording, but a
+  phrasing none of them knows still passes.
 
 ## Use
 
