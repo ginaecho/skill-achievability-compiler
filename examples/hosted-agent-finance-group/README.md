@@ -1,5 +1,11 @@
 # Quarterly Finance Report as a group of Foundry hosted agents
 
+**Security change on `gc/A365`:** monitored runs no longer accept text labels as
+evidence. Remote-dependent actions remain blocked until a host-authenticated evidence
+verifier is supplied to `receive_bridge`; the existing `build()` does not install one.
+The transport/deployment description below is historical demo behavior, not a secure
+end-to-end deployment claim. See [finance security](../../docs/AGENT365_SECURITY.md).
+
 The six roles of the finance protocol (Fetcher, ExpenseAnalyst, RevenueAnalyst,
 TaxSpecialist, TaxVerifier, Writer) run as **six** Microsoft Foundry hosted
 agents that talk to each other over A2A. There is no coordinator: the user
@@ -111,6 +117,24 @@ would have to hold state across requests). The relayed messages keep their
 sender's label, so each role's skill still names exactly the labels of its
 projection. The full mapping is the `MESSAGES` table in `main.py`.
 
+### Transport: the Responses endpoint, not A2A (platform limit, 2026-10-08)
+
+The first live run reached ExpenseAnalyst over A2A with Fetcher's own identity
+(HTTP 200, authorization accepted, skillc allowed the handoff) and got JSON-RPC
+error -32099 `HostedAgentNotSupported`: "Use a prompt agent as the A2A target".
+Foundry does not accept a hosted agent as an A2A target, in any protocol
+version; the incoming-A2A documentation removed hosted agents from the
+supported types on 2026-08-26. The edges therefore run over each callee's
+Responses endpoint (`.../agents/<service>/endpoint/protocols/openai/responses`),
+which every hosted agent exposes under the same Entra authorization and the
+same Foundry Agent Consumer role. `PEER_PROTOCOL=responses` is the default;
+`PEER_PROTOCOL=a2a` keeps the A2A client for when the platform allows hosted
+targets. The agents, identities, connections, agent cards and the declared
+topology are unchanged, so `skillc gate` still checks the ten edges as
+declared. Writer's `GenerateReport` is the reply that closes the chain and is
+not a callable edge (a call back to Fetcher would recurse into the pending
+entry request).
+
 ### The ten edges
 
 | # | edge (caller -> callee) | message(s) | carried by | connection (`azure.yaml`) |
@@ -193,21 +217,18 @@ remote precondition (`analyze_expenses`, `audit_high_revenue`, `approve_*`,
 `write_revenue_analysis`, `compose_report`) would be denied and the group
 would stop at its first step.
 
-`main.py` therefore adds the **receive half of the role's projection** as two
-small middleware objects (`receive_bridge`): the agent middleware reads the
-labels of the incoming request and the function middleware reads the labels
-of each callee's reply, and both add the facts the label carries (the `adds`
-of the sender's last tool before the message, from the pack) to the monitor's
-state, under its lock. A label counts only through the channel the projection
-allows it on: `[Approval]` counts for RevenueAnalyst only in the reply of its
-`TaxVerifier` call, never in a request or in another callee's reply; a new
-incoming request resets the facts, because one A2A request is one run of the
-local protocol. The bridge trusts labels as the protocol trusts messages;
-**who** may send them is the platform's check (Entra on every A2A endpoint,
-Foundry Agent Consumer on the callee). What it does not do, and what skillc
-should learn to do in the monitor itself, is bind the label to the A2A
-caller's identity and derive the label-to-facts table from the pack instead
-of the hand-written `MESSAGES` in `main.py`. The state file is
+`receive_bridge` reads incoming and reply labels but adds facts only when a
+trusted host verifier supplies matching `MessageEvidence`: original producer,
+receiver, tenant, workflow, label and digest of the complete payload. Endpoint
+access alone does not establish those facts, especially for relayed messages.
+`[Approval]` must still arrive through `reply:TaxVerifier`, and a new request
+resets local facts and action history. Missing evidence is logged and grants no
+facts; verifier or storage errors propagate. The default `build()` has no
+verifier, so it intentionally cannot complete the monitored distributed flow.
+Do not treat model JSON as verified evidence. A real transport adapter must
+authenticate successful producer execution, freshness and payload bindings.
+The label-to-facts map is still the hand-written `MESSAGES` in `main.py`.
+The state file is
 `$HOME/.skillc/<session>/state.json`, with the session from
 `FOUNDRY_AGENT_SESSION_ID`.
 

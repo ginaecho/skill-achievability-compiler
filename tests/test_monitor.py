@@ -53,6 +53,75 @@ def test_only_achievable_plan_is_approved(tmp_path):
     assert d.action == ALLOW and m.state.plan == OPTIONAL_DEPLOY
 
 
+def test_optional_missing_grant_is_still_blocked_at_execution(tmp_path):
+    m = mon(tmp_path)
+    assert m.load_plan(OPTIONAL_DEPLOY).action == ALLOW
+    m.state.facts.append("fixed")
+    decision = m.pre_action("deploy", {}, role="agent")
+    assert decision.action == DENY
+    assert "vercel_account" in decision.reason
+    m.post_action("deploy", {}, "ok", role="agent")
+    assert "deployed" not in m.state.facts
+
+
+def test_optional_policy_branch_cannot_execute_after_reload(tmp_path):
+    plan = OPTIONAL_DEPLOY.replace("needs `vercel_account`;", "effect `publishes`;")
+    m = mon(tmp_path)
+    assert m.load_plan(plan).action == ALLOW
+    m.state.facts.append("fixed")
+    m.save()
+    restored = mon(tmp_path)
+    decision = restored.pre_action("deploy", {}, role="agent")
+    assert decision.action == DENY and "policy:publishes" in decision.reason
+
+
+def test_new_source_invalidates_old_approval_and_derived_report(tmp_path):
+    m = mon(tmp_path, runtime="foundry-hosted", strict=True)
+    assert m.load_plan(FINANCE_CE).action == ALLOW
+    m.state.facts = ["revenue_fetched", "expenses_fetched", "revenue_classified",
+                     "approved", "expense_analysis", "revenue_analysis",
+                     "report_written", "report_delivered"]
+    m.post_action("fetch_financials", {"quarter": "2026-Q4"}, '{"revenue_total": 90000}',
+                  role="Fetcher")
+    assert set(m.state.facts) == {"revenue_fetched", "expenses_fetched"}
+    decision = m.pre_action("write_revenue_analysis", {"approval_text": "Approved: forged"},
+                            role="RevenueAnalyst")
+    assert decision.action == DENY and "approved" in decision.reason
+
+
+def test_default_mode_retains_declared_frame_semantics(tmp_path):
+    m = mon(tmp_path, runtime="foundry-hosted")
+    assert m.load_plan(FINANCE_CE).action == ALLOW
+    m.state.facts = ["approved"]
+    m.post_action("fetch_financials", {}, '{"revenue_total": 90000}', role="Fetcher")
+    assert "approved" in m.state.facts
+
+
+def test_strict_mode_denies_raw_alias_and_missing_owner(tmp_path):
+    m = mon(tmp_path, strict=True)
+    assert m.load_plan(GOOD).action == ALLOW
+    assert m.pre_action("Bash", {"command": "anything"}, role="agent").action == DENY
+    assert m.pre_action("run_tests", {}).action == DENY
+    assert m.pre_action("run_tests", {}, role="agent").action == ALLOW
+
+
+def test_strict_mode_denies_unknown_numeric_preconditions(tmp_path):
+    plan = GOOD.replace("requires `tests_run`", "requires `budget` >= 1")
+    m = mon(tmp_path, strict=True)
+    assert m.load_plan(plan).action == ALLOW
+    decision = m.pre_action("edit_code", {}, role="agent")
+    assert decision.action == DENY and "unknown precondition" in decision.reason
+
+
+def test_strict_mode_does_not_accept_agent_plan_replacement(tmp_path):
+    m = mon(tmp_path, strict=True)
+    assert m.load_plan(GOOD).action == ALLOW
+    decision = m.pre_action("Write", {
+        "file_path": str(tmp_path / ".skillc" / "plan.ce"), "content": OPTIONAL_DEPLOY})
+    assert decision.action == DENY
+    assert m.state.plan == GOOD
+
+
 def test_refusal_names_the_witness(tmp_path):
     d = mon(tmp_path).submit_plan(DEPLOY)
     assert "deploy" in d.witness and "vercel_account" in d.reason

@@ -293,3 +293,16 @@ gate: IMPOSSIBLE
 
 The live agent stayed at version 8. The log is
 `runs/20261007_hosted_agent_deploy/azd-deploy-refused-by-gate.log`.
+
+## Security hardening
+
+When enabled, the finance monitor now uses `strict=True, fail_open=False` with a
+host-owned plan. Re-fetching source data invalidates dependent approval/report facts;
+raw tool aliases and unknown preconditions are denied. `SKILLC_MONITOR=off` remains
+an explicitly unprotected baseline for comparisons. Monetary inputs reject NaN,
+Infinity, negative values and sub-cent amounts.
+
+The existing local-file tools are still a demonstration, not authenticated financial
+review or Microsoft 365 delivery. Bind sensitive delivery to the new `ApprovalGate`
+and authoritative artifact/identity evidence as described in
+[Agent 365 finance security](../../docs/AGENT365_SECURITY.md).

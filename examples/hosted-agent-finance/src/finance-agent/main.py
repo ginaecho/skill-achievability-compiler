@@ -59,6 +59,7 @@ from pathlib import Path
 from typing import Annotated, Any
 
 from agent_framework import Agent, FunctionTool, MCPStreamableHTTPTool, tool
+from skillc.security import money_minor
 
 log = logging.getLogger("finance-agent")
 
@@ -141,10 +142,7 @@ def fetch_financials(
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             kind = (row.get("type") or "").strip().lower()
-            try:
-                amount = float(row.get("amount") or 0)
-            except ValueError:
-                continue
+            amount = money_minor(row.get("amount") or 0) / 100
             category = (row.get("category") or "").strip()
             items.append({"category": category, "type": kind, "amount": amount})
             if kind == "revenue":
@@ -207,7 +205,7 @@ def classify_revenue(
     revenue_total: Annotated[float, "Total revenue for the quarter, as given by Fetcher."],
 ) -> str:
     """Classify the quarter's revenue as 'high' (above the $50,000 threshold) or 'standard'."""
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     branch = "high" if revenue > REVENUE_THRESHOLD else "standard"
     relation = "above" if branch == "high" else "at or below"
     consequence = (
@@ -238,7 +236,7 @@ def write_revenue_analysis(
             "approval text must start with 'Approved' or 'Verified'. Obtain the Approval from "
             "TaxVerifier first."
         )
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     margin = ""
     try:
         exp = float(str(expense_context).strip().split()[-1].replace(",", ""))
@@ -292,7 +290,7 @@ def audit_high_revenue(
     rules: Annotated[str, "The tax rules text from lookup_tax_rules."],
 ) -> str:
     """Audit high revenue against the tax rules and produce the AuditReport for TaxVerifier."""
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     excess = revenue - REVENUE_THRESHOLD
     n_rules = sum(1 for line in (rules or "").splitlines() if line.strip()[:1].isdigit())
     return (
@@ -334,7 +332,7 @@ def approve_standard(
     revenue_total: Annotated[float, "Total revenue for the quarter (at or below the threshold)."],
 ) -> str:
     """Issue the Approval for the standard branch, confirming the threshold needs no audit."""
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     if revenue > REVENUE_THRESHOLD:
         text = (
             f"Rejected: revenue {revenue:,.2f} is above the {REVENUE_THRESHOLD:,.2f} threshold; "
@@ -589,17 +587,18 @@ def skillc_monitor_or_none():
     if os.environ.get("SKILLC_MONITOR", "").lower() == "off":
         log.info("skillc monitor disabled by SKILLC_MONITOR=off")
         return None
-    try:
-        from skillc.integrations.agent_framework import skillc_monitor
-    except ImportError:
-        log.info("skillc[agent-framework] not installed; running without the skillc monitor")
-        return None
+    from skillc.integrations.agent_framework import skillc_monitor
+
+    plan_path = PLAN_FILE if PLAN_FILE.is_file() else (
+        EXAMPLE_ROOT / "protocol" / "quarterly_finance_report.ce")
     monitor = skillc_monitor(
         runtime="foundry-hosted",
         root=Path(os.environ.get("HOME", ".")) / ".skillc",
-        plan_path=PLAN_FILE if PLAN_FILE.is_file() else None,
+        plan_path=plan_path,
         agent_tools=ROLES,
         logger=log,
+        strict=True,
+        fail_open=False,
     )
     verdict = (monitor.plan_decision.action if monitor.plan_decision else "no plan")
     log.info("skillc monitor active; plan %s: %s", PLAN_FILE.name, verdict)

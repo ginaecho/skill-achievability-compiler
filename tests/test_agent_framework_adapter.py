@@ -299,6 +299,55 @@ def test_environment_switch_disables_the_middleware(tmp_path, monkeypatch, caplo
     assert caplog.text.count("disabled") == 1
 
 
+def test_strict_mode_requires_fail_closed(tmp_path):
+    with pytest.raises(ValueError, match="fail_open=False"):
+        monitor(tmp_path, strict=True)
+
+
+def test_strict_mode_requires_host_owned_plan(tmp_path):
+    with pytest.raises(ValueError, match="host-supplied"):
+        skillc_monitor(root=tmp_path, strict=True, fail_open=False)
+    with pytest.raises(ValueError, match="no plan tool"):
+        monitor(tmp_path, strict=True, fail_open=False, enable_plan_tool=True)
+
+
+def test_strict_mode_cannot_be_disabled_after_construction(tmp_path, monkeypatch):
+    m = monitor(tmp_path, strict=True, fail_open=False)
+    monkeypatch.setenv("SKILLC_MONITOR", "off")
+    with pytest.raises(ValueError, match="cannot be disabled"):
+        m.middleware_for("Writer")
+
+
+def test_strict_internal_failure_never_invokes_the_tool(tmp_path, monkeypatch):
+    m = monitor(tmp_path, strict=True, fail_open=False)
+
+    def failure(*args, **kwargs):
+        raise OSError("state unavailable")
+
+    monkeypatch.setattr(m.core, "pre_action", failure)
+    calls = []
+    ctx = FunctionInvocationContext(function=fetch_financials, arguments={})
+
+    async def next_call():
+        calls.append(True)
+
+    with pytest.raises(OSError, match="state unavailable"):
+        run(SkillcFunctionMiddleware(m, "Fetcher").process(ctx, next_call))
+    assert calls == []
+
+
+def test_strict_alias_bypass_is_denied_before_tool_invocation(tmp_path):
+    m = monitor(tmp_path, strict=True, fail_open=False)
+
+    @tool
+    def write_file(content: Annotated[str, "Content"]) -> str:
+        return "written"
+
+    ctx, called = run(invoke(SkillcFunctionMiddleware(m, "Writer"),
+                            write_file, {"content": "skip approval"}))
+    assert not called and ctx.result["skillc"] == "blocked"
+
+
 def test_shapes():
     assert arguments_dict({"a": 1}) == {"a": 1} and arguments_dict(None) == {}
 

@@ -240,6 +240,19 @@ documentation, not assumed.
 | limits | text modality only, no streaming, JSON-RPC only for v1.0; each call creates an A2A task and context, retained 60 days. A2A is request and reply, so a protocol "tells" becomes a request whose reply may carry the next message. |
 | identity | every hosted agent has its own Entra instance identity (seen in `azd ai agent show`: Instance Identity Principal ID), so per-role RBAC and non-self-approval become properties of the deployment, not conventions. |
 
+**Verified live on 2026-10-08, and it changes the transport:** Foundry does
+not accept a *hosted* agent as an A2A target. A call from one hosted agent
+to another's `.../endpoint/protocols/a2a` is authorized and answered, but
+with JSON-RPC error -32099 `HostedAgentNotSupported`: "Use a prompt agent
+as the A2A target", in every protocol version. The incoming-A2A page
+dropped hosted agents from the supported types on 2026-08-26. The group
+example therefore runs its edges over each callee's **Responses** endpoint
+(`.../endpoint/protocols/openai/responses`), which every hosted agent
+exposes under the same Entra authorization and the same Foundry Agent
+Consumer role; the agents, identities, connections and declared topology
+are unchanged, only the wire format differs, and the A2A path stays
+selectable for when the platform allows hosted targets.
+
 For the finance protocol the ordered edges are F→RA, F→EA, EA→RA, EA→W,
 RA→TV, RA→W, RA→TS, TS→TV, TV→RA, W→F: ten connections and ten `a2a`
 tools, and every agent that is ever a callee (all six) exposes `a2a`. The

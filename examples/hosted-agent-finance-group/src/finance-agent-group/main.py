@@ -48,8 +48,8 @@ agent_tools, logger) and .middleware_for(role) -> [function middleware, agent mi
 Monitor.pre_action evaluates a Tool's `requires` against the facts the SAME process's tools
 added, and an agent tool (a callee) is allowed without changing state. In a group the facts a
 role depends on (`approved`, `expense_analysis`, ...) are established by another agent's tool
-and arrive as a labelled message, so ReceiveBridge below applies the facts a received label
-carries. That is the receive half of the role's projection, which the monitor lacks today.
+and arrive as labelled messages. ReceiveBridge applies their facts only with host-verified
+evidence. The text-only demo transport supplies none, so remote-dependent steps fail closed.
 """
 
 from __future__ import annotations
@@ -66,8 +66,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
+from collections.abc import Callable, Sequence
 
 from agent_framework import Agent, FunctionTool, tool
+from skillc.security import MessageEvidence, money_minor
 
 log = logging.getLogger("finance-agent-group")
 
@@ -81,6 +83,7 @@ DEFAULT_QUARTER = "2026-Q3"
 ROLES = ("Fetcher", "ExpenseAnalyst", "RevenueAnalyst", "TaxSpecialist", "TaxVerifier", "Writer")
 TOKEN_SCOPE = "https://ai.azure.com/.default"
 A2A_TIMEOUT = 120.0
+A2A_VERSION = "1.0"   # the A2A-Version header; Foundry serves v0.3 when none is selected
 
 # ------------------------------------------------------------------------------------ topology
 
@@ -109,7 +112,10 @@ EDGES = (
     ("TaxVerifier", "RevenueAnalyst"),
     ("Writer", "Fetcher"),
 )
-CALLEES = {r: tuple(b for a, b in EDGES if a == r) for r in ROLES}
+# Writer -> Fetcher (GenerateReport) is the reply that closes the chain, not a call: Fetcher is
+# waiting on RevenueAnalyst, which is waiting on Writer, so a call back would recurse.
+REPLY_EDGES = {("Writer", "Fetcher")}
+CALLEES = {r: tuple(b for a, b in EDGES if a == r and (a, b) not in REPLY_EDGES) for r in ROLES}
 
 # The protocol messages: label -> (sender, receiver, facts the message carries, how the
 # receiver gets it). The facts are the `adds` of the tool the sender used right before the
@@ -123,8 +129,10 @@ MESSAGES: dict[str, tuple[str, str, tuple[str, ...], str]] = {
     # RevenueAnalyst, which relays ExpenseAnalysis in its request to Writer.
     "ExpenseData": ("ExpenseAnalyst", "RevenueAnalyst", ("expense_analysis",), "request"),
     "ExpenseAnalysis": ("ExpenseAnalyst", "Writer", ("expense_analysis",), "request"),
-    "HighRevenueNotification": ("RevenueAnalyst", "TaxVerifier", ("revenue_classified",), "request"),
-    "StandardRevenueNotification": ("RevenueAnalyst", "TaxVerifier", ("revenue_classified",), "request"),
+    "HighRevenueNotification": ("RevenueAnalyst", "TaxVerifier", ("revenue_classified",),
+                                "request"),
+    "StandardRevenueNotification": ("RevenueAnalyst", "TaxVerifier", ("revenue_classified",),
+                                    "request"),
     "HighBranchNotification": ("RevenueAnalyst", "Writer", ("revenue_classified",), "request"),
     "StandardBranchNotification": ("RevenueAnalyst", "Writer", ("revenue_classified",), "request"),
     "NotifyTaxSpecialist": ("RevenueAnalyst", "TaxSpecialist", ("revenue_classified",), "request"),
@@ -220,10 +228,7 @@ def fetch_financials(
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             kind = (row.get("type") or "").strip().lower()
-            try:
-                amount = float(row.get("amount") or 0)
-            except ValueError:
-                continue
+            amount = money_minor(row.get("amount") or 0) / 100
             category = (row.get("category") or "").strip()
             items.append({"category": category, "type": kind, "amount": amount})
             if kind == "revenue":
@@ -286,7 +291,7 @@ def classify_revenue(
     revenue_total: Annotated[float, "Total revenue for the quarter, as given by Fetcher."],
 ) -> str:
     """Classify the quarter's revenue as 'high' (above the $50,000 threshold) or 'standard'."""
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     branch = "high" if revenue > REVENUE_THRESHOLD else "standard"
     relation = "above" if branch == "high" else "at or below"
     consequence = (
@@ -317,7 +322,7 @@ def write_revenue_analysis(
             "approval text must start with 'Approved' or 'Verified'. Obtain the Approval from "
             "TaxVerifier first."
         )
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     margin = ""
     try:
         exp = float(str(expense_context).strip().split()[-1].replace(",", ""))
@@ -371,7 +376,7 @@ def audit_high_revenue(
     rules: Annotated[str, "The tax rules text from lookup_tax_rules."],
 ) -> str:
     """Audit high revenue against the tax rules and produce the AuditReport for TaxVerifier."""
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     excess = revenue - REVENUE_THRESHOLD
     n_rules = sum(1 for line in (rules or "").splitlines() if line.strip()[:1].isdigit())
     return (
@@ -413,7 +418,7 @@ def approve_standard(
     revenue_total: Annotated[float, "Total revenue for the quarter (at or below the threshold)."],
 ) -> str:
     """Issue the Approval for the standard branch, confirming the threshold needs no audit."""
-    revenue = float(revenue_total)
+    revenue = money_minor(revenue_total) / 100
     if revenue > REVENUE_THRESHOLD:
         text = (
             f"Rejected: revenue {revenue:,.2f} is above the {REVENUE_THRESHOLD:,.2f} threshold; "
@@ -689,6 +694,9 @@ class BearerAuth:
         if args.context.service_parameters is None:
             args.context.service_parameters = {}
         args.context.service_parameters["Authorization"] = f"Bearer {await self._bearer()}"
+        # Foundry serves A2A v0.3 unless a version is selected; the a2a-sdk client speaks v1.0
+        # method names, which the v0.3 bridge answers with -32099 "operation is not supported".
+        args.context.service_parameters["A2A-Version"] = A2A_VERSION
 
     async def after(self, args) -> None:
         return None
@@ -717,9 +725,84 @@ async def resolve_agent_card(callee: str, auth: BearerAuth):
 
     base = a2a_base_url(callee)
     async with httpx.AsyncClient(timeout=A2A_TIMEOUT) as http:
-        resolver = A2ACardResolver(httpx_client=http, base_url=base, agent_card_path="agentCard/v1.0")
+        resolver = A2ACardResolver(httpx_client=http, base_url=base,
+                                   agent_card_path="agentCard/v1.0")
         headers = {"Authorization": f"Bearer {await auth._bearer()}"}
         return await resolver.get_agent_card(http_kwargs={"headers": headers})
+
+
+def responses_url(callee: str) -> str:
+    """The callee's Responses endpoint, which every hosted agent exposes under Entra auth."""
+    project = os.environ["FOUNDRY_PROJECT_ENDPOINT"].rstrip("/")
+    return (f"{project}/agents/{SERVICE_NAMES[callee]}/endpoint/protocols/openai/responses"
+            "?api-version=v1")
+
+
+def platform_call_id() -> str | None:
+    """The current request's platform call id (x-agent-foundry-call-id), when hosted."""
+    try:
+        from azure.ai.agentserver.core import get_request_context
+    except ImportError:
+        return None
+    try:
+        return getattr(get_request_context(), "call_id", None)
+    except Exception:  # noqa: BLE001 - outside a request there is no context
+        return None
+
+
+def responses_tools(role: str) -> list[FunctionTool]:
+    """One tool per outgoing edge of `role`, calling the callee's Responses endpoint.
+
+    Foundry does not accept a hosted agent as an A2A *target* (JSON-RPC -32099
+    HostedAgentNotSupported, "Use a prompt agent as the A2A target", 2026-10-08), so the
+    edges run over each callee's Responses endpoint instead: same callee, same agent identity
+    on the caller, same Foundry Agent Consumer authorization, same request/reply mapping of
+    the protocol; only the wire format differs. The A2A path stays selectable with
+    PEER_PROTOCOL=a2a for when the platform allows hosted targets.
+    """
+    import httpx
+
+    tools: list[FunctionTool] = []
+    for callee in CALLEES[role]:
+        auth = BearerAuth()
+        url = responses_url(callee)
+
+        async def call_peer(message: Annotated[str, "The protocol message(s) for the callee, "
+                                               "each on a line starting with its label in "
+                                               "square brackets, with the values its tools "
+                                               "need in plain text."],
+                            _url: str = url, _auth: BearerAuth = auth) -> str:
+            headers = {"Authorization": f"Bearer {await _auth._bearer()}",
+                       "Content-Type": "application/json"}
+            # Container protocol 2.0.0: forward the platform call id verbatim on outbound calls
+            # to other agents; the platform resolves the caller from it and the callee's
+            # hosting library needs it to prepare the request (hosted-agent contract).
+            call_id = platform_call_id()
+            if call_id:
+                headers["x-agent-foundry-call-id"] = call_id
+            async with httpx.AsyncClient(timeout=A2A_TIMEOUT) as http:
+                # store=false: a one-shot reply that needs no host-managed state on the callee
+                r = await http.post(_url, json={"input": message, "stream": False, "store": False},
+                                    headers=headers)
+            if r.status_code != 200:
+                return f"Error: {_url.split('/agents/')[1].split('/')[0]} answered HTTP " \
+                       f"{r.status_code}: {r.text[:300]}"
+            d = r.json()
+            texts = [c.get("text") for o in d.get("output") or [] for c in (o.get("content") or [])
+                     if c.get("type") == "output_text" and c.get("text")]
+            if not texts and d.get("status") != "completed":
+                return f"Error: callee response status {d.get('status')}"
+            return "\n".join(texts) or "(empty reply)"
+
+        tools.append(tool(name=callee, description=EDGE_DESCRIPTIONS[(role, callee)])(call_peer))
+    return tools
+
+
+def peer_tools(role: str) -> list[FunctionTool]:
+    """The outgoing edges of `role` over the transport PEER_PROTOCOL selects (responses | a2a)."""
+    if os.environ.get("PEER_PROTOCOL", "responses").lower() == "a2a":
+        return a2a_tools(role)
+    return responses_tools(role)
 
 
 def a2a_tools(role: str) -> list[FunctionTool]:
@@ -775,17 +858,18 @@ def skillc_monitor_or_none(role: str):
     if os.environ.get("SKILLC_MONITOR", "").lower() == "off":
         log.info("skillc monitor disabled by SKILLC_MONITOR=off")
         return None
-    try:
-        from skillc.integrations.agent_framework import skillc_monitor
-    except ImportError:
-        log.info("skillc[agent-framework] not installed; running without the skillc monitor")
-        return None
+    from skillc.integrations.agent_framework import skillc_monitor
+
+    plan_path = PLAN_FILE if PLAN_FILE.is_file() else (
+        EXAMPLE_ROOT / "protocol" / "quarterly_finance_report.ce")
     monitor = skillc_monitor(
         runtime="foundry-hosted",
         root=Path(os.environ.get("HOME", ".")) / ".skillc",
-        plan_path=PLAN_FILE if PLAN_FILE.is_file() else None,
+        plan_path=plan_path,
         agent_tools=CALLEES[role],
         logger=log,
+        fail_open=False,
+        strict=True,
     )
     verdict = monitor.plan_decision.action if monitor.plan_decision else "no plan"
     log.info("skillc monitor active for %s; plan %s: %s", role, PLAN_FILE.name, verdict)
@@ -796,71 +880,86 @@ def _labels_in(text: str) -> list[str]:
     return list(dict.fromkeys(m.group("label") for m in LABEL_RX.finditer(text or "")))
 
 
-def _apply_received(monitor, role: str, text: str, via: str) -> list[str]:
-    """Add to the monitor's protocol state the facts carried by the labelled messages in
-    `text` that `role` may receive through `via` ("request" or "reply:<Callee>"); with
-    via="request" the state is first reset to the pack's initial facts, because one incoming
-    A2A request is one run of the role's local protocol. Returns the facts added.
+def _apply_received(monitor, role: str, text: str, via: str, *,
+                    evidence: Sequence[MessageEvidence] = (),
+                    tenant: str = "", workflow: str = "") -> list[str]:
+    """Only host-verified, content-bound evidence may establish received facts.
 
-    The bridge trusts labels the way the protocol trusts messages; who may send them is the
-    platform's check (Entra on the A2A endpoint, Foundry Agent Consumer on the callee).
+    Labels and endpoint access are not evidence that an operation succeeded. Without
+    a trusted evidence adapter the group intentionally cannot advance remote facts.
     """
     core = getattr(monitor, "core", None)
     if core is None:
         return []
-    accepted = incoming(role)
-    facts = [f for lbl in _labels_in(text) if lbl in accepted and accepted[lbl][1] == via
-             for f in accepted[lbl][0]]
-    added: list[str] = []
-    try:
-        from skillc.monitor import state_lock
+    from skillc.monitor import state_lock
 
-        with state_lock(core.state_path):
-            try:
-                if via == "request":
-                    core.state.facts = list((core.plan_pack() or {}).get("init_true", []))
-                added = [f for f in facts if f not in core.state.facts]
-                core.state.facts.extend(added)
-            finally:
-                core.save()
-    except Exception as e:  # noqa: BLE001 - never stop the agent
-        log.warning("skillc receive bridge (%s): %s; allowing", via, e)
-        return []
+    facts: list[str] = []
+    for label in _labels_in(text):
+        if label not in MESSAGES:
+            continue
+        issuer, receiver, carried, route = MESSAGES[label]
+        if receiver != role or route != via:
+            continue
+        verified = bool(tenant and workflow) and any(
+            item.matches(text=text, issuer=issuer, receiver=role, tenant=tenant,
+                         workflow=workflow, label=label) for item in evidence)
+        if verified:
+            facts.extend(carried)
+        else:
+            log.warning("skillc receive denied (%s, %s): %s lacks verified evidence",
+                        role, via, label)
+    with state_lock(core.state_path):
+        try:
+            if via == "request":
+                core.state.facts = list((core.plan_pack() or {}).get("init_true", []))
+                core.state.actions = []
+            added = list(dict.fromkeys(f for f in facts if f not in core.state.facts))
+            core.state.facts.extend(added)
+        finally:
+            core.save()
     if added or via == "request":
         log.info("skillc receive bridge (%s, %s): facts now %s", role, via, core.state.facts)
     return added
 
 
-def receive_bridge(monitor, role: str) -> list:
-    """The two middleware objects that give the monitor the receive events of the projection:
-    the incoming request's labels (agent middleware) and each callee's reply labels (function
-    middleware, for the A2A tools only)."""
-    from agent_framework import AgentContext, AgentMiddleware, FunctionInvocationContext, FunctionMiddleware
+def receive_bridge(monitor, role: str, *,
+                   verify_received: Callable[[str, str], Sequence[MessageEvidence]] | None = None,
+                   tenant: str = "", workflow: str = "") -> list:
+    """The host supplies a verifier and trusted workflow IDs, never model arguments.
+
+    The verifier must authenticate the original producer even across relays, verify
+    successful execution and freshness, and bind the complete payload. No verifier
+    is installed by the demo's build(): textual peer replies are not trustworthy.
+    """
+    from agent_framework import (AgentContext, AgentMiddleware, FunctionInvocationContext,
+                                 FunctionMiddleware)
 
     class RequestLabels(AgentMiddleware):
         async def process(self, context: AgentContext, call_next) -> None:
-            try:
-                text = ""
-                for m in reversed(list(getattr(context, "messages", []) or [])):
-                    if getattr(m, "role", None) == "user" and isinstance(getattr(m, "text", None), str):
-                        text = m.text
-                        break
-                _apply_received(monitor, role, text, "request")
-            except Exception as e:  # noqa: BLE001
-                log.warning("skillc receive bridge (request): %s; allowing", e)
+            text = ""
+            for m in reversed(list(getattr(context, "messages", []) or [])):
+                if (getattr(m, "role", None) == "user"
+                        and isinstance(getattr(m, "text", None), str)):
+                    text = m.text
+                    break
+            evidence = verify_received(text, "request") if verify_received else ()
+            _apply_received(monitor, role, text, "request", evidence=evidence,
+                            tenant=tenant, workflow=workflow)
             await call_next()
 
     class ReplyLabels(FunctionMiddleware):
         async def process(self, context: FunctionInvocationContext, call_next) -> None:
             await call_next()
-            try:
-                name = str(getattr(context.function, "name", None) or context.function)
-                if name in CALLEES[role]:
-                    result = context.result
-                    text = result if isinstance(result, str) else str(getattr(result, "text", result))
-                    _apply_received(monitor, role, text, f"reply:{name}")
-            except Exception as e:  # noqa: BLE001
-                log.warning("skillc receive bridge (reply): %s; allowing", e)
+            from skillc.integrations.agent_framework import result_value
+
+            name = str(getattr(context.function, "name", None) or context.function)
+            if name in CALLEES[role]:
+                value = result_value(context.result)
+                text = value if isinstance(value, str) else json.dumps(value)
+                via = f"reply:{name}"
+                evidence = verify_received(text, via) if verify_received else ()
+                _apply_received(monitor, role, text, via, evidence=evidence,
+                                tenant=tenant, workflow=workflow)
 
     return [RequestLabels(), ReplyLabels()]
 
@@ -876,7 +975,7 @@ def build(role: str) -> tuple[Agent, list[Any]]:
     middleware: list = []
     if monitor is not None:
         middleware = [*receive_bridge(monitor, role), *(monitor.middleware_for(role) or [])]
-    tools: list[Any] = [*ROLE_TOOLS[role], *a2a_tools(role)]
+    tools: list[Any] = [*ROLE_TOOLS[role], *peer_tools(role)]
     agent = Agent(
         client=client,
         instructions=load_instructions(role),
@@ -901,7 +1000,8 @@ def check(role: str) -> int:
     skill = SKILLS_DIR / f"{role}.md"
     print(f"role: {role}  (service {SERVICE_NAMES[role]}, agent name {agent.name})")
     print(f"data dir: {data_dir()}  (quarters: {quarters})")
-    print(f"skills dir: {SKILLS_DIR}  ({role}.md {'found' if skill.is_file() else 'missing; built-in instructions'})")
+    found = 'found' if skill.is_file() else 'missing; built-in instructions'
+    print(f"skills dir: {SKILLS_DIR}  ({role}.md {found})")
     print(f"tools: {', '.join(_tool_name(t) for t in tools)}")
     for callee in CALLEES[role]:
         print(f"edge {role} -> {callee}: a2a tool {callee!r} -> {a2a_base_url(callee)}")

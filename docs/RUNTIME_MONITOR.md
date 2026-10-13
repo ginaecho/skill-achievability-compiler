@@ -22,6 +22,15 @@ Everything is deterministic and costs zero model tokens. The implementation is
 `src/skillc/monitor.py` (the logic) and `src/skillc/monitor_hook.py` (the Claude Code
 adapter). The tests are in `tests/test_monitor.py`.
 
+Security hardening: named capability calls now reapply runtime restrictions, including
+restrictions on branches pruned during static validation. Agent Framework callers
+can opt into `strict=True, fail_open=False` with a host-owned plan: recomputing an
+upstream predicate invalidates dependent approvals and derived artifacts, and raw tool
+aliases, unknown owners and unknown preconditions are denied. Default mode retains
+the pack's ordinary frame semantics. This does not authenticate tool
+results or bind Boolean facts to payloads. Use the separate evidence-bound
+`ApprovalGate` at a sensitive delivery tool; see [finance security](AGENT365_SECURITY.md).
+
 ## Signals and decisions
 
 | signal | where it comes from | what skillc does |

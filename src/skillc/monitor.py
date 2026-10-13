@@ -58,9 +58,10 @@ from pathlib import Path
 from typing import Any
 
 from .checker import check
+from .formula import atoms
 from .frontend.ce import CEError, parse_ce_detailed, render_formula
 from .frontend.prompts import CE_DOC, CE_RUNTIME_DOC, CE_SOFTWARE_DOC
-from .frontend.runtime import Runtime, bind_runtime, load_runtime, runtime_note
+from .frontend.runtime import Binding, Runtime, bind_runtime, load_runtime, runtime_note
 from .frontend.toolpolicy import Library, Obligation, load_library, match, unmet
 from .pack import PackError
 
@@ -157,6 +158,7 @@ class Config:
     # sub-agent handoffs (a coordinator's role tools): always allowed, never change state
     agent_tools: tuple = ()
     prohibited: list = field(default_factory=list)   # list[Rule]
+    strict: bool = False             # named capabilities, known owners and known preconditions only
 
     @staticmethod
     def load(path: Path) -> Config:
@@ -213,11 +215,8 @@ class Monitor:
       submit_plan(text)               a plan written through another channel
       load_plan(text)                 a pre-approved plan at startup; resets the facts
 
-    Fail-open contract.  The monitor never raises across an adapter boundary.  The
-    methods above only raise on a programming error or an unreadable state file, and
-    an adapter must treat any exception as "allow": catch it, write one line to stderr,
-    and let the agent's call go through.  A monitor that crashes must not deny every
-    tool of the agent, and must not stop the agent by crashing the hook or middleware.
+    Adapters select failure policy. Legacy adapters may log errors and allow execution;
+    strict enforcement must instead propagate errors without invoking the protected tool.
     Decisions the monitor cannot make (an unparsable plan, an unknown tool) are DENY
     with a reason, not exceptions.
 
@@ -434,11 +433,35 @@ class Monitor:
 
     def _plan_via(self) -> set:
         parsed = self._parsed_plan()
-        return {b.get("via") for b in parsed[1].values()} if parsed else set()
+        if not parsed:
+            return set()
+        bound = self._runtime_binding()
+        dead = set(bound.withdrawn) | set(bound.blocked)
+        return {b.get("via") for name, b in parsed[1].items() if name not in dead}
+
+    def _runtime_binding(self) -> Binding:
+        parsed = self._parsed_plan()
+        if parsed is None:
+            raise ValueError("no approved plan")
+        rt, lib = self.effective()
+        return bind_runtime(parsed[0], parsed[1], rt, prune=True, library=lib, software=True)
+
+    def _runtime_denial(self, tool: str) -> str | None:
+        try:
+            bound = self._runtime_binding()
+        except (CEError, PackError, ValueError) as e:
+            return f"skillc: cannot bind the approved plan to the current runtime: {e}"
+        if tool in bound.withdrawn:
+            return f"skillc: `{tool}` is unavailable: {bound.withdrawn[tool]}."
+        if tool in bound.blocked:
+            return f"skillc: `{tool}` is blocked by the runtime: {', '.join(bound.blocked[tool])}."
+        return None
 
     # ------------------------------------------------------------------ protocol state
     def _owner_mismatch(self, tool: str, cap: dict, role: str | None) -> str | None:
         owner = cap.get("owner")
+        if self.cfg.strict and (not role or owner in (None, "?")):
+            return f"skillc: `{tool}` requires a known calling role and declared owner."
         if role and owner not in (None, "?") and owner != role:
             return (f"skillc: `{tool}` is owned by role {owner}, not {role} "
                     "(policy: separation of duties)")
@@ -464,7 +487,10 @@ class Monitor:
 
     def _unmet_precondition(self, tool: str, cap: dict) -> str | None:
         pre = cap.get("pre", True)
-        if eval_formula(pre, self.state.facts) is not False:
+        value = eval_formula(pre, self.state.facts)
+        if value is None and self.cfg.strict:
+            return f"skillc: `{tool}` has an unknown precondition; strict enforcement denies it."
+        if value is not False:
             return None
         unmet = unmet_atoms(pre, self.state.facts)
         if unmet:
@@ -475,7 +501,21 @@ class Monitor:
                 + (", ".join(f"`{f}`" for f in self.state.facts) or "nothing") + ").")
 
     def _apply_effects(self, tool: str, cap: dict) -> None:
-        facts = [f for f in self.state.facts if f not in cap.get("del", [])]
+        invalidated: set[str] = set()
+        if self.cfg.strict:
+            # Strict runtime policy treats downstream facts as artifact-dependent.
+            # Default mode retains the pack's ordinary STRIPS frame semantics.
+            changed = set(cap.get("add", [])) | set(cap.get("del", []))
+            caps = (self.plan_pack() or {}).get("capabilities", {})
+            while True:
+                previous = len(invalidated)
+                for name, dependent in caps.items():
+                    if name != tool and atoms(dependent.get("pre", True)) & (changed | invalidated):
+                        invalidated.update(dependent.get("add", []))
+                if len(invalidated) == previous:
+                    break
+        facts = [f for f in self.state.facts
+                 if f not in invalidated and f not in cap.get("del", [])]
         facts += [p for p in cap.get("add", []) if p not in facts]
         self.state.facts = facts
         self.state.actions.append(tool)
@@ -554,6 +594,9 @@ class Monitor:
         when the adapter knows it (one middleware per role agent); a capability owned by
         another role is then refused."""
         if self.is_plan_file(tool_input):
+            if self.cfg.strict:
+                return self._record("action", Decision(
+                    DENY, "skillc: strict enforcement does not let tools replace the host's plan."))
             if tool not in self.cfg.plan_tools:
                 return self._record("action", Decision(
                     DENY, f"skillc: write the whole plan with {' or '.join(self.cfg.plan_tools)} "
@@ -571,10 +614,15 @@ class Monitor:
                       "judges ACHIEVABLE can be implemented."), tool)
         cap = self._capability(tool)
         if cap is not None:
-            reason = (self._owner_mismatch(tool, cap, role)
+            reason = (self._runtime_denial(tool)
+                      or self._owner_mismatch(tool, cap, role)
                       or self._unmet_precondition(tool, cap))
             if reason:
                 return self._record("action", Decision(DENY, reason, [tool]), tool)
+        elif self.cfg.strict and not free:
+            return self._record("action", Decision(
+                DENY, f"skillc: strict enforcement requires a named capability; `{tool}` "
+                      "cannot bypass capability ownership or preconditions."), tool)
         text = self._action_text(tool_input)
         rt_tool = self.cfg.tool_map.get(tool, tool)
         if cap is not None:                         # the plan binds the Tool to its runtime tool
@@ -615,7 +663,8 @@ class Monitor:
             return self._record("observe", Decision(ALLOW), tool)
         cap = self._capability(tool)
         if (cap is not None and not is_failure(result)
-                and self._owner_mismatch(tool, cap, role) is None):
+                and self._owner_mismatch(tool, cap, role) is None
+                and self._runtime_denial(tool) is None):
             self._apply_effects(tool, cap)
         out = result if isinstance(result, str) else json.dumps(result, default=str)
         new = self._observe(out, self._action_text(tool_input))

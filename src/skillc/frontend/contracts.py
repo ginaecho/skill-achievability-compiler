@@ -136,8 +136,9 @@ def apply_contracts(pack: dict, contracts: dict, states: Iterable[str],
                     init_true: Iterable[str] = ()) -> ContractBinding:
     """Substitute environment contracts for the pack's granted capabilities.
 
-    `init_true` is the environment's initial state; it holds whenever the
-    environment's contracts are in force. Under those contracts, an initial
+    `init_true` is the environment's initial state; it replaces the intent's
+    assumed facts whenever environment contracts are applied. An intent cannot
+    manufacture prior approval or authentication. Under those contracts, an initial
     constraint naming anything outside the state vocabulary is a compaction
     artifact the environment cannot confirm, so it is dropped: removing a
     constraint only widens the initial states and can never create a refutation.
@@ -164,7 +165,7 @@ def apply_contracts(pack: dict, contracts: dict, states: Iterable[str],
         applied.append(name)
     dropped: set[str] = set()
     if applied:
-        bound["init_true"] = sorted(set(bound.get("init_true", [])) | set(init_true))
+        bound["init_true"] = sorted(set(init_true))
         kept = []
         for constraint in bound.get("init_constraints", []):
             outside = (atoms(constraint) | numeric_vars(constraint)) - vocabulary

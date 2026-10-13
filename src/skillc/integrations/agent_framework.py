@@ -22,7 +22,8 @@ ownership of the plan's Tools is enforced per role.  The state lives in
 Fail-open.  Every entry point is wrapped: an internal exception is logged once at
 WARNING and the call is allowed (`fail_open=True`, the default).  The monitor never stops
 an agent by crashing.  `SKILLC_MONITOR=off` in the environment makes `middleware_for`
-return nothing.
+return nothing. Opt-in `strict=True` instead requires `fail_open=False`, a host-owned
+plan and named, owned capabilities; it denies unknown guards and disallows this switch.
 
 Usage, in the hosted agent's main.py:
 
@@ -78,7 +79,11 @@ class SkillcMonitor:
                  session_id: str | None = None, agent_tools: Iterable[str] = (),
                  prohibited: list[dict] | None = None, thinking: str = "off",
                  fail_open: bool = True, logger: logging.Logger | None = None,
-                 enable_plan_tool: bool | None = None):
+                 enable_plan_tool: bool | None = None, strict: bool = False):
+        if strict and fail_open:
+            raise ValueError("strict enforcement requires fail_open=False")
+        if strict and (enable_plan_tool or (plan_text is None and plan_path is None)):
+            raise ValueError("strict enforcement requires a host-supplied plan and no plan tool")
         self.log = logger or logging.getLogger("skillc.agent_framework")
         self.root = Path(root)
         self.session_id = session_id or os.environ.get("FOUNDRY_AGENT_SESSION_ID") or "default"
@@ -92,7 +97,7 @@ class SkillcMonitor:
         self.cfg = Config(runtime=runtime, plan_file="{session}/plan.ce",
                           state_file="{session}/state.json", thinking=thinking,
                           free_tools=(PLAN_TOOL,), tool_map={}, plan_tools=(PLAN_TOOL,),
-                          agent_tools=tuple(agent_tools), prohibited=rules)
+                          agent_tools=tuple(agent_tools), prohibited=rules, strict=strict)
         try:
             if plan_text is None and plan_path is not None:
                 plan_text = Path(plan_path).read_text(encoding="utf-8")
@@ -118,6 +123,8 @@ class SkillcMonitor:
         """The two middleware objects for one agent; `role` is its role in the plan, so that
         a Tool owned by another role is refused.  Empty when SKILLC_MONITOR=off."""
         if os.environ.get(ENV_SWITCH, "").lower() == "off":
+            if self.cfg.strict:
+                raise ValueError("strict enforcement cannot be disabled by SKILLC_MONITOR=off")
             if not self._off_logged:
                 self.log.info("skillc monitor disabled by %s=off", ENV_SWITCH)
                 self._off_logged = True

@@ -63,6 +63,21 @@ browser app for demonstrating how a `SKILL.md`, `agent.md`, or prompt moves
 through the real compiler. It streams the active Python modules and functions,
 generated formal pack, terminal commands, and final verdict while SkillC runs.
 
+### Agent 365 finance security
+
+The [finance security application](docs/AGENT365_SECURITY.md) adds evidence-bound,
+single-use delivery approvals and opt-in strict runtime enforcement alongside static
+validation. An [offline demo](examples/agent365-finance/security_demo.py) exercises
+forged approval, changed documents, unauthorized recipients and replay with synthetic
+data. This is not a deployed Microsoft 365 integration; the distributed finance
+demo now requires a trusted evidence adapter rather than accepting message labels
+as approval.
+
+[Ten source-backed Agent 365 cases](examples/agent365-cases/README.md) provide
+separate folders with primary-source URLs, complete local models, supported checks,
+limitations and recorded results. See the [case report](docs/AGENT365_CASE_REPORT.md)
+for the environment-initial-state binding fix demonstrated by those checks.
+
 ### Controlled English (CE)
 
 A pack can also be written, reviewed or generated in SkillC Controlled
