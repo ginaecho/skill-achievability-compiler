@@ -837,6 +837,35 @@ def test_program_resolution():
     assert resolve_program("terraform", RT, LIB)[0] == "installable"
 
 
+def test_software_resolution_by_runtime_mode():
+    from dataclasses import replace
+
+    from skillc.frontend.runtime import SOFTWARE_MODES, resolve_software
+
+    assert resolve_software("pandoc", RT) == (True, "installable from public registries")
+    assert resolve_software("pandoc", replace(RT, software="none"))[0] is False
+    preinstalled = replace(RT, software="preinstalled")
+    assert resolve_software("python", preinstalled)[0] is True
+    assert resolve_software("surely-not-installed-anywhere", preinstalled)[0] is False
+    # session-installable: an install needs a reachable registry and dies with the session
+    hosted = load_runtime("foundry-hosted")
+    assert hosted.software == "session-installable" in SOFTWARE_MODES
+    ok, why = resolve_software("pandoc", hosted)
+    assert ok and "does not survive the session" in why
+    isolated = replace(hosted, grants=tuple(g for g in hosted.grants
+                                            if g != "package_registries"))
+    assert resolve_software("pandoc", isolated) == (
+        False, "no package registry is reachable from this sandbox")
+    # bound into a plan, the withdrawn Tool names the reason
+    text = TPL.replace("via `bash`; needs `llm_api_key`; runs `python`",
+                       "via `write`; runs `pandoc`")
+    r = parse_ce_detailed(text)
+    b = bind_runtime(r.pack, r.bindings, isolated, software=True)
+    assert b.withdrawn["call_model"] == (
+        "software:pandoc (no package registry is reachable from this sandbox)")
+    assert "call_model" not in bind_runtime(r.pack, r.bindings, hosted, software=True).withdrawn
+
+
 SPAWN = """\
 Skill `s`.
 Roles: `agent`.

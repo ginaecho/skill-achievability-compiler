@@ -13,6 +13,10 @@ only for stdio servers: skillc speaks just enough MCP (initialize,
 notifications/initialized, paged tools/list over newline-delimited JSON-RPC)
 and stops the process afterwards.  Servers whose tools were not listed are
 recorded as unknown, so their absence never refutes anything.
+
+`list_http_tools` speaks the same three messages to a streamable HTTP server
+(JSON-RPC over POST, a JSON or SSE answer) for adapters that already hold a
+URL and a bearer token, such as the Foundry toolbox probe (`env.foundry`).
 """
 from __future__ import annotations
 
@@ -21,6 +25,8 @@ import os
 import queue
 import subprocess
 import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
@@ -101,7 +107,7 @@ def _check_server(spec: dict) -> None:
         if not isinstance(url, str):
             raise MCPConfigError("url must be a string")
         try:
-            urlsplit(url).port
+            _ = urlsplit(url).port          # raises on an invalid port
         except ValueError as e:
             raise MCPConfigError(f"invalid url: {e}") from None
 
@@ -195,3 +201,87 @@ def list_stdio_tools(spec: dict, timeout: float = 20.0) -> list[dict]:
     finally:
         proc.kill()
         proc.wait(timeout=5)
+
+
+def list_http_tools(url: str, token: str | None, timeout: float = 20.0) -> list[dict]:
+    """List the tools of a streamable HTTP MCP server (all pages).
+
+    The client side of the transport only: `initialize`, the
+    `notifications/initialized` notification, then `tools/list` until the
+    server returns no `nextCursor`, each as a JSON-RPC POST that accepts a
+    JSON body or an SSE stream whose `data:` lines carry the messages.  A
+    `Mcp-Session-Id` the server assigns is sent back on every later request.
+    The token travels only in the Authorization header: it is never logged,
+    raised in an error or stored.
+    """
+    session: dict[str, str] = {}
+
+    def post(msg: dict) -> Any:
+        headers = {"Content-Type": "application/json",
+                   "Accept": "application/json, text/event-stream", **session}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
+        req = urllib.request.Request(url, data=json.dumps(msg).encode("utf-8"),
+                                     headers=headers, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                sid = resp.headers.get("Mcp-Session-Id")
+                if sid:
+                    session["Mcp-Session-Id"] = sid
+                body = resp.read().decode("utf-8", "replace")
+                content_type = resp.headers.get("Content-Type") or ""
+        except urllib.error.HTTPError as e:
+            raise MCPProbeError(f"HTTP {e.code} from {_public_url(url)}") from None
+        except (urllib.error.URLError, OSError) as e:
+            reason = getattr(e, "reason", None) or e
+            raise MCPProbeError(f"{_public_url(url)}: {str(reason)[:200]}") from None
+        if "id" not in msg:
+            return None                       # a notification has no answer
+        for answer in _rpc_messages(body, content_type):
+            if answer.get("id") == msg["id"]:
+                if "error" in answer:
+                    raise MCPProbeError(f"server error: {answer['error']}")
+                return answer.get("result") or {}
+        raise MCPProbeError(f"no answer to {msg['method']} in the response")
+
+    post({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+          "params": {"protocolVersion": PROTOCOL_VERSION, "capabilities": {},
+                     "clientInfo": {"name": "skillc", "version": __version__}}})
+    post({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    tools, cursor, request_id = [], None, 2
+    while True:
+        page = post({"jsonrpc": "2.0", "id": request_id, "method": "tools/list",
+                     "params": {"cursor": cursor} if cursor else {}})
+        tools += [t for t in page.get("tools") or [] if isinstance(t, dict) and t.get("name")]
+        cursor = page.get("nextCursor")
+        if not cursor:
+            return tools
+        request_id += 1
+
+
+def _rpc_messages(body: str, content_type: str) -> list[dict]:
+    """The JSON-RPC messages in an HTTP answer: a JSON object or array, or
+    the `data:` payloads of an SSE stream (one event may span several lines)."""
+    text = body.strip()
+    if not text:
+        return []
+    if "text/event-stream" in content_type or text.startswith(("data:", "event:", ":")):
+        found: list[dict] = []
+        chunks: list[str] = []
+        for line in [*text.splitlines(), ""]:
+            if line.startswith("data:"):
+                chunks.append(line[5:].strip())
+            elif not line.strip() and chunks:
+                try:
+                    msg = json.loads("\n".join(chunks))
+                except json.JSONDecodeError:
+                    msg = None
+                chunks = []
+                found += [m for m in (msg if isinstance(msg, list) else [msg])
+                          if isinstance(m, dict)]
+        return found
+    try:
+        msg = json.loads(text)
+    except json.JSONDecodeError:
+        raise MCPProbeError("the answer is neither JSON nor an event stream") from None
+    return [m for m in (msg if isinstance(msg, list) else [msg]) if isinstance(m, dict)]

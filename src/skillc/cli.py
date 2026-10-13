@@ -469,14 +469,34 @@ def cmd_monitor(args) -> int:
     root = Path(args.root)
     cfg_path = root / ".skillc" / "monitor.json"
     if args.action == "init":
-        cfg = Config(runtime=args.runtime, thinking=args.thinking)
+        if args.copilot:
+            from .monitor_copilot import HOOKS_FILE, copilot_config, copilot_hooks
+            cfg = copilot_config(args.runtime, args.thinking)
+        else:
+            cfg = Config(runtime=args.runtime, thinking=args.thinking)
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(json.dumps(cfg.dump(), indent=1) + "\n", encoding="utf-8")
         print(f"wrote {cfg_path}")
+        if args.copilot:
+            hooks_path = root / HOOKS_FILE
+            hooks_path.parent.mkdir(parents=True, exist_ok=True)
+            hooks_path.write_text(json.dumps(copilot_hooks(), indent=1) + "\n",
+                                  encoding="utf-8")
+            print(f"wrote {hooks_path} (Copilot CLI and the Copilot cloud agent read it; "
+                  "the cloud agent needs skillc installed in copilot-setup-steps)")
+            return 0
         print("add to .claude/settings.json:")
         print(json.dumps(HOOKS_SNIPPET, indent=1))
         return 0
+    if args.action == "mcp":
+        from .monitor_mcp import serve
+        serve(root if args.root != "." else Path.home() / ".skillc-mcp", args.runtime,
+              args.thinking)
+        return 0
     if args.action == "hook":
+        if args.arg == "copilot":
+            from .monitor_copilot import main as copilot_main
+            return copilot_main(args.event or "")
         from .monitor_hook import main as hook_main
         return hook_main(args.arg)
     mon = Monitor(Config.load(cfg_path), root)
@@ -499,7 +519,15 @@ def _probe_env(args):
     from .env import azure, mcp
     from .env.model import merge
     envs = []
-    if args.from_raw:
+    foundry_env = None
+    if getattr(args, "foundry", False) or args.from_raw:
+        # the Foundry control plane, live or from one of its exports; a --from-raw DIR that
+        # is not a Foundry export falls through to the Azure replay below
+        from .env import foundry
+        foundry_env = foundry.probe_from_args(args)
+        if foundry_env is not None:
+            envs.append(foundry_env)
+    if args.from_raw and foundry_env is None:
         envs.append(azure.probe(azure.replay_runner(args.from_raw), args.subscription,
                                 mode="replay"))
     elif args.azure:
@@ -508,9 +536,12 @@ def _probe_env(args):
         envs.append(mcp.probe(args.mcp_config, list_tools=args.list_tools))
     if args.claude:
         envs.append(_probe_claude(args, args.needs_from or []))
+    if getattr(args, "self", False):
+        from .env import selfprobe
+        envs.append(selfprobe.self_probe_from_args(args))
     if not envs:
-        raise ValueError("say what to probe: --azure, --from-raw DIR, --claude "
-                         "and/or --mcp-config FILE")
+        raise ValueError("say what to probe: --azure, --from-raw DIR, --claude, --foundry, "
+                         "--self and/or --mcp-config FILE")
     return merge(*envs)
 
 
@@ -562,6 +593,21 @@ def cmd_env(args) -> int:
     if args.action == "merge":
         merge(*(Environment.load(f) for f in args.files)).save(args.output)
         print(f"wrote {args.output}")
+        return 0
+    if args.action == "from-azd":
+        from .env.azd import from_azure_yaml, intent_artifacts
+        env = from_azure_yaml(args.azure_yaml)
+        if args.output:
+            env.save(args.output)
+        if args.json:
+            print(json.dumps(env.to_dict(), indent=1))
+        elif not args.output:
+            print(env_summary(env))
+        if args.output:
+            print(f"wrote {args.output}")
+        artifacts = intent_artifacts(args.azure_yaml)
+        print("intent artifacts: " + (", ".join(str(a) for a in artifacts) or "(none)"),
+              file=sys.stderr)
         return 0
     from .env.reach import load_intent
     from .env.watch import watch
@@ -635,6 +681,17 @@ def _add_probe_opts(sp) -> None:
     sp.add_argument("--needs-from", action="append", metavar="INTENT",
                     help="with --claude: probe what these intents' operations need")
     _add_claude_opts(sp)
+    # hosted-agent probes (docs/HOSTED_AGENT.md): the Foundry control plane and the sandbox
+    try:
+        from .env import foundry
+        foundry.add_probe_opts(sp)
+    except ImportError:
+        pass
+    try:
+        from .env import selfprobe
+        selfprobe.add_self_opts(sp)
+    except ImportError:
+        pass
 
 
 def _add_claude_opts(sp) -> None:
@@ -781,13 +838,24 @@ def main(argv: list[str] | None = None) -> int:
 
     sp = sub.add_parser("monitor", help="runtime monitor: gate an agent's plan, "
                                         "reasoning and actions (docs/RUNTIME_MONITOR.md)")
-    sp.add_argument("action", choices=("init", "hook", "plan", "status", "reset"))
-    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post) or plan file")
+    sp.add_argument("action", choices=("init", "hook", "mcp", "plan", "status", "reset"),
+                    help="mcp: serve the monitor as MCP tools over stdio, for hosts "
+                         "without hooks (state under --root, default ~/.skillc-mcp)")
+    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post for Claude Code, "
+                                           "copilot for GitHub Copilot) or plan file")
+    sp.add_argument("event", nargs="?", help="with `hook copilot`: the Copilot hook event "
+                                             "(sessionStart, userPromptSubmitted, preToolUse, "
+                                             "postToolUse, postToolUseFailure, agentStop)")
+    sp.add_argument("--copilot", action="store_true",
+                    help="init: configure for GitHub Copilot hooks (CLI and cloud agent) and "
+                         "write .github/hooks/skillc.json instead of Claude Code hooks")
     sp.add_argument("--root", default=".", help="project directory (default: .)")
     sp.add_argument("--runtime", default="developer-sandbox",
                     help="init: runtime manifest name or JSON path")
-    sp.add_argument("--thinking", choices=("stop", "warn", "off"), default="stop",
-                    help="init: what reasoning that heads to the impossible does")
+    sp.add_argument("--thinking", choices=("ask", "stop", "warn", "off"), default="ask",
+                    help="init: what reasoning that heads to the impossible does (ask: put "
+                         "it to the agent as a question; stop: hold actions until a new "
+                         "plan passes)")
     sp.set_defaults(fn=cmd_monitor)
 
     sp = sub.add_parser("env", help="environment topology: probe, show, diff, merge, watch "
@@ -805,6 +873,11 @@ def main(argv: list[str] | None = None) -> int:
     e = env_sub.add_parser("merge", help="combine environment files (e.g. Azure + MCP)")
     e.add_argument("files", nargs="+")
     e.add_argument("-o", "--output", required=True)
+    e = env_sub.add_parser("from-azd", help="the environment an azd project declares in its "
+                                            "azure.yaml (offline; every fact is declared)")
+    e.add_argument("azure_yaml", metavar="AZURE_YAML")
+    e.add_argument("-o", "--output", help="write the skillc.env/1 document here")
+    e.add_argument("--json", action="store_true", help="print the document to stdout")
     e = env_sub.add_parser("watch", help="re-probe on a schedule; report what changed")
     _add_probe_opts(e)
     e.add_argument("--dir", default=".skillc/env", help="where snapshots are kept")
@@ -833,6 +906,12 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--json", action="store_true")
     sp.add_argument("-o", "--output", help="write the skillc.intent/1 JSON here")
     sp.set_defaults(fn=cmd_intent)
+
+    try:
+        from .gate import add_parser as _add_gate_parser
+        _add_gate_parser(sub)              # `skillc gate`: the deploy gate (docs/ENVIRONMENT.md)
+    except ImportError:
+        pass
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)

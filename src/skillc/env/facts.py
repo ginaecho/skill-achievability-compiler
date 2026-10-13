@@ -183,8 +183,13 @@ def _service_need(env: Environment, kind: str, value: str) -> Fact:
 
 
 def _path_need(env: Environment, path: str) -> Fact:
+    def under(child: str, parent: str) -> bool:
+        """`child` is `parent` or inside it, whichever separator the platform used."""
+        c, p = child.replace("\\", "/"), parent.replace("\\", "/").rstrip("/")
+        return c == p or c.startswith(p + "/")
+
     probed = [n for n in env.of_kind("scope") if n["attrs"].get("level") == "path"
-              and (path == n["name"] or path.startswith(n["name"].rstrip("/") + "/"))]
+              and under(path, n["name"])]
     if not probed:
         return Fact(None, (f"path {path} was not probed",), (f"path {path} is writable",))
     node = max(probed, key=lambda n: len(n["name"]))

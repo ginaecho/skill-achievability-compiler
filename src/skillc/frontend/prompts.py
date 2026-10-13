@@ -414,6 +414,9 @@ SOFTWARE_NOTE = {
     "preinstalled": ("Software policy: only software already installed on the "
                      "machine can run; nothing can be installed.\n"),
     "none": "Software policy: no software can be run at all.\n",
+    "session-installable": ("Software policy: any public package can be installed into "
+                            "the current session while a package registry is reachable; "
+                            "the install does not survive the session.\n"),
 }
 
 

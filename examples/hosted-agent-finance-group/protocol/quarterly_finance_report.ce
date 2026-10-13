@@ -1,0 +1,68 @@
+# QuarterlyFinanceReport as a skillc pack in Controlled English: the GROUP deployment.
+# Identical to examples/hosted-agent-finance/protocol/quarterly_finance_report.ce (synced
+# 2026-10-08, after `lookup_tax_rules` became `via code_interpreter` there) except this header: the protocol, the tools, their owners and preconditions
+# are the same whether the six roles run in one hosted agent or in six. Here each role
+# is its own hosted agent (ROLE env of src/finance-agent-group/main.py) and each `tells`
+# is an A2A request whose reply carries the next message back (README, section 2).
+# Source: session-typed-agents/experiments/cases/finance (protocols/v1.scr, v1.policy).
+# Policies are encoded as preconditions and ownership: S1 (approval before the final
+# analysis) is `write_revenue_analysis` requiring `approved`; D1 (no self-approval) is
+# that only `TaxVerifier` owns an approving tool, and in the group that owner is a
+# separate process under its own Entra identity; S2 is the protocol order itself.
+Skill `quarterly-finance-report`.
+Roles: `Fetcher`, `RevenueAnalyst`, `ExpenseAnalyst`, `Writer`, `TaxVerifier`, `TaxSpecialist`.
+Tool `fetch_financials` (owner `Fetcher`): via `code_interpreter`; adds `revenue_fetched`, `expenses_fetched`; effect `local`.
+Tool `analyze_expenses` (owner `ExpenseAnalyst`): via `code_interpreter`; requires `expenses_fetched`; adds `expense_analysis`; effect `local`.
+Tool `classify_revenue` (owner `RevenueAnalyst`): via `code_interpreter`; requires `revenue_fetched`; adds `revenue_classified`; effect `local`.
+Tool `lookup_tax_rules` (owner `TaxSpecialist`): via `code_interpreter`; adds `tax_rules_found`; effect `local`.
+Tool `audit_high_revenue` (owner `TaxSpecialist`): via `code_interpreter`; requires `tax_rules_found` and `revenue_classified`; adds `audit_report`; effect `local`.
+Tool `approve_audited` (owner `TaxVerifier`): via `write`; requires `audit_report`; adds `approved`; effect `local`.
+Tool `approve_standard` (owner `TaxVerifier`): via `write`; requires `revenue_classified`; adds `approved`; effect `local`.
+Tool `write_revenue_analysis` (owner `RevenueAnalyst`): via `write`; requires `approved` and `expense_analysis`; adds `revenue_analysis`; effect `local`.
+Tool `compose_report` (owner `Writer`): via `code_interpreter`; requires `expense_analysis` and `revenue_analysis`; adds `report_written`; effect `local`.
+Tool `deliver_report` (owner `Writer`): via `write`; requires `report_written`; adds `report_delivered`; effect `local`.
+Initially true: none.
+Goal: `report_delivered` and `approved`.
+Protocol:
+  - `Fetcher` uses `fetch_financials`.
+  - `Fetcher` tells `RevenueAnalyst` `RawRevenueData`.
+  - `Fetcher` tells `ExpenseAnalyst` `RawExpenseData`.
+  - `ExpenseAnalyst` uses `analyze_expenses`.
+  - `ExpenseAnalyst` tells `RevenueAnalyst` `ExpenseData`.
+  - `ExpenseAnalyst` tells `Writer` `ExpenseAnalysis`.
+  - `RevenueAnalyst` uses `classify_revenue`.
+  - `RevenueAnalyst` chooses one of (observed):
+    - branch `HighRevenueNotification`:
+      - `RevenueAnalyst` tells `TaxVerifier` `HighRevenueNotification`.
+      - `RevenueAnalyst` tells `Writer` `HighBranchNotification`.
+      - `RevenueAnalyst` tells `TaxSpecialist` `NotifyTaxSpecialist`.
+      - `TaxSpecialist` uses `lookup_tax_rules`.
+      - `TaxSpecialist` uses `audit_high_revenue`.
+      - `TaxSpecialist` tells `TaxVerifier` `AuditReport`.
+      - `TaxVerifier` uses `approve_audited`.
+      - `TaxVerifier` tells `RevenueAnalyst` `Approval`.
+      - `RevenueAnalyst` uses `write_revenue_analysis`.
+      - `RevenueAnalyst` tells `Writer` `FinalRevenueAnalysis`.
+      - `Writer` uses `compose_report`.
+      - `Writer` uses `deliver_report`.
+      - `Writer` tells `Fetcher` `GenerateReport`.
+    - branch `StandardRevenueNotification`:
+      - `RevenueAnalyst` tells `TaxVerifier` `StandardRevenueNotification`.
+      - `RevenueAnalyst` tells `Writer` `StandardBranchNotification`.
+      - `RevenueAnalyst` tells `TaxSpecialist` `NotifyStandardRole`.
+      - `TaxVerifier` uses `approve_standard`.
+      - `TaxVerifier` tells `RevenueAnalyst` `Approval`.
+      - `RevenueAnalyst` uses `write_revenue_analysis`.
+      - `RevenueAnalyst` tells `Writer` `FinalRevenueAnalysis`.
+      - `Writer` uses `compose_report`.
+      - `Writer` uses `deliver_report`.
+      - `Writer` tells `Fetcher` `GenerateReport`.
+Behaviour of `TaxVerifier`:
+  - branch on `RevenueAnalyst` one of:
+    - branch `HighRevenueNotification`:
+      - receive `AuditReport` from `TaxSpecialist`.
+      - use `approve_audited`.
+      - send `Approval` to `RevenueAnalyst`.
+    - branch `StandardRevenueNotification`:
+      - use `approve_standard`.
+      - send `Approval` to `RevenueAnalyst`.

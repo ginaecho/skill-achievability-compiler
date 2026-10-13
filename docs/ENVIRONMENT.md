@@ -230,6 +230,111 @@ names come from `MicrosoftDocs/azure-docs` `permissions/internet-of-things.md`
 and related pages, which are cited in the file. Add operations, or a whole new
 provider, as data.
 
+## Declared environment from an azd project
+
+A Foundry hosted agent is built from an `azd` project whose `azure.yaml`
+declares, before anything exists in Azure, what the agent will have. That
+declaration compiles to a `skillc.env/1` document offline, with no Azure call:
+
+```console
+$ skillc env from-azd azure.yaml -o env.json        # the intent artifacts go to stderr
+$ skillc env from-azd azure.yaml --json
+$ skillc reach skills/cite-sources.md --env env.json
+```
+
+The walk over `services` is deterministic; `$ref` includes are resolved
+relative to the containing file (local YAML or JSON only; a URL or a cycle is
+recorded as unknown), and `${VAR}` references stay as written, each recorded
+as an unknown `value:VAR`.
+
+| `host` | nodes |
+|---|---|
+| `azure.ai.project` | `service model/<deployment>` (model, version, SKU; `available`); `service egress/public` with `mode` and `isolated`, availability unknown: `AllowInternetOutbound` is an assumption to measure from inside the sandbox, `AllowOnlyApprovedOutbound` or an `agentSubnet` leaves public hosts unknown until probed |
+| `azure.ai.connection` | `service connection/<name>` with `category`, `auth_type`, `target` (scheme and host only) and env var names; `credentials` are never read |
+| `azure.ai.toolbox` | `mcp_server toolbox/<name>` exposing one `tool toolbox/<name>/<type>[/<connection>]` per `tools[]` entry; an `mcp` entry without `allowed_tools` is an unknown tool set (`mcp_tools:...`) |
+| `azure.ai.agent` | `principal principal/agent/<name>` (`identity_mode: agent`, `agent_kind`, `protocols`, `cpu`, `memory`, env var names, `toolboxes` from `toolboxes` and `uses`); each `policies[]` entry is a `policy` node with an uninterpreted deny applied to `/` |
+| `azure.ai.skill` | no node; its `instructions` file is an intent artifact |
+| anything else | `unknown service:<name>` |
+
+Every node carries `declared: true`. **A declared fact is an assumption until a
+probe observes it**: `reach` reports "achievable if the toolbox really exposes
+`azure_ai_search`", never a refutation that rests on the declaration alone.
+The intent artifacts (`azure.ai.skill` instructions, an agent `instructions`
+that names a file, `skills/*.md` beside the `azure.yaml`) are listed by
+`skillc.env.azd.intent_artifacts()`.
+
+## Deploy gate
+
+`skillc gate DIR` is the `predeploy` hook of an azd project: it refuses, before
+`azd deploy` creates an agent version, a protocol, skill or topology the
+declared environment already rules out. No model is called.
+
+```console
+$ skillc gate . --declared azure.yaml                 # exit 0 / 1 / 3 / 2
+$ skillc gate . --declared azure.yaml --env .skillc/env/latest.json --json
+$ skillc gate --install-hook                          # the hooks.predeploy snippet
+```
+
+In order: the declared environment (`env from-azd`, merged with an observed
+probe when `--env` names one; observed facts win); the effective runtime (the
+`foundry-hosted` manifest minus every tool the declaration cannot supply:
+`search` needs an `azure_ai_search` toolbox tool, `mcp` an `mcp` one, and so on;
+`read` and `write` are always there; `web_fetch` is kept under network
+isolation only as an assumption; a toolbox counts only if an agent uses it);
+every `protocol/*.ce` (the pure check, then the runtime-bound check as the
+monitor binds it, with the azure.yaml edit for each withdrawn tool); with more
+than one `azure.ai.agent`, the A2A topology every `A tells B` message needs (a
+`RemoteA2A` connection to B, an `a2a` tool in a toolbox A uses, `a2a` on B's
+endpoint); and every intent artifact (`reach` on its needs, plus each
+frontmatter `tools:` name against the declared toolbox tools and the runtime).
+
+The verdict is IMPOSSIBLE if any item is, UNKNOWN if nothing is impossible but
+something rests on an assumption, else ACHIEVABLE; the exit code follows
+`reach` (0, 1, 3, and 2 for an error). With OpenTelemetry installed the gate
+emits one `skillc.verdict gate <verdict>` span.
+
+## Observed environment of a deployed hosted agent
+
+After `azd deploy`, the same facts the `azure.yaml` declared exist in the
+Foundry project, and `skillc env probe --foundry` reads them back, read-only,
+with your `az login`:
+
+```console
+$ skillc env probe --foundry --project https://<account>.services.ai.azure.com/api/projects/<project> \
+      --agent finance-report-agent -o observed.json --save-raw foundry-export/
+$ skillc env probe --from-raw foundry-export/ -o observed.json     # offline replay
+$ skillc env from-azd azure.yaml -o declared.json
+$ skillc env diff declared.json observed.json
+```
+
+`--agent NAME[:VERSION]` selects the agent and the version (default: the
+current one; without `--agent`, every agent of the project). The probe reads:
+
+| fact | how it is read | nodes |
+|---|---|---|
+| the agent and its version | the project REST data plane (`/agents/{name}`, `/agents/{name}/versions/{v}`, `api-version=v1`, bearer token for `https://ai.azure.com/.default`) | `principal principal/agent/<name>`: `object_id` (the instance identity), `version`, `status`, `cpu`, `memory`, `protocols`, environment variable **names**, `runtime`, `entry_point`, the endpoint's `protocol_configuration`, `a2a`, `agent_card` |
+| the toolboxes | `/toolboxes`, then the default version's definition | `mcp_server toolbox/<name>` (`version`, `transport: toolbox`, `url`) exposing one `tool toolbox/<name>/<type>[/<connection>]` per declared tool, with the ids `from-azd` uses |
+| the toolbox's live tool list | `tools/list` over streamable HTTP MCP against `.../toolboxes/<name>/versions/<v>/mcp` (`skillc.env.mcp.list_http_tools`) | `tool toolbox/<name>/mcp/<tool>` with `observed: true` and the description the server gave; `mcp_tools:toolbox/<name>` is unknown when the listing fails, `--no-list-tools` skips it |
+| the connections | `/connections` | `service connection/<name>` with `category`, `auth_type`, `target` (host only); credentials are never read |
+| the agent identity's RBAC | `az role assignment list --assignee-object-id <object id>` through the Azure adapter's read-only runner | the same `role` nodes and `assigned` edges `--azure` records for you; the Foundry Agent Consumer role (`eed3b665-...`) is named even when its definition cannot be read |
+
+Every node carries `observed: true`, so `env diff declared.json
+observed.json` shows exactly which declared facts became observations, the
+live MCP tools as added, and the `${VAR}` values the deploy resolved as
+removed unknowns. The tool listing is made with your token: unless
+`--as-user` is given, it is attributed to the agent identity with the
+recorded assumption `mcp_tools_identity:toolbox/<name>` that the agent sees
+the same tools. Deny assignments and the project's network isolation are not
+read; they stay unknown, as in the declared environment.
+
+`--save-raw DIR` keeps every answer as a JSON file, **sanitised** before it
+is written: keys named like token, secret, key, authorization, password or
+credential are dropped (a connection's `credentials` keeps only its `type`),
+environment variable values become `<redacted>`, e-mail addresses are
+replaced and URLs lose their query. `--from-raw DIR` replays such an export
+with no network; `tests/fixtures/foundry/` holds one recorded from the
+finance example.
+
 ## Limits
 
 * The probe covers one subscription per run. Merge several with `env merge`.
@@ -237,7 +342,8 @@ provider, as data.
   interpreted; they appear as uninterpreted deny assumptions.
 * Deny assignments that target *groups* are not resolved against your group
   membership; they make deny checks an assumption.
-* HTTP/SSE MCP servers are recorded but their tools are not listed.
+* HTTP/SSE MCP servers from configuration files are recorded but their tools are
+  not listed; only the Foundry probe lists a toolbox's tools over HTTP.
 * The catalogue states what an operation *needs*, not everything that can go
   wrong at run time (quotas, name collisions, regional SKU availability). Those
   are outside the snapshot.

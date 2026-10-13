@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Iterable
+from collections.abc import Iterable
 
 from ..pack import validate_pack
 from ..profiles import normalize_tool

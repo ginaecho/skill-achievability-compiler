@@ -197,7 +197,18 @@ def _ensure_scope(env: Environment, scope: str, sub: str) -> None:
     if "/managementgroups/" in norm_id(scope):
         env.add_node(scope, "scope", scope.rsplit("/", 1)[-1], level="management_group")
         env.add_edge("/", scope, "contains")
-        env.add_edge(scope, sub, "contains")
+        if sub:
+            env.add_edge(scope, sub, "contains")
+
+
+def role_assignments(run: Runner, env: Environment, principal: str, assignee: str,
+                     sub: str = "") -> None:
+    """Record the role assignments of `assignee` (an object id) as `assigned`
+    edges from the `principal` node, with the same role nodes `probe` makes for
+    the signed-in principal.  Another adapter uses this for an identity it
+    discovered itself (the Foundry probe, for an agent's instance identity).
+    `sub` is the subscription scope management groups hang above, if known."""
+    _role_assignments(run, env, principal, assignee, {}, sub)
 
 
 def _role_assignments(run: Runner, env: Environment, principal: str, oid: str | None,

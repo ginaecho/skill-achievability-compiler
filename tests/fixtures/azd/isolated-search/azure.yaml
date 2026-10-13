@@ -1,0 +1,78 @@
+# Authored for skillc's tests (not from foundry-samples). Exercises every branch of
+# env/azd.py: a $ref include, a connection with ${SECRET} credentials, a network block
+# with AllowOnlyApprovedOutbound, a toolbox with azure_ai_search, a skill, a rai policy.
+name: isolated-search-agent
+services:
+  ai-project:
+    host: azure.ai.project
+    deployments:
+      - name: gpt-5.4-mini
+        model:
+          format: OpenAI
+          name: gpt-5.4-mini
+          version: '2026-03-17'
+        sku:
+          name: GlobalStandard
+          capacity: 10
+    network:
+      isolationMode: AllowOnlyApprovedOutbound
+      agentSubnet: /subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-net/providers/Microsoft.Network/virtualNetworks/vnet/subnets/agents
+  search-conn:
+    host: azure.ai.connection
+    uses:
+      - ai-project
+    category: CognitiveSearch
+    target: https://contoso-search.search.windows.net/indexes/docs?api-version=2024-07-01
+    authType: ApiKey
+    credentials:
+      type: ApiKey
+      key: ${SEARCH_API_KEY}
+      literalKeyThatMustNeverAppear: not-a-real-key-ABC123
+    env:
+      SEARCH_API_KEY: ${SEARCH_API_KEY}
+  docs-mcp:
+    host: azure.ai.connection
+    uses:
+      - ai-project
+    category: RemoteTool
+    target: https://user:pw@learn.microsoft.com/api/mcp
+    authType: ProjectManagedIdentity
+  research-tools:
+    host: azure.ai.toolbox
+    uses:
+      - ai-project
+      - search-conn
+      - docs-mcp
+    description: Search plus the Learn MCP server
+    tools:
+      - type: azure_ai_search
+        connection: search-conn
+        require_approval: never
+      - type: code_interpreter
+      - type: mcp
+        server_label: learn
+        server_url: https://learn.microsoft.com/api/mcp
+        connection: docs-mcp
+        allowed_tools:
+          - microsoft_docs_search
+      - type: mcp
+        server_label: gitmcp
+        server_url: https://gitmcp.io/Azure/azure-rest-api-specs
+  cite-sources:
+    host: azure.ai.skill
+    instructions: ./skills/cite-sources.md
+  researcher:
+    $ref: ./agents/researcher.yaml
+    description: overrides the description in the include
+  remote-include:
+    $ref: https://example.invalid/agent.yaml
+    host: azure.ai.agent
+    kind: prompt
+    instructions: ./agents/researcher-prompt.md
+  cycle-include:
+    $ref: ./agents/cycle-a.yaml
+  legacy-web:
+    host: containerapp
+    project: src/web
+infra:
+  provider: microsoft.foundry

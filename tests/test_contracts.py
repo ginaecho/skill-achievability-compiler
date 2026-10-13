@@ -101,6 +101,19 @@ def test_environment_initial_state_satisfies_contract_preconditions():
     assert with_init.achievable
 
 
+def test_intent_cannot_supply_approval_missing_from_environment_initial_state():
+    pack = _pack("published",
+                 {"publish": {"owner": "agent", "add": ["published"]}}, ["publish"])
+    pack["init_true"] = ["approved"]
+    contract = {"publish": {"pre": "approved", "add": ["published"]}}
+
+    binding = apply_contracts(pack, contract, STATES, init_true=[])
+
+    assert binding.pack["init_true"] == []
+    assert check(binding.pack).reason == "BLOCKED_GUARD"
+    assert pack["init_true"] == ["approved"]  # Binding must not mutate the source.
+
+
 def test_bind_environment_withholds_tools_then_applies_contracts():
     pack = _pack({"and": ["booked", "confirmation_sent"]}, ASSUMED_BOOKING,
                  ["search", "book_fare", "email"])

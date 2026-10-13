@@ -14,9 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-from .frontend.toolpolicy import match, unmet
-from .monitor import (ALLOW, DENY, Config, Monitor, plan_instructions, state_lock,
-                      thinking_since)
+from .monitor import ALLOW, DENY, WARN, Config, Monitor, state_lock, thinking_since
 
 CONFIG = Path(".skillc") / "monitor.json"
 
@@ -39,9 +37,10 @@ def handle(kind: str, event: dict) -> int:
     handler = _HANDLERS.get(kind)
     if handler is None:
         raise ValueError(f"unknown hook kind {kind!r}")
-    config = Config.load(root / CONFIG)
+    sid = str(event.get("session_id") or "")
+    config = Config.load(root / CONFIG).for_session(sid)
     with state_lock(root / config.state_file):
-        mon = Monitor(config, root)
+        mon = Monitor(config, root, session_id=sid)
         try:
             handler(mon, event)
         finally:
@@ -50,25 +49,15 @@ def handle(kind: str, event: dict) -> int:
 
 
 def _on_prompt(mon: Monitor, event: dict) -> None:
-    ctx = []
-    sid = event.get("session_id", "")
-    if sid not in mon.state.sessions:
-        mon.state.sessions.append(sid)
-        ctx.append(plan_instructions(mon.runtime, mon.cfg.plan_file))
     prompt = event.get("prompt") or event.get("prompt_text") or ""
-    rt, lib = mon.effective()
-    gaps = [o for o in match(prompt, lib) if unmet(o, rt, lib)]
-    if gaps:
-        ctx.append("skillc intent check: the request mentions requirements runtime "
-                   f"`{rt.name}` cannot meet: " + "; ".join(
-                       f"'{o.text}' needs {o.clause()}" for o in gaps)
-                   + ". Plan around them or tell the user.")
+    ctx = mon.on_prompt(prompt, str(event.get("session_id") or ""))
     if ctx:
         _emit("UserPromptSubmit", additionalContext="\n\n".join(ctx))
 
 
 def _on_pre(mon: Monitor, event: dict) -> None:
     tool_input = event.get("tool_input") or {}
+    question = ""                                  # thinking mode `ask`: put to the agent
     if event.get("transcript_path"):
         transcript = Path(event["transcript_path"])
         offsets = mon.state.transcript_offsets
@@ -78,11 +67,14 @@ def _on_pre(mon: Monitor, event: dict) -> None:
             _emit("PreToolUse", permissionDecision="deny",
                   permissionDecisionReason=t.reason)
             return
+        if t.action == WARN:
+            question = t.reason
     d = mon.pre_action(event.get("tool_name", ""), tool_input)
     if d.action == DENY:
-        _emit("PreToolUse", permissionDecision="deny", permissionDecisionReason=d.reason)
-    elif d.reason:
-        _emit("PreToolUse", additionalContext=d.reason)
+        _emit("PreToolUse", permissionDecision="deny",
+              permissionDecisionReason="\n\n".join(filter(None, (question, d.reason))))
+    elif d.reason or question:
+        _emit("PreToolUse", additionalContext="\n\n".join(filter(None, (question, d.reason))))
 
 
 def _on_post(mon: Monitor, event: dict) -> None:
