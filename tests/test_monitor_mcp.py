@@ -99,6 +99,6 @@ def test_served_over_stdio(tmp_path):
             return names, res.content[0].text
 
     names, text = asyncio.run(run())
-    assert names == {"skillc_start", "skillc_check_plan", "skillc_check_reasoning",
-                     "skillc_check_action", "skillc_report_result", "skillc_status"}
+    from skillc.monitor_mcp import MCP_TOOLS
+    assert names == set(MCP_TOOLS)
     assert text.startswith("DECISION: deny   NEXT: ask_user")

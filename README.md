@@ -78,6 +78,10 @@ separate folders with primary-source URLs, complete local models, supported chec
 limitations and recorded results. See the [case report](docs/AGENT365_CASE_REPORT.md)
 for the environment-initial-state binding fix demonstrated by those checks.
 
+The same runtime capabilities (strict host-owned plans, evidence-bound single-use
+approvals) are available in **Microsoft Scout** through `skillc monitor mcp`; see
+[Scout parity](docs/SCOUT_PARITY.md) for the matrix and the enforcement differences.
+
 ### Controlled English (CE)
 
 A pack can also be written, reviewed or generated in SkillC Controlled

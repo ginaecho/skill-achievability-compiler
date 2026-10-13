@@ -132,6 +132,10 @@ class ApprovalGate:
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path, timeout=10)
 
+    def validate(self, delivery: Delivery) -> str:
+        """The delivery's fingerprint if current policy could approve it; raises otherwise."""
+        return self._check(delivery)
+
     def _check(self, delivery: Delivery) -> str:
         fingerprint = delivery.fingerprint()
         if (delivery.tenant, delivery.workflow) != (self.tenant, self.workflow):

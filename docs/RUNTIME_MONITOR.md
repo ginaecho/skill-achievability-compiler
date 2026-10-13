@@ -154,11 +154,19 @@ skillc monitor mcp --runtime scout-desktop --root ~/.skillc-mcp     # stdio MCP 
 | `skillc_check_action(tool, details)` | `pre_action` |
 | `skillc_report_result(tool, details, output)` | `post_action` |
 | `skillc_status()` | state |
+| `skillc_request_approval(tool, destinations, content, …)` | user approval via MCP elicitation |
+| `skillc_revoke_approval(approval)` | withdraw an unused approval |
 
 Every answer starts with `DECISION: … NEXT: … USER_NEEDS: …`. Every call and answer is
-appended to `<root>/.skillc/calls.jsonl`, to evaluate a run afterwards. The runtime
+appended to `<root>/.skillc/calls.jsonl` (approval references redacted), to evaluate a
+run afterwards. The runtime
 manifest `scout-desktop` describes Scout on Windows: PowerShell, files, web, a browser,
 the user's Microsoft 365 data through WorkIQ, Teams messages, Azure DevOps.
+
+The A365 capabilities are available here as well: `--strict --host-plan FILE` and
+`--approval-policy FILE` (or `<root>/.skillc/approval-policy.json`); install them with
+`skillc monitor scout-install`. See [Scout parity](SCOUT_PARITY.md) for the capability
+matrix and the enforcement differences.
 
 This is **advisory**: nothing forces the agent to call the tools or to obey them. The
 calls log shows how often it did. Enforcement on Scout needs the host to load Copilot
