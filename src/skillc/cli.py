@@ -491,7 +491,19 @@ def cmd_monitor(args) -> int:
     if args.action == "mcp":
         from .monitor_mcp import serve
         serve(root if args.root != "." else Path.home() / ".skillc-mcp", args.runtime,
-              args.thinking)
+              args.thinking, strict=args.strict, host_plan=args.host_plan,
+              policy_path=args.approval_policy)
+        return 0
+    if args.action == "scout-install":
+        from .scout import install
+        for line in install(
+                scout_home=Path(args.scout_home) if args.scout_home else None,
+                root=root if args.root != "." else Path.home() / ".skillc-mcp",
+                runtime=args.runtime if args.runtime != "developer-sandbox"
+                else "scout-desktop",
+                strict=args.strict, host_plan=args.host_plan,
+                policy_path=args.approval_policy):
+            print(line)
         return 0
     if args.action == "hook":
         if args.arg == "copilot":
@@ -838,9 +850,12 @@ def main(argv: list[str] | None = None) -> int:
 
     sp = sub.add_parser("monitor", help="runtime monitor: gate an agent's plan, "
                                         "reasoning and actions (docs/RUNTIME_MONITOR.md)")
-    sp.add_argument("action", choices=("init", "hook", "mcp", "plan", "status", "reset"),
+    sp.add_argument("action", choices=("init", "hook", "mcp", "scout-install", "plan",
+                                       "status", "reset"),
                     help="mcp: serve the monitor as MCP tools over stdio, for hosts "
-                         "without hooks (state under --root, default ~/.skillc-mcp)")
+                         "without hooks (state under --root, default ~/.skillc-mcp); "
+                         "scout-install: register that server and the skillc-check skill "
+                         "with Microsoft Scout (backs up what it replaces)")
     sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post for Claude Code, "
                                            "copilot for GitHub Copilot) or plan file")
     sp.add_argument("event", nargs="?", help="with `hook copilot`: the Copilot hook event "
@@ -856,6 +871,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="init: what reasoning that heads to the impossible does (ask: put "
                          "it to the agent as a question; stop: hold actions until a new "
                          "plan passes)")
+    sp.add_argument("--strict", action="store_true",
+                    help="mcp/scout-install: strict enforcement with a host-owned plan "
+                         "(requires --host-plan)")
+    sp.add_argument("--host-plan", type=Path, metavar="FILE",
+                    help="mcp/scout-install: CE plan owned by the host, loaded per session")
+    sp.add_argument("--approval-policy", type=Path, metavar="FILE",
+                    help="mcp/scout-install: JSON naming protected runtime tools and allowed "
+                         "destinations; their actions need the user's exact approval")
+    sp.add_argument("--scout-home", help="scout-install: Scout data folder (default ~/.scout)")
     sp.set_defaults(fn=cmd_monitor)
 
     sp = sub.add_parser("env", help="environment topology: probe, show, diff, merge, watch "
