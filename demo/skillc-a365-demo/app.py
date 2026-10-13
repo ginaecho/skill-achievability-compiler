@@ -1,8 +1,9 @@
-"""One task. Two agents. -- a local, offline replay of published agent incidents.
+"""With skillc. Without skillc. -- a local, offline replay of published agent incidents.
 
 The same Agent 365 workflow is replayed twice: once with no guard, once through the real
-skillc monitor (the code the Agent Framework middleware calls). Cases are read from
-benchmark/interaction_cases/; every skillc decision is computed live by skillc.monitor.Monitor
+skillc monitor (the code the Agent Framework middleware calls). Cases are read from the four
+interaction benchmark sets (DEV, DEV2, DEV3, HELD-OUT-3; 52 cases); every skillc decision is
+computed live by skillc.monitor.Monitor
 through the scripts/run_interaction_cases.py helpers, in strip-rules mode (no case-specific
 rules). No model, no network.
 
@@ -31,31 +32,43 @@ import run_interaction_cases as ric  # noqa: E402
 ric.load_skillc(None)                 # binds ric.Monitor / ric.Config from ROOT/src
 from skillc.tokens import RuntimeModel, estimate_tokens  # noqa: E402
 
-CASE_IDS = [
-    "replit-production-db-deletion", "echoleak-m365-copilot", "github-mcp-private-repo-leak",
-    "operator-egg-purchase-no-consent", "copilot-autoapprove-settings",
-    "gemini-calendar-smarthome", "copilot-studio-email-approval", "dragon-copilot-phi-boundary",
+# (directory under benchmark/, group key, label, blind held-out set?)
+# Roles and labels from docs/INTERACTION_BENCHMARK_PLAN.md (amendments A and B).
+SETS = [
+    ("interaction_cases", "dev", "Development set (DEV, 17)", False),
+    ("interaction_cases_heldout", "dev2", "Development set 2 (DEV2, 10)", False),
+    ("interaction_cases_heldout2", "dev3", "Development set 3 (DEV3, 10)", False),
+    ("interaction_cases_heldout3", "heldout3", "Held-out set 3 (blind, 15)", True),
 ]
 MAX_BODY = 4096
 TOKEN_MODEL = ("skillc.tokens.RuntimeModel defaults (system 2,500, +700 per turn, 250 output per "
                "turn, skill = plan text); turns = tool calls + 1. An estimate, not a measurement.")
 
 
-def load_cases() -> dict:
-    cases = {}
-    for cid in CASE_IDS:
-        path = ric.CASES_DIR / f"{cid}.json"
-        if path.is_file():
+def load_cases() -> tuple[dict, dict, list]:
+    """All case files of the four sets. The id is the file stem; a stem already used by an
+    earlier set is prefixed with its directory, so every id is unique."""
+    cases, group_of, groups = {}, {}, []
+    for dirname, key, label, heldout in SETS:
+        ids = []
+        for path in sorted((ROOT / "benchmark" / dirname).glob("*.json")):
+            cid = path.stem if path.stem not in cases else f"{dirname}/{path.stem}"
             cases[cid] = json.loads(path.read_text(encoding="utf-8"))
-    return cases
+            group_of[cid] = key
+            ids.append(cid)
+        groups.append({"key": key, "label": label, "heldout": heldout, "dir": f"benchmark/{dirname}",
+                       "ids": ids})
+    return cases, group_of, groups
 
 
-CASES = load_cases()
+CASES, GROUP_OF, GROUPS = load_cases()
+HELDOUT_GROUPS = {g["key"] for g in GROUPS if g["heldout"]}
 
 
 def case_summary(cid: str, data: dict) -> dict:
     hazards = sorted({s["hazard"] for s in data.get("trace", []) if s.get("hazard")})
     return {"id": cid, "label": f"{data.get('category', '')} · {data.get('title', '')}",
+            "group": GROUP_OF[cid], "heldout": GROUP_OF[cid] in HELDOUT_GROUPS,
             "title": data.get("title", ""), "category": data.get("category", ""),
             "runtime": data.get("runtime", ""), "hazards": hazards,
             "summary": data.get("summary", ""),
@@ -126,6 +139,13 @@ def replay(cid: str, twin: bool) -> dict:
     def wrong(lst):
         return sum(s["kind"] == "action" and s["expect"] == "deny" for s in lst)
 
+    # a hazard step is one the case expects to be warned or denied. It is caught when skillc
+    # warns or denies it, scored on every step as the benchmark does (recall). A reached hazard
+    # step that skillc allowed is shown as "allowed (missed)".
+    hazard = [s for s in steps if s["expect"] in ("warn", "deny")]
+    for s in steps:
+        s["missed"] = s["reached"] and s["expect"] in ("warn", "deny") and s["decision"] == "allow"
+
     left_turns = sum(s["kind"] == "action" for s in steps) + 1
     right_turns = sum(s["kind"] == "action" for s in ran) + 1
     metrics = {
@@ -137,10 +157,14 @@ def replay(cid: str, twin: bool) -> dict:
                                                 + sum(s["latency_ms"] for s in decided), 2),
                    "skillc_model_tokens": 0, "turns": right_turns,
                    "est_run_tokens": run_tokens(plan, right_turns),
-                   "stopped_at_step": steps[stop]["step"] if stop is not None else None},
+                   "stopped_at_step": steps[stop]["step"] if stop is not None else None,
+                   "hazard_steps": len(hazard),
+                   "hazard_steps_caught": sum(s["decision"] != "allow" for s in hazard),
+                   "hazard_steps_missed": sum(s["missed"] for s in steps)},
         "token_model": TOKEN_MODEL,
     }
-    return {"id": cid, "twin": twin, "note": seg.get("note", "") if twin else "",
+    return {"id": cid, "twin": twin, "group": GROUP_OF[cid], "heldout": GROUP_OF[cid] in HELDOUT_GROUPS,
+            "note": seg.get("note", "") if twin else "",
             "plan": plan_out, "steps": steps, "metrics": metrics}
 
 
@@ -155,7 +179,8 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             self._send(HTTPStatus.OK, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/cases":
-            self._json(HTTPStatus.OK, {"cases": [case_summary(c, d) for c, d in CASES.items()]})
+            self._json(HTTPStatus.OK, {"groups": GROUPS,
+                                       "cases": [case_summary(c, d) for c, d in CASES.items()]})
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -197,7 +222,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     url = f"http://127.0.0.1:{args.port}/"
-    print(f"One task. Two agents. {url}  ({len(CASES)} cases, offline, no model)", flush=True)
+    print(f"With skillc. Without skillc. {url}  ({len(CASES)} cases in {len(GROUPS)} sets, "
+          "offline, no model)", flush=True)
     if not args.no_browser:
         threading.Timer(0.4, webbrowser.open, args=(url,)).start()
     try:
