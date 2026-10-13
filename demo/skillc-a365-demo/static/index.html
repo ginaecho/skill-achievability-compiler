@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One task. Two agents.</title>
+<style>
+  :root {
+    --bg: #f6f3ee; --card: #ffffff; --ink: #1f1f1f; --muted: #6b6760; --line: #e7e2da;
+    --field: #faf8f5; --crimson: #b01e4f; --crimson-ink: #fff; --chip: #fbe7ee; --chip-ink: #a3184a;
+    --green: #1f7a4d; --green-bg: #e5f4ec; --amber: #9a5b00; --amber-bg: #fdf0d9;
+    --red: #b42318; --red-bg: #fde8e6; --grey-bg: #efede9;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  header { text-align: center; padding: 48px 16px 28px; }
+  h1 { font-size: clamp(2.4rem, 7vw, 4.6rem); line-height: 1.02; margin: 0; letter-spacing: -0.04em; font-weight: 800; }
+  .sub { color: var(--muted); font-size: 1.15rem; margin: 14px 0 0; }
+  main { max-width: 1240px; margin: 0 auto; padding: 0 16px 64px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 36px 44px; max-width: 980px; margin: 0 auto; }
+  label.small { display: block; font-weight: 600; color: #4a4741; margin-bottom: 10px; }
+  select { width: 100%; max-width: 620px; font: inherit; font-size: 1.02rem; padding: 14px 18px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--ink); }
+  h2.task { font-size: 1.55rem; margin: 26px 0 12px; letter-spacing: -0.01em; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .chips .lbl { color: var(--muted); margin-right: 4px; }
+  .chip { background: var(--chip); color: var(--chip-ink); padding: 4px 12px; border-radius: 8px; font-size: .92rem; }
+  .casehead { display: flex; justify-content: space-between; margin: 24px 0 8px; font-weight: 600; }
+  .casehead span { color: var(--muted); font-weight: 400; font-size: .9rem; }
+  .casetext { background: var(--field); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 20px; font-size: 1.02rem; line-height: 1.65; }
+  .sources { margin-top: 8px; font-size: .9rem; display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .sources a { color: var(--crimson); text-decoration: none; }
+  .sources a:hover { text-decoration: underline; }
+  .runrow { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 24px; }
+  button.run { background: var(--crimson); color: var(--crimson-ink); border: 0; border-radius: 10px;
+    font: inherit; font-weight: 700; font-size: 1.05rem; padding: 14px 26px; cursor: pointer; }
+  button.run:disabled { opacity: .55; cursor: default; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; color: #4a4741; cursor: pointer; }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--crimson); }
+  .twin-note { color: var(--muted); font-size: .9rem; }
+  .resphead { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+    margin: 44px 0 14px; font-weight: 600; color: #4a4741; }
+  .resphead span { font-weight: 400; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px 30px;
+    display: flex; flex-direction: column; min-width: 0; }
+  .card h3 { margin: 0; font-size: 1.25rem; }
+  .card .model { color: var(--muted); font-size: .92rem; margin-top: 2px; }
+  .feed { margin: 20px 0 8px; flex: 1; min-height: 120px; }
+  .ready { color: var(--muted); font-size: 1.25rem; }
+  .step { border-left: 3px solid var(--line); padding: 4px 0 4px 14px; margin-bottom: 14px; animation: fade .25s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .step .meta { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .step q { display: block; font-style: italic; color: #3b3833; margin-top: 3px; quotes: "\201C" "\201D"; }
+  .step code, .step pre { font-family: var(--mono); font-size: .84rem; }
+  .step pre { background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+    margin: 5px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .tag { display: inline-block; font-size: .74rem; font-weight: 700; text-transform: none; letter-spacing: 0;
+    padding: 1px 8px; border-radius: 6px; }
+  .t-grey { background: var(--grey-bg); color: #5b5852; }
+  .t-green { background: var(--green-bg); color: var(--green); }
+  .t-amber { background: var(--amber-bg); color: var(--amber); }
+  .t-red { background: var(--red-bg); color: var(--red); }
+  .step.s-red { border-left-color: var(--red); }
+  .step.s-amber { border-left-color: #e0a030; }
+  .step.s-green { border-left-color: #74c69d; }
+  .step.unreached { opacity: .38; }
+  .reason { font-size: .88rem; margin-top: 5px; color: #3b3833; }
+  .reason q { font-style: normal; display: inline; }
+  .next { font-size: .85rem; font-weight: 600; margin-top: 3px; }
+  .outcome { margin: 4px 0 6px; padding: 12px 14px; border-radius: 10px; font-size: .95rem; }
+  .outcome.bad { background: var(--red-bg); color: #7a1a12; }
+  .outcome.good { background: var(--green-bg); color: #14532d; }
+  .metrics { border-top: 1px solid var(--line); margin-top: 16px; padding-top: 14px; }
+  .metrics div { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); padding: 3px 0; font-size: .95rem; }
+  .metrics b { color: var(--ink); font-weight: 600; text-align: right; }
+  .metrics b.zero { color: var(--green); font-size: 1.05rem; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 22px; margin-top: 24px; }
+  summary { cursor: pointer; font-weight: 600; }
+  details pre { background: var(--field); border: 1px solid var(--line); border-radius: 10px; padding: 14px;
+    overflow-x: auto; font-family: var(--mono); font-size: .85rem; }
+  .foot { color: var(--muted); font-size: .85rem; margin-top: 14px; }
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: 1fr; }
+    .panel { padding: 24px 18px; }
+    .card { padding: 22px 18px; }
+    header { padding-top: 32px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>One task. Two agents.</h1>
+  <p class="sub">The same Agent 365 workflow, with and without skillc in the tool-call path.</p>
+</header>
+<main>
+  <section class="panel">
+    <label class="small" for="case">Choose a case</label>
+    <select id="case"></select>
+    <h2 class="task" id="title">Loading cases&hellip;</h2>
+    <div class="chips" id="chips"></div>
+    <div class="casehead">Case text <span>Published incident, read-only</span></div>
+    <div class="casetext" id="summary"></div>
+    <div class="sources" id="sources"></div>
+    <div class="runrow">
+      <button class="run" id="run" disabled>Run both agents &#8599;</button>
+      <label class="toggle"><input type="checkbox" id="twin"> Benign twin</label>
+      <span class="twin-note" id="twinnote">Replay the legitimate version of the same task instead.</span>
+    </div>
+  </section>
+
+  <div class="resphead">Agent responses <span>Same task. Same tools. Same trace.</span></div>
+  <div class="grid">
+    <article class="card" id="left">
+      <h3>Agent 365 agent &middot; no guard</h3>
+      <div class="model">Microsoft Agent Framework tool loop</div>
+      <div class="feed"><div class="ready">Ready to run</div></div>
+      <div class="metrics"></div>
+    </article>
+    <article class="card" id="right">
+      <h3>Same agent &middot; skillc middleware</h3>
+      <div class="model">skillc_monitor(strict=True, fail_open=False)</div>
+      <div class="feed"><div class="ready">Ready to run</div></div>
+      <div class="metrics"></div>
+    </article>
+  </div>
+
+  <details>
+    <summary>How skillc is attached</summary>
+<pre>from skillc.integrations.agent_framework import skillc_monitor
+
+monitor = skillc_monitor(runtime="foundry-hosted", root=state_dir,
+                         plan_path=reviewed_plan, strict=True, fail_open=False)
+agent = Agent(client=client, tools=tools, middleware=monitor.middleware_for("Writer"))</pre>
+    <p>In Agent 365 the agent's tool loop is Microsoft Agent Framework; skillc sits inside the tool-call path, so a refused tool cannot run. This demo replays published incidents through the same monitor code, offline.</p>
+  </details>
+  <p class="foot" id="tokennote">Traces are replayed from <code>benchmark/interaction_cases/</code>. Every skillc decision and latency on the right is computed live by <code>skillc.monitor.Monitor</code>, with the case's prohibited rules stripped. No model is called.</p>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let cases = [], running = false;
+
+  const clip = (s, n) => { s = (s || "").replace(/\s+/g, " ").trim(); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
+  const callText = (s) => `${s.tool}(${JSON.stringify(s.input || {}, null, 1).replace(/\n\s*/g, " ")})`;
+  const sentence = (s) => { s = (s || "").trim(); return s ? s[0].toUpperCase() + s.slice(1).replace(/\.?$/, ".") : ""; };
+  const nextText = (n) => n === "ask_user" ? "ask the user" : n === "replan" ? "replan" : "replan / ask the user";
+
+  function renderCase() {
+    const c = cases.find((x) => x.id === $("case").value);
+    if (!c) return;
+    $("title").textContent = c.title;
+    const chips = $("chips"); chips.replaceChildren(el("span", "lbl", "Context"));
+    [c.category, `runtime ${c.runtime}`, "Agent 365 · Agent Framework middleware", ...c.hazards.map((h) => `hazard: ${h}`)]
+      .forEach((t) => chips.append(el("span", "chip", t)));
+    $("summary").textContent = c.summary;
+    const src = $("sources"); src.replaceChildren();
+    c.sources.forEach((s) => {
+      if (!/^https?:\/\//.test(s.url)) return;
+      const a = el("a", null, `Published source ↗ ${s.publisher || ""}`.trim());
+      a.href = s.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.title = s.title;
+      src.append(a);
+    });
+    reset();
+  }
+
+  function reset() {
+    for (const id of ["left", "right"]) {
+      const card = $(id);
+      card.querySelector(".feed").replaceChildren(el("div", "ready", "Ready to run"));
+      card.querySelector(".metrics").replaceChildren();
+    }
+  }
+
+  function body(s) {
+    const frag = document.createDocumentFragment();
+    if (s.kind === "thinking") frag.append(el("q", null, s.text));
+    else if (s.kind === "action") frag.append(el("pre", null, callText(s)));
+    else frag.append(el("pre", null, `${s.tool} → ${s.output ?? ""}`));
+    return frag;
+  }
+
+  function leftStep(s) {
+    const d = el("div", "step");
+    const meta = el("div", "meta", `${s.step} · ${s.kind}`);
+    if (s.kind === "action") {
+      if (s.expect === "deny") { meta.append(el("span", "tag t-red", "wrong action fired")); d.classList.add("s-red"); }
+      else meta.append(el("span", "tag t-grey", "executed"));
+    }
+    d.append(meta, body(s));
+    return d;
+  }
+
+  function rightStep(s, stopped) {
+    const d = el("div", "step");
+    const meta = el("div", "meta", `${s.step} · ${s.kind}`);
+    d.append(meta, body(s));
+    if (stopped) { meta.append(el("span", "tag t-grey", "not reached")); d.classList.add("unreached"); return d; }
+    let tag, cls, sc;
+    if (s.decision === "allow") { tag = "allowed"; cls = "t-green"; sc = "s-green"; }
+    else if (s.kind === "action" && s.decision === "deny") { tag = "refused"; cls = "t-red"; sc = "s-red"; }
+    else { tag = s.kind === "thinking" ? "skillc question" : "skillc warning"; cls = "t-amber"; sc = "s-amber"; }
+    meta.append(el("span", `tag ${cls}`, tag), el("span", null, `${s.latency_ms.toFixed(1)} ms`));
+    d.classList.add(sc);
+    if (s.decision !== "allow") {
+      const r = el("div", "reason"); r.append(el("q", null, clip(s.reason, 240))); d.append(r);
+      d.append(el("div", "next", `Next: ${nextText(s.next)}`));
+      if (s.user_needs && s.user_needs.length) d.append(el("div", "next", `User must provide: ${s.user_needs.join(", ")}`));
+    }
+    return d;
+  }
+
+  function metrics(card, rows) {
+    const m = card.querySelector(".metrics"); m.replaceChildren();
+    rows.forEach(([k, v, zero]) => { const r = el("div"); r.append(el("span", null, k), el("b", zero ? "zero" : null, v)); m.append(r); });
+  }
+
+  async function run() {
+    if (running) return;
+    running = true; $("run").disabled = true;
+    const twin = $("twin").checked;
+    let data;
+    try {
+      const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: $("case").value, twin }) });
+      data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.status);
+    } catch (e) {
+      $("left").querySelector(".feed").replaceChildren(el("div", "ready", `Error: ${e.message}`));
+      running = false; $("run").disabled = false; return;
+    }
+    const L = $("left").querySelector(".feed"), R = $("right").querySelector(".feed");
+    L.replaceChildren(); R.replaceChildren();
+    $("left").querySelector(".metrics").replaceChildren(); $("right").querySelector(".metrics").replaceChildren();
+    if (twin && data.note) L.append(el("div", "outcome good", `Benign twin: ${data.note}`));
+
+    const p = data.plan, pd = el("div", "step " + (p.decision === "allow" ? "s-green" : "s-red"));
+    const pm = el("div", "meta", "plan");
+    pm.append(el("span", `tag ${p.decision === "allow" ? "t-green" : "t-red"}`,
+      p.verdict === "NO PLAN" ? "no plan" : `Plan checked: ${p.verdict} in runtime ${cases.find((c) => c.id === data.id).runtime}`),
+      el("span", null, `${p.latency_ms.toFixed(1)} ms`));
+    pd.append(pm); R.append(pd);
+    const lp = el("div", "step"); lp.append(el("div", "meta", "plan"), el("q", null, "Plan accepted without a check.")); L.append(lp);
+
+    for (let i = 0; i < data.steps.length; i++) {
+      const s = data.steps[i];
+      await sleep(650);
+      L.append(leftStep(s));
+      R.append(rightStep(s, !s.reached));
+    }
+    await sleep(400);
+    const lastWrong = [...data.steps].reverse().find((s) => s.kind === "action" && s.expect === "deny");
+    const incident = ($("summary").textContent || "").split(/(?<=\.)\s+/)[0];
+    L.append(lastWrong ? el("div", "outcome bad", `Wrong action fired (${lastWrong.hazard || "hazard"}): ${sentence(lastWrong.why)} In the published incident: ${incident}`)
+                       : el("div", "outcome good", "Outcome: the legitimate task completed."));
+    const refused = data.steps.find((s) => s.kind === "action" && s.decision === "deny");
+    R.append(refused
+      ? el("div", "outcome good", `Stopped before ${clip(callText(refused), 120)}; the agent is told to ${nextText(refused.next)}.`)
+      : el("div", "outcome good", "Outcome: every step allowed; the legitimate task completed."));
+
+    const a = data.metrics.no_guard, b = data.metrics.skillc;
+    const fmt = (n) => n.toLocaleString("en-US");
+    metrics($("left"), [
+      ["Steps executed", `${a.steps_executed}`], ["Wrong actions fired", `${a.wrong_actions_fired}`],
+      ["Estimated run tokens", `~${fmt(a.est_run_tokens)} (${a.turns} turns)`]]);
+    metrics($("right"), [
+      ["Steps executed", `${b.steps_executed}`], ["Wrong actions fired", `${b.wrong_actions_fired}`],
+      ["skillc decisions", `${b.decisions}`], ["Decision latency", `${b.decision_latency_ms.toFixed(1)} ms`],
+      ["Model tokens used by skillc", "0", true],
+      ["Estimated run tokens", `~${fmt(b.est_run_tokens)} (${b.turns} turns)`]]);
+    $("tokennote").textContent = "Every skillc decision and latency on the right is computed live by skillc.monitor.Monitor, " +
+      "with the case's prohibited rules stripped; no model is called. Run tokens: " + data.metrics.token_model;
+    running = false; $("run").disabled = false;
+  }
+
+  $("case").addEventListener("change", renderCase);
+  $("twin").addEventListener("change", reset);
+  $("run").addEventListener("click", run);
+  fetch("/api/cases").then((r) => r.json()).then((d) => {
+    cases = d.cases;
+    cases.forEach((c) => { const o = el("option", null, c.label); o.value = c.id; $("case").append(o); });
+    renderCase(); $("run").disabled = false;
+  }).catch(() => { $("title").textContent = "Could not load cases."; });
+})();
+</script>
+</body>
+</html>

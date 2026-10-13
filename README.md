@@ -121,6 +121,8 @@ python examples/agent365-finance/security_demo.py --state-dir runs/agent365-secu
 python -m pytest tests/test_agent365_cases.py tests/test_security.py tests/test_finance_security.py -q
 ```
 
+**See it:** `python demo/skillc-a365-demo/app.py` replays published incidents side by side, with and without skillc ([demo](demo/skillc-a365-demo/README.md)).
+
 **Read:**
 [Agent 365 security](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/AGENT365_SECURITY.md) ·
 [ten cases](https://github.com/ginaecho/skill-achievability-compiler/blob/main/examples/agent365-cases/README.md) ·
