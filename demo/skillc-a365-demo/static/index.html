@@ -65,6 +65,33 @@
   .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; }
   .toggle input { width: 18px; height: 18px; accent-color: var(--blue); }
   .twin-note { color: var(--muted); font-size: .9rem; }
+  [hidden] { display: none !important; }
+
+  /* user-authored case editor */
+  .editlink { font-size: .9rem; margin-left: 8px; white-space: nowrap; }
+  .editor { margin-top: 22px; }
+  .edgrid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 28px; }
+  .edgrid + .edgrid { margin-top: 22px; }
+  .editor label.small { margin: 14px 0 6px; }
+  .editor .edgrid > div > label.small:first-child { margin-top: 0; }
+  .editor input[type=text], .editor textarea { width: 100%; font: inherit; padding: 10px 14px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--field); color: var(--ink); }
+  .editor textarea { font-family: var(--mono); font-size: .82rem; line-height: 1.45; resize: vertical; }
+  .editor select { max-width: none; }
+  .edrt { margin-top: 10px; }
+  .hint { color: var(--muted); font-size: .84rem; margin-top: 4px; }
+  .hint code { font-family: var(--mono); font-size: .9em; color: var(--blue); }
+  .small-toggle { font-size: .9rem; margin-top: 8px; }
+  .pcheck { margin-top: 8px; font-size: .86rem; padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); }
+  .pcheck:empty { display: none; }
+  .pcheck.good { background: var(--green-bg); color: var(--green-dark); }
+  .pcheck.bad { background: var(--red-bg); color: var(--red-dark); }
+  .pcheck.idle { background: var(--grey-bg); color: var(--grey); }
+  .edbtns { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
+  button.ghost { background: var(--card); color: var(--blue); border: 1px solid var(--note-line); border-radius: 8px;
+    font: inherit; font-weight: 600; font-size: .9rem; padding: 7px 14px; cursor: pointer; }
+  button.ghost:hover { background: var(--note-bg); }
+  .edmsg { margin-top: 16px; padding: 10px 14px; border-radius: 10px; background: var(--red-bg); color: var(--red-dark); font-size: .92rem; }
 
   /* 2. consoles */
   .resphead { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
@@ -151,7 +178,7 @@
   .diagram .ahb { fill: var(--blue); }
   .foot { color: var(--muted); font-size: .85rem; margin-top: 18px; }
   @media (max-width: 900px) {
-    .grid, .vgrid, .ctx { grid-template-columns: 1fr; }
+    .grid, .vgrid, .ctx, .edgrid { grid-template-columns: 1fr; }
     .panel { padding: 22px 16px; }
     details { padding: 14px 16px; }
     header { padding-top: 32px; }
@@ -168,12 +195,45 @@
 <main>
   <section class="panel">
     <h2 class="sec">The situation the agent was in</h2>
-    <p class="secsub">What the agent was asked, what it could see, and what it could do, reconstructed from the published case.</p>
+    <p class="secsub" id="secsub">What the agent was asked, what it could see, and what it could do, reconstructed from the published case.</p>
     <label class="small" for="case">Case</label>
     <select id="case"></select>
     <h3 class="ctitle" id="title">Loading cases&hellip;</h3>
-    <div class="cmeta" id="meta"></div>
-    <div class="ctx">
+    <div class="cmeta"><span id="meta"></span> <a href="#" class="editlink" id="editcase" hidden>Edit this case</a></div>
+    <div class="editor" id="editor" hidden>
+      <div class="edgrid">
+        <div>
+          <label class="small" for="ed-runtime">Runtime</label>
+          <select id="ed-runtime"></select>
+          <div class="rt edrt" id="ed-rtdesc"></div>
+          <ul class="tools" id="ed-tools"></ul>
+          <div class="lacks" id="ed-lacks"></div>
+        </div>
+        <div>
+          <label class="small" for="ed-task">The user asked</label>
+          <input type="text" id="ed-task" maxlength="4000" placeholder="what the user asked the agent">
+          <label class="small" for="ed-arts">What the agent could see</label>
+          <textarea id="ed-arts" rows="6" spellcheck="false" placeholder="=== system prompt (excerpt) ===&#10;You are the coding agent for ...&#10;=== e-mail from the vendor ===&#10;..."></textarea>
+          <div class="hint">Each artifact starts with a line <code>=== &lt;name&gt; ===</code>, followed by its content.</div>
+        </div>
+      </div>
+      <div class="edgrid">
+        <div>
+          <label class="small" for="ed-plan">Plan (Controlled English; the skillc run submits it first)</label>
+          <textarea id="ed-plan" rows="10" spellcheck="false"></textarea>
+          <label class="toggle small-toggle"><input type="checkbox" id="ed-noplan"> No plan (require_plan off)</label>
+          <div class="pcheck" id="ed-pcheck"></div>
+        </div>
+        <div>
+          <label class="small" for="ed-session">Session (one step per line)</label>
+          <textarea id="ed-session" rows="10" spellcheck="false" placeholder="# one step per line; the prefix decides the kind&#10;assistant: <reasoning text>&#10;tool: <ToolName> <JSON input>     e.g.  tool: Bash {&quot;command&quot;: &quot;pytest -q&quot;}&#10;out: <tool output for the previous tool line>   (optional; \n is a newline)&#10;# blank lines are ignored; a # line is a comment"></textarea>
+          <div class="edbtns"><button type="button" class="ghost" id="ed-example">Load example</button>
+            <span class="hint">A legitimate step, then a committed hazardous step and its tool call.</span></div>
+        </div>
+      </div>
+      <div class="edmsg" id="ed-msg" hidden></div>
+    </div>
+    <div class="ctx" id="ctx">
       <div>
         <section><h3>The user asked</h3><div class="ask"><div class="who">user</div><div id="task"></div></div></section>
         <section><h3>Runtime and tools</h3><div class="rt" id="runtime"></div><ul class="tools" id="tools"></ul><div class="lacks" id="lacks"></div></section>
@@ -185,7 +245,7 @@
     </div>
     <div class="runrow">
       <button class="run" id="run" disabled>Run both</button>
-      <label class="toggle"><input type="checkbox" id="twin"> Benign twin</label>
+      <label class="toggle" id="twinlabel"><input type="checkbox" id="twin"> Benign twin</label>
       <span class="twin-note" id="twinnote">Run the legitimate version of the same task instead.</span>
     </div>
   </section>
@@ -319,7 +379,7 @@
   </details>
   </section>
 
-  <p class="foot" id="foot">Tool outputs are fixtures reconstructed from the published incident; skillc output is live. The agent's reasoning and tool calls are replayed from the benchmark case files under <code>benchmark/</code>; every skillc line (plan result, question, refusal) is produced during this run by <code>skillc.monitor.Monitor</code>, with the case's prohibited rules stripped, and its latency is measured. Timestamps are the elapsed time of this replay. No model is called.</p>
+  <p class="foot" id="foot">Tool outputs are fixtures reconstructed from the published incident; skillc output is live. The agent's reasoning and tool calls are replayed from the benchmark case files under <code>benchmark/</code>; every skillc line (plan result, question, refusal) is produced during this run by <code>skillc.monitor.Monitor</code>, with the case's prohibited rules stripped, and its latency is measured. Timestamps are the elapsed time of this replay. No model is called. Your own case runs through the same monitor; nothing is executed, sent or deleted; only skillc's decisions are real.</p>
 </main>
 <script>
 (() => {
@@ -331,9 +391,94 @@
                    tool: "[tool]", out: "[out]", context: "[context]", end: "#" };
   // Pause before a line appears, by kind: reasoning takes longest, monitor lines are instant.
   const PACE = { hdr: 120, user: 500, read: 450, plan: 450, monitor: 60, assistant: 1100, tool: 650, out: 380, context: 60, end: 400 };
-  let cases = new Map(), runId = 0;
+  const CUSTOM = "__custom__";
+  let cases = new Map(), runId = 0, runtimes = new Map(), examplePlans = {}, exampleCase = null;
+  const isCustom = () => $("case").value === CUSTOM;
+
+  // ---- user-authored case editor
+  function setMode(custom) {
+    $("editor").hidden = !custom;
+    $("ctx").hidden = custom;
+    $("editcase").hidden = custom;
+    $("twinlabel").hidden = custom; $("twinnote").hidden = custom;
+    $("secsub").textContent = custom
+      ? "Write the situation yourself: the runtime, the request, what the agent could see, the plan and the session. skillc decides it live."
+      : "What the agent was asked, what it could see, and what it could do, reconstructed from the published case.";
+  }
+
+  function renderRuntime() {
+    const r = runtimes.get($("ed-runtime").value);
+    if (!r) return;
+    $("ed-rtdesc").replaceChildren(el("b", null, r.name), ` ${r.description}`);
+    const tl = $("ed-tools"); tl.replaceChildren();
+    Object.entries(r.tools).forEach(([k, v]) => { const li = el("li"); li.append(el("code", null, k), v); tl.append(li); });
+    $("ed-lacks").textContent = r.lacks.length ? `Not available: ${r.lacks.join("; ")}.` : "";
+  }
+
+  let lastRuntime = null;
+  function onRuntimeChange() {
+    const rt = $("ed-runtime").value, plan = $("ed-plan");
+    // swap the example plan only if the user has not changed it
+    if (!plan.value.trim() || (lastRuntime && plan.value === examplePlans[lastRuntime])) plan.value = examplePlans[rt] || "";
+    lastRuntime = rt;
+    renderRuntime(); schedulePlanCheck(); reset();
+  }
+
+  let planTimer = null, planSeq = 0;
+  function schedulePlanCheck() { clearTimeout(planTimer); planTimer = setTimeout(checkPlan, 350); }
+  async function checkPlan() {
+    const box = $("ed-pcheck"), seq = ++planSeq;
+    $("ed-plan").disabled = $("ed-noplan").checked;
+    if ($("ed-noplan").checked) { box.className = "pcheck idle"; box.textContent = "No plan: require_plan is off and plan conformance is not checked."; return; }
+    const plan = $("ed-plan").value;
+    if (!plan.trim()) { box.className = "pcheck bad"; box.textContent = "Enter a plan, or tick “No plan”."; return; }
+    try {
+      const res = await fetch("/api/check_plan", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runtime: $("ed-runtime").value, plan }) });
+      const d = await res.json();
+      if (seq !== planSeq) return;
+      if (!res.ok) throw new Error(d.error || res.status);
+      box.className = `pcheck ${d.decision === "allow" ? "good" : "bad"}`;
+      box.textContent = `Monitor.check_plan: ${d.verdict} (${d.latency_ms.toFixed(1)} ms)\n${d.reason}`;
+    } catch (e) { if (seq === planSeq) { box.className = "pcheck bad"; box.textContent = `plan check failed: ${e.message}`; } }
+  }
+
+  function fillEditor(src) {
+    $("ed-runtime").value = src.runtime; lastRuntime = src.runtime;
+    $("ed-task").value = src.task || "";
+    $("ed-arts").value = src.artifacts || "";
+    $("ed-noplan").checked = !src.plan;
+    $("ed-plan").value = src.plan || examplePlans[src.runtime] || "";
+    $("ed-session").value = src.session || "";
+    renderRuntime(); schedulePlanCheck();
+  }
+
+  function editThisCase(ev) {
+    ev.preventDefault();
+    const c = cases.get($("case").value);
+    if (!c) return;
+    const arts = c.artifacts.filter((a) => a.step == null).map((a) => `=== ${a.name} ===\n${a.content}`).join("\n");
+    $("case").value = CUSTOM; setMode(true); $("title").textContent = `Your own case (from: ${c.title})`;
+    $("meta").textContent = "user-authored · no published incident";
+    fillEditor({ runtime: runtimes.has(c.runtime.name) ? c.runtime.name : "developer-sandbox", task: c.task,
+                 artifacts: arts, plan: c.plan, session: c.session });
+    reset();
+  }
+
+  function customBody() {
+    return { runtime: $("ed-runtime").value, task: $("ed-task").value, artifacts: $("ed-arts").value,
+             plan: $("ed-noplan").checked ? null : $("ed-plan").value, session: $("ed-session").value };
+  }
 
   function renderCase() {
+    if (isCustom()) {
+      setMode(true);
+      $("title").textContent = "Your own case"; $("meta").textContent = "user-authored · no published incident";
+      if (!$("ed-plan").value && !$("ed-session").value) fillEditor({ runtime: "developer-sandbox", plan: examplePlans["developer-sandbox"] });
+      reset();
+      return;
+    }
+    setMode(false);
     const c = cases.get($("case").value);
     if (!c) return;
     $("title").textContent = c.title;
@@ -369,6 +514,7 @@
       $(id).querySelector(".st").textContent = "idle";
     }
     $("verdict").hidden = true;
+    $("ed-msg").hidden = true;
     $("run").disabled = cases.size === 0;
   }
 
@@ -405,6 +551,7 @@
     const v = data.verdict, a = data.metrics.no_guard, b = data.metrics.skillc, twin = data.twin;
     const L = $("vleft"), R = $("vright");
     L.querySelectorAll(".outcome").forEach((e) => e.remove()); R.querySelectorAll(".outcome").forEach((e) => e.remove());
+    if (v.custom) return renderCustomVerdict(data);
     $("vsub").textContent = twin
       ? "Benign twin: the legitimate version of the task. Nothing should be refused; any skillc question or refusal is a false positive."
       : "Scored after both runs finished, against the case's labelled steps (expect: question or refuse).";
@@ -465,18 +612,66 @@
     $("verdict").hidden = false;
   }
 
+  // A user-authored case has no benchmark labels: report what ran and what skillc did.
+  function renderCustomVerdict(data) {
+    const v = data.verdict, a = data.metrics.no_guard, b = data.metrics.skillc, L = $("vleft"), R = $("vright");
+    const stop = v.skillc.stopped;
+    $("vsub").textContent = "Your own case: no benchmark labels, so the verdict reports what ran and what skillc did. Whether a step was wrong is your call.";
+    rows(L, [["Steps executed", `${a.steps_executed}`], ["Tool calls executed", `${v.no_guard.tool_calls}`],
+      ["Where it stopped", "ran to the end"],
+      ["Estimated run tokens", `~${a.est_run_tokens.toLocaleString("en-US")} (${a.turns} turns)`]]);
+    rows(R, [["Steps executed", `${b.steps_executed}`], ["Tool calls executed", `${v.skillc.tool_calls}`],
+      ["Where it stopped", stop ? `step ${stop.step} (line ${stop.line}), call refused` : "ran to the end"],
+      ["skillc questions raised", `${v.skillc.questions}`, v.skillc.questions ? "miss" : null],
+      ["Tool calls refused", `${v.skillc.refused}`, v.skillc.refused ? "good" : null],
+      ["Plan", data.plan.verdict], ["skillc decisions", `${b.decisions}`],
+      ["skillc decision latency", `${b.decision_latency_ms.toFixed(1)} ms in total`],
+      ["Model tokens used by skillc", "0", "good"],
+      ["Estimated run tokens", `~${b.est_run_tokens.toLocaleString("en-US")} (${b.turns} turns)`]]);
+    note(L, "warn", [el("b", null, "Every call ran. "), v.incident_outcome]);
+    if (stop) {
+      const who = stop.next === "ask_user" ? `asked the user${stop.user_needs.length ? ` for ${stop.user_needs.join(", ")}` : ""}` : "told to replan without it";
+      note(R, "good", [el("b", null, "Stopped before it ran: "), code(stop.call), `. The refusal was the tool result; the agent was ${who}.`]);
+    } else if (v.skillc.questions) {
+      note(R, "warn", [`skillc raised ${plural(v.skillc.questions, "question")} and refused no call; every call ran.`]);
+    } else {
+      note(R, "good", ["skillc allowed every step; no question, no refusal."]);
+    }
+    const tb = $("vsteps"); tb.replaceChildren();
+    data.steps.forEach((s) => {
+      const tr = el("tr");
+      const what = el("td");
+      what.append(s.kind === "thinking" ? `reasoning: “${s.text}”` : s.kind === "result" ? `output of ${s.tool}` : code(`${s.tool} ${JSON.stringify(s.input || {})}`));
+      const lab = el("td"); lab.append(el("span", "tag t-grey", "user-authored"));
+      const left = el("td"); left.append(el("span", "tag t-grey", s.kind === "thinking" ? "reasoned" : "ran"));
+      const right = el("td"); let t;
+      if (!s.reached) t = el("span", "tag t-grey", `not reached${s.decision !== "allow" ? ` (would be ${s.decision === "deny" ? "refused" : "questioned"})` : ""}`);
+      else if (s.decision === "deny") t = el("span", "tag t-red", "refused");
+      else if (s.decision === "warn") t = el("span", "tag t-amber", "skillc question");
+      else t = el("span", "tag t-grey", s.kind === "thinking" ? "reasoned" : "ran");
+      right.append(t);
+      tr.append(el("td", null, `${s.step} (line ${s.line})`), what, lab, left, right); tb.append(tr);
+    });
+    $("verdict").hidden = false;
+  }
+
   async function run() {
-    const twin = $("twin").checked, cid = $("case").value;
+    const twin = $("twin").checked, cid = $("case").value, custom = isCustom();
     reset();
     const my = runId, live = () => my === runId;
     $("run").disabled = true;
     let data;
     try {
-      const res = await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cid, twin }) });
+      const res = custom
+        ? await fetch("/api/run_custom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(customBody()) })
+        : await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cid, twin }) });
       data = await res.json();
       if (!res.ok) throw new Error(data.error || res.status);
     } catch (e) {
-      if (live()) { $("left").querySelector(".screen").replaceChildren(el("div", "idle", `error: ${e.message}`)); $("run").disabled = false; }
+      if (!live()) return;
+      if (custom) { const m = $("ed-msg"); m.textContent = `Cannot run this case: ${e.message}`; m.hidden = false; }
+      else $("left").querySelector(".screen").replaceChildren(el("div", "idle", `error: ${e.message}`));
+      $("run").disabled = false;
       return;
     }
     if (!live()) return;
@@ -493,14 +688,26 @@
   $("case").addEventListener("change", renderCase);
   $("twin").addEventListener("change", () => reset());
   $("run").addEventListener("click", run);
+  $("editcase").addEventListener("click", editThisCase);
+  $("ed-runtime").addEventListener("change", onRuntimeChange);
+  $("ed-plan").addEventListener("input", schedulePlanCheck);
+  $("ed-noplan").addEventListener("change", checkPlan);
+  $("ed-example").addEventListener("click", () => { if (exampleCase) { fillEditor({ ...exampleCase, plan: examplePlans[exampleCase.runtime] }); reset(); } });
   fetch("/api/cases").then((r) => r.json()).then((d) => {
     d.cases.forEach((c) => cases.set(c.id, c));
+    (d.runtimes || []).forEach((r) => runtimes.set(r.name, r));
+    examplePlans = d.example_plans || {}; exampleCase = d.example_case || null;
+    const rsel = $("ed-runtime");
+    runtimes.forEach((r) => { const o = el("option", null, r.name); o.value = r.name; rsel.append(o); });
     const sel = $("case");
+    const own = el("option", null, "✎ Write your own case"); own.value = CUSTOM; sel.append(own);
     d.groups.forEach((g) => {
       const og = document.createElement("optgroup"); og.label = g.label;
       g.ids.forEach((id) => { const c = cases.get(id); if (!c) return; const o = el("option", null, c.label); o.value = id; og.append(o); });
       sel.append(og);
     });
+    const first = d.groups.length ? d.groups[0].ids[0] : null;
+    if (first) sel.value = first;                 // open on a built-in case, as before
     renderCase();
   }).catch(() => { $("title").textContent = "Could not load cases."; });
 })();

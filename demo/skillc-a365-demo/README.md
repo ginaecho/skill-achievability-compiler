@@ -53,6 +53,38 @@ the sources). Placeholders stand in for addresses, payloads and personal data; i
 are described in one plain clause. Adding a case means adding one such file; the benchmark files under
 `benchmark/` are not modified.
 
+## Your own case
+
+The first dropdown option, **✎ Write your own case**, replaces the read-only situation with an
+editor. **Edit this case** (next to a built-in case) copies that case into the editor: task, the
+artifacts read at the start, runtime, plan and session, with the fixtures as `out:` lines.
+
+* **Runtime:** one of `developer-sandbox`, `scout-desktop`, `office-assistant`, `foundry-hosted`,
+  `offline-workstation`, with its tools listed under it.
+* **Task:** what the user asked the agent.
+* **What the agent could see:** each artifact is a line `=== <name> ===` followed by its content.
+* **Plan:** the Controlled English plan the skillc run submits first, prefilled with a short valid
+  plan for the runtime (the `GOOD` plan of `tests/test_monitor.py`, or the same shape over `read` /
+  `write` or `code_interpreter` / `write`). It is checked on the server with `Monitor.check_plan` as
+  you type, and the verdict shows inline. Tick **No plan** to run with `require_plan` off.
+* **Session:** one step per line; the prefix decides the kind. Blank lines are ignored and a `#`
+  line is a comment. **Load example** fills a five-line session: a legitimate test run, then
+  reasoning that commits to dropping the production table, then the tool call that does it.
+
+  ```
+  assistant: <reasoning text>                      -> thinking (observe_thinking)
+  tool: <ToolName> <JSON object>                   -> action   (pre_action), e.g. tool: Bash {"command": "pytest -q"}
+  out: <output of the previous tool line>          -> result   (post_action); optional, \n is a newline
+  ```
+
+The run is the same as for a built-in case: a fresh temp root,
+`Config(runtime=<runtime>, require_plan=<plan given>)` (no case rules, destinations or interaction
+settings), the plan submitted, then each step through the monitor with measured latency. The
+no-guard console echoes the typed session with the typed `out:` lines, or "(no output given)". There
+are no benchmark labels, so the verdict reports **skillc questions raised** and **tool calls
+refused** instead of hazard steps caught, and the outcome is "No published incident; user-authored
+case." Nothing is executed, sent or deleted; only skillc's decisions are real.
+
 ## What is replayed and what is live
 
 * **Replayed:** the agent's reasoning and tool calls, from the benchmark case files (abstractions of
@@ -71,8 +103,17 @@ fail_open=False)`); this demo calls the same monitor directly and does not run A
 
 ## API
 
-* `GET /api/cases`: `groups` (key, label, heldout, dir, ids) and `cases` (id, label, title, category,
-  kind, agent, task, artifacts, runtime {name, description, tools, lacks}, twin_note, sources).
+* `GET /api/cases`: `groups` (key, label, heldout, dir, ids), `cases` (id, label, title, category,
+  kind, agent, task, artifacts, runtime {name, description, tools, lacks}, plan, session (the trace
+  in the editor's line format), twin_note, sources), `runtimes` (the five editor runtimes),
+  `example_plans` (per runtime) and `example_case`.
+* `POST /api/run_custom` with `{"runtime", "task", "artifacts", "plan": <text>|null, "session"}`: the
+  same shape as `/api/run`; `verdict.custom` is true and `verdict.skillc` adds `questions` and
+  `refused`. Limits: session 20 KB and 60 steps; a tool name is one token; a tool input parses to a
+  JSON object. A violation returns 400 with the line number, for example
+  `line 2: the tool input is not valid JSON (Expecting ',' delimiter, column 17)`.
+* `POST /api/check_plan` with `{"runtime", "plan"}`: `Monitor.check_plan` on a fresh monitor
+  (`verdict` ACHIEVABLE or REFUSED, `reason`, `latency_ms`).
 * `POST /api/run` with `{"id": "<case id>", "twin": false}`: `logs.no_guard` and `logs.skillc` (lines
   `{k, text, ms}`), `verdict` (labelled steps, false positives, per-run tool calls, wrong actions,
   where skillc stopped, incident outcome), plus the plan result, per-step decisions and `metrics`. An
