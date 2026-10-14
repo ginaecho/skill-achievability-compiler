@@ -88,11 +88,14 @@
   .pcheck.bad { background: var(--red-bg); color: var(--red-dark); }
   .pcheck.idle { background: var(--grey-bg); color: var(--grey); }
   .edbtns { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
-  button.ghost { background: var(--card); color: var(--blue); border: 1px solid var(--note-line); border-radius: 8px;
+  button.ghost, label.ghost { background: var(--card); color: var(--blue); border: 1px solid var(--note-line); border-radius: 8px;
     font: inherit; font-weight: 600; font-size: .9rem; padding: 7px 14px; cursor: pointer; }
   .edlocal { margin: 0 0 12px; }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .edlocal select { width: auto; max-width: min(100%, 460px); }
-  button.ghost:hover { background: var(--note-bg); }
+  label.ghost { display: inline-block; margin: 0; }
+  label.ghost:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button.ghost:hover, label.ghost:hover { background: var(--note-bg); }
   .edmsg { margin-top: 16px; padding: 10px 14px; border-radius: 10px; background: var(--red-bg); color: var(--red-dark); font-size: .92rem; }
 
   /* 2. consoles */
@@ -206,6 +209,11 @@
       <div class="edbtns edlocal">
         <button type="button" class="ghost" id="ed-machine">Fill from this machine</button>
         <select id="ed-sess" aria-label="Import a Claude Code session"><option value="">Import a Claude Code session&hellip;</option></select>
+        <label class="ghost" id="ed-dirbtn" hidden>Fill from my .claude folder<input type="file" id="ed-dir" webkitdirectory class="vh"></label>
+        <select id="ed-proj" aria-label="Pick a project from your .claude folder" hidden></select>
+        <select id="ed-psess" aria-label="Pick a session of that project" hidden></select>
+        <label class="ghost">Upload a transcript (.jsonl)<input type="file" id="ed-file" accept=".jsonl,.json,.txt" class="vh"></label>
+        <select id="ed-uturn" aria-label="Pick a prompt from the uploaded transcript" hidden><option value="">Pick a prompt&hellip;</option></select>
         <span class="hint" id="ed-localmsg">Reads ~/.claude, this repository&rsquo;s git state and your Claude Code transcripts on this computer. Nothing leaves 127.0.0.1; credential values are never read.</span>
       </div>
       <div class="edgrid">
@@ -508,21 +516,155 @@
     } catch (e) { sessionsLoaded = false; $("ed-localmsg").textContent = `Could not list sessions: ${e.message}`; }
   }
 
+  function applyImport(d) {
+    const msg = $("ed-localmsg");
+    $("ed-task").value = d.task;
+    $("ed-session").value = d.session;
+    $("ed-noplan").checked = true; checkPlan();    // a real session wrote no skillc plan
+    if (!d.steps) {
+      msg.textContent = "The agent took no recorded steps after this prompt (for example a message sent while it was stopped), so there is nothing to run. Pick another prompt.";
+      reset();
+      return;
+    }
+    msg.textContent = `Imported ${d.steps} step(s)` + (d.truncated ? `; ${d.truncated} more were cut to fit the editor` : "")
+      + ". The agent's thinking is not stored in transcripts, so its visible messages stand in as the assistant lines. No plan is set, since the real session wrote none.";
+    reset();
+  }
+
   async function importSession() {
     const sel = $("ed-sess"), msg = $("ed-localmsg");
     if (!sel.value) return;
     const [id, turn] = sel.value.split("|");
     msg.textContent = "Importing the session…";
     try {
-      const d = await getLocal(`/api/local/session?id=${encodeURIComponent(id)}&turn=${encodeURIComponent(turn)}`);
-      $("ed-task").value = d.task;
-      $("ed-session").value = d.session;
-      $("ed-noplan").checked = true; checkPlan();    // a real session wrote no skillc plan
-      msg.textContent = `Imported ${d.steps} step(s)` + (d.truncated ? `; ${d.truncated} more were cut to fit the editor` : "")
-        + ". The agent's thinking is not stored in transcripts, so its visible messages stand in as the assistant lines. No plan is set, since the real session wrote none.";
-      reset();
+      applyImport(await getLocal(`/api/local/session?id=${encodeURIComponent(id)}&turn=${encodeURIComponent(turn)}`));
     } catch (e) { msg.textContent = `Could not import: ${e.message}`; }
     sel.value = "";
+  }
+
+  let uploadText = "";
+  async function postTranscript(query) {
+    const res = await fetch(`/api/transcript${query}`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: uploadText });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.status);
+    return d;
+  }
+
+  async function onUpload() { await loadTranscript($("ed-file").files[0]); $("ed-file").value = ""; }
+
+  async function loadTranscript(f) {
+    const msg = $("ed-localmsg"), sel = $("ed-uturn");
+    if (!f) return;
+    msg.textContent = `Reading ${f.name}…`;
+    try {
+      uploadText = await f.text();
+      const d = await postTranscript("");
+      sel.replaceChildren(el("option", null, `Pick a prompt from ${d.title || f.name}…`));
+      sel.options[0].value = "";
+      d.turns.forEach((t) => { const o = el("option", null, t.prompt); o.value = String(t.turn); sel.append(o); });
+      sel.hidden = false; sel.focus();
+      msg.textContent = `${d.turns.length} prompt(s) in ${f.name}. Pick one to fill the task and the session. The file is parsed in memory and not stored.`;
+    } catch (e) { sel.hidden = true; msg.textContent = `Could not read ${f.name}: ${e.message}`; }
+  }
+
+  // "Fill from my .claude folder" (hosted app): the browser reads the folder the viewer picks.
+  // Only small context files are read here; a transcript is sent to the server only when the
+  // viewer picks a session, and the server parses it in memory without storing it.
+  let claudeDir = null;
+  const BUILTIN_TOOLS = "Bash, Read, Write, Edit, Glob, Grep, NotebookEdit, WebFetch, WebSearch, Agent, TodoWrite, Skill, AskUserQuestion";
+
+  function list(v) { return Array.isArray(v) && v.length ? v.join(", ") : ""; }
+
+  function settingsSummary(name, j) {
+    const out = [], perm = j.permissions || {};
+    if (perm.defaultMode) out.push(`permission mode: ${perm.defaultMode}`);
+    for (const k of ["allow", "ask", "deny"]) if (list(perm[k])) out.push(`${k} rules: ${list(perm[k])}`);
+    if (j.mcpServers) out.push(`MCP servers: ${Object.keys(j.mcpServers).join(", ")}`);
+    if (j.enabledPlugins) {
+      const on = Object.entries(j.enabledPlugins).filter(([, v]) => v).map(([k]) => k);
+      if (on.length) out.push(`plugins enabled: ${on.join(", ")}`);
+    }
+    if (j.model) out.push(`model: ${j.model}`);
+    return out.map((l) => `${name}: ${l}`);
+  }
+
+  async function onPickDir() {
+    const files = [...$("ed-dir").files], msg = $("ed-localmsg");
+    $("ed-dir").value = "";
+    if (!files.length) return;
+    const dir = { claudeMd: null, settings: [], projects: new Map() };
+    for (const f of files) {
+      const parts = f.webkitRelativePath.split("/");
+      const i = parts.indexOf(".claude");
+      const rel = (i >= 0 ? parts.slice(i + 1) : parts.slice(1)).join("/");
+      if (rel === "CLAUDE.md") dir.claudeMd = f;
+      else if (rel === "settings.json" || rel === "settings.local.json") dir.settings.push(f);
+      const m = rel.match(/^projects\/([^/]+)\/(?:([^/]+\.jsonl)|memory\/MEMORY\.md)$/);
+      if (m) {
+        const p = dir.projects.get(m[1]) || { name: m[1], sessions: [], memory: null, latest: 0 };
+        if (m[2]) { p.sessions.push(f); p.latest = Math.max(p.latest, f.lastModified); } else p.memory = f;
+        dir.projects.set(m[1], p);
+      }
+    }
+    if (!dir.claudeMd && !dir.settings.length && !dir.projects.size) {
+      msg.textContent = "That folder has no CLAUDE.md, settings or projects. Pick the .claude folder in your home folder (on macOS press Cmd+Shift+. to show it).";
+      return;
+    }
+    claudeDir = dir;
+    const sel = $("ed-proj");
+    sel.replaceChildren(el("option", null, "Pick a project…")); sel.options[0].value = "";
+    [...dir.projects.values()].filter((p) => p.sessions.length).sort((a, b) => b.latest - a.latest).forEach((p) => {
+      const o = el("option", null, `${p.name.length > 60 ? "…" + p.name.slice(-60) : p.name} (${p.sessions.length} sessions)`);
+      o.value = p.name; sel.append(o);
+    });
+    sel.hidden = sel.options.length < 2;
+    $("ed-psess").hidden = true;
+    await fillFromDir(null);
+    if (!sel.hidden) sel.focus();
+  }
+
+  async function fillFromDir(project) {
+    const d = claudeDir, arts = [], from = [];
+    if (d.claudeMd) { arts.push(`=== ~/.claude/CLAUDE.md (user instructions) ===\n${(await d.claudeMd.text()).trim().slice(0, 4000)}`); from.push("CLAUDE.md"); }
+    const env = [`Claude Code built-in tools (standard set): ${BUILTIN_TOOLS}`];
+    for (const f of d.settings) {
+      try { env.push(...settingsSummary(f.name, JSON.parse(await f.text()))); from.push(f.name); } catch (e) { /* not JSON */ }
+    }
+    if (project && project.memory) { arts.push(`=== memory index (MEMORY.md) ===\n${(await project.memory.text()).trim().slice(0, 4000)}`); from.push("MEMORY.md"); }
+    arts.push(`=== environment (from ~/.claude settings) ===\n${env.join("\n")}`);
+    if ($("ed-runtime").value !== "developer-sandbox") { $("ed-runtime").value = "developer-sandbox"; onRuntimeChange(); }
+    $("ed-arts").value = arts.join("\n");
+    $("ed-localmsg").textContent = `Filled “What the agent could see” from ${from.join(", ") || "the folder"}`
+      + (project ? ` of ${project.name}` : "") + ". Read in your browser; nothing was sent."
+      + (!project && $("ed-proj").options.length > 1 ? " Pick a project to add its memory and list its sessions." : "");
+    reset();
+  }
+
+  async function onPickProject() {
+    const p = claudeDir && claudeDir.projects.get($("ed-proj").value), sel = $("ed-psess");
+    if (!p) return;
+    await fillFromDir(p);
+    p.sessions.sort((a, b) => b.lastModified - a.lastModified);
+    sel.replaceChildren(el("option", null, "Pick a session…")); sel.options[0].value = "";
+    p.sessions.slice(0, 20).forEach((f, i) => {
+      const when = new Date(f.lastModified).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      const o = el("option", null, `${when} · ${(f.size / 1048576).toFixed(1)} MB`); o.value = String(i); sel.append(o);
+    });
+    sel.hidden = false; sel.focus();
+  }
+
+  async function onPickSession() {
+    const p = claudeDir && claudeDir.projects.get($("ed-proj").value), i = $("ed-psess").value;
+    if (!p || i === "") return;
+    await loadTranscript(p.sessions[Number(i)]);
+  }
+
+  async function importUploaded() {
+    const sel = $("ed-uturn");
+    if (!sel.value) return;
+    $("ed-localmsg").textContent = "Importing…";
+    try { applyImport(await postTranscript(`?turn=${encodeURIComponent(sel.value)}`)); }
+    catch (e) { $("ed-localmsg").textContent = `Could not import: ${e.message}`; }
   }
 
   function customBody() {
@@ -756,11 +898,20 @@
   $("ed-sess").addEventListener("focus", loadSessions);
   $("ed-sess").addEventListener("pointerdown", loadSessions);
   $("ed-sess").addEventListener("change", importSession);
+  $("ed-file").addEventListener("change", onUpload);
+  $("ed-dir").addEventListener("change", onPickDir);
+  $("ed-proj").addEventListener("change", onPickProject);
+  $("ed-psess").addEventListener("change", onPickSession);
+  $("ed-uturn").addEventListener("change", importUploaded);
   $("ed-example").addEventListener("click", () => { if (exampleCase) { fillEditor({ ...exampleCase, plan: examplePlans[exampleCase.runtime] }); reset(); } });
   fetch("/api/cases").then((r) => r.json()).then((d) => {
     d.cases.forEach((c) => cases.set(c.id, c));
     (d.runtimes || []).forEach((r) => runtimes.set(r.name, r));
     examplePlans = d.example_plans || {}; exampleCase = d.example_case || null;
+    if (d.hosted) {                               // the server is not on the viewer's machine
+      $("ed-machine").hidden = true; $("ed-sess").hidden = true; $("ed-dirbtn").hidden = false;
+      $("ed-localmsg").textContent = "Fill from my .claude folder: pick the .claude folder in your home folder. Your browser reads CLAUDE.md, settings and project memory to fill “What the agent could see” and lists your sessions. Only a session you pick is sent; it is parsed in memory and not stored. The browser may say it is uploading the folder; it does not.";
+    }
     const rsel = $("ed-runtime");
     runtimes.forEach((r) => { const o = el("option", null, r.name); o.value = r.name; rsel.append(o); });
     const sel = $("case");

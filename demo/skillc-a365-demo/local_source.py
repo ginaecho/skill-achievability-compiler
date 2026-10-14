@@ -5,6 +5,8 @@
                                  skillc.env.claude probe (tools, rules, MCP servers, credential names)
     list_turns(root)             the prompts of the recent Claude Code sessions in this repository
     session_turn(root, id, n)    one prompt as task + session lines (assistant / tool / out)
+    upload_turns(text)           the same two for an uploaded transcript (.jsonl text), parsed in
+    upload_turn(text, n)         memory and not stored; used by the hosted app
 
 Nothing is written, sent or executed. Credential values are never read; only whether a variable is
 set. Transcripts hide the model's thinking, so the agent's visible text stands in for its reasoning.
@@ -141,13 +143,32 @@ def _prompt_text(rec: dict) -> str | None:
     return text
 
 
+def _parse_lines(lines):
+    for line in lines:
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict):
+            yield rec
+
+
 def _records(path: Path):
     with path.open(encoding="utf-8", errors="replace") as f:
-        for line in f:
-            try:
-                yield json.loads(line)
-            except json.JSONDecodeError:
-                continue
+        yield from _parse_lines(f)
+
+
+def _turns(records) -> tuple[list[dict], str]:
+    """(prompts typed by the user, the session's title) for one transcript."""
+    turns, title = [], ""
+    for rec in records:
+        if rec.get("type") == "ai-title" and rec.get("aiTitle"):
+            title = str(rec["aiTitle"])
+        text = _prompt_text(rec)
+        if text is not None:
+            turns.append({"turn": len(turns), "when": str(rec.get("timestamp", "")),
+                          "prompt": _clip(text.replace("\n", " "), 140)})
+    return turns, title
 
 
 def list_turns(root: Path, sessions: int = 8, per_session: int = 30) -> list[dict]:
@@ -157,14 +178,7 @@ def list_turns(root: Path, sessions: int = 8, per_session: int = 30) -> list[dic
                    key=lambda p: p.stat().st_mtime, reverse=True)[:sessions]
     out = []
     for p in files:
-        turns, title = [], ""
-        for rec in _records(p):
-            if rec.get("type") == "ai-title" and rec.get("aiTitle"):
-                title = rec["aiTitle"]
-            text = _prompt_text(rec)
-            if text is not None:
-                turns.append({"turn": len(turns), "when": rec.get("timestamp", ""),
-                              "prompt": _clip(text.replace("\n", " "), 140)})
+        turns, title = _turns(_records(p))
         if turns:
             when = datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
             out.append({"id": p.stem, "modified": when, "title": title, "turns": turns[-per_session:]})
@@ -183,15 +197,33 @@ def _one_line(text: str) -> str:
 
 
 def session_turn(root: Path, session_id: str, turn: int) -> dict:
-    """{task, session, steps, truncated}: prompt `turn` of the session and what the agent did next,
-    up to the next prompt the user typed. Subagent (sidechain) records are left out."""
+    """One prompt of a transcript of this repository; see _turn."""
     if not SESSION_ID.match(session_id or ""):
         raise ValueError("unknown session")
     path = project_dir(root) / f"{session_id}.jsonl"
     if not path.is_file():
         raise ValueError("unknown session")
+    return _turn(_records(path), turn)
+
+
+def upload_turns(text: str) -> dict:
+    """{title, turns} of an uploaded transcript."""
+    turns, title = _turns(_parse_lines(text.splitlines()))
+    if not turns:
+        raise ValueError("no prompts found: upload a Claude Code transcript (.jsonl) from "
+                         "~/.claude/projects/<project>/")
+    return {"title": title, "turns": turns}
+
+
+def upload_turn(text: str, turn: int) -> dict:
+    return _turn(_parse_lines(text.splitlines()), turn)
+
+
+def _turn(records, turn: int) -> dict:
+    """{task, session, steps, truncated}: prompt `turn` and what the agent did next, up to the
+    next prompt the user typed. Subagent (sidechain) records are left out."""
     task, n, lines, steps, size, dropped = None, -1, [], 0, 0, 0
-    for rec in _records(path):
+    for rec in records:
         text = _prompt_text(rec)
         if text is not None:
             n += 1

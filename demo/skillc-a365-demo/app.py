@@ -14,12 +14,15 @@ mode (no case-specific rules). No model, no network. The verdict is computed aft
 A user-authored case (`POST /api/run_custom`) goes through the same monitor: the typed session
 is parsed into thinking / action / result steps and replayed; nothing is executed. The editor can
 be filled from this machine (`GET /api/local/*`, see local_source.py): the Claude Code context an
-agent here loads, and the prompts of recent Claude Code sessions in this repository.
+agent here loads, and the prompts of recent Claude Code sessions in this repository. An uploaded
+transcript (`POST /api/transcript`) is parsed in memory and not stored. With SKILLC_DEMO_HOSTED=1
+(the Azure deployment, see deploy/) the local reads are off and the server binds 0.0.0.0:$PORT.
 """
 from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import tempfile
@@ -53,6 +56,11 @@ SETS = [
     ("interaction_cases_heldout3", "heldout3", "Held-out set 3 (blind)", True),
 ]
 MAX_BODY = 4096
+MAX_TRANSCRIPT = 16 * 1024 * 1024
+# Hosted (Azure Container Apps): the local-machine reads are off, since the server is not on the
+# viewer's machine; the viewer uploads a transcript instead.
+HOSTED = os.environ.get("SKILLC_DEMO_HOSTED") == "1"
+RUN_LOCK = threading.Lock()           # z3 is not thread-safe: one monitor run at a time
 MODEL = "<model deployment>"
 MIDDLEWARE = "skillc_monitor(runtime='{rt}', plan_path='.skillc/plan.ce', strict=True, fail_open=False)"
 TOKEN_MODEL = ("skillc.tokens.RuntimeModel defaults (system 2,500, +700 per turn, 250 output per "
@@ -444,7 +452,9 @@ def parse_session(text: str) -> list[dict]:
         if len(steps) > MAX_STEPS:
             raise CaseError(f"line {no}: at most {MAX_STEPS} steps")
     if not steps:
-        raise CaseError("session: no steps")
+        raise CaseError("the Session box has no steps (blank and # lines do not count). Import a "
+                        "session (pick a project, a session and a prompt), click Load example, or "
+                        "type steps such as `tool: Bash {\"command\": \"pytest -q\"}`")
     for i, s in enumerate(steps, 1):
         s["step"] = i
     return steps
@@ -580,6 +590,8 @@ class Handler(BaseHTTPRequestHandler):
         return host in ("127.0.0.1", "localhost")
 
     def _local(self, path: str, query: dict) -> None:
+        if HOSTED:
+            return self._json(HTTPStatus.NOT_FOUND, {"error": "not available in the hosted app"})
         if not self._local_host():
             return self._json(HTTPStatus.FORBIDDEN, {"error": "local reads answer 127.0.0.1 only"})
         try:
@@ -605,7 +617,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.OK, {"groups": GROUPS,
                                        "cases": [case_summary(c, d) for c, d in CASES.items()],
                                        "runtimes": [runtime_info(n) for n in CUSTOM_RUNTIMES],
-                                       "example_plans": EXAMPLE_PLANS, "example_case": EXAMPLE_CASE})
+                                       "example_plans": EXAMPLE_PLANS, "example_case": EXAMPLE_CASE,
+                                       "hosted": HOSTED})
         else:
             self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -618,8 +631,24 @@ class Handler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise CaseError("the request body is not JSON")
 
+    def _transcript(self, query: dict) -> None:
+        """POST /api/transcript[?turn=N] with a Claude Code transcript (.jsonl) as the body: its
+        prompts, or prompt N as task + session. Parsed in memory; nothing is stored."""
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0 or n > MAX_TRANSCRIPT:
+                raise ValueError(f"the transcript must be 1 byte to {MAX_TRANSCRIPT // 2**20} MB")
+            text = self.rfile.read(n).decode("utf-8", errors="replace")
+            if "turn" in query:
+                return self._json(HTTPStatus.OK, local_source.upload_turn(text, int(query["turn"][0])))
+            return self._json(HTTPStatus.OK, local_source.upload_turns(text))
+        except ValueError as e:
+            return self._json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
+
     def do_POST(self) -> None:
-        path = self.path.split("?", 1)[0]
+        path, _, qs = self.path.partition("?")
+        if path == "/api/transcript":
+            return self._transcript(parse_qs(qs))
         if path in ("/api/run_custom", "/api/check_plan"):
             try:
                 body = self._custom_body()
@@ -627,11 +656,15 @@ class Handler(BaseHTTPRequestHandler):
                     if (not isinstance(body, dict) or body.get("runtime") not in CUSTOM_RUNTIMES
                             or not isinstance(body.get("plan"), str) or len(body["plan"]) > 8000):
                         raise CaseError('expected {"runtime": <runtime>, "plan": <text>}')
-                    return self._json(HTTPStatus.OK, check_plan(body["runtime"], body["plan"]))
+                    with RUN_LOCK:
+                        result = check_plan(body["runtime"], body["plan"])
+                    return self._json(HTTPStatus.OK, result)
                 case = custom_case(body)
             except ValueError as e:              # CaseError, bad Content-Length
                 return self._json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
-            return self._json(HTTPStatus.OK, custom_session(case))
+            with RUN_LOCK:
+                result = custom_session(case)
+            return self._json(HTTPStatus.OK, result)
         if path != "/api/run":
             return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
         try:
@@ -645,7 +678,9 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, AttributeError):
             return self._json(HTTPStatus.BAD_REQUEST,
                               {"error": 'expected {"id": <a listed case id>, "twin": true|false}'})
-        self._json(HTTPStatus.OK, session(cid, twin))
+        with RUN_LOCK:
+            result = session(cid, twin)
+        self._json(HTTPStatus.OK, result)
 
     def _json(self, status, payload) -> None:
         self._send(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -689,14 +724,15 @@ def main(argv=None) -> int:
         return print_log(argv[1:])
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--port", type=int, default=int(os.environ.get("PORT", 8765)))
     ap.add_argument("--no-browser", action="store_true", help="do not open a browser tab")
     args = ap.parse_args(argv)
-    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
-    url = f"http://127.0.0.1:{args.port}/"
+    host = "0.0.0.0" if HOSTED else "127.0.0.1"
+    server = ThreadingHTTPServer((host, args.port), Handler)
+    url = f"http://{host}:{args.port}/"
     print(f"With skillc. Without skillc. {url}  ({len(CASES)} showcase cases, offline, no model)",
           flush=True)
-    if not args.no_browser:
+    if not args.no_browser and not HOSTED:
         threading.Timer(0.4, webbrowser.open, args=(url,)).start()
     try:
         server.serve_forever()
