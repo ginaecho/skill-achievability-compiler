@@ -59,6 +59,11 @@ The first dropdown option, **✎ Write your own case**, replaces the read-only s
 editor. **Edit this case** (next to a built-in case) copies that case into the editor: task, the
 artifacts read at the start, runtime, plan and session, with the fixtures as `out:` lines.
 
+Two controls at the top of the editor fill it from this machine (read only; the server answers them only for requests addressed to `127.0.0.1` or `localhost`):
+
+* **Fill from this machine** sets the runtime to `developer-sandbox` (Claude Code here) and fills *What the agent could see* with what a Claude Code agent started in this repository loads: `~/.claude/CLAUDE.md`, the project `CLAUDE.md` if any, the memory index, git branch / remotes / recent commits, and a `skillc.env.claude.probe` summary (tools, allow / deny rules, MCP servers, credential names that are set; never their values; no egress check).
+* **Import a Claude Code session** lists the prompts of the 8 most recent sessions in `~/.claude/projects/<this repository>/`. Picking one fills the task with that prompt and the session with what the agent did until the next prompt: its visible text as `assistant:` lines (transcripts do not keep the thinking), its tool calls and their results; subagent records are left out. Lines are cut to 1,200 characters and the session to the editor's limits. **No plan** is ticked, since a real session wrote no skillc plan. Code: `local_source.py`.
+
 * **Runtime:** one of `developer-sandbox`, `scout-desktop`, `office-assistant`, `foundry-hosted`,
   `offline-workstation`, with its tools listed under it.
 * **Task:** what the user asked the agent.

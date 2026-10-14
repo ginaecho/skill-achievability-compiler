@@ -90,6 +90,8 @@
   .edbtns { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
   button.ghost { background: var(--card); color: var(--blue); border: 1px solid var(--note-line); border-radius: 8px;
     font: inherit; font-weight: 600; font-size: .9rem; padding: 7px 14px; cursor: pointer; }
+  .edlocal { margin: 0 0 12px; }
+  .edlocal select { width: auto; max-width: min(100%, 460px); }
   button.ghost:hover { background: var(--note-bg); }
   .edmsg { margin-top: 16px; padding: 10px 14px; border-radius: 10px; background: var(--red-bg); color: var(--red-dark); font-size: .92rem; }
 
@@ -201,6 +203,11 @@
     <h3 class="ctitle" id="title">Loading cases&hellip;</h3>
     <div class="cmeta"><span id="meta"></span> <a href="#" class="editlink" id="editcase" hidden>Edit this case</a></div>
     <div class="editor" id="editor" hidden>
+      <div class="edbtns edlocal">
+        <button type="button" class="ghost" id="ed-machine">Fill from this machine</button>
+        <select id="ed-sess" aria-label="Import a Claude Code session"><option value="">Import a Claude Code session&hellip;</option></select>
+        <span class="hint" id="ed-localmsg">Reads ~/.claude, this repository&rsquo;s git state and your Claude Code transcripts on this computer. Nothing leaves 127.0.0.1; credential values are never read.</span>
+      </div>
       <div class="edgrid">
         <div>
           <label class="small" for="ed-runtime">Runtime</label>
@@ -465,6 +472,59 @@
     reset();
   }
 
+  async function getLocal(url) {
+    const res = await fetch(url), d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.status);
+    return d;
+  }
+
+  async function fillFromMachine() {
+    const msg = $("ed-localmsg"), btn = $("ed-machine");
+    btn.disabled = true; msg.textContent = "Reading this machine…";
+    try {
+      const d = await getLocal("/api/local/context");
+      if ($("ed-runtime").value !== d.runtime) { $("ed-runtime").value = d.runtime; onRuntimeChange(); }
+      $("ed-arts").value = d.artifacts;
+      msg.textContent = `Filled from: ${d.sources.join(", ")}. Runtime: ${d.runtime} (Claude Code on this machine).`;
+      reset();
+    } catch (e) { msg.textContent = `Could not read this machine: ${e.message}`; }
+    finally { btn.disabled = false; }
+  }
+
+  let sessionsLoaded = false;
+  async function loadSessions() {
+    if (sessionsLoaded) return;
+    sessionsLoaded = true;
+    const sel = $("ed-sess");
+    try {
+      const d = await getLocal("/api/local/sessions");
+      if (!d.sessions.length) { sel.options[0].textContent = "No Claude Code sessions found for this repository"; return; }
+      d.sessions.forEach((s) => {
+        const og = document.createElement("optgroup");
+        og.label = `${s.modified} · ${s.title || s.id.slice(0, 8)}`;
+        s.turns.forEach((t) => { const o = el("option", null, t.prompt); o.value = `${s.id}|${t.turn}`; og.append(o); });
+        sel.append(og);
+      });
+    } catch (e) { sessionsLoaded = false; $("ed-localmsg").textContent = `Could not list sessions: ${e.message}`; }
+  }
+
+  async function importSession() {
+    const sel = $("ed-sess"), msg = $("ed-localmsg");
+    if (!sel.value) return;
+    const [id, turn] = sel.value.split("|");
+    msg.textContent = "Importing the session…";
+    try {
+      const d = await getLocal(`/api/local/session?id=${encodeURIComponent(id)}&turn=${encodeURIComponent(turn)}`);
+      $("ed-task").value = d.task;
+      $("ed-session").value = d.session;
+      $("ed-noplan").checked = true; checkPlan();    // a real session wrote no skillc plan
+      msg.textContent = `Imported ${d.steps} step(s)` + (d.truncated ? `; ${d.truncated} more were cut to fit the editor` : "")
+        + ". The agent's thinking is not stored in transcripts, so its visible messages stand in as the assistant lines. No plan is set, since the real session wrote none.";
+      reset();
+    } catch (e) { msg.textContent = `Could not import: ${e.message}`; }
+    sel.value = "";
+  }
+
   function customBody() {
     return { runtime: $("ed-runtime").value, task: $("ed-task").value, artifacts: $("ed-arts").value,
              plan: $("ed-noplan").checked ? null : $("ed-plan").value, session: $("ed-session").value };
@@ -692,6 +752,10 @@
   $("ed-runtime").addEventListener("change", onRuntimeChange);
   $("ed-plan").addEventListener("input", schedulePlanCheck);
   $("ed-noplan").addEventListener("change", checkPlan);
+  $("ed-machine").addEventListener("click", fillFromMachine);
+  $("ed-sess").addEventListener("focus", loadSessions);
+  $("ed-sess").addEventListener("pointerdown", loadSessions);
+  $("ed-sess").addEventListener("change", importSession);
   $("ed-example").addEventListener("click", () => { if (exampleCase) { fillEditor({ ...exampleCase, plan: examplePlans[exampleCase.runtime] }); reset(); } });
   fetch("/api/cases").then((r) => r.json()).then((d) => {
     d.cases.forEach((c) => cases.set(c.id, c));

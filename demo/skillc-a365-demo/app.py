@@ -12,7 +12,9 @@ mode (no case-specific rules). No model, no network. The verdict is computed aft
     python demo/skillc-a365-demo/app.py run <case-id> [--guard] [--twin]   # print one session log
 
 A user-authored case (`POST /api/run_custom`) goes through the same monitor: the typed session
-is parsed into thinking / action / result steps and replayed; nothing is executed.
+is parsed into thinking / action / result steps and replayed; nothing is executed. The editor can
+be filled from this machine (`GET /api/local/*`, see local_source.py): the Claude Code context an
+agent here loads, and the prompts of recent Claude Code sessions in this repository.
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
@@ -36,6 +39,7 @@ RUNTIMES = ROOT / "src" / "skillc" / "data" / "runtimes"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import run_interaction_cases as ric  # noqa: E402
+import local_source  # noqa: E402
 
 ric.load_skillc(None)                 # binds ric.Monitor / ric.Config from ROOT/src
 from skillc.tokens import RuntimeModel, estimate_tokens  # noqa: E402
@@ -569,8 +573,32 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args) -> None:
         pass
 
+    def _local_host(self) -> bool:
+        """/api/local/* reads this machine: answer only requests addressed to the loopback name
+        (a page on another origin that rebinds its DNS name to 127.0.0.1 is refused)."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+        return host in ("127.0.0.1", "localhost")
+
+    def _local(self, path: str, query: dict) -> None:
+        if not self._local_host():
+            return self._json(HTTPStatus.FORBIDDEN, {"error": "local reads answer 127.0.0.1 only"})
+        try:
+            if path == "/api/local/context":
+                return self._json(HTTPStatus.OK, local_source.machine_context(ROOT))
+            if path == "/api/local/sessions":
+                return self._json(HTTPStatus.OK, {"sessions": local_source.list_turns(ROOT)})
+            if path == "/api/local/session":
+                turn = int(query.get("turn", ["-1"])[0])
+                return self._json(HTTPStatus.OK,
+                                  local_source.session_turn(ROOT, query.get("id", [""])[0], turn))
+        except ValueError as e:
+            return self._json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
+        self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
     def do_GET(self) -> None:
-        path = self.path.split("?", 1)[0]
+        path, _, qs = self.path.partition("?")
+        if path.startswith("/api/local/"):
+            return self._local(path, parse_qs(qs))
         if path in ("/", "/index.html"):
             self._send(HTTPStatus.OK, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
         elif path == "/api/cases":
