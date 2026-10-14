@@ -199,6 +199,9 @@ class State:
     facts: list = field(default_factory=list)      # predicates currently true (protocol state)
     actions: list = field(default_factory=list)    # capabilities executed successfully, in order
     rejections: int = 0              # plans refused in a row since the last approval
+    # unmet `request_gate` obligations of the current request (Obligation fields): no plan
+    # is approved while one is open; a new request replaces them
+    request_gaps: list = field(default_factory=list)
     log: list = field(default_factory=list)
 
 
@@ -281,19 +284,40 @@ class Monitor:
         return out
 
     # ------------------------------------------------------------------ prompt
+    def _request_gaps(self, prompt: str) -> list[Obligation]:
+        if not prompt.strip():
+            return []
+        rt, lib = self.effective()
+        return [o for o in match(prompt, lib) if unmet(o, rt, lib)]
+
     def intent_gaps(self, prompt: str) -> str | None:
         """The intent check of a request: requirements the library finds in it that the
         effective runtime cannot meet, as one message for the agent, or None."""
-        if not prompt.strip():
-            return None
-        rt, lib = self.effective()
-        gaps = [o for o in match(prompt, lib) if unmet(o, rt, lib)]
+        gaps = self._request_gaps(prompt)
         if not gaps:
             return None
+        rows = []
+        for o in gaps:
+            row = f"'{o.text}' ({o.clause()})"
+            if o.note:
+                row += f": {o.note}"
+            if o.substitutes:
+                row += f" Reachable instead: {o.substitutes}"
+            rows.append(row)
+        gated = [o for o in gaps if o.request_gate]
         return ("skillc intent check: the request mentions requirements runtime "
-                f"`{rt.name}` cannot meet: "
-                + "; ".join(f"'{o.text}' ({o.clause()})" for o in gaps)
-                + ". Plan around them or tell the user.")
+                f"`{self.effective()[0].name}` cannot meet: " + "; ".join(rows)
+                + (" This is what the request asks for, not a step to plan around: ask the "
+                   "user whether to narrow the request; until then no plan is approved."
+                   if gated else " Plan around them or tell the user."))
+
+    def note_request(self, prompt: str) -> str | None:
+        """The intent check of a new request (`intent_gaps`); its unmet `request_gate`
+        obligations are kept, and `check_plan` approves no plan while one is open."""
+        if prompt.strip():
+            self.state.request_gaps = [asdict(o) for o in self._request_gaps(prompt)
+                                       if o.request_gate]
+        return self.intent_gaps(prompt)
 
     def on_prompt(self, prompt: str, session_id: str) -> list[str]:
         """Context to give the agent when the user's request arrives: the plan protocol
@@ -303,7 +327,7 @@ class Monitor:
             self.state.sessions.append(session_id)
             ctx.append(plan_instructions(self.runtime, self.cfg.plan_file,
                                          write_tool=self.cfg.plan_tools[0]))
-        gap = self.intent_gaps(prompt)
+        gap = self.note_request(prompt)
         if gap:
             ctx.append(gap)
         return ctx
@@ -316,6 +340,9 @@ class Monitor:
             parsed = parse_ce_detailed(text)
         except CEError as e:
             return Decision(DENY, f"the plan does not parse: {e}"), info
+        gate = self._request_gate()
+        if gate:
+            return gate, info
         # prohibited behaviours declared in the plan itself
         bad = self._prohibited_text(text)
         for name, b in parsed.bindings.items():
@@ -365,6 +392,30 @@ class Monitor:
         return Decision(DENY, "\n".join(lines), sorted(set(b.withdrawn) | set(b.blocked)),
                         next=ASK_USER if needs or v.label != "IMPOSSIBLE" else REPLAN,
                         user_needs=needs), info
+
+    def _request_gate(self) -> Decision | None:
+        """DENY (ask_user) while the request needs a resource the runtime cannot grant
+        (an open `request_gate` obligation): a plan that leaves it out does not do what
+        the user asked."""
+        rt, lib = self.effective()
+        open_ = [o for o in (Obligation(**g) for g in self.state.request_gaps)
+                 if o.kind in USER_KINDS and unmet(o, rt, lib)]
+        if not open_:
+            return None
+        lines = []
+        for o in open_:
+            lines.append(f"skillc: the request needs `{o.value}` ('{o.text}'), which runtime "
+                         f"`{rt.name}` cannot provide." + (f" {o.note}" if o.note else ""))
+            if o.substitutes:
+                lines.append(f"Narrower goal that is reachable: {o.substitutes}")
+        lines.append("A plan that leaves this out does not do what the user asked, so no "
+                     "plan is approved for this request. Do not implement anything yet: tell "
+                     "the user what skillc found and ask whether the narrower goal is "
+                     "acceptable. If they accept, start again with the narrowed request in "
+                     "the user's words (with the skillc tools: call skillc_start again), "
+                     "then submit the plan.")
+        needs = sorted({o.value for o in open_})
+        return Decision(DENY, "\n".join(lines), needs, ASK_USER, needs)
 
     def submit_plan(self, text: str) -> Decision:
         d, info = self.check_plan(text)

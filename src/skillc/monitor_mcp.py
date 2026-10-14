@@ -146,7 +146,7 @@ class McpMonitor:
 
         def fn(mon: Monitor) -> str:
             mon.state.sessions.append(sid)
-            gap = mon.intent_gaps(request)
+            gap = mon.note_request(request)
             return (f"skillc session {sid}.\n" + instructions(mon)
                     + ("\n\n" + gap if gap else ""))
         return self._run("start", {"request": request}, fn, sid)
