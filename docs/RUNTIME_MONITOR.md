@@ -334,7 +334,17 @@ Every answer starts with `DECISION: … NEXT: … USER_NEEDS: …`. Every call a
 appended to `<root>/.skillc/calls.jsonl` (approval references redacted), to evaluate a
 run afterwards. The runtime
 manifest `scout-desktop` describes Scout on Windows: PowerShell, files, web, a browser,
-the user's Microsoft 365 data through WorkIQ, Teams messages, Azure DevOps.
+the user's own and shared Microsoft 365 data through WorkIQ (what the signed-in user can
+access; other people's private mail, chats and meetings are listed under `lacks`), Teams
+messages, Azure DevOps.
+
+Some requirements are the request's goal, not a step a plan can route around: library
+entries marked `request_gate` (such as `others_m365_data`, "summarize my colleagues'
+latest discussions"). When `skillc_start` (or `on_prompt` in hook hosts) finds one the
+runtime cannot meet, the intent check gives the entry's note and its narrower reachable
+alternative, and `skillc_check_plan` denies every plan with `NEXT: ask_user` until a new
+request without it arrives (the user's narrowed request, passed to `skillc_start` again).
+Other unmet requirements of a request only warn: a plan that leaves them out may pass.
 
 The A365 capabilities are available here as well: `--strict --host-plan FILE` and
 `--approval-policy FILE` (or `<root>/.skillc/approval-policy.json`); install them with
