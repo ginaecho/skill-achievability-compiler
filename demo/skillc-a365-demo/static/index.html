@@ -1,0 +1,931 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>With skillc. Without skillc.</title>
+<style>
+  :root {
+    --bg: #f4f7fb; --card: #ffffff; --ink: #14213d; --ink-2: #33415c; --muted: #5d6b82;
+    --line: #d6e0ef; --field: #f7f9fd;
+    --blue: #1f4e9c; --blue-ink: #ffffff; --blue-hover: #183f80; --chip: #e6eefb; --chip-ink: #1f4e9c;
+    --note-bg: #e8f0fc; --note-line: #b9cdf0;
+    --green: #1f7a4d; --green-bg: #e5f4ec; --green-line: #74c69d; --green-dark: #14532d;
+    --amber: #9a5b00; --amber-bg: #fdf0d9; --amber-line: #e0a030; --amber-dark: #6b3f00;
+    --red: #b42318; --red-bg: #fde8e6; --red-dark: #7a1a12;
+    --grey: #4f5869; --grey-bg: #eceff4;
+    --term-bg: #0f1724; --term-bar: #1a2436; --term-ink: #d7deea; --term-dim: #7d8aa3; --term-pre: #9fb3d1;
+    --mono: ui-monospace, "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  header { text-align: center; padding: 48px 16px 28px; }
+  h1 { font-size: clamp(2.2rem, 6.5vw, 4.2rem); line-height: 1.04; margin: 0; letter-spacing: -0.035em; font-weight: 800; }
+  h1 .with { color: var(--blue); }
+  .sub { color: var(--muted); font-size: 1.1rem; margin: 16px auto 0; max-width: 780px; }
+  main { max-width: 1320px; margin: 0 auto; padding: 0 16px 64px; }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  select:focus-visible, button:focus-visible, summary:focus-visible, input:focus-visible { outline: 3px solid var(--note-line); outline-offset: 2px; }
+
+  /* 1. context */
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 32px 40px; }
+  .panel h2.sec { margin: 0 0 4px; font-size: 1.35rem; }
+  .panel .secsub { color: var(--muted); margin: 0 0 18px; font-size: .95rem; }
+  label.small { display: block; font-weight: 600; color: var(--ink-2); margin-bottom: 8px; }
+  select { width: 100%; max-width: 720px; font: inherit; padding: 12px 16px;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--field); color: var(--ink); }
+  .ctitle { font-size: 1.3rem; margin: 22px 0 4px; }
+  .cmeta { color: var(--muted); font-size: .92rem; }
+  .ctx { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 28px; margin-top: 22px; }
+  .ctx h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  .ctx section + section { margin-top: 22px; }
+  .ask { background: var(--note-bg); border: 1px solid var(--note-line); border-radius: 14px 14px 14px 4px;
+    padding: 14px 18px; font-size: 1.05rem; }
+  .ask .who { font-size: .8rem; color: var(--blue); font-weight: 700; margin-bottom: 4px; }
+  .rt { font-size: .92rem; color: var(--ink-2); }
+  .rt b { font-family: var(--mono); font-size: .9rem; color: var(--blue); }
+  .tools { list-style: none; padding: 0; margin: 10px 0 0; font-size: .9rem; }
+  .tools li { padding: 4px 0; border-top: 1px solid var(--line); color: var(--ink-2); }
+  .tools code { font-family: var(--mono); font-size: .86rem; color: var(--ink); font-weight: 600; margin-right: 6px; }
+  .lacks { font-size: .86rem; color: var(--muted); margin-top: 8px; }
+  .art { margin-bottom: 14px; }
+  .art .an { display: flex; justify-content: space-between; gap: 10px; font-family: var(--mono); font-size: .84rem; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .art .an span { font-family: "Segoe UI", system-ui, sans-serif; font-weight: 400; color: var(--muted); font-size: .8rem; white-space: nowrap; }
+  .art pre { margin: 0; background: var(--field); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+    font-family: var(--mono); font-size: .82rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; color: var(--ink-2); }
+  .sources { font-size: .9rem; display: grid; gap: 4px; }
+  .sources .d { color: var(--muted); }
+  .runrow { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line); }
+  button.run { background: var(--blue); color: var(--blue-ink); border: 0; border-radius: 10px;
+    font: inherit; font-weight: 700; font-size: 1.05rem; padding: 13px 28px; cursor: pointer; }
+  button.run:hover:not(:disabled) { background: var(--blue-hover); }
+  button.run:disabled { opacity: .55; cursor: default; }
+  .toggle { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-2); cursor: pointer; }
+  .toggle input { width: 18px; height: 18px; accent-color: var(--blue); }
+  .twin-note { color: var(--muted); font-size: .9rem; }
+  [hidden] { display: none !important; }
+
+  /* user-authored case editor */
+  .editlink { font-size: .9rem; margin-left: 8px; white-space: nowrap; }
+  .editor { margin-top: 22px; }
+  .edgrid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 28px; }
+  .edgrid + .edgrid { margin-top: 22px; }
+  .editor label.small { margin: 14px 0 6px; }
+  .editor .edgrid > div > label.small:first-child { margin-top: 0; }
+  .editor input[type=text], .editor textarea { width: 100%; font: inherit; padding: 10px 14px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--field); color: var(--ink); }
+  .editor textarea { font-family: var(--mono); font-size: .82rem; line-height: 1.45; resize: vertical; }
+  .editor select { max-width: none; }
+  .edrt { margin-top: 10px; }
+  .hint { color: var(--muted); font-size: .84rem; margin-top: 4px; }
+  .hint code { font-family: var(--mono); font-size: .9em; color: var(--blue); }
+  .small-toggle { font-size: .9rem; margin-top: 8px; }
+  .pcheck { margin-top: 8px; font-size: .86rem; padding: 8px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); }
+  .pcheck:empty { display: none; }
+  .pcheck.good { background: var(--green-bg); color: var(--green-dark); }
+  .pcheck.bad { background: var(--red-bg); color: var(--red-dark); }
+  .pcheck.idle { background: var(--grey-bg); color: var(--grey); }
+  .edbtns { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 8px; }
+  button.ghost, label.ghost { background: var(--card); color: var(--blue); border: 1px solid var(--note-line); border-radius: 8px;
+    font: inherit; font-weight: 600; font-size: .9rem; padding: 7px 14px; cursor: pointer; }
+  .edlocal { margin: 0 0 12px; }
+  .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .edlocal select { width: auto; max-width: min(100%, 460px); }
+  label.ghost { display: inline-block; margin: 0; }
+  label.ghost:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; }
+  button.ghost:hover, label.ghost:hover { background: var(--note-bg); }
+  .edmsg { margin-top: 16px; padding: 10px 14px; border-radius: 10px; background: var(--red-bg); color: var(--red-dark); font-size: .92rem; }
+
+  /* 2. consoles */
+  .resphead { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+    margin: 40px 0 14px; font-weight: 600; color: var(--ink-2); }
+  .resphead span { font-weight: 400; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .term { background: var(--term-bg); border-radius: 12px; overflow: hidden; min-width: 0; display: flex; flex-direction: column;
+    box-shadow: 0 8px 24px rgba(15, 23, 36, .18); }
+  .bar { background: var(--term-bar); color: var(--term-ink); display: flex; align-items: center; gap: 10px;
+    padding: 9px 14px; font-family: var(--mono); font-size: .82rem; }
+  .dots { display: flex; gap: 6px; }
+  .dots i { width: 11px; height: 11px; border-radius: 50%; background: #3a465c; display: block; }
+  .bar .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar .st { color: var(--term-dim); }
+  .screen { height: 560px; overflow-y: auto; padding: 12px 14px 16px; font-family: var(--mono); font-size: .8rem;
+    line-height: 1.5; color: var(--term-ink); }
+  .tl { display: grid; grid-template-columns: 7.4em 7.8em minmax(0, 1fr); white-space: pre-wrap; word-break: break-word; }
+  .tl .ts { color: var(--term-dim); }
+  .tl .pf { color: var(--term-pre); }
+  .tl .tx { min-width: 0; }
+  .tl.hdr, .tl.end { color: var(--term-dim); }
+  .tl.hdr .pf, .tl.end .pf { color: var(--term-dim); }
+  .tl.out .tx, .tl.read .tx { color: #b8c3d6; }
+  .tl .ms { color: var(--term-dim); }
+  .cursor { display: inline-block; width: .6em; height: 1.05em; background: var(--term-ink); vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+  .idle { color: var(--term-dim); }
+
+  /* 3. verdict */
+  .verdict { margin-top: 30px; }
+  .verdict[hidden] { display: none; }
+  .verdict h2 { font-size: 1.35rem; margin: 0 0 4px; }
+  .verdict .secsub { color: var(--muted); margin: 0 0 16px; font-size: .95rem; }
+  .vgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .vcard { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 26px; min-width: 0; }
+  .vcard.sk { border-color: var(--note-line); box-shadow: 0 0 0 3px var(--note-bg); }
+  .vcard h3 { margin: 0 0 12px; font-size: 1.1rem; }
+  .row { display: flex; justify-content: space-between; gap: 14px; padding: 5px 0; border-top: 1px solid var(--line); font-size: .94rem; color: var(--muted); }
+  .row b { color: var(--ink); font-weight: 600; text-align: right; }
+  .row b.bad { color: var(--red); } .row b.good { color: var(--green); } .row b.miss { color: var(--amber); }
+  .outcome { margin-top: 12px; padding: 12px 14px; border-radius: 10px; font-size: .93rem; }
+  .outcome.bad { background: var(--red-bg); color: var(--red-dark); }
+  .outcome.good { background: var(--green-bg); color: var(--green-dark); }
+  .outcome.warn { background: var(--amber-bg); color: var(--amber-dark); border: 1px solid var(--amber-line); }
+  .outcome code { font-family: var(--mono); font-size: .85em; word-break: break-word; }
+  .labelled { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px; margin-top: 18px; overflow-x: auto; }
+  .labelled h3 { margin: 0 0 8px; font-size: 1.05rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 720px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; color: var(--ink-2); }
+  td code { font-family: var(--mono); font-size: .82rem; word-break: break-word; color: var(--ink); }
+  .tag { display: inline-block; font-size: .76rem; font-weight: 700; padding: 1px 8px; border-radius: 6px; white-space: nowrap; }
+  .t-grey { background: var(--grey-bg); color: var(--grey); }
+  .t-green { background: var(--green-bg); color: var(--green); }
+  .t-amber { background: var(--amber-bg); color: var(--amber); }
+  .t-red { background: var(--red-bg); color: var(--red); }
+
+  .explain { margin-top: 28px; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 22px; margin-top: 16px; }
+  details[open] { border-color: var(--note-line); }
+  summary { cursor: pointer; font-weight: 700; font-size: 1.08rem; }
+  details p { color: var(--ink-2); max-width: 920px; }
+  details code, .foot code { font-family: var(--mono); font-size: .86em; color: var(--blue); }
+  .diagram { overflow-x: auto; margin: 16px 0 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--field); }
+  .diagram svg { display: block; width: 100%; min-width: 700px; height: auto; }
+  .diagram text { font-family: "Segoe UI", system-ui, sans-serif; fill: var(--ink); }
+  .diagram .t { font-size: 15px; font-weight: 700; }
+  .diagram .s { font-size: 12px; fill: var(--muted); }
+  .diagram .w { fill: var(--blue-ink); }
+  .diagram .box { fill: var(--card); stroke: var(--note-line); stroke-width: 1.5; }
+  .diagram .a365 { fill: var(--chip); stroke: var(--blue); stroke-width: 1.5; }
+  .diagram .af { fill: var(--card); stroke: var(--blue); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .diagram .sk { fill: var(--blue); }
+  .diagram .gate { fill: var(--amber-bg); stroke: var(--amber-line); stroke-width: 1.5; }
+  .diagram .gatet { fill: var(--amber-dark); }
+  .diagram .ln { stroke: var(--ink-2); stroke-width: 1.6; fill: none; }
+  .diagram .dash { stroke: var(--blue); stroke-width: 1.4; fill: none; stroke-dasharray: 4 4; }
+  .diagram .bad { stroke: var(--red); stroke-width: 1.8; fill: none; }
+  .diagram .redt { fill: var(--red); font-size: 12px; font-weight: 600; }
+  .diagram .bluet { fill: var(--blue); font-size: 12px; font-weight: 600; }
+  .diagram .ah { fill: var(--ink-2); }
+  .diagram .ahr { fill: var(--red); }
+  .diagram .ahb { fill: var(--blue); }
+  .foot { color: var(--muted); font-size: .85rem; margin-top: 18px; }
+  @media (max-width: 900px) {
+    .grid, .vgrid, .ctx, .edgrid { grid-template-columns: 1fr; }
+    .panel { padding: 22px 16px; }
+    details { padding: 14px 16px; }
+    header { padding-top: 32px; }
+    .screen { height: 440px; }
+    .tl { grid-template-columns: 7.2em 7.6em minmax(0, 1fr); font-size: .74rem; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="with">With skillc.</span> Without skillc.</h1>
+  <p class="sub">The same Microsoft Agent 365 agent, the same situation, run twice: once with no guard, once with skillc in the tool-call path. Watch both runs; the verdict comes at the end.</p>
+</header>
+<main>
+  <section class="panel">
+    <h2 class="sec">The situation the agent was in</h2>
+    <p class="secsub" id="secsub">What the agent was asked, what it could see, and what it could do, reconstructed from the published case.</p>
+    <label class="small" for="case">Case</label>
+    <select id="case"></select>
+    <h3 class="ctitle" id="title">Loading cases&hellip;</h3>
+    <div class="cmeta"><span id="meta"></span> <a href="#" class="editlink" id="editcase" hidden>Edit this case</a></div>
+    <div class="editor" id="editor" hidden>
+      <div class="edbtns edlocal">
+        <button type="button" class="ghost" id="ed-machine">Fill from this machine</button>
+        <select id="ed-sess" aria-label="Import a Claude Code session"><option value="">Import a Claude Code session&hellip;</option></select>
+        <label class="ghost" id="ed-dirbtn" hidden>Fill from my .claude folder<input type="file" id="ed-dir" webkitdirectory class="vh"></label>
+        <select id="ed-proj" aria-label="Pick a project from your .claude folder" hidden></select>
+        <select id="ed-psess" aria-label="Pick a session of that project" hidden></select>
+        <label class="ghost">Upload a transcript (.jsonl)<input type="file" id="ed-file" accept=".jsonl,.json,.txt" class="vh"></label>
+        <select id="ed-uturn" aria-label="Pick a prompt from the uploaded transcript" hidden><option value="">Pick a prompt&hellip;</option></select>
+        <span class="hint" id="ed-localmsg">Reads ~/.claude, this repository&rsquo;s git state and your Claude Code transcripts on this computer. Nothing leaves 127.0.0.1; credential values are never read.</span>
+      </div>
+      <div class="edgrid">
+        <div>
+          <label class="small" for="ed-runtime">Runtime</label>
+          <select id="ed-runtime"></select>
+          <div class="rt edrt" id="ed-rtdesc"></div>
+          <ul class="tools" id="ed-tools"></ul>
+          <div class="lacks" id="ed-lacks"></div>
+        </div>
+        <div>
+          <label class="small" for="ed-task">The user asked</label>
+          <input type="text" id="ed-task" maxlength="4000" placeholder="what the user asked the agent">
+          <label class="small" for="ed-arts">What the agent could see</label>
+          <textarea id="ed-arts" rows="6" spellcheck="false" placeholder="=== system prompt (excerpt) ===&#10;You are the coding agent for ...&#10;=== e-mail from the vendor ===&#10;..."></textarea>
+          <div class="hint">Each artifact starts with a line <code>=== &lt;name&gt; ===</code>, followed by its content.</div>
+        </div>
+      </div>
+      <div class="edgrid">
+        <div>
+          <label class="small" for="ed-plan">Plan (Controlled English; the skillc run submits it first)</label>
+          <textarea id="ed-plan" rows="10" spellcheck="false"></textarea>
+          <label class="toggle small-toggle"><input type="checkbox" id="ed-noplan"> No plan (require_plan off)</label>
+          <div class="pcheck" id="ed-pcheck"></div>
+        </div>
+        <div>
+          <label class="small" for="ed-session">Session (one step per line)</label>
+          <textarea id="ed-session" rows="10" spellcheck="false" placeholder="# one step per line; the prefix decides the kind&#10;assistant: <reasoning text>&#10;tool: <ToolName> <JSON input>     e.g.  tool: Bash {&quot;command&quot;: &quot;pytest -q&quot;}&#10;out: <tool output for the previous tool line>   (optional; \n is a newline)&#10;# blank lines are ignored; a # line is a comment"></textarea>
+          <div class="edbtns"><button type="button" class="ghost" id="ed-example">Load example</button>
+            <span class="hint">A legitimate step, then a committed hazardous step and its tool call.</span></div>
+        </div>
+      </div>
+      <div class="edmsg" id="ed-msg" hidden></div>
+    </div>
+    <div class="ctx" id="ctx">
+      <div>
+        <section><h3>The user asked</h3><div class="ask"><div class="who">user</div><div id="task"></div></div></section>
+        <section><h3>Runtime and tools</h3><div class="rt" id="runtime"></div><ul class="tools" id="tools"></ul><div class="lacks" id="lacks"></div></section>
+        <section><h3>Published sources</h3><div class="sources" id="sources"></div></section>
+      </div>
+      <div>
+        <section><h3>What the agent could see</h3><div id="artifacts"></div></section>
+      </div>
+    </div>
+    <div class="runrow">
+      <button class="run" id="run" disabled>Run both</button>
+      <label class="toggle" id="twinlabel"><input type="checkbox" id="twin"> Benign twin</label>
+      <span class="twin-note" id="twinnote">Run the legitimate version of the same task instead.</span>
+    </div>
+  </section>
+
+  <div class="resphead">The runs <span>Same task, same tools, same model output</span></div>
+  <div class="grid">
+    <div class="term" id="left">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">agent365 run &middot; no guard</span><span class="st">idle</span></div>
+      <div class="screen"><div class="idle">$ waiting for run</div></div>
+    </div>
+    <div class="term" id="right">
+      <div class="bar"><span class="dots"><i></i><i></i><i></i></span><span class="name">agent365 run &middot; with skillc</span><span class="st">idle</span></div>
+      <div class="screen"><div class="idle">$ waiting for run</div></div>
+    </div>
+  </div>
+
+  <section class="verdict" id="verdict" hidden>
+    <h2>Run verdict</h2>
+    <p class="secsub" id="vsub">Scored after both runs finished, against the case's labelled steps.</p>
+    <div class="vgrid">
+      <div class="vcard" id="vleft"><h3>No guard</h3><div class="rows"></div></div>
+      <div class="vcard sk" id="vright"><h3>With skillc</h3><div class="rows"></div></div>
+    </div>
+    <div class="labelled"><h3>Step by step</h3><table><thead><tr><th>Step</th><th>What the agent did</th><th>Label</th><th>No guard</th><th>With skillc</th></tr></thead><tbody id="vsteps"></tbody></table></div>
+  </section>
+
+  <section class="explain">
+  <details open>
+    <summary>How Agent 365 runs an agent</summary>
+    <div class="diagram">
+      <svg viewBox="0 0 1000 256" role="img" aria-labelledby="d1t">
+        <title id="d1t">User, then Agent 365, then an agent built on Microsoft Agent Framework, then tools, then effects. The tool call goes from the model's decision straight to the tool.</title>
+        <defs>
+          <marker id="ar1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ar1r" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahr" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ar1b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahb" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="box" x="16" y="96" width="92" height="60" rx="10"/>
+        <text class="t" x="62" y="131" text-anchor="middle">User</text>
+        <line class="ln" x1="108" y1="126" x2="140" y2="126" marker-end="url(#ar1)"/>
+        <rect class="a365" x="142" y="56" width="204" height="140" rx="12"/>
+        <text class="t" x="244" y="84" text-anchor="middle">Microsoft Agent 365</text>
+        <text class="s" x="244" y="110" text-anchor="middle">Entra agent identity</text>
+        <text class="s" x="244" y="130" text-anchor="middle">registry · policy</text>
+        <text class="s" x="244" y="150" text-anchor="middle">observability (telemetry)</text>
+        <text class="s" x="244" y="178" text-anchor="middle">governs; does not run the loop</text>
+        <line class="ln" x1="346" y1="126" x2="378" y2="126" marker-end="url(#ar1)"/>
+        <rect class="af" x="380" y="40" width="300" height="172" rx="12"/>
+        <text class="t" x="530" y="66" text-anchor="middle">Agent (Microsoft Agent Framework)</text>
+        <rect class="box" x="400" y="96" width="112" height="60" rx="10"/>
+        <text class="t" x="456" y="122" text-anchor="middle">Model</text>
+        <text class="s" x="456" y="141" text-anchor="middle">decides a call</text>
+        <rect class="box" x="550" y="96" width="112" height="60" rx="10"/>
+        <text class="t" x="606" y="122" text-anchor="middle">Tool loop</text>
+        <text class="s" x="606" y="141" text-anchor="middle">runs it</text>
+        <line class="bad" x1="512" y1="126" x2="548" y2="126" marker-end="url(#ar1r)"/>
+        <text class="redt" x="530" y="188" text-anchor="middle">no check on the individual call</text>
+        <line class="bad" x1="662" y1="126" x2="712" y2="126" marker-end="url(#ar1r)"/>
+        <rect class="box" x="714" y="66" width="150" height="120" rx="12"/>
+        <text class="t" x="789" y="92" text-anchor="middle">Tools</text>
+        <text class="s" x="789" y="116" text-anchor="middle">MCP servers</text>
+        <text class="s" x="789" y="136" text-anchor="middle">Microsoft 365 / Graph</text>
+        <text class="s" x="789" y="156" text-anchor="middle">connectors</text>
+        <line class="ln" x1="864" y1="126" x2="894" y2="126" marker-end="url(#ar1)"/>
+        <rect class="box" x="896" y="96" width="90" height="60" rx="10"/>
+        <text class="t" x="941" y="122" text-anchor="middle">Effects</text>
+        <text class="s" x="941" y="141" text-anchor="middle">send, pay, delete</text>
+        <path class="dash" d="M789,186 V230 H244 V200" marker-end="url(#ar1b)"/>
+        <text class="bluet" x="516" y="248" text-anchor="middle">Agent 365 sees the activity; no proof before execution</text>
+      </svg>
+    </div>
+    <p>Microsoft Agent 365 governs agents: each agent has its own Microsoft Entra agent identity, and Agent 365 adds policy and observability around it. It does not run the agent's tool loop. That loop is Microsoft Agent Framework, the code the agent is built with: the model decides on a tool call and the framework runs it. The tools are reached through MCP servers (the project's toolbox), Microsoft 365 / Graph and connectors; when the agent is invoked with a user's token it can act on behalf of that user, so its effective permissions depend on who called. A tool call therefore goes from the model's decision straight to the tool. Agent 365 sees the agent's activity through telemetry, but it has no proof before execution that the plan can succeed and no gate on each individual call. The left-hand console is this agent: every call the model makes runs.</p>
+  </details>
+
+  <details>
+    <summary>How skillc + Agent 365 works</summary>
+    <div class="diagram">
+      <svg viewBox="0 0 1000 300" role="img" aria-labelledby="d2t">
+        <title id="d2t">The same path with skillc middleware inside the Agent Framework tool-call path, between the model's decision and the tool, a plan check at deploy, and an approval gate at sensitive delivery tools.</title>
+        <defs>
+          <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ah" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ar2b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="ahb" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+        <rect class="box" x="16" y="146" width="80" height="60" rx="10"/>
+        <text class="t" x="56" y="181" text-anchor="middle">User</text>
+        <line class="ln" x1="96" y1="176" x2="120" y2="176" marker-end="url(#ar2)"/>
+        <rect class="a365" x="122" y="116" width="160" height="120" rx="12"/>
+        <text class="t" x="202" y="144" text-anchor="middle">Agent 365</text>
+        <text class="s" x="202" y="168" text-anchor="middle">Entra agent identity</text>
+        <text class="s" x="202" y="186" text-anchor="middle">registry · policy</text>
+        <text class="s" x="202" y="204" text-anchor="middle">observability</text>
+        <line class="ln" x1="282" y1="176" x2="304" y2="176" marker-end="url(#ar2)"/>
+        <rect class="af" x="306" y="90" width="430" height="172" rx="12"/>
+        <text class="t" x="521" y="114" text-anchor="middle">Agent (Microsoft Agent Framework)</text>
+        <rect class="box" x="322" y="146" width="104" height="60" rx="10"/>
+        <text class="t" x="374" y="172" text-anchor="middle">Model</text>
+        <text class="s" x="374" y="191" text-anchor="middle">thinks, decides</text>
+        <line class="ln" x1="426" y1="176" x2="446" y2="176" marker-end="url(#ar2)"/>
+        <rect class="sk" x="448" y="132" width="148" height="88" rx="10"/>
+        <text class="t w" x="522" y="158" text-anchor="middle">skillc middleware</text>
+        <text class="s w" x="522" y="178" text-anchor="middle">reads the reasoning</text>
+        <text class="s w" x="522" y="194" text-anchor="middle">checks every call</text>
+        <text class="s w" x="522" y="210" text-anchor="middle">allow · question · refuse</text>
+        <line class="ln" x1="596" y1="176" x2="616" y2="176" marker-end="url(#ar2)"/>
+        <rect class="box" x="618" y="146" width="104" height="60" rx="10"/>
+        <text class="t" x="670" y="172" text-anchor="middle">Tool loop</text>
+        <text class="s" x="670" y="191" text-anchor="middle">runs if allowed</text>
+        <path class="dash" d="M500,220 C500,248 374,248 374,210" marker-end="url(#ar2b)"/>
+        <text class="bluet" x="440" y="256" text-anchor="middle">refusal returned as the tool result</text>
+        <rect class="gate" x="372" y="14" width="300" height="50" rx="10"/>
+        <text class="t gatet" x="522" y="36" text-anchor="middle">Plan check at deploy</text>
+        <text class="s gatet" x="522" y="54" text-anchor="middle">ACHIEVABLE / IMPOSSIBLE · 0 model tokens</text>
+        <line class="ln" x1="522" y1="64" x2="522" y2="128" marker-end="url(#ar2)"/>
+        <line class="ln" x1="722" y1="176" x2="758" y2="176" marker-end="url(#ar2)"/>
+        <rect class="box" x="760" y="100" width="128" height="152" rx="12"/>
+        <text class="t" x="824" y="124" text-anchor="middle">Tools</text>
+        <text class="s" x="824" y="146" text-anchor="middle">MCP servers</text>
+        <text class="s" x="824" y="164" text-anchor="middle">M365 / Graph</text>
+        <text class="s" x="824" y="182" text-anchor="middle">connectors</text>
+        <rect class="gate" x="772" y="196" width="104" height="44" rx="8"/>
+        <text class="s gatet" x="824" y="215" text-anchor="middle" font-weight="700">approval gate</text>
+        <text class="s gatet" x="824" y="231" text-anchor="middle">send · pay</text>
+        <line class="ln" x1="888" y1="176" x2="910" y2="176" marker-end="url(#ar2)"/>
+        <rect class="box" x="912" y="146" width="76" height="60" rx="10"/>
+        <text class="t" x="950" y="181" text-anchor="middle">Effects</text>
+        <path class="dash" d="M824,252 V284 H560 V224" marker-end="url(#ar2b)"/>
+        <text class="bluet" x="692" y="278" text-anchor="middle">result observed, plan re-checked</text>
+      </svg>
+    </div>
+    <p>skillc attaches as Agent Framework middleware: <code>skillc_monitor(runtime="foundry-hosted", plan_path=..., strict=True, fail_open=False)</code>, passed to the agent as <code>middleware=monitor.middleware_for("Writer")</code>. Before the run, the host-owned plan is checked against the runtime and gets ACHIEVABLE or IMPOSSIBLE; the check is sound for refutation and uses zero model tokens. During the run, every reasoning step is read for hazards the agent commits to; a committed hazard becomes the "skillc question" put back to the agent, and it arms that hazard. Every tool call is checked before it runs (armed hazard, hazard scan, plan conformance, runtime restrictions, owner and preconditions), and a refused tool cannot run, because skillc is inside the call path: the model reads the refusal as the tool's result. After each call the result is observed and the plan is re-checked; if it can no longer succeed, actions are held. Sends and payments go through evidence-bound, single-use approvals tied to the exact content, destinations and amount. Every decision is deterministic and explainable (the refusal quotes the sentence that triggered it), with no model in the decision path. Scope: this demo replays published incidents offline through the same monitor code; a live tenant needs the host adapter.</p>
+  </details>
+  </section>
+
+  <p class="foot" id="foot">Tool outputs are fixtures reconstructed from the published incident; skillc output is live. The agent's reasoning and tool calls are replayed from the benchmark case files under <code>benchmark/</code>; every skillc line (plan result, question, refusal) is produced during this run by <code>skillc.monitor.Monitor</code>, with the case's prohibited rules stripped, and its latency is measured. Timestamps are the elapsed time of this replay. No model is called. Your own case runs through the same monitor; nothing is executed, sent or deleted; only skillc's decisions are real.</p>
+</main>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+  const PREFIX = { hdr: "#", user: "[user]", read: "[read]", plan: "[plan]", monitor: "[skillc]", assistant: "[assistant]",
+                   tool: "[tool]", out: "[out]", context: "[context]", end: "#" };
+  // Pause before a line appears, by kind: reasoning takes longest, monitor lines are instant.
+  const PACE = { hdr: 120, user: 500, read: 450, plan: 450, monitor: 60, assistant: 1100, tool: 650, out: 380, context: 60, end: 400 };
+  const CUSTOM = "__custom__";
+  let cases = new Map(), runId = 0, runtimes = new Map(), examplePlans = {}, exampleCase = null;
+  const isCustom = () => $("case").value === CUSTOM;
+
+  // ---- user-authored case editor
+  function setMode(custom) {
+    $("editor").hidden = !custom;
+    $("ctx").hidden = custom;
+    $("editcase").hidden = custom;
+    $("twinlabel").hidden = custom; $("twinnote").hidden = custom;
+    $("secsub").textContent = custom
+      ? "Write the situation yourself: the runtime, the request, what the agent could see, the plan and the session. skillc decides it live."
+      : "What the agent was asked, what it could see, and what it could do, reconstructed from the published case.";
+  }
+
+  function renderRuntime() {
+    const r = runtimes.get($("ed-runtime").value);
+    if (!r) return;
+    $("ed-rtdesc").replaceChildren(el("b", null, r.name), ` ${r.description}`);
+    const tl = $("ed-tools"); tl.replaceChildren();
+    Object.entries(r.tools).forEach(([k, v]) => { const li = el("li"); li.append(el("code", null, k), v); tl.append(li); });
+    $("ed-lacks").textContent = r.lacks.length ? `Not available: ${r.lacks.join("; ")}.` : "";
+  }
+
+  let lastRuntime = null;
+  function onRuntimeChange() {
+    const rt = $("ed-runtime").value, plan = $("ed-plan");
+    // swap the example plan only if the user has not changed it
+    if (!plan.value.trim() || (lastRuntime && plan.value === examplePlans[lastRuntime])) plan.value = examplePlans[rt] || "";
+    lastRuntime = rt;
+    renderRuntime(); schedulePlanCheck(); reset();
+  }
+
+  let planTimer = null, planSeq = 0;
+  function schedulePlanCheck() { clearTimeout(planTimer); planTimer = setTimeout(checkPlan, 350); }
+  async function checkPlan() {
+    const box = $("ed-pcheck"), seq = ++planSeq;
+    $("ed-plan").disabled = $("ed-noplan").checked;
+    if ($("ed-noplan").checked) { box.className = "pcheck idle"; box.textContent = "No plan: require_plan is off and plan conformance is not checked."; return; }
+    const plan = $("ed-plan").value;
+    if (!plan.trim()) { box.className = "pcheck bad"; box.textContent = "Enter a plan, or tick “No plan”."; return; }
+    try {
+      const res = await fetch("/api/check_plan", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ runtime: $("ed-runtime").value, plan }) });
+      const d = await res.json();
+      if (seq !== planSeq) return;
+      if (!res.ok) throw new Error(d.error || res.status);
+      box.className = `pcheck ${d.decision === "allow" ? "good" : "bad"}`;
+      box.textContent = `Monitor.check_plan: ${d.verdict} (${d.latency_ms.toFixed(1)} ms)\n${d.reason}`;
+    } catch (e) { if (seq === planSeq) { box.className = "pcheck bad"; box.textContent = `plan check failed: ${e.message}`; } }
+  }
+
+  function fillEditor(src) {
+    $("ed-runtime").value = src.runtime; lastRuntime = src.runtime;
+    $("ed-task").value = src.task || "";
+    $("ed-arts").value = src.artifacts || "";
+    $("ed-noplan").checked = !src.plan;
+    $("ed-plan").value = src.plan || examplePlans[src.runtime] || "";
+    $("ed-session").value = src.session || "";
+    renderRuntime(); schedulePlanCheck();
+  }
+
+  function editThisCase(ev) {
+    ev.preventDefault();
+    const c = cases.get($("case").value);
+    if (!c) return;
+    const arts = c.artifacts.filter((a) => a.step == null).map((a) => `=== ${a.name} ===\n${a.content}`).join("\n");
+    $("case").value = CUSTOM; setMode(true); $("title").textContent = `Your own case (from: ${c.title})`;
+    $("meta").textContent = "user-authored · no published incident";
+    fillEditor({ runtime: runtimes.has(c.runtime.name) ? c.runtime.name : "developer-sandbox", task: c.task,
+                 artifacts: arts, plan: c.plan, session: c.session });
+    reset();
+  }
+
+  async function getLocal(url) {
+    const res = await fetch(url), d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.status);
+    return d;
+  }
+
+  async function fillFromMachine() {
+    const msg = $("ed-localmsg"), btn = $("ed-machine");
+    btn.disabled = true; msg.textContent = "Reading this machine…";
+    try {
+      const d = await getLocal("/api/local/context");
+      if ($("ed-runtime").value !== d.runtime) { $("ed-runtime").value = d.runtime; onRuntimeChange(); }
+      $("ed-arts").value = d.artifacts;
+      msg.textContent = `Filled from: ${d.sources.join(", ")}. Runtime: ${d.runtime} (Claude Code on this machine).`;
+      reset();
+    } catch (e) { msg.textContent = `Could not read this machine: ${e.message}`; }
+    finally { btn.disabled = false; }
+  }
+
+  let sessionsLoaded = false;
+  async function loadSessions() {
+    if (sessionsLoaded) return;
+    sessionsLoaded = true;
+    const sel = $("ed-sess");
+    try {
+      const d = await getLocal("/api/local/sessions");
+      if (!d.sessions.length) { sel.options[0].textContent = "No Claude Code sessions found for this repository"; return; }
+      d.sessions.forEach((s) => {
+        const og = document.createElement("optgroup");
+        og.label = `${s.modified} · ${s.title || s.id.slice(0, 8)}`;
+        s.turns.forEach((t) => { const o = el("option", null, t.prompt); o.value = `${s.id}|${t.turn}`; og.append(o); });
+        sel.append(og);
+      });
+    } catch (e) { sessionsLoaded = false; $("ed-localmsg").textContent = `Could not list sessions: ${e.message}`; }
+  }
+
+  function applyImport(d) {
+    const msg = $("ed-localmsg");
+    $("ed-task").value = d.task;
+    $("ed-session").value = d.session;
+    $("ed-noplan").checked = true; checkPlan();    // a real session wrote no skillc plan
+    if (!d.steps) {
+      msg.textContent = "The agent took no recorded steps after this prompt (for example a message sent while it was stopped), so there is nothing to run. Pick another prompt.";
+      reset();
+      return;
+    }
+    msg.textContent = `Imported ${d.steps} step(s)` + (d.truncated ? `; ${d.truncated} more were cut to fit the editor` : "")
+      + ". The agent's thinking is not stored in transcripts, so its visible messages stand in as the assistant lines. No plan is set, since the real session wrote none.";
+    reset();
+  }
+
+  async function importSession() {
+    const sel = $("ed-sess"), msg = $("ed-localmsg");
+    if (!sel.value) return;
+    const [id, turn] = sel.value.split("|");
+    msg.textContent = "Importing the session…";
+    try {
+      applyImport(await getLocal(`/api/local/session?id=${encodeURIComponent(id)}&turn=${encodeURIComponent(turn)}`));
+    } catch (e) { msg.textContent = `Could not import: ${e.message}`; }
+    sel.value = "";
+  }
+
+  let uploadText = "";
+  async function postTranscript(query) {
+    const res = await fetch(`/api/transcript${query}`, { method: "POST", headers: { "Content-Type": "text/plain" }, body: uploadText });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.status);
+    return d;
+  }
+
+  async function onUpload() { await loadTranscript($("ed-file").files[0]); $("ed-file").value = ""; }
+
+  async function loadTranscript(f) {
+    const msg = $("ed-localmsg"), sel = $("ed-uturn");
+    if (!f) return;
+    msg.textContent = `Reading ${f.name}…`;
+    try {
+      uploadText = await f.text();
+      const d = await postTranscript("");
+      sel.replaceChildren(el("option", null, `Pick a prompt from ${d.title || f.name}…`));
+      sel.options[0].value = "";
+      d.turns.forEach((t) => { const o = el("option", null, t.prompt); o.value = String(t.turn); sel.append(o); });
+      sel.hidden = false; sel.focus();
+      msg.textContent = `${d.turns.length} prompt(s) in ${f.name}. Pick one to fill the task and the session. The file is parsed in memory and not stored.`;
+    } catch (e) { sel.hidden = true; msg.textContent = `Could not read ${f.name}: ${e.message}`; }
+  }
+
+  // "Fill from my .claude folder" (hosted app): the browser reads the folder the viewer picks.
+  // Only small context files are read here; a transcript is sent to the server only when the
+  // viewer picks a session, and the server parses it in memory without storing it.
+  let claudeDir = null;
+  const BUILTIN_TOOLS = "Bash, Read, Write, Edit, Glob, Grep, NotebookEdit, WebFetch, WebSearch, Agent, TodoWrite, Skill, AskUserQuestion";
+
+  function list(v) { return Array.isArray(v) && v.length ? v.join(", ") : ""; }
+
+  function settingsSummary(name, j) {
+    const out = [], perm = j.permissions || {};
+    if (perm.defaultMode) out.push(`permission mode: ${perm.defaultMode}`);
+    for (const k of ["allow", "ask", "deny"]) if (list(perm[k])) out.push(`${k} rules: ${list(perm[k])}`);
+    if (j.mcpServers) out.push(`MCP servers: ${Object.keys(j.mcpServers).join(", ")}`);
+    if (j.enabledPlugins) {
+      const on = Object.entries(j.enabledPlugins).filter(([, v]) => v).map(([k]) => k);
+      if (on.length) out.push(`plugins enabled: ${on.join(", ")}`);
+    }
+    if (j.model) out.push(`model: ${j.model}`);
+    return out.map((l) => `${name}: ${l}`);
+  }
+
+  async function onPickDir() {
+    const files = [...$("ed-dir").files], msg = $("ed-localmsg");
+    $("ed-dir").value = "";
+    if (!files.length) return;
+    const dir = { claudeMd: null, settings: [], projects: new Map() };
+    for (const f of files) {
+      const parts = f.webkitRelativePath.split("/");
+      const i = parts.indexOf(".claude");
+      const rel = (i >= 0 ? parts.slice(i + 1) : parts.slice(1)).join("/");
+      if (rel === "CLAUDE.md") dir.claudeMd = f;
+      else if (rel === "settings.json" || rel === "settings.local.json") dir.settings.push(f);
+      const m = rel.match(/^projects\/([^/]+)\/(?:([^/]+\.jsonl)|memory\/MEMORY\.md)$/);
+      if (m) {
+        const p = dir.projects.get(m[1]) || { name: m[1], sessions: [], memory: null, latest: 0 };
+        if (m[2]) { p.sessions.push(f); p.latest = Math.max(p.latest, f.lastModified); } else p.memory = f;
+        dir.projects.set(m[1], p);
+      }
+    }
+    if (!dir.claudeMd && !dir.settings.length && !dir.projects.size) {
+      msg.textContent = "That folder has no CLAUDE.md, settings or projects. Pick the .claude folder in your home folder (on macOS press Cmd+Shift+. to show it).";
+      return;
+    }
+    claudeDir = dir;
+    const sel = $("ed-proj");
+    sel.replaceChildren(el("option", null, "Pick a project…")); sel.options[0].value = "";
+    [...dir.projects.values()].filter((p) => p.sessions.length).sort((a, b) => b.latest - a.latest).forEach((p) => {
+      const o = el("option", null, `${p.name.length > 60 ? "…" + p.name.slice(-60) : p.name} (${p.sessions.length} sessions)`);
+      o.value = p.name; sel.append(o);
+    });
+    sel.hidden = sel.options.length < 2;
+    $("ed-psess").hidden = true;
+    await fillFromDir(null);
+    if (!sel.hidden) sel.focus();
+  }
+
+  async function fillFromDir(project) {
+    const d = claudeDir, arts = [], from = [];
+    if (d.claudeMd) { arts.push(`=== ~/.claude/CLAUDE.md (user instructions) ===\n${(await d.claudeMd.text()).trim().slice(0, 4000)}`); from.push("CLAUDE.md"); }
+    const env = [`Claude Code built-in tools (standard set): ${BUILTIN_TOOLS}`];
+    for (const f of d.settings) {
+      try { env.push(...settingsSummary(f.name, JSON.parse(await f.text()))); from.push(f.name); } catch (e) { /* not JSON */ }
+    }
+    if (project && project.memory) { arts.push(`=== memory index (MEMORY.md) ===\n${(await project.memory.text()).trim().slice(0, 4000)}`); from.push("MEMORY.md"); }
+    arts.push(`=== environment (from ~/.claude settings) ===\n${env.join("\n")}`);
+    if ($("ed-runtime").value !== "developer-sandbox") { $("ed-runtime").value = "developer-sandbox"; onRuntimeChange(); }
+    $("ed-arts").value = arts.join("\n");
+    $("ed-localmsg").textContent = `Filled “What the agent could see” from ${from.join(", ") || "the folder"}`
+      + (project ? ` of ${project.name}` : "") + ". Read in your browser; nothing was sent."
+      + (!project && $("ed-proj").options.length > 1 ? " Pick a project to add its memory and list its sessions." : "");
+    reset();
+  }
+
+  async function onPickProject() {
+    const p = claudeDir && claudeDir.projects.get($("ed-proj").value), sel = $("ed-psess");
+    if (!p) return;
+    await fillFromDir(p);
+    p.sessions.sort((a, b) => b.lastModified - a.lastModified);
+    sel.replaceChildren(el("option", null, "Pick a session…")); sel.options[0].value = "";
+    p.sessions.slice(0, 20).forEach((f, i) => {
+      const when = new Date(f.lastModified).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+      const o = el("option", null, `${when} · ${(f.size / 1048576).toFixed(1)} MB`); o.value = String(i); sel.append(o);
+    });
+    sel.hidden = false; sel.focus();
+  }
+
+  async function onPickSession() {
+    const p = claudeDir && claudeDir.projects.get($("ed-proj").value), i = $("ed-psess").value;
+    if (!p || i === "") return;
+    await loadTranscript(p.sessions[Number(i)]);
+  }
+
+  async function importUploaded() {
+    const sel = $("ed-uturn");
+    if (!sel.value) return;
+    $("ed-localmsg").textContent = "Importing…";
+    try { applyImport(await postTranscript(`?turn=${encodeURIComponent(sel.value)}`)); }
+    catch (e) { $("ed-localmsg").textContent = `Could not import: ${e.message}`; }
+  }
+
+  function customBody() {
+    return { runtime: $("ed-runtime").value, task: $("ed-task").value, artifacts: $("ed-arts").value,
+             plan: $("ed-noplan").checked ? null : $("ed-plan").value, session: $("ed-session").value };
+  }
+
+  function renderCase() {
+    if (isCustom()) {
+      setMode(true);
+      $("title").textContent = "Your own case"; $("meta").textContent = "user-authored · no published incident";
+      if (!$("ed-plan").value && !$("ed-session").value) fillEditor({ runtime: "developer-sandbox", plan: examplePlans["developer-sandbox"] });
+      reset();
+      return;
+    }
+    setMode(false);
+    const c = cases.get($("case").value);
+    if (!c) return;
+    $("title").textContent = c.title;
+    $("meta").textContent = `${c.category} · published ${c.kind} · ${c.agent}`;
+    $("task").textContent = c.task;
+    const rt = $("runtime"); rt.replaceChildren(el("b", null, c.runtime.name), ` ${c.runtime.description}`);
+    const tl = $("tools"); tl.replaceChildren();
+    Object.entries(c.runtime.tools).forEach(([k, v]) => { const li = el("li"); li.append(el("code", null, k), v); tl.append(li); });
+    $("lacks").textContent = c.runtime.lacks.length ? `Not available: ${c.runtime.lacks.join("; ")}.` : "";
+    const ar = $("artifacts"); ar.replaceChildren();
+    c.artifacts.forEach((a) => {
+      const d = el("div", "art"), n = el("div", "an", a.name); n.append(el("span", null, a.kind));
+      d.append(n, el("pre", null, a.content)); ar.append(d);
+    });
+    const src = $("sources"); src.replaceChildren();
+    c.sources.forEach((s) => {
+      const row = el("div");
+      if (/^https?:\/\//.test(s.url)) {
+        const a = el("a", null, `${s.publisher}: ${s.title}`); a.href = s.url; a.target = "_blank"; a.rel = "noopener noreferrer"; row.append(a);
+      } else row.append(`${s.publisher}: ${s.title}`);
+      if (s.date) row.append(el("span", "d", ` · ${s.date}`));
+      src.append(row);
+    });
+    $("twinnote").textContent = c.twin_note ? `Benign twin: ${c.twin_note}` : "Run the legitimate version of the same task instead.";
+    reset();
+  }
+
+  // Cancels any run in progress (its loops see a newer runId and stop) and clears everything.
+  function reset() {
+    runId++;
+    for (const id of ["left", "right"]) {
+      $(id).querySelector(".screen").replaceChildren(el("div", "idle", "$ waiting for run"));
+      $(id).querySelector(".st").textContent = "idle";
+    }
+    $("verdict").hidden = true;
+    $("ed-msg").hidden = true;
+    $("run").disabled = cases.size === 0;
+  }
+
+  const stamp = (t0) => { const ms = performance.now() - t0, m = Math.floor(ms / 60000), s = (ms % 60000) / 1000;
+    return `[${String(m).padStart(2, "0")}:${s.toFixed(3).padStart(6, "0")}]`; };
+
+  async function stream(term, lines, t0, live) {
+    const scr = term.querySelector(".screen"), st = term.querySelector(".st");
+    scr.replaceChildren(); st.textContent = "running";
+    const cur = el("span", "cursor"); scr.append(cur);
+    for (const l of lines) {
+      const extra = l.k === "out" ? Math.min(600, l.text.length * 1.5) : 0;
+      await sleep(PACE[l.k] + extra);
+      if (!live()) return;
+      const row = el("div", `tl ${l.k}`);
+      const tx = el("span", "tx", l.text);
+      if (l.ms != null) tx.append(el("span", "ms", `  (${l.ms.toFixed(1)} ms)`));
+      row.append(el("span", "ts", stamp(t0)), el("span", "pf", PREFIX[l.k]), tx);
+      scr.insertBefore(row, cur);
+      scr.scrollTop = scr.scrollHeight;
+    }
+    cur.remove();
+    st.textContent = "exited";
+  }
+
+  function rows(card, list) {
+    const r = card.querySelector(".rows"); r.replaceChildren();
+    list.forEach(([k, v, cls]) => { if (v == null) return; const d = el("div", "row"); d.append(el("span", null, k), el("b", cls || null, v)); r.append(d); });
+  }
+  const note = (card, cls, parts) => { const o = el("div", `outcome ${cls}`); parts.forEach((p) => o.append(p)); card.append(o); };
+  const code = (t) => el("code", null, t);
+
+  function renderVerdict(data) {
+    const v = data.verdict, a = data.metrics.no_guard, b = data.metrics.skillc, twin = data.twin;
+    const L = $("vleft"), R = $("vright");
+    L.querySelectorAll(".outcome").forEach((e) => e.remove()); R.querySelectorAll(".outcome").forEach((e) => e.remove());
+    if (v.custom) return renderCustomVerdict(data);
+    $("vsub").textContent = twin
+      ? "Benign twin: the legitimate version of the task. Nothing should be refused; any skillc question or refusal is a false positive."
+      : "Scored after both runs finished, against the case's labelled steps (expect: question or refuse).";
+    rows(L, [["Steps executed", `${a.steps_executed}`], ["Tool calls executed", `${v.no_guard.tool_calls}`],
+      ["Wrong actions fired", `${v.no_guard.wrong.length}`, v.no_guard.wrong.length ? "bad" : "good"],
+      ["Where it stopped", "ran to the end"],
+      ["Estimated run tokens", `~${a.est_run_tokens.toLocaleString("en-US")} (${a.turns} turns)`]]);
+    const stop = v.skillc.stopped;
+    rows(R, [["Steps executed", `${b.steps_executed}`], ["Tool calls executed", `${v.skillc.tool_calls}`],
+      ["Wrong actions fired", `${v.skillc.wrong.length}`, v.skillc.wrong.length ? "bad" : "good"],
+      ["Where it stopped", stop ? `step ${stop.step}, call refused` : "ran to the end"],
+      ["Hazard steps caught (benchmark)", b.hazard_steps ? `${b.hazard_steps_caught}/${b.hazard_steps}` : "none labelled",
+        b.hazard_steps_caught < b.hazard_steps ? "miss" : null],
+      ["False positives", `${v.false_positives.length}`, v.false_positives.length ? "miss" : "good"],
+      ["skillc decisions", `${b.decisions}`], ["skillc decision latency", `${b.decision_latency_ms.toFixed(1)} ms in total`],
+      ["Model tokens used by skillc", "0", "good"],
+      ["Estimated run tokens", `~${b.est_run_tokens.toLocaleString("en-US")} (${b.turns} turns)`]]);
+
+    if (twin) {
+      note(L, "good", ["The legitimate task completed."]);
+      note(R, v.false_positives.length ? "warn" : "good", [v.false_positives.length
+        ? `skillc questioned or refused ${plural(v.false_positives.length, "legitimate step")} (false positive).`
+        : "Every step allowed; the legitimate task completed with no skillc question or refusal."]);
+    } else {
+      if (v.no_guard.wrong.length) {
+        const w = v.no_guard.wrong[v.no_guard.wrong.length - 1];
+        note(L, "bad", [el("b", null, "Wrong action fired: "), code(w.call), `. ${w.why ? w.why[0].toUpperCase() + w.why.slice(1) + "." : ""}`]);
+      }
+      note(L, "bad", [el("b", null, `In the published ${v.kind}: `), v.incident_outcome]);
+      if (stop && !v.skillc.wrong.length) {
+        const who = stop.next === "ask_user" ? `asked the user${stop.user_needs.length ? ` for ${stop.user_needs.join(", ")}` : ""}` : "told to replan without it";
+        note(R, "good", [el("b", null, "Stopped before it ran: "), code(stop.call), `. The refusal was the tool result; the agent was ${who}.`]);
+      } else if (v.skillc.wrong.length) {
+        note(R, "warn", [el("b", null, "skillc did not stop this run: "), code(v.skillc.wrong[0].call), " ran."]);
+      }
+    }
+
+    const tb = $("vsteps"); tb.replaceChildren();
+    const shown = twin ? data.steps : data.steps.filter((s) => s.expect !== "allow" || s.decision !== "allow");
+    shown.forEach((s) => {
+      const tr = el("tr");
+      const what = el("td"); what.append(s.kind === "thinking" ? `reasoning: “${s.text}”` : code(s.tool ? `${s.tool} ${JSON.stringify(s.input || {})}` : ""));
+      const lab = el("td");
+      if (s.expect === "allow") lab.append(el("span", "tag t-grey", "legitimate"));
+      else lab.append(el("span", `tag ${s.expect === "deny" ? "t-red" : "t-amber"}`, s.expect === "deny" ? "wrong action" : "should be questioned"),
+        el("div", null, s.hazard ? `hazard: ${s.hazard}` : ""));
+      const left = el("td"); left.append(s.kind === "thinking" ? el("span", "tag t-grey", "reasoned") :
+        el("span", `tag ${s.expect === "deny" ? "t-red" : "t-grey"}`, s.expect === "deny" ? "fired" : "ran"));
+      const right = el("td"); let t;
+      if (!s.reached) t = el("span", "tag t-grey", `not reached${s.decision !== "allow" ? ` (would be ${s.decision === "deny" ? "refused" : "questioned"})` : ""}`);
+      else if (s.decision === "deny") t = el("span", `tag ${s.expect === "allow" ? "t-amber" : "t-green"}`, "refused");
+      else if (s.decision === "warn") t = el("span", `tag ${s.expect === "allow" ? "t-amber" : "t-green"}`, "skillc question");
+      else if (s.expect !== "allow") t = el("span", "tag t-amber", "allowed (missed)");
+      else t = el("span", "tag t-grey", s.kind === "thinking" ? "reasoned" : "ran");
+      right.append(t);
+      tr.append(el("td", null, `${s.step}`), what, lab, left, right); tb.append(tr);
+    });
+    $("verdict").hidden = false;
+  }
+
+  // A user-authored case has no benchmark labels: report what ran and what skillc did.
+  function renderCustomVerdict(data) {
+    const v = data.verdict, a = data.metrics.no_guard, b = data.metrics.skillc, L = $("vleft"), R = $("vright");
+    const stop = v.skillc.stopped;
+    $("vsub").textContent = "Your own case: no benchmark labels, so the verdict reports what ran and what skillc did. Whether a step was wrong is your call.";
+    rows(L, [["Steps executed", `${a.steps_executed}`], ["Tool calls executed", `${v.no_guard.tool_calls}`],
+      ["Where it stopped", "ran to the end"],
+      ["Estimated run tokens", `~${a.est_run_tokens.toLocaleString("en-US")} (${a.turns} turns)`]]);
+    rows(R, [["Steps executed", `${b.steps_executed}`], ["Tool calls executed", `${v.skillc.tool_calls}`],
+      ["Where it stopped", stop ? `step ${stop.step} (line ${stop.line}), call refused` : "ran to the end"],
+      ["skillc questions raised", `${v.skillc.questions}`, v.skillc.questions ? "miss" : null],
+      ["Tool calls refused", `${v.skillc.refused}`, v.skillc.refused ? "good" : null],
+      ["Plan", data.plan.verdict], ["skillc decisions", `${b.decisions}`],
+      ["skillc decision latency", `${b.decision_latency_ms.toFixed(1)} ms in total`],
+      ["Model tokens used by skillc", "0", "good"],
+      ["Estimated run tokens", `~${b.est_run_tokens.toLocaleString("en-US")} (${b.turns} turns)`]]);
+    note(L, "warn", [el("b", null, "Every call ran. "), v.incident_outcome]);
+    if (stop) {
+      const who = stop.next === "ask_user" ? `asked the user${stop.user_needs.length ? ` for ${stop.user_needs.join(", ")}` : ""}` : "told to replan without it";
+      note(R, "good", [el("b", null, "Stopped before it ran: "), code(stop.call), `. The refusal was the tool result; the agent was ${who}.`]);
+    } else if (v.skillc.questions) {
+      note(R, "warn", [`skillc raised ${plural(v.skillc.questions, "question")} and refused no call; every call ran.`]);
+    } else {
+      note(R, "good", ["skillc allowed every step; no question, no refusal."]);
+    }
+    const tb = $("vsteps"); tb.replaceChildren();
+    data.steps.forEach((s) => {
+      const tr = el("tr");
+      const what = el("td");
+      what.append(s.kind === "thinking" ? `reasoning: “${s.text}”` : s.kind === "result" ? `output of ${s.tool}` : code(`${s.tool} ${JSON.stringify(s.input || {})}`));
+      const lab = el("td"); lab.append(el("span", "tag t-grey", "user-authored"));
+      const left = el("td"); left.append(el("span", "tag t-grey", s.kind === "thinking" ? "reasoned" : "ran"));
+      const right = el("td"); let t;
+      if (!s.reached) t = el("span", "tag t-grey", `not reached${s.decision !== "allow" ? ` (would be ${s.decision === "deny" ? "refused" : "questioned"})` : ""}`);
+      else if (s.decision === "deny") t = el("span", "tag t-red", "refused");
+      else if (s.decision === "warn") t = el("span", "tag t-amber", "skillc question");
+      else t = el("span", "tag t-grey", s.kind === "thinking" ? "reasoned" : "ran");
+      right.append(t);
+      tr.append(el("td", null, `${s.step} (line ${s.line})`), what, lab, left, right); tb.append(tr);
+    });
+    $("verdict").hidden = false;
+  }
+
+  async function run() {
+    const twin = $("twin").checked, cid = $("case").value, custom = isCustom();
+    reset();
+    const my = runId, live = () => my === runId;
+    $("run").disabled = true;
+    let data;
+    try {
+      const res = custom
+        ? await fetch("/api/run_custom", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(customBody()) })
+        : await fetch("/api/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: cid, twin }) });
+      data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.status);
+    } catch (e) {
+      if (!live()) return;
+      if (custom) { const m = $("ed-msg"); m.textContent = `Cannot run this case: ${e.message}`; m.hidden = false; }
+      else $("left").querySelector(".screen").replaceChildren(el("div", "idle", `error: ${e.message}`));
+      $("run").disabled = false;
+      return;
+    }
+    if (!live()) return;
+    const t0 = performance.now();
+    await Promise.all([stream($("left"), data.logs.no_guard, t0, live), stream($("right"), data.logs.skillc, t0, live)]);
+    if (!live()) return;
+    await sleep(500);
+    if (!live()) return;
+    renderVerdict(data);
+    $("verdict").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("run").disabled = false;
+  }
+
+  $("case").addEventListener("change", renderCase);
+  $("twin").addEventListener("change", () => reset());
+  $("run").addEventListener("click", run);
+  $("editcase").addEventListener("click", editThisCase);
+  $("ed-runtime").addEventListener("change", onRuntimeChange);
+  $("ed-plan").addEventListener("input", schedulePlanCheck);
+  $("ed-noplan").addEventListener("change", checkPlan);
+  $("ed-machine").addEventListener("click", fillFromMachine);
+  $("ed-sess").addEventListener("focus", loadSessions);
+  $("ed-sess").addEventListener("pointerdown", loadSessions);
+  $("ed-sess").addEventListener("change", importSession);
+  $("ed-file").addEventListener("change", onUpload);
+  $("ed-dir").addEventListener("change", onPickDir);
+  $("ed-proj").addEventListener("change", onPickProject);
+  $("ed-psess").addEventListener("change", onPickSession);
+  $("ed-uturn").addEventListener("change", importUploaded);
+  $("ed-example").addEventListener("click", () => { if (exampleCase) { fillEditor({ ...exampleCase, plan: examplePlans[exampleCase.runtime] }); reset(); } });
+  fetch("/api/cases").then((r) => r.json()).then((d) => {
+    d.cases.forEach((c) => cases.set(c.id, c));
+    (d.runtimes || []).forEach((r) => runtimes.set(r.name, r));
+    examplePlans = d.example_plans || {}; exampleCase = d.example_case || null;
+    if (d.hosted) {                               // the server is not on the viewer's machine
+      $("ed-machine").hidden = true; $("ed-sess").hidden = true; $("ed-dirbtn").hidden = false;
+      $("ed-localmsg").textContent = "Fill from my .claude folder: pick the .claude folder in your home folder. Your browser reads CLAUDE.md, settings and project memory to fill “What the agent could see” and lists your sessions. Only a session you pick is sent; it is parsed in memory and not stored. The browser may say it is uploading the folder; it does not.";
+    }
+    const rsel = $("ed-runtime");
+    runtimes.forEach((r) => { const o = el("option", null, r.name); o.value = r.name; rsel.append(o); });
+    const sel = $("case");
+    const own = el("option", null, "✎ Write your own case"); own.value = CUSTOM; sel.append(own);
+    d.groups.forEach((g) => {
+      const og = document.createElement("optgroup"); og.label = g.label;
+      g.ids.forEach((id) => { const c = cases.get(id); if (!c) return; const o = el("option", null, c.label); o.value = id; og.append(o); });
+      sel.append(og);
+    });
+    const first = d.groups.length ? d.groups[0].ids[0] : null;
+    if (first) sel.value = first;                 // open on a built-in case, as before
+    renderCase();
+  }).catch(() => { $("title").textContent = "Could not load cases."; });
+})();
+</script>
+</body>
+</html>

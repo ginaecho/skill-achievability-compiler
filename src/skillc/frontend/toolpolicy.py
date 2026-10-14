@@ -17,6 +17,11 @@ some Tool (on a skippable branch if the work is optional).  Coverage is
 checked deterministically; an unmet obligation is a located error.  A match
 never decides a verdict by itself: the runtime manifest and the checker do.
 
+An entry marked `request_gate` names a requirement that is the request's goal itself
+(another person's mail, say), not a step a plan can route around: when a user's request
+raises it and the runtime cannot meet it, the runtime monitor approves no plan until the
+user narrows the request (monitor.Monitor.note_request).
+
 Entries carry provenance (the execution reports they were learned from), in
 the spirit of API->permission maps such as PScout (CCS 2012).
 """
@@ -44,6 +49,7 @@ class Obligation:
     text: str             # the matching text
     note: str = ""
     substitutes: str = ""
+    request_gate: bool = False   # unmet in a request: no plan passes until the user narrows it
 
     def clause(self) -> str:
         return {"resource": f"needs `{self.value}`",
@@ -96,7 +102,8 @@ def match(text: str, library: Library) -> list[Obligation]:
                     if key not in found or no < found[key].line:
                         found[key] = Obligation(e["id"], kind, value, no,
                                                 m.group(0)[:80], e.get("note", ""),
-                                                e.get("substitutes", ""))
+                                                e.get("substitutes", ""),
+                                                e.get("request_gate", False))
     return sorted(found.values(), key=lambda o: (o.line, o.value))
 
 

@@ -18,6 +18,9 @@ A365.**
 - Runtime restrictions are checked again before each action.
 - Protected actions can require the user's approval of the exact content, destinations,
   source and amount. Approvals are single-use, expire, and cannot be forged or reused.
+- A request whose goal the runtime cannot reach (a `request_gate` library entry, such as
+  other people's Microsoft 365 data) gets no approved plan until the user narrows it
+  (A365: when the agent submits its own plan).
 
 **Weaker in Scout**
 

@@ -37,7 +37,34 @@ from .profiles import builtin_profiles, load_profile
 
 def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
     """Return (pack, compile_result_or_None) for a .json pack, .ce or markdown."""
+    pack, res, _ = _load_front(path, args)
+    return pack, res
+
+
+def _deterministic_refutes(path: Path, args):
+    """Tier T2 probe: (pack, res) when the deterministic front-end alone
+    refutes the skill (IMPOSSIBLE, not an abstention), else None.  Any error
+    falls back to the LLM path, so `needed` is never worse than `always`."""
+    try:
+        det = argparse.Namespace(**{**vars(args), "llm": False})
+        pack, res = _load_result(path, det)
+        v = _check_loaded(pack, res, det)
+    except Exception:
+        return None
+    return (pack, res) if v.refuted else None
+
+
+def _load_front(path: Path, args) -> tuple[dict, CompileResult | None, str | None]:
+    """Like _load_result, plus which front-end decided ("deterministic" or
+    "llm"; None when --llm is not in play)."""
     res = None
+    front_end = "llm" if getattr(args, "llm", False) else None
+    if (front_end and getattr(args, "llm_when", "always") == "needed"
+            and path.suffix not in (".json", ".ce")):
+        hit = _deterministic_refutes(path, args)
+        if hit is not None:
+            pack, res = hit
+            return pack, res, "deterministic"
     if path.suffix == ".json":
         pack = json.loads(path.read_text(encoding="utf-8"))
     elif path.suffix == ".ce":
@@ -64,7 +91,9 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
             raise ValueError("--compaction-provenance is only valid for a compiled JSON pack")
         manifest = json.loads(Path(provenance_path).read_text(encoding="utf-8"))
         res = result_from_manifest(pack, manifest)
-    return pack, res
+    if path.suffix in (".json", ".ce"):
+        front_end = "deterministic" if front_end else None
+    return pack, res, front_end
 
 
 def _compact_with_llm(path: Path, args) -> dict:
@@ -191,18 +220,29 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
         print(f"warning: {w}", file=file)
 
 
+_SKIP_NOTE = "LLM not called: deterministic front-end refuted"
+
+
 def cmd_check(args) -> int:
-    pack, res = _load_result(Path(args.file), args)
+    pack, res, front_end = _load_front(Path(args.file), args)
     v = _check_loaded(pack, res, args)
     trace_artifact("verdict", v.to_dict())
     if args.json:
         out = v.to_dict()
         out["pack_name"] = pack.get("name", "?")
+        if front_end:
+            out["front_end"] = front_end
+            if front_end == "deterministic" and getattr(args, "llm_when", "always") == "needed":
+                out["note"] = _SKIP_NOTE
         if res is not None:
             out["compaction_goal_source"] = res.goal_source
         print(json.dumps(out, indent=2))
     else:
         _print_verdict(pack, res, v, verbose=args.verbose)
+        if front_end:
+            print(f"  front_end: {front_end}")
+            if front_end == "deterministic" and getattr(args, "llm_when", "always") == "needed":
+                print(f"  {_SKIP_NOTE}")
     if v.unknown:
         return 3
     return 0 if v.achievable else 1
@@ -238,9 +278,10 @@ def cmd_scan(args) -> int:
     for f in files:
         rel = f.relative_to(root)
         try:
-            pack, res = _load_result(f, args)
+            pack, res, front_end = _load_front(f, args)
             v = _check_loaded(pack, res, args)
             rows.append({"skill": rel.as_posix(), "verdict": v.label,
+                         **({"front_end": front_end} if front_end else {}),
                          "reason": v.reason if not v.achievable else "",
                          "frontier": list(v.frontier),
                          "unknown": v.unknown, "refuted": v.refuted,
@@ -263,6 +304,9 @@ def cmd_scan(args) -> int:
         print(f"\n{n_ok}/{len(rows)} achievable under profile "
               f"'{args.profile}'; {n_refuted} refuted, {n_unknown} unknown "
               f"(abstentions -- not refutations or permission to run)")
+        if args.llm:
+            n_llm = sum(r.get("front_end") == "llm" for r in rows)
+            print(f"LLM calls: {n_llm} of {len(rows)} (saved {len(rows) - n_llm})")
     return 0
 
 
@@ -309,6 +353,7 @@ def cmd_cost(args) -> int:
 
     # (name, source text, pack, usage blocks of the compaction calls)
     sources: list[tuple[str, str, dict, list[dict]]] = []
+    skipped: list[bool] = []           # per source: LLM skipped by --llm-when needed
     if args.corpus:
         for spec in load_corpus():
             # `nl` is the spec's natural-language source: the actual
@@ -328,17 +373,19 @@ def cmd_cost(args) -> int:
             text = f.read_text(encoding="utf-8") if f.suffix != ".json" else ""
             try:
                 with metered() as usage:
-                    pack, _ = _load_result(f, args)
+                    pack, _, fe = _load_front(f, args)
             except (PackError, ValueError) as e:
                 print(f"skillc: {f}: {type(e).__name__}: {e}", file=sys.stderr)
                 continue
             sources.append((pack.get("name", f.stem), text, pack, usage))
+            skipped.append(fe == "deterministic")
 
     model = RuntimeModel(cache_hit_rate=args.cache_hit_rate)
     corpus = CorpusEconomics(price=args.price)
     achievable: list[tuple[str, int, int]] = []
     measured: list[bool] = []          # per priced skill: usage measured?
-    for name, text, pack, usage in sources:
+    for i, (name, text, pack, usage) in enumerate(sources):
+        no_llm = i < len(skipped) and skipped[i]
         try:
             v = check(pack)
         except (PackError, ValueError) as e:
@@ -348,8 +395,9 @@ def cmd_cost(args) -> int:
         if args.llm and usage:
             ver = measured_cost(usage)
         else:
-            ver = check_cost(src, llm=priced_llm, repair_rounds=args.repair_rounds)
-        if priced_llm:
+            ver = check_cost(src, llm=priced_llm and not no_llm,
+                             repair_rounds=args.repair_rounds)
+        if priced_llm and not no_llm:
             measured.append(ver.measured)
         if v.refuted and v.reason in FAILURE_PROFILES:
             corpus.rows.append(economics(
@@ -739,6 +787,10 @@ def _add_compile_opts(sp) -> None:
                     help="bind extraction to reviewed goal, capabilities, and initial state")
     sp.add_argument("--llm", action="store_true",
                     help="use the semantic LLM compaction front-end")
+    sp.add_argument("--llm-when", choices=("always", "needed"), default="always",
+                    help="with --llm: 'needed' runs the deterministic front-end first "
+                         "and skips the LLM when it already refutes the skill "
+                         "(default: always call the LLM)")
     sp.add_argument("--llm-provider", choices=PROVIDERS,
                     help="LLM provider (default: SKILLC_LLM_PROVIDER or anthropic)")
     sp.add_argument("--model",

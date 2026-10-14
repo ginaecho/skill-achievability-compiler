@@ -1,0 +1,462 @@
+{
+  "version": "3.0",
+  "description": "Interaction hazards: what an agent may do to the world that the user did not ask for. Patterns are applied per clause of a committed sentence (and per command segment of an action); an entry with `targets` also needs a target in the same clause, and a target inside a `safe_targets` token does not count. `exclude` (reasoning) and `action_exclude` (actions) cancel a hit when they match the same clause or segment. `exclude_unit` applies `exclude` to the whole sentence and the one before. `span: unit` matches the whole sentence instead of one clause. `inherit_targets` lets a clause that points back (there, it, that) take its target from the earlier clauses of the sentence or from the sentence before. `armed_only_patterns` recognise the tool call that realizes a hazard the reasoning committed to; they never refuse a call by themselves. `decision` is the default policy (deny | ask | plan), `who` the party that can fix a refusal (replan | ask_user). `action_patterns` (default: `patterns`) recognise the tool call that realizes the hazard. See docs/RUNTIME_MONITOR.md, Interaction awareness.",
+  "classes": {
+    "destructive": {
+      "decision": "deny",
+      "who": "replan",
+      "needs": [],
+      "label": "a destructive operation on a protected target"
+    },
+    "outbound_send": {
+      "decision": "plan",
+      "who": "replan",
+      "needs": [],
+      "label": "a send to a destination outside the approved plan"
+    },
+    "payment": {
+      "decision": "ask",
+      "who": "ask_user",
+      "needs": [
+        "payment_approval"
+      ],
+      "label": "a payment, which only the user can approve"
+    },
+    "secret_exposure": {
+      "decision": "deny",
+      "who": "replan",
+      "needs": [],
+      "label": "exposing a secret"
+    },
+    "privilege": {
+      "decision": "ask",
+      "who": "ask_user",
+      "needs": [
+        "confirmation"
+      ],
+      "label": "a privilege escalation or a disabled safeguard"
+    },
+    "scope_escape": {
+      "decision": "ask",
+      "who": "ask_user",
+      "needs": [
+        "confirmation"
+      ],
+      "label": "an action beyond the scope of the task"
+    },
+    "injection_compliance": {
+      "decision": "deny",
+      "who": "replan",
+      "needs": [],
+      "label": "following instructions found in tool output"
+    },
+    "commitment": {
+      "decision": "ask",
+      "who": "ask_user",
+      "needs": [
+        "operator_approval"
+      ],
+      "label": "a commitment (money, price, legal effect, a policy exception) the agent has no authority to make"
+    },
+    "consent_override": {
+      "decision": "deny",
+      "who": "replan",
+      "needs": [],
+      "label": "carrying on against an explicit refusal of the person affected"
+    },
+    "pii_exposure": {
+      "decision": "ask",
+      "who": "ask_user",
+      "needs": [
+        "confirmation"
+      ],
+      "label": "sending or showing a third party's personal data"
+    },
+    "policy_violation": {
+      "decision": "deny",
+      "who": "replan",
+      "needs": [],
+      "label": "abusive or brand-damaging content, or dropping the operator's rules"
+    }
+  },
+  "entries": [
+    {
+      "id": "destructive-verb",
+      "class": "destructive",
+      "description": "a destructive verb aimed at a protected target. Targets are things whose loss is not routine: production, databases as a whole, whole or protected tables, the repository and its main branch, backups, the home directory, a drive root, uncommitted work. Routine clean-up words (index, dead code, stale, temp, log files, ...) cancel the hit: removing them is ordinary maintenance. v3: discard, throw away and clear (with a determiner) are destructive verbs like delete; a cloud drive (Drive, OneDrive, Dropbox, SharePoint), spreadsheets and the documents of the user or another person are protected targets: they are authored content, not regenerable build output.",
+      "patterns": [
+        "\\b(?:delet(?:e|es|ing)|remov(?:e|es|ing)|wip(?:e|es|ing)|drop(?:s|ping)?|truncat(?:e|es|ing)|purg(?:e|es|ing)|destroy(?:s|ing)?|eras(?:e|es|ing)|format(?:s|ting)?|overwrit(?:e|es|ing)|nuk(?:e|es|ing)|discard(?:s|ing)?|throw(?:s|ing)? away|blow(?:s|ing)? away|dropdb)\\b|\\bclear(?:s|ing)?\\s+(?:out\\s+)?(?:the|all|those|these|their|its|every|my|your|our|his|her)\\b",
+        "\\bforce[- ]?push(?:es|ing)?\\b|\\bpush(?:ing)?\\b[^;\\n]*?(?:--force\\b|--force-with-lease|\\s-f\\b)",
+        "\\brm\\s+-(?:rf|fr|r|R|Rf|rF)\\b|\\brmdir\\s+/s\\b|\\bdel\\s+/s\\b|\\bRemove-Item\\b[^;\\n]*-Recurse",
+        "\\bMove-Item\\b[^;\\n]*-Force|\\bmv\\s+-f\\b|\\bmove\\s+(?:/y\\s+)?\\*"
+      ],
+      "targets": "\\b(?:prod(?:uction)?|live|databases?|db|schemas?|customers?|user data|repo(?:sitory)?|origin|backups?|all files|every file|entire|whole|everything|the project|workspace|migrations|buckets?|namespaces?|clusters?|resource group|tenants?|mailbox(?:es)?|calendars?|home dir(?:ectory)?|file[- ]?systems?|cloud resources|all (?:data|resources))\\b|\\b(?:main|master)\\s+branch\\b|\\borigin/(?:main|master)\\b|\\bbranch\\s+(?:main|master)\\b|\\busers?\\s+(?:table|data)\\b|\\ball users\\b|\\b(?:all|every|the whole|entire|prod\\w*)\\s+tables?\\b|(?:^|[\\s'\\\"=(])~(?=/|\\s|$|['\\\"])|\\$HOME\\b|(?:^|\\s)/(?:\\*|\\s|$)|(?<![\\w.])\\.git\\b|(?<![\\w.])\\.env\\b|\\(root\\)|(?<![\\w\\\\])[A-Za-z]:\\\\?(?=\\s|$|[\\\"'])|\\bdrive root\\b|\\broot of the drive\\b|\\bthe whole drive\\b|\\bworking[- ]tree\\b|\\blocal (?:edits|changes|commits)\\b|\\buncommitted (?:changes|work)\\b|(?:^|[\\s'\\\"])\\.?[\\\\/]?\\*(?=$|[\\s'\\\"])|\\b(?:google drive|onedrive|one ?drive|dropbox|sharepoint|icloud drive|box\\.com)\\b|(?-i:\\bDrive\\b)|\\bspreadsheets\\b|\\bworkbooks\\b|\\b(?:the user's|users'|user's|customer's|client's|someone's|their|his|her)\\s+(?:[\\w-]+\\s+){0,2}?(?:files|documents|docs|spreadsheets|sheets|photos|folders?|e-?mails|notes|drives?|data)\\b",
+      "safe_targets": "node_modules|__pycache__|\\.pytest_cache|\\bdist\\b|\\bbuild\\b|\\btmp\\b|\\btemp\\b|\\bcache\\b|\\.tmp\\b|\\bscratch\\b|\\.venv\\b|\\bcoverage\\b|\\.mypy_cache|\\.ruff_cache|\\btarget/",
+      "decision": "deny",
+      "who": "replan",
+      "exclude": "\\b(?:index(?:es)?|dead code|unused (?:code|imports?|variables?|index)|comment(?:s|ed)?|stale|duplicate|test fixtures?|fixture rows?|temporary|temp|old logs?|log files?|whitespace|trailing|typo)\\b|\\bfrom (?:the )?(?:code|file|function|module|class|docstring)\\b",
+      "inherit_targets": true
+    },
+    {
+      "id": "discard-local-work",
+      "class": "destructive",
+      "description": "throwing away uncommitted work: revert, restore, discard, roll back or reset the working tree, tracked files or local/uncommitted/unsaved edits. In git vocabulary these verbs overwrite the working copy from HEAD, and uncommitted edits exist nowhere else, so the loss cannot be undone. Stashing, committing or backing up first, or unstaging only (--staged), keeps the work and cancels the hit. The exclusion reads the whole sentence and the one before (exclude_unit): the safeguard is usually stated in its own clause.",
+      "patterns": [
+        "\\b(?:revert(?:s|ing)?|restor(?:e|es|ing)|discard(?:s|ing)?|throw(?:s|ing)? away|roll(?:s|ing)? back|reset(?:s|ting)?|undo(?:es|ing)?|wip(?:e|es|ing)|blow(?:s|ing)? away|clean(?:s|ing)? out)\\b"
+      ],
+      "targets": "\\btracked files?\\b|\\bworking[- ]?(?:tree|copy|directory)\\b|\\b(?:local|uncommitted|unsaved|unstaged|pending|in-progress|half-finished|unfinished|work-in-progress)\\s+(?:[\\w-]+\\s+)?(?:edits|changes|work|modifications)\\b|\\bback to HEAD\\b|\\bthe user's (?:edits|changes|work)\\b",
+      "exclude": "\\bstash(?:ed|es|ing)?\\b|\\bbacked up\\b|\\bback(?:ing)? (?:it|them|up)\\b|\\bbackup\\b|\\b(?:after|once|having) commit\\w*|\\bcommitted (?:them|it|first|everything)\\b|--staged\\b|\\bunstag\\w*",
+      "action_patterns": [
+        "\\bgit\\s+restore\\b(?![^;\\n]*(?:--staged|\\s-S\\b))(?=\\s+\\S)|\\bgit\\s+restore\\b[^;\\n]*--worktree\\b",
+        "\\bgit\\s+checkout\\b[^;\\n]*?\\s--\\s+\\S",
+        "\\bgit\\s+stash\\s+(?:drop|clear)\\b",
+        "\\bgit\\s+clean\\b[^;\\n]*\\s-\\w*f"
+      ],
+      "decision": "deny",
+      "who": "replan",
+      "exclude_unit": true
+    },
+    {
+      "id": "destructive-command",
+      "class": "destructive",
+      "description": "a command that destroys data, history or infrastructure by itself; DELETE FROM only without a WHERE clause or on a protected table (a scoped delete on a session table is routine) v3: git restore without --staged, git checkout -- <path>, git stash drop/clear and git clean -f overwrite or delete uncommitted work that exists nowhere else.",
+      "patterns": [
+        "(?-i:\\bDROP\\s+(?:TABLE|DATABASE|SCHEMA)\\b)",
+        "(?-i:\\bDELETE\\s+FROM\\s+(?:(?i:[\\w.\\\"`]*(?:users|customers|accounts|orders|payments|prod\\w*))\\b|(?![^;\\n]*\\bWHERE\\b)))",
+        "(?-i:\\bTRUNCATE\\s+(?:TABLE\\s+)?\\w)",
+        "\\bterraform\\s+destroy\\b",
+        "\\baz\\s+group\\s+delete\\b",
+        "\\baws\\s+s3\\s+rm\\b[^;\\n]*--recursive",
+        "\\bkubectl\\s+delete\\s+(?:namespace|ns|deployment|pvc|pv)\\b",
+        "\\bgit\\s+branch\\s+-D\\b",
+        "\\bgit\\s+clean\\b[^;\\n]*\\s-\\w*f",
+        "\\bgit\\s+checkout\\b[^;\\n]*?\\s--\\s+\\S",
+        "\\bgit\\s+reset\\s+--hard\\b",
+        "\\bhard[- ]reset(?:s|ting)?\\b",
+        "\\bnpm\\s+unpublish\\b",
+        "\\brm\\s+-(?:rf|fr|r|R|Rf|rF)\\s+(?:\\./)?src/?(?=\\s|$)",
+        "\\brmdir\\s+/s\\s+/q\\s+[A-Za-z]:\\\\?(?=\\s|$|[\\\"'])",
+        "\\bgit\\s+restore\\b(?![^;\\n]*(?:--staged|\\s-S\\b))(?=\\s+\\S)|\\bgit\\s+restore\\b[^;\\n]*--worktree\\b",
+        "\\bgit\\s+stash\\s+(?:drop|clear)\\b"
+      ],
+      "decision": "deny",
+      "who": "replan"
+    },
+    {
+      "id": "process-kill",
+      "class": "destructive",
+      "description": "killing a service or a running recording/database process by name: what it was doing is lost",
+      "patterns": [
+        "\\b(?:pkill|killall|kill\\s+-9)\\b"
+      ],
+      "targets": "\\b(?:recording|ffmpeg|obs|postgres\\w*|mysql\\w*|redis\\w*|nginx|server|daemon)\\b|\\s-f\\b",
+      "exclude": "\\brestart\\w*\\b",
+      "decision": "deny",
+      "who": "replan"
+    },
+    {
+      "id": "outbound-send",
+      "class": "outbound_send",
+      "description": "a send, post or upload to a destination outside the system: an email address, URL, domain or an external party; a role of the approved plan or a sub-agent is not one",
+      "patterns": [
+        "(?<!the )(?<!a )(?<!an )(?<!this )(?<!that )(?<!my )(?<!your )(?<!our )(?<!their )\\b(?:send(?:s|ing)?|e-?mail(?:ing)?|mail(?:ing)?|messag(?:e|ing)|post(?:ing)?|repl(?:y|ying)|forward(?:s|ing)?|shar(?:e|ing)|upload(?:ing)?|publish(?:es|ing)?|submit(?:s|ting)?|transmit(?:s|ting)?|notify(?:ing)?|DM|tweet(?:ing)?|invit(?:e|ing))\\b"
+      ],
+      "targets": "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}|https?://[^\\s'\\\"<>)`]+|\\b(?:[a-z0-9-]+\\.)+(?:com|org|net|io|co|dev|app|ai|gov|edu|example|info|biz|us|uk|de|fr|cloud|xyz|me|sh|ru|cn|tk|site|online)\\b|\\b(?:external|outside|third[- ]party|public(?:ly)?|webhooks?|slack|teams channel|gist|pastebin)\\b|\\bto (?:the )?(?:customers?|clients?|recipients?|attacker|vendor|supplier|mailing list|distribution list|all staff|everyone|external|outside|third[- ]part(?:y|ies)|his|her|their) (?:personal )?(?:address|inbox|e-?mail|account)\\b",
+      "decision": "plan",
+      "who": "replan"
+    },
+    {
+      "id": "payment",
+      "class": "payment",
+      "description": "a payment, purchase, transfer of money or refund: a transactional verb with its object. Building payment software (a form, an API, tests) is not paying. v3: a tool named for approving, executing or releasing a transfer or payout moves money whatever its documentation calls it; a camelCase or dotted tool name counts as its words.",
+      "patterns": [
+        "\\b(?:make|submit|confirm|authori[sz]e|complete|execute|process|place|initiate|approve)\\s+(?:a |the |this |that |my |their )?(?:payment|purchase|order|transfer|refund|charge|checkout)\\b",
+        "\\bpay\\s+(?:for|the|\\$|\\d|them|him|her|it|invoice|the bill)\\b",
+        "\\bbuy(?:ing)?\\s+(?!-in)(?:the|a|an|\\d|it|them|some)\\b",
+        "\\b(?:issue|give|process)\\s+(?:a |the )?refund\\b|\\brefund\\s+(?:the|them|him|her|\\$|\\d)",
+        "\\bwire\\s+(?:\\$|\\u20ac|\\u00a3|\\d|the|funds|money)",
+        "\\btransfer\\s+(?:\\$|\\u20ac|\\u00a3|\\d|funds|money|the balance)",
+        "\\bcheck ?out\\b(?=[^;]{0,30}\\b(?:cart|order|now)\\b)",
+        "\\badd(?:ing)?\\s+(?:it|them|\\d+|the|a|an)[^;]{0,30}\\bto (?:the )?cart\\b",
+        "\\b(?:tell|ask|have)\\s+(?:people|them|everyone|customers?|him|her)\\s+to\\s+(?:pay|venmo|send (?:money|payment))\\b",
+        "\\brelease\\s+(?:the\\s+)?(?:funds|payment|money|escrow|payout)\\b"
+      ],
+      "action_patterns": [
+        "\\b(?:place|submit|confirm)\\s+(?:the|an?|this|my|their)\\s+order\\b",
+        "\\b(?:make|confirm|submit|send|execute)\\s+(?:a\\s+|the\\s+)?payment\\b",
+        "\\b(?:complete|confirm)\\s+(?:the\\s+)?purchase\\b",
+        "api\\.stripe\\.com|/v1/(?:charges|payment_intents|transfers|refunds)\\b",
+        "\\bwire\\s+transfer\\b|\\btransfer\\s+(?:funds|money)\\b",
+        "\\bpay\\w*\\s+(?:via|with|through|using)\\b[^;\\n]{0,40}\\bto\\s+@[\\w-]+",
+        "\\b(?:venmo|cash ?app)\\b[^;\\n]{0,20}@[\\w-]+|\\bpaypal\\.me/",
+        "\\b(?:approve|execute|initiate|release|authori[sz]e)\\s+(?:the\\s+)?(?:transfer|payout|withdrawal|wire|disbursement)\\b"
+      ],
+      "decision": "ask",
+      "who": "ask_user",
+      "exclude": "\\b(?:form|field|module|page|api|endpoint|service|library|sdk|tests?|test case|code|feature|flow|integration|validation|schema|handler|webhook|component|mock|stub|docs?|documentation)\\b",
+      "armed_only_patterns": [
+        "\\b(?:submit|place|confirm|complete)\\s+order\\b|\\bcheckout\\b|\\bcharge\\s+card\\b|\\bpay(?:ment)?\\s+(?:via|with|to)\\b|\\bvenmo\\b|\\bpaypal\\.me\\b|\\bcash ?app\\b"
+      ]
+    },
+    {
+      "id": "secret-exposure",
+      "class": "secret_exposure",
+      "description": "printing, logging or transmitting a secret; checking that a secret is set, missing or invalid without showing it is not exposing it v3: output, render, emit, write out and embed are exposure verbs; so is moving a secret into a channel others read (dropping rows into a ticket reply, writing values into a PR summary, as an image or link reference). A tokens/credentials table and connection strings are secrets. Once armed, a Markdown image or <img> pointing at an outside host realizes it: rendering fetches the URL.",
+      "patterns": [
+        "\\b(?:print(?:s|ing)?|echo(?:es|ing)?|cat|log(?:s|ging)?|dump(?:s|ing)?|(?:show(?:s|ing)?|display(?:s|ing)?)(?!\\s+(?:it\\s+)?(?:to\\s+)?(?:the user|you)\\b)|past(?:e|es|ing)|send(?:s|ing)?|upload(?:s|ing)?|post(?:s|ing)?|includ(?:e|es|ing)|attach(?:es|ing)?|base64|expos(?:e|es|ing)|leak(?:s|ing)?|e-?mail(?:s|ing)?|printenv|Get-Content|(?<!the )(?<!its )(?<!this )(?<!that )output(?:s|ting)?(?!\\s*:|\\s+(?:of|from|is|was|shows?|contains?)\\b)|render(?:s|ing)?|emit(?:s|ting)?|writ(?:e|es|ing) (?:them |it |those |these )?out|embed(?:s|ding)?)\\b|\\bcurl\\b[^;\\n]*\\s(?:-d|--data\\S*|-F|--upload-file)\\b",
+        "\\b(?:drop(?:s|ping)?|put(?:s|ting)?|writ(?:e|es|ing)|cop(?:y|ies|ying)|insert(?:s|ing)?|past(?:e|es|ing)|plac(?:e|es|ing)|add(?:s|ing)?|return(?:s|ing)?|post(?:s|ing)?|dump(?:s|ing)?|carr(?:y|ies|ying))\\b[^;\\n]{0,60}?\\b(?:into|in|onto|on|to|as)\\s+(?:the\\s+|a\\s+|an\\s+|its\\s+|their\\s+)?(?:[\\w-]+\\s+){0,3}?(?:repl(?:y|ies)|response|comments?|tickets?|pr|pull request|summary|issues?|messages?|chat|channel|public \\w+|image (?:links?|references?|urls?|tags?)|markdown image|(?:image )?url|link)\\b"
+      ],
+      "targets": "\\b(?:access|auth|bearer|api|github|gh|refresh|id|session|personal access|oauth|sas|jwt|slack|npm|pypi)[ _-]?tokens?\\b|\\b[A-Z0-9]*_(?:TOKEN|SECRET|PASSWORD|API_?KEY|KEY)\\b|\\bsecrets?\\b|\\bpasswords?\\b|\\bpasswd\\b|\\bapi[_ -]?keys?\\b|\\bcredentials?\\b|\\bprivate keys?\\b|(?<![\\w.])\\.env\\b|\\bid_rsa\\b|\\baccess keys?\\b|\\bcookies?\\b|\\bsession ids?\\b|\\bOTP\\b|\\bone[- ]time (?:code|password)\\b|\\b2FA codes?\\b|\\b(?:tokens?|credentials?|secrets?|keys?|passwords?)\\s+tables?\\b|\\bprivileged (?:tokens?|tables?|keys?|credentials?|rows?)\\b|\\bconnection strings?\\b",
+      "decision": "deny",
+      "who": "replan",
+      "exclude": "\\s-[zn]\\s|\\bis (?:not )?set\\b|\\bunset\\b|\\bnot set\\b|\\bexists?\\b|\\bpresent\\b|\\bdefined\\b|\\bconfigured\\b|\\bmissing\\b|\\bredact\\w*|\\bmask\\w*|\\bwithout (?:printing|showing|revealing|exposing)|\\bwhether\\b|\\binvalid\\b|\\bexpired\\b",
+      "armed_only_patterns": [
+        "https?://[^\\s'\\\"<>]*[?&#][^\\s'\\\"<>]*(?:key|token|secret)=",
+        "!\\[[^\\]]*\\]\\(\\s*https?://|<img\\b[^>]*\\bsrc\\s*=\\s*[\\\"']?https?://"
+      ]
+    },
+    {
+      "id": "confidential-exposure",
+      "class": "secret_exposure",
+      "description": "putting private or regulated data where others can read it",
+      "patterns": [
+        "\\b(?:includ(?:e|es|ing)|post(?:s|ing)?|publish(?:es|ing)?|send(?:s|ing)?|shar(?:e|es|ing)|upload(?:s|ing)?|past(?:e|es|ing)|leak(?:s|ing)?|expos(?:e|es|ing)|attach(?:es|ing)?|commit(?:s|ting)?|open(?:s|ing)? an? (?:pr|pull request|issue))\\b|\\bcreate[_ ](?:pull[_ ]request|issue|comment|gist)\\b"
+      ],
+      "targets": "\\bprivate (?:repos?|repositor(?:y|ies)|data|channels?|files?|documents?)\\b|\\bconfidential\\b|\\bsalar(?:y|ies)\\b|\\bPII\\b|\\bPHI\\b|\\bpatient (?:data|records?|notes?)\\b|\\bmedical records?\\b",
+      "decision": "deny",
+      "who": "replan"
+    },
+    {
+      "id": "privilege",
+      "class": "privilege",
+      "description": "a privilege escalation or a disabled safeguard; sudo only for what changes the system's protection (rm, chmod, a root shell, users, /etc, the firewall); installing a package with sudo is routine",
+      "patterns": [
+        "\\bsudo\\s+(?:-\\w+\\s+)*(?:rm|chmod|chown|dd|mkfs|fdisk|systemctl\\s+(?:disable|stop|mask)|visudo|passwd|su\\b|-i\\b|-s\\b|bash|sh\\b|tee\\s+/etc|sed[^;\\n]*/etc/|useradd|usermod|iptables|ufw\\s+disable|setenforce\\s+0)",
+        "\\b(?:run|use|with|as)\\s+(?:it\\s+)?(?:with\\s+)?sudo\\b(?!\\s+(?:apt|apt-get|yum|dnf|brew|pip3?|npm|snap|port|zypper|pacman)\\b)",
+        "\\bchmod\\s+(?:-R\\s+)?777\\b",
+        "\\bchown\\s+(?:-R\\s+)?root\\b",
+        "\\bgrant(?:s|ing)?\\b[^;\\n]{0,40}\\b(?:admin\\w*|owner|global administrator)\\b",
+        "\\badd\\b[^;\\n]{0,60}\\bto\\b[^;\\n]{0,20}\\badministrators\\b",
+        "\\bdisabl(?:e|es|ing)\\s+(?:the\\s+)?(?:firewall|defender|antivirus|mfa|2fa|multi-factor)",
+        "\\ballow all\\b",
+        "0\\.0\\.0\\.0/0",
+        "\\bautoApprove\\b",
+        "\\byolo mode\\b",
+        "--dangerously-skip-permissions",
+        "\\bbypass(?:ing)?\\s+(?:the\\s+)?permissions\\b",
+        "\\btrust all\\b",
+        "\\bset\\b[^;\\n]{0,40}\\b(?:auto[-_ ]?approve|allow\\w*)\\b[^;\\n]{0,20}\\btrue\\b",
+        "\\b(?:curl|wget|iwr|Invoke-WebRequest)\\b[^;\\n]*\\|\\s*(?:ba|z|da)?sh\\b|\\b(?:iwr|Invoke-WebRequest)\\b[^;\\n]*\\|\\s*iex\\b"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "config-write",
+      "class": "privilege",
+      "description": "writing an agent's or a shell's own configuration: tool auto-approval in an MCP / editor / Claude settings file, or SSH keys, sudoers and shell start-up files",
+      "patterns": [
+        "\\b(?:add(?:s|ing)?|writ(?:e|es|ing)|edit(?:s|ing)?|modify(?:ing)?|updat(?:e|es|ing)|insert(?:s|ing)?|creat(?:e|es|ing)|register(?:s|ing)?)\\b[^;\\n]{0,120}(?:\\.cursor/mcp\\.json|\\bmcp\\.json\\b|\\.claude/settings[\\w.-]*\\.json|claude_desktop_config\\.json|\\.codex/config\\.toml|\\.mcp\\.json|\\.vscode/settings\\.json|\\bsudoers\\b|\\bauthorized_keys\\b|\\.bashrc\\b|\\.zshrc\\b)"
+      ],
+      "action_patterns": [
+        "(?:\\.cursor/mcp\\.json|\\.vscode/settings\\.json|\\.claude/settings(?:\\.local)?\\.json|\\bmcp\\.json|\\bsettings\\.json|claude_desktop_config\\.json|\\.codex/config\\.toml)\\b[^\\n]*\\b(?:autoApprove|dangerously\\w*|trust\\w*|allow\\w*)\\b",
+        "\\b(?:autoApprove|dangerously\\w*|trust\\w*|allow\\w*)\\b[^\\n]*(?:\\.cursor/mcp\\.json|\\.vscode/settings\\.json|\\.claude/settings(?:\\.local)?\\.json|\\bmcp\\.json|\\bsettings\\.json)\\b",
+        "\\b(?:Write|Edit|write|edit|create file|write file)\\b[^\\n]*(?:\\.cursor/mcp\\.json|claude_desktop_config\\.json|\\.codex/config\\.toml)",
+        "(?:~/\\.ssh/|/etc/sudoers|\\bauthorized_keys\\b|(?:^|[/\\\\\\s])\\.bashrc\\b|(?:^|[/\\\\\\s])\\.zshrc\\b|(?:^|[/\\\\\\s])\\.profile\\b)"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "scope-escape",
+      "class": "scope_escape",
+      "description": "an action aimed at everyone or at production rather than the task: an acting verb with a preposition into production, or with all/every users; a bug that happens in production is not one",
+      "patterns": [
+        "\\b(?:deploy|run|apply|execute|push|roll(?:ing)? ?out|migrate|change|modify|update|delete|drop|send|test|try|experiment)\\w*\\b[^;]{0,40}\\b(?:in|to|on|against|into)\\s+(?:production|prod|the live (?:site|system|environment))\\b",
+        "\\b(?:e-?mail|message|notify|send|delete|update|reset|charge|bill|contact|text|apply|disable|enable|push)\\w*\\b[^;]{0,40}\\b(?:all|every|each)\\s+(?:users?|customers?|tenants?|mailbox(?:es)?|employees?|contacts?|accounts?)\\b",
+        "\\b(?:e-?mail|message|notify|send|delete|update|reset|apply|disable|enable|push|roll(?:ing)? ?out|deploy)\\w*\\b[^;]{0,40}\\b(?:org|tenant|company)[- ]wide\\b",
+        "\\beveryone in the (?:organi[sz]ation|company|org)\\b",
+        "\\bbulk[- ](?:send|delete|update|email)\\b"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "digression",
+      "class": "scope_escape",
+      "description": "leaving the task for something unrelated (wander off, for fun, take a break, browse photos for a while)",
+      "patterns": [
+        "\\b(?:wander(?:ing)? off|take a break(?! from)|for fun|unrelated to (?:the|my) task|off[- ]task|get distracted|look at some .{0,30}(?:photos|videos|pictures) for a while)\\b"
+      ],
+      "action_patterns": [],
+      "armed_only_patterns": [
+        "\\b(?:navigate|goto|open[_ ]url|visit|browse)\\b[^\\n]*https?://(?!localhost\\b|127\\.0\\.0\\.1\\b|\\[::1\\])"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "physical-actuation",
+      "class": "scope_escape",
+      "description": "acting on physical devices",
+      "patterns": [
+        "\\b(?:open(?:s|ing)?|clos(?:e|es|ing)|unlock(?:s|ing)?|lock(?:s|ing)?|turn(?:s|ing)? (?:on|off)|switch(?:es|ing)? (?:on|off)|start(?:s|ing)?|activat(?:e|es|ing)|disabl(?:e|es|ing))\\b[^;\\n]{0,60}\\b(?:smart[- ]home|google home|alexa|homekit|boilers?|thermostats?|garage doors?|front doors?|door locks?|smart (?:locks?|plugs?|lights?)|heaters?|furnaces?)\\b"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "limit-escape",
+      "class": "scope_escape",
+      "description": "removing the limits the operator set on the agent's own run",
+      "patterns": [
+        "\\b(?:remov(?:e|es|ing)|disabl(?:e|es|ing)|bypass(?:es|ing)?|lift(?:s|ing)?|overrid(?:e|es|ing)|comment(?:s|ing)? out|circumvent(?:s|ing)?|get(?:ting)? around)\\b[^;\\n]{0,40}\\b(?:time[_ ]?limits?|timeouts?|rate[_ ]?limits?|quotas?|budget caps?|max[_ ](?:steps|iterations|turns|tokens)|guardrails?|safety checks?|sandbox(?:ing)?|monitor(?:ing)?|skillc)\\b"
+      ],
+      "action_patterns": [
+        "\\b(?:TIME_?LIMIT|TIMEOUT|RATE_?LIMIT|MAX_[A-Z_]+)\\s*=\\s*(?:10\\s*\\*\\*\\s*\\d+|\\d{7,}|None\\b|float\\(\\s*['\\\"]inf|math\\.inf)"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "hidden-copy-send",
+      "class": "outbound_send",
+      "description": "sending while knowing that the message is also copied, blind or silently, to an outside or undeclared recipient (a tool's hidden BCC, a forwarding rule): the copy leaves the declared destinations whatever the plan allows, so this entry is refused (decision deny), not checked against the plan. The evidence may be in the sentence before (a report about the tool); removing or stripping the copy cancels the hit.",
+      "patterns": [
+        "(?<!the )(?<!a )(?<!an )(?<!this )(?<!that )\\b(?:send(?:s|ing)?|e-?mail(?:ing)?|mail(?:ing)?|forward(?:s|ing)?|deliver(?:s|ing)?|let (?:it|the (?:hidden |blind )?copy|them) go)\\b"
+      ],
+      "targets": "\\b(?:bcc|blind (?:carbon )?cop(?:y|ies)|hidden cop(?:y|ies)|silent cop(?:y|ies)|secret cop(?:y|ies)|extra recipient)\\b[^.]{0,80}?\\b(?:outside|external|third[- ]party|undeclared|unknown|attacker|unlisted|not (?:a recipient|declared|listed))\\b|\\b(?:quietly|silently|secretly|covertly)\\s+(?:adds?|cop(?:y|ies)|cc'?s|bcc'?s|forwards?|sends?)\\b",
+      "exclude": "\\b(?:remov\\w+|strip\\w*|delet\\w+|drop\\w*|without (?:the )?(?:bcc|hidden|blind|extra))\\b",
+      "span": "unit",
+      "action_patterns": [],
+      "decision": "deny",
+      "who": "replan"
+    },
+    {
+      "id": "exfiltration-url",
+      "class": "outbound_send",
+      "description": "data carried out in a URL (an image link, a query string) v3: data rendered 'as image references/links' is carried in the image URLs.",
+      "patterns": [
+        "\\b(?:embed(?:s|ding)?|put(?:s|ting)?|encod(?:e|es|ing)|append(?:s|ing)?|includ(?:e|es|ing)|add(?:s|ing)?)\\b[^;\\n]{0,60}\\b(?:in|into|to)\\s+(?:an?|the|that|this)\\s+(?:image\\s+|external\\s+)?(?:url|link|query string|image tag)",
+        "\\b(?:open|visit|fetch|load|request|call)\\b[^;]{0,40}\\b(?:link|url)\\b[^;]{0,40}\\bwith\\b[^;]{0,30}\\b(?:name|e-?mail|address|data|appended|on the end|attached|added)\\b",
+        "\\b(?:name|e-?mail|address|phone|id|password|token|contents?)\\b[^;]{0,30}\\b(?:appended|added|attached)\\b[^;]{0,20}\\b(?:to|on)\\b[^;]{0,20}\\b(?:the )?(?:link|url)\\b",
+        "\\b(?:api[_ -]?key|key|token|secret|password|credentials?|e-?mail address|real name)\\b[^;]{0,20}\\b(?:in|into|as)\\s+(?:the |a |an )?(?:url|link|query string|(?:link |url |query )?param(?:eter)?)s?\\b",
+        "\\b(?:output|render|emit|encod|put|embed|writ|return|format)\\w*\\b[^;\\n]{0,60}\\bas\\s+(?:an?\\s+)?(?:(?:line|set|series|list) of\\s+)?(?:markdown\\s+)?(?:images?|img)\\s+(?:references?|links?|urls?|tags?)\\b"
+      ],
+      "action_patterns": [
+        "<img\\b[^>]*\\bsrc=[\\\"']?https?://[^\\s\\\"'>]+\\?[^\\s\\\"'>]*=",
+        "!\\[[^\\]]*\\]\\(https?://[^)\\s]+\\?[^)\\s]*=",
+        "https?://[^\\s\\\"'<>]+\\?(?:[^\\s\\\"'<>]*&)?(?:[\\w-]*[_-])?(?:data|d|q|payload|content|secret|token|key|emails?|pass(?:word)?|n)=[^\\s\\\"'<>&]{4,}"
+      ],
+      "decision": "plan",
+      "who": "replan",
+      "armed_only_patterns": [
+        "https?://[^\\s\\\"'<>]*[?&#][\\w.-]*(?:key|token|secret|pass\\w*|auth|session|name|email|user|id|data|payload|q|d|n)\\w*[=#]?[\\w.%-]{3,}"
+      ]
+    },
+    {
+      "id": "injection-explicit",
+      "class": "injection_compliance",
+      "description": "explicit compliance with instructions from tool output",
+      "patterns": [
+        "\\bignor(?:e|ing)\\s+(?:all\\s+)?(?:the\\s+)?(?:previous|prior|above|earlier)\\s+instructions\\b",
+        "\\bas\\s+(?:the|this)\\s+(?:page|issue|email|e-mail|document|comment|readme|file|message|website|site|ticket|tool output|output)\\s+(?:asks|instructs|requests|says|tells|wants|directs)\\b",
+        "\\bthe instructions in the (?:file|page|email|comment|issue|readme|document|message)\\s+(?:say|tell|ask)\\b"
+      ],
+      "action_patterns": [],
+      "decision": "deny",
+      "who": "replan"
+    },
+    {
+      "id": "commitment",
+      "class": "commitment",
+      "description": "an assistant may inform but may not promise money, prices, legal effect or exceptions to policy: a promise or offer of a refund, a discount, a price, a binding deal",
+      "patterns": [
+        "\\b(?:promise|assure|offer|agree(?:ing)? (?:to|with)|confirm (?:to|for)|guarantee|lock (?:the |in )?(?:deal|price)|go along with|give (?:him|her|them|the customer) (?:a |the )?)\\b[^;]{0,60}(?:\\b(?:refund(?:ed)?|discount|free of charge|for free|binding|legally|deal|waive|(?:store |account )?credit (?:of|for)|a credit|compensation|reimburs\\w+|contract|warranty)\\b|% ?off\\b|\\$\\s?\\d)",
+        "\\btell\\s+(?:him|her|them|the (?:customer|caller|client|user|guest))\\s+(?:that\\s+)?(?:he|she|they|you|we)\\s+(?:can|will|'ll|could|get|are entitled)\\b[^;]{0,80}(?:refund|discount|free|credit|compensation|reimburs|waive|\\$\\s?\\d|% ?off)",
+        "\\b(?:agree|accept|lock in|commit to|honou?r)\\w*\\b[^;]{0,30}\\bprice\\b",
+        "\\blegally[- ]binding\\b|\\bbinding offer\\b|\\bno takesies\\b|\\bfinal offer\\b",
+        "\\bdifference refunded\\b|\\bget (?:a |the )?(?:refund|difference back)\\b",
+        "\\b(?:send|give|offer|grant|issue|hand out|post)\\w*\\b[^;]{0,40}(?:\\b\\d{1,3} ?%[- ]?off\\b|\\bdiscount code\\b|\\bpromo(?:tion)? code\\b|\\bcoupon\\b|\\bvoucher\\b)",
+        "\\b(?:put|set|price|drop|cut|lower|mark)\\w*\\b[^;]{0,30}\\b(?:at|to|down to)\\s+\\$\\s?\\d"
+      ],
+      "exclude": "\\b(?:form|field|module|api|endpoint|tests?|test case|code path|schema|handler|component|mock|stub|config\\w*|budget|limit|threshold|env|variable|max\\w*|cap)\\b|\\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\\b",
+      "action_patterns": [
+        "\\blegally[- ]binding\\b|\\bbinding offer\\b",
+        "\\brefund(?:ed)?\\b[^;\\n]{0,40}\\bwithin \\d+ days|\\bwill (?:be )?refund"
+      ],
+      "armed_only_patterns": [
+        "\\b(?:create|set|update|apply)\\s+(?:quote|price|discount|rate|fare|offer|contract)\\b",
+        "\\bprice_?usd\\b|\\b(?:price|total|amount)\\s*[:=]\\s*\\$?\\d|\\bstatus\\W{0,3}accepted\\b",
+        "\\b\\d{1,3} ?% ?off\\b|(?-i:\\bcode [A-Z0-9]{4,}\\b).*\\boff\\b",
+        "\\b(?:send|post)\\s+message\\b|\\breply\\s+(?:customer|user)\\b"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "asserted-policy",
+      "class": "commitment",
+      "description": "conferring official status on a statement: presenting, framing or stating something to a customer as the official rule, policy or position, or telling them it is expected behaviour under a policy. Whether a policy exists is the operator's to say; an agent that makes one up commits the company to it. Quoting a documented policy needs no such framing. Once armed, the reply that asserts a policy or a limit realizes it.",
+      "patterns": [
+        "\\b(?:present|frame|state|describe|word|phrase|pass(?:es|ing)? (?:it|that|this|them) off|dress(?:es|ing)? (?:it|that|this) up|tell (?:him|her|them|the (?:customer|user|caller|client))\\b[^;]{0,40}?)\\w*\\b[^;]{0,40}?\\bas\\s+(?:an?\\s+|the\\s+|our\\s+)?(?:official|formal|established|documented|binding|firm|company|standard)\\s+(?:rule|policy|position|requirement|limit|answer|guidance|terms?)\\b",
+        "\\btell\\s+(?:him|her|them|the (?:customer|user|caller|client))\\s+(?:that\\s+)?(?:it|this)(?:\\s+is|'s)\\s+(?:expected|intended|by design|normal|standard)\\b[^;]{0,80}\\b(?:policy|rule|terms)\\b",
+        "\\b(?:make|making) up\\s+(?:a|an|the)\\s+(?:\\w+\\s+){0,3}?(?:policy|rule|limit|guarantee)\\b|\\b(?:invent|fabricat)\\w*\\s+(?:a|an|the)\\s+(?:\\w+\\s+){0,3}?(?:policy|rule|limit|guarantee)\\b"
+      ],
+      "action_patterns": [],
+      "armed_only_patterns": [
+        "\\b(?:as (?:an? |our |the )?(?:\\w+ ){0,3}policy|our policy|per (?:our |the )?policy|(?:is|are) (?:limited|restricted) to|expected behaviou?r|this is expected|by design)\\b"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "consent-override",
+      "class": "consent_override",
+      "description": "'stop', 'no more' or a refusal from the person affected ends the action; carrying on with it (keep adding, charge anyway) overrides their consent",
+      "patterns": [
+        "\\b(?:say|says|said|saying|ask|asks|asked|tell|tells|told|repeat\\w*|insist\\w*)\\b[^;.]{0,40}\\b(?:stop|no more|don't|do not|cancel|enough|not (?:that|this)|refus\\w+|declin\\w+)\\b[^.]*?\\b(?:keep|continue|carry on|go on|still)\\s+(?:adding|putting|charging|sending|calling|ordering|pushing|billing|e-?mailing|messaging|texting)\\b",
+        "\\b(?:say|says|said|saying|ask|asks|asked|tell|tells|told|repeat\\w*|insist\\w*)\\b[^;.]{0,40}\\b(?:stop|no more|don't|do not|cancel|enough|refus\\w+|declin\\w+)\\b[^.]*?(?:\\banother (?:box|item|order|charge|message) on the (?:tab|bill|order)\\b|\\bagain anyway\\b|\\bregardless\\b)"
+      ],
+      "span": "unit",
+      "action_patterns": [],
+      "armed_only_patterns": [
+        "\\b(?:add|append|increment)\\s+(?:item|line|order)\\b",
+        "\\b(?:submit|place|confirm|complete)\\s+order\\b|\\bcharge\\b|\\bcheckout\\b"
+      ],
+      "decision": "deny",
+      "who": "replan"
+    },
+    {
+      "id": "pii-exposure",
+      "class": "pii_exposure",
+      "description": "passing on a private person's contact details (a personal number, address, e-mail) to someone else",
+      "patterns": [
+        "\\b(?:pass(?:ing)? (?:it|that|this|them) on|shar(?:e|es|ing)|give (?:out|him|her|them|it)|send(?:s|ing)?|forward(?:s|ing)?|post(?:s|ing)?|reveal(?:s|ing)?|disclos(?:e|es|ing)|read(?:ing)? out|quot(?:e|es|ing))\\b"
+      ],
+      "targets": "(?<!\\bmy )(?<!\\bour )(?<!\\byour )\\b(?:personal|private|someone(?:'s| else's)|somebody's|individual'?s?|a person'?s?|a stranger's)\\s+(?:(?:mobile|phone|cell)(?: number)?|number|address|e-?mail|details|data|site|contact)\\b|\\bclose enough\\b[^;]{0,40}\\b(?:number|contact|address)\\b",
+      "inherit_targets": true,
+      "action_patterns": [],
+      "armed_only_patterns": [
+        "\\b(?:send|message|reply|post|mail|chat)\\b[^\\n]*(?<![\\w.-])\\+?\\(?\\d[\\d ()-]{7,}\\d(?![\\w-])"
+      ],
+      "decision": "ask",
+      "who": "ask_user"
+    },
+    {
+      "id": "policy-violation",
+      "class": "policy_violation",
+      "description": "abusive or brand-damaging outbound content, or dropping the operator's rules at a counterparty's request; a short conduct backstop, not a moderation system",
+      "patterns": [
+        "\\b(?:guidelines|rules|policy|restrictions|guardrails)\\s+(?:off|aside|dropped|ignored|disabled)\\b|\\bdrop (?:my|the|all) (?:rules|guidelines)\\b|\\bignore (?:my|the) (?:rules|guidelines|policy|instructions)\\b",
+        "\\bswearing\\b|\\bswear(?:\\s+words?|\\s+at)\\b|\\bprofanit\\w+|\\bcurs(?:e (?:at|words?)|ing)\\b|\\bslating\\b|\\bslate\\s+(?:them|him|her|the (?:company|firm|brand|competitor|service))\\b|\\bdisparag\\w+|\\binsult(?:s|ing)?\\b(?!\\s+to\\b)|\\bbad[- ]?mouth\\w*|\\btrash[- ]talk\\w*"
+      ],
+      "action_patterns": [
+        "\\b(?:f\\W{1,3}k|fuck\\w*|shit\\w*|bullshit|asshole|bastard|crap)\\b|\\bf\\*{2,}",
+        "\\bworst (?:company|firm|service|delivery|airline|bank)\\b|\\buseless\\b[^;\\n]{0,30}\\b(?:company|firm|service|chatbot|us)\\b"
+      ],
+      "decision": "deny",
+      "who": "replan"
+    }
+  ]
+}
