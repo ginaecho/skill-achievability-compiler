@@ -1,0 +1,64 @@
+```ce
+Skill `entra-agent-id`.
+Roles: `agent`, `user`.
+Tool `search_latest_docs` (owner `agent`): via `web_search`; requires `allowlisted_docs_source`; adds `latest_docs_found`.
+Tool `read_reference_files` (owner `agent`): via `read`; adds `reference_files_read`.
+Tool `install_python_packages` (owner `agent`): via `bash`; requires `python_available`; needs `package_registries`; adds `python_packages_installed`.
+Tool `install_powershell_module` (owner `agent`): via `windows_desktop`; needs `powershell7`; adds `powershell_module_installed`.
+Tool `authenticate_graph_app` (owner `agent`): via `bash`; requires `app_credentials_available`; requires `required_permissions_granted`; adds `graph_app_authenticated`.
+Tool `authenticate_graph_delegated` (owner `agent`): via `windows_desktop`; requires `delegated_user_available`; requires `required_permissions_granted`; adds `graph_delegated_authenticated`.
+Tool `discover_agentidentity_permissions` (owner `agent`): via `bash`; requires `azure_cli_available`; requires `graph_or_azure_authenticated`; adds `permissions_discovered`.
+Tool `grant_admin_consent` (owner `agent`): via `bash`; requires `azure_cli_available`; requires `admin_rights_available`; needs `azure_account`; adds `required_permissions_granted`.
+Tool `provision_agent_identity_resources` (owner `agent`): via `bash`; requires `graph_app_authenticated`; requires `sponsor_user_is_user_object`; adds `blueprint_created`, `blueprint_principal_created`, `agent_identity_created`.
+Tool `cleanup_agent_identity_resources` (owner `agent`): via `bash`; requires `graph_app_authenticated`; requires `blueprint_created`; adds `resources_deleted`; removes `blueprint_created`, `blueprint_principal_created`, `agent_identity_created`.
+Tool `send_provisioning_files` (owner `agent`): via `send_user_file`; requires `implementation_files_written`; adds `files_sent_to_user`.
+
+Initially true: `python_available`, `allowlisted_docs_source`, `user_conversation`.
+Initially: not `latest_docs_found`.
+Initially: not `reference_files_read`.
+Initially: not `python_packages_installed`.
+Initially: not `powershell_module_installed`.
+Initially: not `graph_app_authenticated`.
+Initially: not `graph_delegated_authenticated`.
+Initially: not `permissions_discovered`.
+Initially: not `required_permissions_granted`.
+Initially: not `blueprint_created`.
+Initially: not `blueprint_principal_created`.
+Initially: not `agent_identity_created`.
+Initially: not `resources_deleted`.
+Initially: not `implementation_files_written`.
+Initially: not `files_sent_to_user`.
+Initially: not `app_credentials_available`.
+Initially: not `delegated_user_available`.
+Initially: not `admin_rights_available`.
+Initially: not `azure_cli_available`.
+Initially: not `graph_or_azure_authenticated`.
+Initially: not `sponsor_user_is_user_object`.
+
+Goal: all of (`latest_docs_found`, `reference_files_read`, any of (`blueprint_created` and `blueprint_principal_created` and `agent_identity_created`, `implementation_files_written` and `files_sent_to_user`)).
+
+Protocol:
+  - `agent` uses `search_latest_docs`.
+  - `agent` uses `read_reference_files`.
+  - `user` chooses one of (observed):
+    - branch `provision_now`:
+      - `user` chooses one of (observed):
+        - branch `application_permissions`:
+          - `agent` uses `install_python_packages`.
+          - `agent` uses `discover_agentidentity_permissions`.
+          - `user` chooses one of (observed):
+            - branch `admin_consent_already_granted`: none.
+            - branch `grant_admin_consent`:
+              - `agent` uses `grant_admin_consent`.
+          - `agent` uses `authenticate_graph_app`.
+          - `agent` uses `provision_agent_identity_resources`.
+          - `user` chooses one of (observed):
+            - branch `keep_resources`: none.
+            - branch `cleanup`:
+              - `agent` uses `cleanup_agent_identity_resources`.
+        - branch `delegated_powershell`:
+          - `agent` uses `install_powershell_module`.
+          - `agent` uses `authenticate_graph_delegated`.
+    - branch `provide_files_only`:
+      - `agent` uses `send_provisioning_files`.
+```

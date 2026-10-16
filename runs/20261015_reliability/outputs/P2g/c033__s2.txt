@@ -1,0 +1,48 @@
+```ce
+Skill `open-sourcing`.
+Roles: `agent`, `user`.
+Tool `detect_org_profile` (owner `agent`): via `bash`; needs `shell`; picks `org_profile` with (`org_profile` == 0 or `org_profile` == 1).
+Tool `read_trailofbits_reference` (owner `agent`): via `read`; requires `trailofbits_profile`; adds `trailofbits_policy_loaded`.
+Tool `ask_secrets_history` (owner `agent`): via `ask_user`; needs `user_conversation`; picks `secrets_risk` with (`secrets_risk` == 0 or `secrets_risk` == 1).
+Tool `scan_git_history_for_secrets` (owner `agent`): via `bash`; needs `shell`; adds `history_scanned`; picks `secrets_found` with (`secrets_found` == 0 or `secrets_found` == 1).
+Tool `inspect_github_exposure_surfaces` (owner `agent`): via `github`; needs `github_account`; adds `github_surfaces_checked`.
+Tool `run_readiness_check` (owner `agent`): via `bash`; needs `shell`; adds `readiness_checked`.
+Tool `read_references_and_repo_markers` (owner `agent`): via `read`; adds `repo_reviewed`; adds `language_guidance_reviewed`.
+Tool `update_release_files` (owner `agent`): via `write`; requires `repo_reviewed`; adds `docs_updated`; adds `license_updated`; adds `ci_updated`; adds `release_setup_updated`; adds `repo_files_updated`.
+Tool `edit_existing_release_files` (owner `agent`): via `edit`; requires `repo_reviewed`; adds `docs_updated`; adds `license_updated`; adds `ci_updated`; adds `release_setup_updated`; adds `repo_files_updated`.
+Tool `validate_build_and_tests` (owner `agent`): via `bash`; requires `repo_files_updated`; needs `shell`; adds `clean_build_verified`; adds `tests_pass`.
+Tool `rerun_readiness_check` (owner `agent`): via `bash`; requires `repo_files_updated`; needs `shell`; adds `final_readiness_checked`.
+Initially true: none.
+Initially: `org_profile` == 0.
+Initially: `secrets_risk` == 0.
+Initially: `secrets_found` == 0.
+Goal: (`history_scanned` and `github_surfaces_checked` and `readiness_checked` and `repo_reviewed` and `language_guidance_reviewed` and `clean_build_verified` and `tests_pass` and `final_readiness_checked` and ((`secrets_risk` == 0 and `secrets_found` == 0 and `docs_updated` and `license_updated` and `ci_updated` and `release_setup_updated`) or (`secrets_risk` == 1) or (`secrets_found` == 1))).
+Protocol:
+  - `agent` uses `detect_org_profile`.
+  - `user` chooses one of (observed):
+    - branch `accept_detected_profile`:
+      - `agent` chooses one of (observed):
+        - branch `trailofbits_detected`:
+          - `agent` uses `read_trailofbits_reference`.
+        - branch `generic_detected`: none.
+    - branch `override_detection`:
+      - `agent` chooses one of (observed):
+        - branch `user_says_trailofbits`:
+          - `agent` uses `read_trailofbits_reference`.
+        - branch `user_says_generic`: none.
+  - `agent` uses `ask_secrets_history`.
+  - `agent` uses `scan_git_history_for_secrets`.
+  - `agent` uses `inspect_github_exposure_surfaces`.
+  - `agent` uses `run_readiness_check`.
+  - `agent` uses `read_references_and_repo_markers`.
+  - `user` chooses one of (observed):
+    - branch `fresh_repository_required`: none.
+    - branch `safe_to_prepare_for_public_release`:
+      - `agent` chooses one of (observed):
+        - branch `create_new_files`:
+          - `agent` uses `update_release_files`.
+        - branch `edit_existing_files`:
+          - `agent` uses `edit_existing_release_files`.
+      - `agent` uses `validate_build_and_tests`.
+      - `agent` uses `rerun_readiness_check`.
+```

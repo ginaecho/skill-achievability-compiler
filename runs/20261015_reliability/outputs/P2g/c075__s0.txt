@@ -1,0 +1,52 @@
+```ce
+Skill `llm-finetuning-training-engineer`.
+Roles: `agent`, `eval_engineer`, `user`.
+Tool `read_brief_and_skills` (owner `agent`): via `read`; adds `brief_read`, `method_chosen`, `dataset_expectation_known`.
+Tool `prepare_dataset` (owner `agent`): via `bash`; requires `brief_read` and `method_chosen` and `dataset_expectation_known`; adds `dataset_prepared`.
+Tool `write_dataset_docs` (owner `agent`): via `write`; requires `dataset_prepared`; adds `dataset_card_committed`, `validation_report_written`, `phase2_complete`.
+Tool `inspect_packed_samples` (owner `agent`): via `bash`; requires `dataset_prepared`; adds `packed_samples_attached`.
+Tool `run_generic_preflight` (owner `agent`): via `bash`; requires `phase2_complete`; adds `env_report_present`; picks `env_ready` with (`env_ready` or not `env_ready`); picks `env_blocked` with (`env_blocked` or not `env_blocked`); picks `env_warnings` with (`env_warnings` or not `env_warnings`).
+Tool `generate_training_files` (owner `agent`): via `bash`; requires `env_report_present` and `env_ready`; adds `train_files_generated`.
+Tool `commit_training_files` (owner `agent`): via `bash`; requires `train_files_generated`; adds `train_files_committed`.
+Tool `launch_training` (owner `agent`): via `bash`; requires `train_files_committed`; adds `training_running`.
+Tool `monitor_training` (owner `agent`): via `bash`; requires `training_running`; picks `training_completed` with (`training_completed` or not `training_completed`); picks `training_failed` with (`training_failed` or not `training_failed`); picks `environment_failure` with (`environment_failure` or not `environment_failure`); picks `divergence_failure` with (`divergence_failure` or not `divergence_failure`); picks `uma_oom_failure` with (`uma_oom_failure` or not `uma_oom_failure`); adds `progress_reported`.
+Tool `triage_and_remediate` (owner `agent`): via `bash`; requires `training_failed`; picks `relaunch_allowed` with (`relaunch_allowed` or not `relaunch_allowed`); adds `failure_reported`.
+Tool `export_artifact` (owner `agent`): via `bash`; requires `training_completed` and `promote_verdict_received`; adds `artifact_exported`, `smoke_test_passed`.
+Tool `send_artifacts` (owner `agent`): via `send_user_file`; requires (`artifact_exported` and `smoke_test_passed`) or `failure_reported`; adds `results_delivered`.
+Initially true: none.
+Initially: `env_ready` == false.
+Initially: `env_blocked` == false.
+Initially: `env_warnings` == false.
+Goal: any of ((all of (`phase2_complete`, `env_report_present`, `env_ready`, `train_files_committed`, `training_completed`)), (all of (`phase2_complete`, `env_report_present`, `failure_reported`)), (all of (`artifact_exported`, `smoke_test_passed`, `results_delivered`))).
+Protocol:
+  - `agent` uses `read_brief_and_skills`.
+  - `agent` uses `prepare_dataset`.
+  - `agent` chooses one of (observed):
+    - branch `packing_enabled`:
+      - `agent` uses `inspect_packed_samples`.
+      - `agent` uses `write_dataset_docs`.
+    - branch `packing_disabled`:
+      - `agent` uses `write_dataset_docs`.
+  - `agent` uses `run_generic_preflight`.
+  - `agent` chooses one of (observed):
+    - branch `blocked_or_warning_report_only`: none.
+    - branch `ready_to_train`:
+      - `agent` uses `generate_training_files`.
+      - `agent` uses `commit_training_files`.
+      - `agent` uses `launch_training`.
+      - loop `monitor_loop`:
+        - `agent` uses `monitor_training`.
+        - `agent` chooses one of (observed):
+          - branch `still_running`:
+            - repeat `monitor_loop`.
+          - branch `completed`: none.
+          - branch `failed`:
+            - `agent` uses `triage_and_remediate`.
+      - `agent` tells `eval_engineer` `checkpoint_ready`.
+      - `eval_engineer` tells `agent` `PROMOTE`.
+      - `agent` uses `export_artifact`.
+      - `agent` uses `send_artifacts`.
+Behaviour of `eval_engineer`:
+  - receive `checkpoint_ready` from `agent`.
+  - send `PROMOTE` to `agent`.
+```

@@ -1,0 +1,65 @@
+```ce
+Skill `policy-enforcer`.
+Roles: `agent`, `user`.
+
+Tool `ask_risk_profile` (owner `agent`):
+  via `ask_user`;
+  adds `risk_profile_known`;
+  picks `risk_profile` with any of (`risk_profile` == "research", `risk_profile` == "development", `risk_profile` == "production").
+
+Tool `read_existing_policy` (owner `agent`):
+  via `read`;
+  requires `audit_mode`;
+  adds `policy_read`.
+
+Tool `write_policy` (owner `agent`):
+  via `write`;
+  requires `risk_profile_known` or `policy_read`;
+  adds `policy_written`;
+  sets `policy_valid` to false.
+
+Tool `validate_policy` (owner `agent`):
+  via `bash`;
+  requires `policy_written`;
+  adds `policy_valid`.
+
+Tool `explain_rules` (owner `agent`):
+  via `write`;
+  requires `policy_written`;
+  adds `rules_explained`.
+
+Tool `audit_policy` (owner `agent`):
+  via `read`;
+  requires `policy_read`;
+  picks `audit_result` with any of (`audit_result` == "gaps_found", `audit_result` == "clean").
+
+Tool `report_audit` (owner `agent`):
+  via `write`;
+  requires any of (`audit_result` == "gaps_found", `audit_result` == "clean");
+  adds `audit_reported`.
+
+Initially true: none.
+Initially: `policy_valid` == false.
+
+Goal: (`policy_written` and `policy_valid` and `rules_explained`) or
+      (`audit_reported`).
+
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `author`:
+      - `agent` uses `ask_risk_profile`.
+      - `agent` uses `write_policy`.
+      - loop `validation_loop`:
+        - `agent` uses `validate_policy`.
+        - `user` chooses one of (observed):
+          - branch `validations_pass`:
+            - `agent` uses `explain_rules`.
+            - repeat `validation_loop`.
+          - branch `fix_errors`:
+            - `agent` uses `write_policy`.
+            - repeat `validation_loop`.
+    - branch `audit`:
+      - `agent` uses `read_existing_policy`.
+      - `agent` uses `audit_policy`.
+      - `agent` uses `report_audit`.
+```

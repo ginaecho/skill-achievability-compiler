@@ -1,0 +1,491 @@
+{
+  "pack": {
+    "name": "transcribe",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_openai_key": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "openai_key_ready": {
+            "or": [
+              "openai_key_ready",
+              {
+                "not": "openai_key_ready"
+              }
+            ]
+          }
+        }
+      },
+      "install_openai_dependency": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries"
+          ]
+        },
+        "add": [
+          "openai_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_transcription_default": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:local_filesystem",
+            "openai_key_ready"
+          ]
+        },
+        "add": [
+          "transcription_saved",
+          "output_validated"
+        ],
+        "del": [
+          "needs_iteration"
+        ],
+        "assigns": {
+          "iteration_count": 0
+        },
+        "nondet": {}
+      },
+      "run_transcription_diarized": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:local_filesystem",
+            "openai_key_ready"
+          ]
+        },
+        "add": [
+          "transcription_saved",
+          "output_validated",
+          "diarization_done"
+        ],
+        "del": [
+          "needs_iteration"
+        ],
+        "assigns": {
+          "iteration_count": 0
+        },
+        "nondet": {}
+      },
+      "rerun_with_targeted_change": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "openai_key_ready",
+                "transcription_saved"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "output_validated"
+        ],
+        "del": [
+          "needs_iteration"
+        ],
+        "assigns": {
+          "iteration_count": 1
+        },
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_openai_key",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "key_missing": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "set_key": [],
+                    "decline": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_openai_key",
+                  "by": "agent"
+                }
+              }
+            ],
+            "key_present": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "install_dependency": [
+              {
+                "act": {
+                  "cap": "install_openai_dependency",
+                  "by": "agent"
+                }
+              }
+            ],
+            "dependency_already_available": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "diarized_request": [
+              {
+                "act": {
+                  "cap": "run_transcription_diarized",
+                  "by": "agent"
+                }
+              }
+            ],
+            "default_request": [
+              {
+                "act": {
+                  "cap": "run_transcription_default",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "accept_output": [],
+            "single_targeted_retry": [
+              {
+                "act": {
+                  "cap": "rerun_with_targeted_change",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "transcription_saved",
+        "output_validated",
+        {
+          "or": [
+            {
+              "not": "wants_diarization"
+            },
+            "diarization_done"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries",
+      "needs:local_filesystem"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "iteration_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "transcribe",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_openai_key": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "openai_key_ready": {
+            "or": [
+              "openai_key_ready",
+              {
+                "not": "openai_key_ready"
+              }
+            ]
+          }
+        }
+      },
+      "install_openai_dependency": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "openai_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_transcription_default": {
+        "owner": "agent",
+        "pre": "openai_key_ready",
+        "add": [
+          "transcription_saved",
+          "output_validated"
+        ],
+        "del": [
+          "needs_iteration"
+        ],
+        "assigns": {
+          "iteration_count": 0
+        },
+        "nondet": {}
+      },
+      "run_transcription_diarized": {
+        "owner": "agent",
+        "pre": "openai_key_ready",
+        "add": [
+          "transcription_saved",
+          "output_validated",
+          "diarization_done"
+        ],
+        "del": [
+          "needs_iteration"
+        ],
+        "assigns": {
+          "iteration_count": 0
+        },
+        "nondet": {}
+      },
+      "rerun_with_targeted_change": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "openai_key_ready",
+            "transcription_saved"
+          ]
+        },
+        "add": [
+          "output_validated"
+        ],
+        "del": [
+          "needs_iteration"
+        ],
+        "assigns": {
+          "iteration_count": 1
+        },
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_openai_key",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "key_missing": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "set_key": [],
+                    "decline": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_openai_key",
+                  "by": "agent"
+                }
+              }
+            ],
+            "key_present": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "install_dependency": [
+              {
+                "act": {
+                  "cap": "install_openai_dependency",
+                  "by": "agent"
+                }
+              }
+            ],
+            "dependency_already_available": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "diarized_request": [
+              {
+                "act": {
+                  "cap": "run_transcription_diarized",
+                  "by": "agent"
+                }
+              }
+            ],
+            "default_request": [
+              {
+                "act": {
+                  "cap": "run_transcription_default",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "accept_output": [],
+            "single_targeted_retry": [
+              {
+                "act": {
+                  "cap": "rerun_with_targeted_change",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "transcription_saved",
+        "output_validated",
+        {
+          "or": [
+            {
+              "not": "wants_diarization"
+            },
+            "diarization_done"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "iteration_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_openai_key": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_openai_dependency": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "run_transcription_default": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run_transcription_diarized": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "rerun_with_targeted_change": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,47 @@
+```ce
+Skill `render-deploy`.
+Roles: `agent`, `user`.
+Tool `check_git_remote` (owner `agent`): via `bash`; requires `git_repo_present`; adds `git_remote_checked`.
+Tool `analyze_codebase` (owner `agent`): via `read`; requires `git_repo_present`; adds `deployment_analyzed`; picks `service_count` with `service_count` >= 0; adds `simple_single_service`, `needs_complex_infra`, `source_git_possible`.
+Tool `ask_source_path` (owner `agent`): via `ask_user`; adds `source_path_decided`.
+Tool `ask_infra_scope` (owner `agent`): via `ask_user`; requires `source_path_decided`; adds `infra_scope_decided`.
+Tool `write_render_blueprint` (owner `agent`): via `write`; requires `deployment_analyzed`; adds `render_yaml_created`.
+Tool `check_render_cli` (owner `agent`): via `bash`; adds `render_cli_checked`, `render_cli_available`.
+Tool `validate_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `render_cli_available`; adds `blueprint_valid`.
+Tool `commit_and_push_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `git_remote_present`; adds `render_yaml_pushed`.
+Tool `get_remote_url` (owner `agent`): via `bash`; requires `git_remote_present`; adds `repo_url_known`, `deeplink_ready`.
+Tool `create_direct_service` (owner `agent`): via `render_mcp`; needs `render_account`; requires `git_remote_present` and `deployment_analyzed` and `simple_single_service`; adds `service_created`, `deployment_started`.
+Tool `check_direct_deploy_status` (owner `agent`): via `render_mcp`; needs `render_account`; requires `service_created`; adds `deployment_live`.
+Initially true: `git_repo_present`.
+Initially: `service_count` == 0.
+Goal: any of (`blueprint_ready_for_dashboard`, `deployment_live`).
+Protocol:
+  - `agent` uses `ask_source_path`.
+  - `agent` uses `ask_infra_scope`.
+  - `agent` uses `check_git_remote`.
+  - `user` chooses one of (observed):
+    - branch `docker_image_path`:
+      - `user` chooses one of (observed):
+        - branch `switch_to_git_repo`: none.
+        - branch `use_render_dashboard_for_image`: none.
+    - branch `git_repo_path`:
+      - `agent` uses `analyze_codebase`.
+      - `user` chooses one of (observed):
+        - branch `direct_creation`:
+          - `agent` uses `create_direct_service`.
+          - `agent` uses `check_direct_deploy_status`.
+        - branch `blueprint`:
+          - `agent` uses `write_render_blueprint`.
+          - `user` chooses one of (observed):
+            - branch `cli_available`:
+              - `agent` uses `check_render_cli`.
+              - `agent` uses `validate_blueprint`.
+            - branch `cli_unavailable`: none.
+          - `agent` uses `commit_and_push_blueprint`.
+          - `agent` uses `get_remote_url`.
+  - `agent` chooses one of (observed):
+    - branch `blueprint_ready`:
+      - checkpoint: `blueprint_ready_for_dashboard`.
+    - branch `direct_deploy_live`:
+      - checkpoint: `deployment_live`.
+```

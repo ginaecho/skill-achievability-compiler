@@ -1,0 +1,49 @@
+```ce
+Skill `dossier`.
+Roles: `agent`, `user`.
+Tool `ask_subject_identity` (owner `agent`): via `ask_user`; adds `q1_answered`.
+Tool `ask_subject_type` (owner `agent`): via `ask_user`; requires `q1_answered`; adds `q2_answered`.
+Tool `ask_purpose` (owner `agent`): via `ask_user`; requires `q2_answered`; adds `q3_answered`.
+Tool `ask_hypothesis` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_provided`.
+Tool `ask_depth` (owner `agent`): via `ask_user`; requires `q3_answered` and (`hypothesis_provided` or `fallback_hypothesis_ready`); adds `q5_answered`.
+Tool `ask_sensitivities` (owner `agent`): via `ask_user`; requires `q5_answered`; adds `q6_answered`.
+Tool `research_and_compile` (owner `agent`): via `bash`; requires `q5_answered` and `subject_disambiguated` and (`hypothesis_provided` or `fallback_hypothesis_ready`); adds `research_complete`, `evidence_balanced`, `audit_ready`, `timeline_ready`, `network_ready`, `reputation_ready`, `red_flags_ready`, `hooks_ready`, `verdict_ready`, `docx_generated`.
+Tool `fetch_web_sources` (owner `agent`): via `web_search`; requires `q5_answered` and (`hypothesis_provided` or `fallback_hypothesis_ready`); adds `sources_found`, `subject_disambiguated`.
+Tool `fetch_pages` (owner `agent`): via `web_fetch`; requires `sources_found`; adds `sources_fetched`.
+Tool `validate_docx` (owner `agent`): via `bash`; requires `docx_generated`; adds `docx_validated`, `required_sections_present`.
+Tool `deliver_docx` (owner `agent`): via `send_user_file`; requires `docx_validated` and `required_sections_present`; adds `docx_delivered`.
+
+Initially true: none.
+Initially: true.
+Goal: `docx_delivered` and `verdict_ready` and `audit_ready` and `evidence_balanced` and `required_sections_present`.
+
+Protocol:
+  - loop `identify_subject`:
+    - `agent` uses `ask_subject_identity`.
+    - `user` chooses one of (observed):
+      - branch `ambiguous`:
+        - repeat `identify_subject`.
+      - branch `specific`: none.
+  - `agent` uses `ask_subject_type`.
+  - `agent` uses `ask_purpose`.
+  - `agent` uses `ask_hypothesis`.
+  - `user` chooses one of (observed):
+    - branch `provided`:
+      - `agent` uses `ask_depth`.
+    - branch `refused_once`:
+      - `agent` uses `ask_hypothesis`.
+      - `user` chooses one of (observed):
+        - branch `provided_after_pushback`:
+          - `agent` uses `ask_depth`.
+        - branch `fallback_hypothesis`:
+          - `agent` uses `ask_depth`.
+  - `user` chooses one of (observed):
+    - branch `needs_sensitivities`:
+      - `agent` uses `ask_sensitivities`.
+    - branch `skip_sensitivities`: none.
+  - `agent` uses `fetch_web_sources`.
+  - `agent` uses `fetch_pages`.
+  - `agent` uses `research_and_compile`.
+  - `agent` uses `validate_docx`.
+  - `agent` uses `deliver_docx`.
+```

@@ -1,0 +1,47 @@
+```ce
+Skill `context-engine`.
+Roles: `agent`, `user`.
+Tool `read_context_file` (owner `agent`): via `read`; adds `context_file_exists`, `context_loaded`.
+Tool `read_anonymization_protocol` (owner `agent`): via `read`; adds `anonymization_protocol_loaded`.
+Tool `ask_setup_prompt` (owner `agent`): via `ask_user`; adds `setup_prompted`.
+Tool `ask_stale_choice` (owner `agent`): via `ask_user`; requires `context_loaded` and `context_stale`; adds `stale_prompted`.
+Tool `ask_missing_fields` (owner `agent`): via `ask_user`; requires `context_loaded` and `required_fields_missing`; adds `missing_fields_prompted`.
+Tool `ask_update_context_file` (owner `agent`): via `ask_user`; requires `context_updates_pending`; adds `update_offer_made`.
+Tool `append_context_file` (owner `agent`): via `edit`; requires `context_file_exists` and `context_updates_pending` and `user_approved_update`; adds `context_file_updated`; removes `context_updates_pending`; sets `context_age_days` to 0.
+Initially true: none.
+Initially: `context_age_days` == 0.
+Goal: any of (`context_loaded`, `setup_prompted`) and (not `external_call_pending` or `anonymization_protocol_loaded`) and (not `context_updates_pending` or any of (`update_offer_made`, `context_file_updated`)).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `context_file_present`:
+      - `agent` uses `read_context_file`.
+      - `agent` chooses one of (observed):
+        - branch `stale`:
+          - `agent` uses `ask_stale_choice`.
+          - `user` chooses one of (observed):
+            - branch `continue_with_stale`: none.
+            - branch `refresh_elsewhere`: none.
+        - branch `not_stale`: none.
+      - `agent` chooses one of (observed):
+        - branch `required_fields_missing`:
+          - `agent` uses `ask_missing_fields`.
+        - branch `required_fields_complete`: none.
+      - `agent` chooses one of (observed):
+        - branch `external_call_pending`:
+          - `agent` uses `read_anonymization_protocol`.
+        - branch `no_external_call`: none.
+      - `agent` chooses one of (observed):
+        - branch `context_updates_pending`:
+          - `agent` uses `ask_update_context_file`.
+          - `user` chooses one of (observed):
+            - branch `approve_update`:
+              - `agent` uses `append_context_file`.
+            - branch `decline_update`: none.
+        - branch `no_updates_pending`: none.
+    - branch `context_file_missing`:
+      - `agent` uses `ask_setup_prompt`.
+      - `agent` chooses one of (observed):
+        - branch `external_call_pending`:
+          - `agent` uses `read_anonymization_protocol`.
+        - branch `no_external_call`: none.
+```

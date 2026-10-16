@@ -1,0 +1,48 @@
+```ce
+Skill `make-repo-contribution`.
+Roles: `agent`, `user`.
+
+Tool `search_for_guidance` (owner `agent`): via `read`; adds `explored`.
+Tool `search_existing_issues` (owner `agent`): via `bash`; adds `issues_searched`.
+Tool `create_issue_from_template` (owner `agent`): via `bash`; requires `issue_template_found`; adds `issue_created`.
+Tool `create_issue_generic` (owner `agent`): via `bash`; requires `no_templates_found`; adds `issue_created`.
+Tool `create_branch` (owner `agent`): via `bash`; adds `branch_created`.
+Tool `commit_changes` (owner `agent`): via `bash`; requires `branch_created`; adds `committed`.
+Tool `create_pr_from_template` (owner `agent`): via `bash`; requires `committed`; adds `pr_created`.
+Tool `create_pr_generic` (owner `agent`): via `bash`; requires `committed` and `no_templates_found`; adds `pr_created`.
+Tool `select_template` (owner `user`): adds `issue_template_found`.
+Tool `choose_issue` (owner `user`): adds `issue_selected`.
+
+Initially true: none.
+Initially: none.
+Goal: `committed` and `pr_created`.
+
+Protocol:
+  - `agent` uses `search_for_guidance`.
+  - `agent` uses `search_existing_issues`.
+  - `user` chooses one of (observed):
+    - branch `existing_issue_found`:
+      - `user` uses `choose_issue`.
+    - branch `no_existing_issue`: none.
+  - `user` chooses one of (observed):
+    - branch `repo_requires_issue`:
+      - `user` chooses one of (observed):
+        - branch `template_available`:
+          - `user` uses `select_template`.
+          - `agent` uses `create_issue_from_template`.
+        - branch `no_template`:
+          - `agent` uses `create_issue_generic`.
+    - branch `issue_not_required`: none.
+  - `agent` uses `create_branch`.
+  - loop `commit_loop`:
+    - `agent` uses `commit_changes`.
+    - `user` chooses one of (observed):
+      - branch `more_to_commit`:
+        - repeat `commit_loop`.
+      - branch `done_committing`: none.
+  - `user` chooses one of (observed):
+    - branch `template_available`:
+      - `agent` uses `create_pr_from_template`.
+    - branch `no_template`:
+      - `agent` uses `create_pr_generic`.
+```

@@ -1,0 +1,647 @@
+{
+  "pack": {
+    "name": "cli-exercise",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_readiness": {
+        "owner": "agent",
+        "pre": "request_defined",
+        "add": [
+          "readiness_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_needed_module": {
+        "owner": "agent",
+        "pre": "request_defined",
+        "add": [
+          "needed_module_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_clarification": {
+        "owner": "agent",
+        "pre": "request_defined",
+        "add": [
+          "all_required_details_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "propose_installation": {
+        "owner": "agent",
+        "pre": "readiness_checked",
+        "add": [
+          "installation_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_dependencies": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:package_registries",
+            "installation_approved"
+          ]
+        },
+        "add": [
+          "dependencies_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_workspace_and_contract": {
+        "owner": "agent",
+        "pre": "all_required_details_known",
+        "add": [
+          "workspace_prepared",
+          "contract_recorded",
+          "executable_identity_recorded",
+          "effect_scope_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_exercise": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace_prepared",
+            "contract_recorded",
+            "executable_identity_recorded",
+            "effect_scope_recorded",
+            "needed_module_read"
+          ]
+        },
+        "add": [
+          "cases_executed",
+          "validation_recorded",
+          "raw_evidence_kept",
+          "json_results_kept",
+          "outcome_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_video_evidence": {
+        "owner": "agent",
+        "pre": "cases_executed",
+        "add": [
+          "video_rendered",
+          "media_paths_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_html_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cases_executed",
+            "report_requested"
+          ]
+        },
+        "add": [
+          "html_rendered",
+          "report_link_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_runtime": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "cleanup_done"
+        ],
+        "del": [
+          "host_running",
+          "terminal_running",
+          "recorder_running",
+          "playback_server_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_readiness",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "details_complete": [
+              {
+                "act": {
+                  "cap": "read_needed_module",
+                  "by": "agent"
+                }
+              }
+            ],
+            "details_missing_or_ambiguous": [
+              {
+                "act": {
+                  "cap": "ask_clarification",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_needed_module",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "dependencies_ready": [],
+            "dependencies_missing": [
+              {
+                "act": {
+                  "cap": "propose_installation",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_installation": [
+                      {
+                        "act": {
+                          "cap": "install_dependencies",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_installation": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_workspace_and_contract",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_cli_exercise",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "render_video_evidence",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "report_wanted": [
+              {
+                "act": {
+                  "cap": "render_html_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "video_only": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "cleanup_runtime",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "outcome_recorded",
+        "media_paths_recorded",
+        "executable_identity_recorded",
+        "cleanup_done",
+        {
+          "or": [
+            "report_requested",
+            {
+              "not": "report_link_recorded"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "request_defined",
+      "needs:shell",
+      "needs:linux",
+      "needs:package_registries"
+    ],
+    "init_constraints": [
+      {
+        "not": "all_required_details_known"
+      },
+      {
+        "not": "report_requested"
+      },
+      {
+        "not": "installation_approved"
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "cli-exercise",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_readiness": {
+        "owner": "agent",
+        "pre": "request_defined",
+        "add": [
+          "readiness_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_needed_module": {
+        "owner": "agent",
+        "pre": "request_defined",
+        "add": [
+          "needed_module_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_clarification": {
+        "owner": "agent",
+        "pre": "request_defined",
+        "add": [
+          "all_required_details_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "propose_installation": {
+        "owner": "agent",
+        "pre": "readiness_checked",
+        "add": [
+          "installation_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_dependencies": {
+        "owner": "agent",
+        "pre": "installation_approved",
+        "add": [
+          "dependencies_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_workspace_and_contract": {
+        "owner": "agent",
+        "pre": "all_required_details_known",
+        "add": [
+          "workspace_prepared",
+          "contract_recorded",
+          "executable_identity_recorded",
+          "effect_scope_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_exercise": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace_prepared",
+            "contract_recorded",
+            "executable_identity_recorded",
+            "effect_scope_recorded",
+            "needed_module_read"
+          ]
+        },
+        "add": [
+          "cases_executed",
+          "validation_recorded",
+          "raw_evidence_kept",
+          "json_results_kept",
+          "outcome_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_video_evidence": {
+        "owner": "agent",
+        "pre": "cases_executed",
+        "add": [
+          "video_rendered",
+          "media_paths_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_html_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cases_executed",
+            "report_requested"
+          ]
+        },
+        "add": [
+          "html_rendered",
+          "report_link_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_runtime": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "cleanup_done"
+        ],
+        "del": [
+          "host_running",
+          "terminal_running",
+          "recorder_running",
+          "playback_server_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_readiness",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "details_complete": [
+              {
+                "act": {
+                  "cap": "read_needed_module",
+                  "by": "agent"
+                }
+              }
+            ],
+            "details_missing_or_ambiguous": [
+              {
+                "act": {
+                  "cap": "ask_clarification",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_needed_module",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "dependencies_ready": [],
+            "dependencies_missing": [
+              {
+                "act": {
+                  "cap": "propose_installation",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_installation": [
+                      {
+                        "act": {
+                          "cap": "install_dependencies",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_installation": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_workspace_and_contract",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_cli_exercise",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "render_video_evidence",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "report_wanted": [
+              {
+                "act": {
+                  "cap": "render_html_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "video_only": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "cleanup_runtime",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "outcome_recorded",
+        "media_paths_recorded",
+        "executable_identity_recorded",
+        "cleanup_done",
+        {
+          "or": [
+            "report_requested",
+            {
+              "not": "report_link_recorded"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "request_defined"
+    ],
+    "init_constraints": [
+      {
+        "not": "all_required_details_known"
+      },
+      {
+        "not": "report_requested"
+      },
+      {
+        "not": "installation_approved"
+      }
+    ]
+  },
+  "bindings": {
+    "check_readiness": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_needed_module": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "ask_clarification": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "propose_installation": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "install_dependencies": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "prepare_workspace_and_contract": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_cli_exercise": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "render_video_evidence": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "render_html_report": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "cleanup_runtime": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

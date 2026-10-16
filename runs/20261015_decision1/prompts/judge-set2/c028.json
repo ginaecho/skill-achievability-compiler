@@ -1,0 +1,77 @@
+{
+  "model": "Decision-1",
+  "state": {
+    "document": "---\nname: code-review\ndescription: Perform code reviews following Sentry engineering practices. Use when reviewing pull requests, examining code changes, or providing feedback on code quality. Covers security, performance, testing, and design review.\n---\n\n# Sentry Code Review\n\nFollow these guidelines when reviewing code for Sentry projects.\n\n## Review Checklist\n\n### Identifying Problems\n\nLook for these issues in code changes:\n\n- **Runtime errors**: Potential exceptions, null pointer issues, out-of-bounds access\n- **Performance**: Unbounded O(n²) operations, N+1 queries, unnecessary allocations\n- **Side effects**: Unintended behavioral changes affecting other components\n- **Backwards compatibility**: Breaking API changes without migration path\n- **ORM queries**: Complex Django ORM with unexpected query performance\n- **Security vulnerabilities**: Injection, XSS, access control gaps, secrets exposure\n\n### Design Assessment\n\n- Do component interactions make logical sense?\n- Does the change align with existing project architecture?\n- Are there conflicts with current requirements or goals?\n\n### Test Coverage\n\nEvery PR should have appropriate test coverage:\n\n- Functional tests for business logic\n- Integration tests for component interactions\n- End-to-end tests for critical user paths\n\nVerify tests cover actual requirements and edge cases. Avoid excessive branching or looping in test code.\n\n### Long-Term Impact\n\nFlag for senior engineer review when changes involve:\n\n- Database schema modifications\n- API contract changes\n- New framework or library adoption\n- Performance-critical code paths\n- Security-sensitive functionality\n\n## Feedback Guidelines\n\n### Tone\n\n- Be polite and empathetic\n- Provide actionable suggestions, not vague criticism\n- Phrase as questions when uncertain: \"Have you considered...?\"\n\n### Approval\n\n- Approve when only minor issues remain\n- Don't block PRs for stylistic preferences\n- Remember: the goal is risk reduction, not perfect code\n\n## Common Patterns to Flag\n\n### Python/Django\n\n```python\n# Bad: N+1 query\nfor user in users:\n    print(user.profile.name)  # Separate query per user\n\n# Good: Prefetch related\nusers = User.objects.prefetch_related('profile')\n```\n\n### TypeScript/React\n\n```typescript\n// Bad: Missing dependency in useEffect\nuseEffect(() => {\n  fetchData(userId);\n}, []);  // userId not in deps\n\n// Good: Include all dependencies\nuseEffect(() => {\n  fetchData(userId);\n}, [userId]);\n```\n\n### Security\n\n```python\n# Bad: SQL injection risk\ncursor.execute(f\"SELECT * FROM users WHERE id = {user_id}\")\n\n# Good: Parameterized query\ncursor.execute(\"SELECT * FROM users WHERE id = %s\", [user_id])\n```\n\n## References\n\n- [Sentry Code Review Guidelines](https://develop.sentry.dev/engineering-practices/code-review/)\n",
+    "runtime": {
+      "name": "claude-code-cloud",
+      "description": "A Claude Code cloud session on Linux x86_64 (no GPU, no Docker daemon) with a shell, the working directory, sub-agents and the connectors listed as tools. Network egress goes through an allow-list proxy: the package registries and hosts pypi (PyPI), npm, GitHub (github.com, api.github.com, raw.githubusercontent.com), Ubuntu (apt archives), NuGet and the Go module proxy are open; other hosts are refused (for example huggingface, Microsoft Learn and Azure, Cloudflare, Expo, Neon and NVIDIA). The user's GitHub account is usable through the github connector and through the gh CLI via the proxy. There are no accounts or credentials for other external services.",
+      "tools": {
+        "bash": "run shell commands on Linux x86_64: install packages from the open registries (pip from PyPI, npm, apt from Ubuntu, go modules, nuget, GitHub release downloads), build, test, run CLIs and scripts, git, gh, start and stop local servers inside the session; network requests reach only the allow-listed hosts",
+        "read": "read files in the working directory; search them by name pattern or content (glob, grep)",
+        "write": "create and overwrite files",
+        "edit": "edit existing files and Jupyter notebooks",
+        "web_fetch": "fetch a web page or unauthenticated API by URL; hosts outside the egress allow-list are refused",
+        "web_search": "search the public web and read result snippets",
+        "ask_user": "ask the user a question (with options) and read the answer in the conversation",
+        "agent": "start sub-agents that work in parallel, send them messages and list them",
+        "skill": "load an installed Claude Code skill, list and search skills and plugins",
+        "tasks": "create, read, update and stop background tasks; schedule, list and delete cron jobs and wake-ups; monitor a condition; read notifications",
+        "artifact": "publish an HTML page as a private claude.ai artifact; read and answer its comments and its small data store",
+        "send_user_file": "send a file from the session to the user",
+        "push_notification": "send a push notification to the user",
+        "mcp_resources": "list and read resources of the connected MCP servers",
+        "github": "GitHub connector (the user's account): get_file_contents, create_pull_request, list_issues, issue_write, search_code, pull_request_read, actions_list, get_job_logs, create_branch, push_files",
+        "notion": "Notion connector (the user's workspace): notion-search, notion-fetch, notion-create-pages, notion-update-page, notion-create-database",
+        "google_drive": "Google Drive connector (the user's drive): search_files, read_file_content, create_file, update_file, share_file",
+        "jam": "Jam connector (bug-report recordings): search, getDetails, getConsoleLogs, getNetworkRequests, analyzeVideo",
+        "mem": "Mem connector (the user's notes): create_note, search_notes, get_note, update_note",
+        "bigdata_com": "Bigdata.com connector (financial data and documents): bigdata_company_tearsheet, bigdata_search, find_securities, bigdata_fetch_document",
+        "etoro": "eToro connector (the user's trading account): get-my-portfolio-summary, get-instruments-overview, prepare-trade",
+        "claude_docs": "Claude Docs connector (living documents on claude.ai): create, read, batch, update, export"
+      }
+    },
+    "pack": "Skill `code-review`.\nRoles: `agent`, `user`.\nTool `inspect_changed_files` (owner `agent`): via `read`; adds `changes_inspected`, `review_completed`.\nTool `inspect_project_context` (owner `agent`): via `read`; adds `context_inspected`.\nTool `query_pr_details` (owner `agent`): via `github`; needs `github_account`; adds `pr_context_available`.\nTool `submit_review_feedback` (owner `agent`): via `github`; needs `github_account`; requires `review_completed`; adds `feedback_submitted`.\nGoal: `review_completed`.\nProtocol:\n  - `user` chooses one of (observed):\n    - branch `github_pr`:\n      - `agent` uses `query_pr_details`.\n    - branch `local_changes`: none.\n  - `agent` uses `inspect_changed_files`.\n  - `agent` uses `inspect_project_context`.\n  - `user` chooses one of (observed):\n    - branch `submit_feedback`:\n      - `agent` uses `submit_review_feedback`.\n    - branch `report_in_chat`: none.\n"
+  },
+  "questions": {
+    "F1": {
+      "type": "noul",
+      "instructions": "no invented Tool (every Tool corresponds to an instruction)",
+      "criteria": {
+        "true": "Every Tool in the pack corresponds to an operation that some sentence of the document asks for, or the pack declares no Tool.",
+        "false": "At least one Tool in the pack is invented: no sentence of the document asks for that operation."
+      }
+    },
+    "F2": {
+      "type": "noul",
+      "instructions": "no omitted mandatory step",
+      "criteria": {
+        "true": "No mandatory step is omitted: every step without which the document's core deliverable cannot be produced appears in the pack. Optional or follow-up work may be omitted or skippable.",
+        "false": "The pack omits at least one mandatory step, a step without which the document's core deliverable cannot be produced."
+      }
+    },
+    "F3": {
+      "type": "noul",
+      "instructions": "the Goal states the document's deliverable",
+      "criteria": {
+        "true": "The pack's Goal names the deliverable of one representative request of the document.",
+        "false": "The pack's Goal does not name the deliverable of one representative request (for example it is `true`, empty, or names something else)."
+      }
+    },
+    "F4": {
+      "type": "noul",
+      "instructions": "no invented ordering (every protocol order is stated or implied by the document)",
+      "criteria": {
+        "true": "No ordering is invented: every order the protocol puts between two steps is stated or implied by the document (for example by data dependence), or the protocol imposes no order.",
+        "false": "The protocol puts at least two steps in an order the document neither states nor implies."
+      }
+    },
+    "F5": {
+      "type": "noul",
+      "instructions": "bindings plausible (each `via` names a runtime tool that can perform the Tool)",
+      "criteria": {
+        "true": "Bindings are plausible: each `via` names a tool from runtime.tools that can really perform the Tool; a `via` naming something outside that list is plausible only if the runtime indeed cannot perform the operation.",
+        "false": "At least one `via` names a tool that cannot perform the Tool, or names something outside runtime.tools although the runtime can perform the operation."
+      }
+    }
+  }
+}

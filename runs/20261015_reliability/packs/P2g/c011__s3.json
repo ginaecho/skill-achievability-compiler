@@ -1,0 +1,765 @@
+{
+  "pack": {
+    "name": "foundationpose-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "task_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "find_checkout": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clone_checkout": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:github_account"
+          ]
+        },
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "adapt_dataset": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "dataset_adapted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "smoke_check_engine": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "engine_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_gt_cache": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "gt_cache_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_inference": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "run_completed",
+          "predictions_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated",
+            "gt_required"
+          ]
+        },
+        "add": [
+          "run_completed",
+          "predictions_available",
+          "report_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rescore_run": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "completed_run_available",
+            "gt_required"
+          ]
+        },
+        "add": [
+          "report_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "batch_run": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "batch_completed",
+          "report_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_results": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "run_completed",
+            "report_available",
+            "batch_completed",
+            "artifacts_supplied"
+          ]
+        },
+        "add": [
+          "results_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "compare_artifacts": {
+        "owner": "agent",
+        "pre": "artifacts_supplied",
+        "add": [
+          "results_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "execution_requested": [
+              {
+                "act": {
+                  "cap": "find_checkout",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "checkout_present": [],
+                    "checkout_missing": [
+                      {
+                        "act": {
+                          "cap": "clone_checkout",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "adapt_needed": [
+                      {
+                        "act": {
+                          "cap": "adapt_dataset",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "adapt_not_needed": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "smoke_check_engine",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "inference_only": [
+                      {
+                        "act": {
+                          "cap": "run_inference",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "inference_plus_scoring": [
+                      {
+                        "act": {
+                          "cap": "build_gt_cache",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_pipeline",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "rescore_completed_run": [
+                      {
+                        "act": {
+                          "cap": "build_gt_cache",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "rescore_run",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "batch_runs": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "batch_with_gt": [
+                              {
+                                "act": {
+                                  "cap": "build_gt_cache",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "batch_without_gt": []
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "batch_run",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "analysis_only": [
+              {
+                "act": {
+                  "cap": "compare_artifacts",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "results_interpreted",
+    "init_true": [
+      "needs:github_account"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "foundationpose-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "task_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "find_checkout": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clone_checkout": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "adapt_dataset": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "dataset_adapted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "smoke_check_engine": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "engine_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_gt_cache": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "gt_cache_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_inference": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "run_completed",
+          "predictions_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated",
+            "gt_required"
+          ]
+        },
+        "add": [
+          "run_completed",
+          "predictions_available",
+          "report_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rescore_run": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "completed_run_available",
+            "gt_required"
+          ]
+        },
+        "add": [
+          "report_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "batch_run": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "batch_completed",
+          "report_available",
+          "provenance_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_results": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "run_completed",
+            "report_available",
+            "batch_completed",
+            "artifacts_supplied"
+          ]
+        },
+        "add": [
+          "results_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "compare_artifacts": {
+        "owner": "agent",
+        "pre": "artifacts_supplied",
+        "add": [
+          "results_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "execution_requested": [
+              {
+                "act": {
+                  "cap": "find_checkout",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "checkout_present": [],
+                    "checkout_missing": [
+                      {
+                        "act": {
+                          "cap": "clone_checkout",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "adapt_needed": [
+                      {
+                        "act": {
+                          "cap": "adapt_dataset",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "adapt_not_needed": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "smoke_check_engine",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "inference_only": [
+                      {
+                        "act": {
+                          "cap": "run_inference",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "inference_plus_scoring": [
+                      {
+                        "act": {
+                          "cap": "build_gt_cache",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_pipeline",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "rescore_completed_run": [
+                      {
+                        "act": {
+                          "cap": "build_gt_cache",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "rescore_run",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "batch_runs": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "batch_with_gt": [
+                              {
+                                "act": {
+                                  "cap": "build_gt_cache",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "batch_without_gt": []
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "batch_run",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "analysis_only": [
+              {
+                "act": {
+                  "cap": "compare_artifacts",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "results_interpreted",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_inputs": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "find_checkout": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "clone_checkout": {
+      "via": "bash",
+      "needs": [
+        "github_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "adapt_dataset": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "smoke_check_engine": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "build_gt_cache": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_inference": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_pipeline": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "rescore_run": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "batch_run": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "inspect_results": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "compare_artifacts": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

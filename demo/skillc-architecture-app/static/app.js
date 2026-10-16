@@ -703,6 +703,9 @@ function graphNodeStatus(artifact) {
   if (!artifact) return "waiting";
   const status = artifact.content?.status;
   if (["passed", "refuted", "unknown", "skipped"].includes(status)) return status;
+  // verdict schema v2: a protocol-typing rejection (not a goal refutation)
+  // is drawn with the failure style
+  if (status === "rejected") return "refuted";
   if (artifact.stage === "verdict") {
     if (artifact.content?.verdict === "IMPOSSIBLE") return "refuted";
     if (artifact.content?.verdict === "UNKNOWN") return "unknown";

@@ -1,0 +1,34 @@
+```ce
+Skill `notion-knowledge-capture`.
+Roles: `agent`, `user`.
+Tool `ask_capture_details` (owner `agent`): via `ask_user`; adds `capture_defined`.
+Tool `read_reference_guides` (owner `agent`): via `read`; adds `reference_checked`.
+Tool `search_notion` (owner `agent`): via `notion`; needs `notion_account`; requires `capture_defined`; adds `prior_context_found`.
+Tool `fetch_notion_pages` (owner `agent`): via `notion`; needs `notion_account`; requires `prior_context_found`; adds `prior_context_read`.
+Tool `create_notion_page` (owner `agent`): via `notion`; needs `notion_account`; requires `capture_defined` and `reference_checked`; adds `notion_page_captured`.
+Tool `update_notion_page` (owner `agent`): via `notion`; needs `notion_account`; requires `capture_defined` and `reference_checked` and `prior_context_read`; adds `notion_page_captured`.
+Tool `link_notion_page` (owner `agent`): via `notion`; needs `notion_account`; requires `notion_page_captured`; adds `notion_page_linked`.
+Tool `create_followup_tasks` (owner `agent`): via `notion`; needs `notion_account`; requires `notion_page_captured`; adds `followup_tasks_created`.
+Tool `reply_restart_instructions` (owner `agent`): via `reply`; adds `restart_instructions_given`.
+Initially true: none.
+Goal: `notion_page_captured` and `notion_page_linked`.
+Protocol:
+  - `agent` uses `ask_capture_details`.
+  - `agent` chooses one of (observed):
+    - branch `notion_connected`:
+      - `agent` uses `read_reference_guides`.
+      - `agent` uses `search_notion`.
+      - `agent` chooses one of (observed):
+        - branch `updating_existing_page` (assuming `prior_context_found`):
+          - `agent` uses `fetch_notion_pages`.
+          - `agent` uses `update_notion_page`.
+        - branch `creating_new_page`:
+          - `agent` uses `create_notion_page`.
+      - `agent` uses `link_notion_page`.
+      - `user` chooses one of (observed):
+        - branch `followup_tasks_needed`:
+          - `agent` uses `create_followup_tasks`.
+        - branch `no_followup_tasks`: none.
+    - branch `notion_not_connected`:
+      - `agent` uses `reply_restart_instructions`.
+```

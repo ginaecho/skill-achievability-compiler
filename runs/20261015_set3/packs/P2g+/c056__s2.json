@@ -1,0 +1,807 @@
+{
+  "pack": {
+    "name": "cli-exercise",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_needed_modules": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "request_understood",
+          "needed_modules_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_readiness": {
+        "owner": "agent",
+        "pre": "request_understood",
+        "add": [
+          "readiness_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_install_approval": {
+        "owner": "agent",
+        "pre": "readiness_checked",
+        "add": [
+          "install_decision_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_dependencies": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "install_decision_known",
+            "user_approved_install"
+          ]
+        },
+        "add": [
+          "dependencies_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "record_contract_and_identity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "request_understood",
+            "dependencies_ready"
+          ]
+        },
+        "add": [
+          "contract_recorded",
+          "executable_identity_recorded",
+          "effect_scope_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_exact_cases": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_ready",
+            "contract_recorded",
+            "exact_cases_requested"
+          ]
+        },
+        "add": [
+          "cases_exercised",
+          "observed_results_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_exploration": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_ready",
+            "contract_recorded",
+            "exploration_requested"
+          ]
+        },
+        "add": [
+          "cases_exercised",
+          "observed_results_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_video_evidence": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cases_exercised",
+            "observed_results_collected"
+          ]
+        },
+        "add": [
+          "video_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_html_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cases_exercised",
+            "observed_results_collected",
+            "html_requested"
+          ]
+        },
+        "add": [
+          "html_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_with_evidence": {
+        "owner": "agent",
+        "pre": "video_ready",
+        "add": [
+          "evidence_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_needed_modules",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_readiness",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "dependencies_already_ready": [
+              {
+                "act": {
+                  "cap": "record_contract_and_identity",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "exact_request": [
+                      {
+                        "act": {
+                          "cap": "run_exact_cases",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "explore_request": [
+                      {
+                        "act": {
+                          "cap": "run_exploration",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "exact_request": [
+                      "exact_cases_requested"
+                    ],
+                    "explore_request": [
+                      "exploration_requested"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "render_video_evidence",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "html_wanted": [
+                      {
+                        "act": {
+                          "cap": "render_html_report",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "video_only": []
+                  },
+                  "assumes": {
+                    "html_wanted": [
+                      "html_requested"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_with_evidence",
+                  "by": "agent"
+                }
+              }
+            ],
+            "dependencies_missing": [
+              {
+                "act": {
+                  "cap": "ask_install_approval",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_install": [
+                      {
+                        "act": {
+                          "cap": "install_dependencies",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "record_contract_and_identity",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "exact_request": [
+                              {
+                                "act": {
+                                  "cap": "run_exact_cases",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "explore_request": [
+                              {
+                                "act": {
+                                  "cap": "run_exploration",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "exact_request": [
+                              "exact_cases_requested"
+                            ],
+                            "explore_request": [
+                              "exploration_requested"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "render_video_evidence",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "html_wanted": [
+                              {
+                                "act": {
+                                  "cap": "render_html_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "video_only": []
+                          },
+                          "assumes": {
+                            "html_wanted": [
+                              "html_requested"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "reply_with_evidence",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_install": []
+                  },
+                  "assumes": {
+                    "approve_install": [
+                      "user_approved_install"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "dependencies_already_ready": [
+              "dependencies_ready"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "evidence_delivered",
+        "video_ready",
+        {
+          "or": [
+            {
+              "not": "html_requested"
+            },
+            "html_ready"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "cli-exercise",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_needed_modules": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "request_understood",
+          "needed_modules_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_readiness": {
+        "owner": "agent",
+        "pre": "request_understood",
+        "add": [
+          "readiness_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_install_approval": {
+        "owner": "agent",
+        "pre": "readiness_checked",
+        "add": [
+          "install_decision_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_dependencies": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "install_decision_known",
+            "user_approved_install"
+          ]
+        },
+        "add": [
+          "dependencies_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "record_contract_and_identity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "request_understood",
+            "dependencies_ready"
+          ]
+        },
+        "add": [
+          "contract_recorded",
+          "executable_identity_recorded",
+          "effect_scope_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_exact_cases": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_ready",
+            "contract_recorded",
+            "exact_cases_requested"
+          ]
+        },
+        "add": [
+          "cases_exercised",
+          "observed_results_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_exploration": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_ready",
+            "contract_recorded",
+            "exploration_requested"
+          ]
+        },
+        "add": [
+          "cases_exercised",
+          "observed_results_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_video_evidence": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cases_exercised",
+            "observed_results_collected"
+          ]
+        },
+        "add": [
+          "video_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "render_html_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cases_exercised",
+            "observed_results_collected",
+            "html_requested"
+          ]
+        },
+        "add": [
+          "html_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_with_evidence": {
+        "owner": "agent",
+        "pre": "video_ready",
+        "add": [
+          "evidence_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_needed_modules",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_readiness",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "dependencies_already_ready": [
+              {
+                "act": {
+                  "cap": "record_contract_and_identity",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "exact_request": [
+                      {
+                        "act": {
+                          "cap": "run_exact_cases",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "explore_request": [
+                      {
+                        "act": {
+                          "cap": "run_exploration",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "exact_request": [
+                      "exact_cases_requested"
+                    ],
+                    "explore_request": [
+                      "exploration_requested"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "render_video_evidence",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "html_wanted": [
+                      {
+                        "act": {
+                          "cap": "render_html_report",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "video_only": []
+                  },
+                  "assumes": {
+                    "html_wanted": [
+                      "html_requested"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_with_evidence",
+                  "by": "agent"
+                }
+              }
+            ],
+            "dependencies_missing": [
+              {
+                "act": {
+                  "cap": "ask_install_approval",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_install": [
+                      {
+                        "act": {
+                          "cap": "install_dependencies",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "record_contract_and_identity",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "exact_request": [
+                              {
+                                "act": {
+                                  "cap": "run_exact_cases",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "explore_request": [
+                              {
+                                "act": {
+                                  "cap": "run_exploration",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "exact_request": [
+                              "exact_cases_requested"
+                            ],
+                            "explore_request": [
+                              "exploration_requested"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "render_video_evidence",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "html_wanted": [
+                              {
+                                "act": {
+                                  "cap": "render_html_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "video_only": []
+                          },
+                          "assumes": {
+                            "html_wanted": [
+                              "html_requested"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "reply_with_evidence",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_install": []
+                  },
+                  "assumes": {
+                    "approve_install": [
+                      "user_approved_install"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "dependencies_already_ready": [
+              "dependencies_ready"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "evidence_delivered",
+        "video_ready",
+        {
+          "or": [
+            {
+              "not": "html_requested"
+            },
+            "html_ready"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "read_needed_modules": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "check_readiness": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "ask_install_approval": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "install_dependencies": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "record_contract_and_identity": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_exact_cases": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_exploration": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "render_video_evidence": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "render_html_report": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "reply_with_evidence": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

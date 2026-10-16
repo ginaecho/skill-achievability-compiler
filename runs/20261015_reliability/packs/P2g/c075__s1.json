@@ -1,0 +1,763 @@
+{
+  "pack": {
+    "name": "llm-finetuning-training-engineer",
+    "roles": [
+      "agent",
+      "eval_engineer"
+    ],
+    "capabilities": {
+      "read_brief_and_run_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "brief_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_dataset_and_reports": {
+        "owner": "agent",
+        "pre": "brief_read",
+        "add": [
+          "dataset_prepared",
+          "dataset_card_committed",
+          "validation_report_written",
+          "phase2_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "confirm_environment_generic": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_ready"
+        ],
+        "del": [],
+        "assigns": {
+          "platform_generic": 1
+        },
+        "nondet": {}
+      },
+      "confirm_environment_dgx": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_ready",
+          "dgx_platform"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_training_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "brief_read",
+            "phase2_complete",
+            "env_report_present",
+            "environment_ready"
+          ]
+        },
+        "add": [
+          "train_files_generated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_training_files": {
+        "owner": "agent",
+        "pre": "train_files_generated",
+        "add": [
+          "train_files_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "launch_training_background": {
+        "owner": "agent",
+        "pre": "train_files_committed",
+        "add": [
+          "training_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "poll_training_logs": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "progress_emitted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_training": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "training_halted"
+        ],
+        "del": [
+          "training_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "export_artifact_with_smoke_test": {
+        "owner": "agent",
+        "pre": "promoted",
+        "add": [
+          "artifact_exported",
+          "smoke_test_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_result": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_checkpoint_for_eval": {
+        "owner": "agent",
+        "pre": "training_completed",
+        "add": [
+          "checkpoint_handed_to_eval"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_brief_and_run_state",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_dataset_and_reports",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "dgx": [
+              {
+                "act": {
+                  "cap": "confirm_environment_dgx",
+                  "by": "agent"
+                }
+              }
+            ],
+            "generic-nvidia": [
+              {
+                "act": {
+                  "cap": "confirm_environment_generic",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "blocked": [
+              {
+                "act": {
+                  "cap": "report_result",
+                  "by": "agent"
+                }
+              }
+            ],
+            "ready": [
+              {
+                "act": {
+                  "cap": "generate_training_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "commit_training_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "launch_training_background",
+                  "by": "agent"
+                }
+              },
+              {
+                "rec": {
+                  "name": "monitor_run",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "poll_training_logs",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "still-running": [
+                            {
+                              "continue": "monitor_run"
+                            }
+                          ],
+                          "completed": [
+                            {
+                              "act": {
+                                "cap": "send_checkpoint_for_eval",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "environment-failure": [
+                            {
+                              "act": {
+                                "cap": "report_result",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "divergence": [
+                            {
+                              "act": {
+                                "cap": "stop_training",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "report_result",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "uma-oom": [
+                            {
+                              "act": {
+                                "cap": "stop_training",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "report_result",
+                                "by": "agent"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "eval_engineer",
+          "observed": true,
+          "branches": {
+            "PROMOTE": [
+              {
+                "act": {
+                  "cap": "export_artifact_with_smoke_test",
+                  "by": "agent"
+                }
+              }
+            ],
+            "REJECT": [
+              {
+                "act": {
+                  "cap": "report_result",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "checkpoint_handed_to_eval",
+        {
+          "and": [
+            "artifact_exported",
+            "smoke_test_passed"
+          ]
+        },
+        "result_reported"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "platform_generic",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "llm-finetuning-training-engineer",
+    "roles": [
+      "agent",
+      "eval_engineer"
+    ],
+    "capabilities": {
+      "read_brief_and_run_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "brief_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_dataset_and_reports": {
+        "owner": "agent",
+        "pre": "brief_read",
+        "add": [
+          "dataset_prepared",
+          "dataset_card_committed",
+          "validation_report_written",
+          "phase2_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "confirm_environment_generic": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_ready"
+        ],
+        "del": [],
+        "assigns": {
+          "platform_generic": 1
+        },
+        "nondet": {}
+      },
+      "confirm_environment_dgx": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_ready",
+          "dgx_platform"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_training_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "brief_read",
+            "phase2_complete",
+            "env_report_present",
+            "environment_ready"
+          ]
+        },
+        "add": [
+          "train_files_generated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_training_files": {
+        "owner": "agent",
+        "pre": "train_files_generated",
+        "add": [
+          "train_files_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "launch_training_background": {
+        "owner": "agent",
+        "pre": "train_files_committed",
+        "add": [
+          "training_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "poll_training_logs": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "progress_emitted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_training": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "training_halted"
+        ],
+        "del": [
+          "training_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "export_artifact_with_smoke_test": {
+        "owner": "agent",
+        "pre": "promoted",
+        "add": [
+          "artifact_exported",
+          "smoke_test_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_result": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_checkpoint_for_eval": {
+        "owner": "agent",
+        "pre": "training_completed",
+        "add": [
+          "checkpoint_handed_to_eval"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_brief_and_run_state",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_dataset_and_reports",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "dgx": [
+              {
+                "act": {
+                  "cap": "confirm_environment_dgx",
+                  "by": "agent"
+                }
+              }
+            ],
+            "generic-nvidia": [
+              {
+                "act": {
+                  "cap": "confirm_environment_generic",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "blocked": [
+              {
+                "act": {
+                  "cap": "report_result",
+                  "by": "agent"
+                }
+              }
+            ],
+            "ready": [
+              {
+                "act": {
+                  "cap": "generate_training_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "commit_training_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "launch_training_background",
+                  "by": "agent"
+                }
+              },
+              {
+                "rec": {
+                  "name": "monitor_run",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "poll_training_logs",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "still-running": [
+                            {
+                              "continue": "monitor_run"
+                            }
+                          ],
+                          "completed": [
+                            {
+                              "act": {
+                                "cap": "send_checkpoint_for_eval",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "environment-failure": [
+                            {
+                              "act": {
+                                "cap": "report_result",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "divergence": [
+                            {
+                              "act": {
+                                "cap": "stop_training",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "report_result",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "uma-oom": [
+                            {
+                              "act": {
+                                "cap": "stop_training",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "report_result",
+                                "by": "agent"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "eval_engineer",
+          "observed": true,
+          "branches": {
+            "PROMOTE": [
+              {
+                "act": {
+                  "cap": "export_artifact_with_smoke_test",
+                  "by": "agent"
+                }
+              }
+            ],
+            "REJECT": [
+              {
+                "act": {
+                  "cap": "report_result",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "checkpoint_handed_to_eval",
+        {
+          "and": [
+            "artifact_exported",
+            "smoke_test_passed"
+          ]
+        },
+        "result_reported"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "platform_generic",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "read_brief_and_run_state": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "prepare_dataset_and_reports": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "confirm_environment_generic": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "confirm_environment_dgx": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "generate_training_files": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "commit_training_files": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "launch_training_background": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "poll_training_logs": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "stop_training": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "export_artifact_with_smoke_test": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "report_result": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "send_checkpoint_for_eval": {
+      "via": "agent",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

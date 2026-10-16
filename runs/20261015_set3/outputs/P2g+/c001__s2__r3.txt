@@ -1,0 +1,43 @@
+```ce
+Skill `render-deploy`.
+Roles: `agent`, `user`.
+Tool `check_git_remote` (owner `agent`): via `bash`; adds `git_remote_checked`.
+Tool `inspect_codebase` (owner `agent`): via `read`; adds `deployment_shape_known`.
+Tool `write_blueprint` (owner `agent`): via `write`; requires `deployment_shape_known`; adds `render_yaml_written`.
+Tool `validate_blueprint` (owner `agent`): via `bash`; requires `render_yaml_written` and `render_cli_available` and `render_cli_authenticated`; adds `render_yaml_validated`.
+Tool `check_cli_auth` (owner `agent`): via `bash`; requires `render_cli_available`; adds `render_cli_authenticated`.
+Tool `commit_and_push_blueprint` (owner `agent`): via `bash`; requires `render_yaml_written` and `git_remote_present`; adds `render_yaml_pushed`.
+Tool `get_repo_url` (owner `agent`): via `bash`; requires `git_remote_present`; adds `repo_url_known`.
+Tool `reply_blueprint_result` (owner `agent`): via `reply`; requires `render_yaml_written` and `repo_url_known`; adds `blueprint_guidance_delivered`.
+Tool `reply_stop_no_remote` (owner `agent`): via `reply`; requires `git_remote_checked`; adds `no_remote_guidance_delivered`.
+Tool `reply_docker_guidance` (owner `agent`): via `reply`; requires `docker_image_path`; adds `docker_dashboard_guidance_delivered`.
+Tool `reply_mcp_setup_guidance` (owner `agent`): via `reply`; requires `direct_creation_chosen` and `mcp_unavailable`; adds `mcp_setup_guidance_delivered`.
+Initially true: `project_present`, `git_repo_present`.
+Goal: `blueprint_guidance_delivered` or `no_remote_guidance_delivered` or `docker_dashboard_guidance_delivered` or `mcp_setup_guidance_delivered`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `git_path` (assuming `git_source_chosen`):
+      - `agent` uses `check_git_remote`.
+      - `user` chooses one of (observed):
+        - branch `no_remote` (assuming `no_git_remote`):
+          - `agent` uses `reply_stop_no_remote`.
+        - branch `has_remote` (assuming `git_remote_present`):
+          - `agent` uses `inspect_codebase`.
+          - `user` chooses one of (observed):
+            - branch `direct_creation` (assuming `direct_creation_chosen` and `mcp_unavailable`):
+              - `agent` uses `reply_mcp_setup_guidance`.
+            - branch `blueprint` (assuming `blueprint_chosen`):
+              - `agent` uses `write_blueprint`.
+              - `user` chooses one of (observed):
+                - branch `cli_available_and_authenticated` (assuming `render_cli_available` and `render_cli_authenticated`):
+                  - `agent` uses `validate_blueprint`.
+                - branch `cli_available_needs_auth` (assuming `render_cli_available` and `cli_auth_needed`):
+                  - `agent` uses `check_cli_auth`.
+                  - `agent` uses `validate_blueprint`.
+                - branch `cli_unavailable` (assuming `render_cli_unavailable`): none.
+              - `agent` uses `commit_and_push_blueprint`.
+              - `agent` uses `get_repo_url`.
+              - `agent` uses `reply_blueprint_result`.
+    - branch `docker_image` (assuming `docker_image_path`):
+      - `agent` uses `reply_docker_guidance`.
+```

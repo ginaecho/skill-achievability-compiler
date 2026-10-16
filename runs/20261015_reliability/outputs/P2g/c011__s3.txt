@@ -1,0 +1,67 @@
+```ce
+Skill `foundationpose-pipeline`.
+Roles: `agent`, `user`.
+Tool `ask_inputs` (owner `agent`): via `ask_user`; adds `task_resolved`.
+Tool `find_checkout` (owner `agent`): via `read`; adds `checkout_found`.
+Tool `clone_checkout` (owner `agent`): via `bash`; needs `github_account`; adds `checkout_found`.
+Tool `adapt_dataset` (owner `agent`): via `bash`; requires `checkout_found`; adds `dataset_adapted`.
+Tool `smoke_check_engine` (owner `agent`): via `bash`; requires `checkout_found`; adds `engine_validated`.
+Tool `build_gt_cache` (owner `agent`): via `bash`; requires `checkout_found`; adds `gt_cache_ready`.
+Tool `run_inference` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated`; adds `run_completed`, `predictions_available`, `provenance_available`.
+Tool `run_pipeline` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated` and `gt_required`; adds `run_completed`, `predictions_available`, `report_available`, `provenance_available`.
+Tool `rescore_run` (owner `agent`): via `bash`; requires `checkout_found` and `completed_run_available` and `gt_required`; adds `report_available`, `provenance_available`.
+Tool `batch_run` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated`; adds `batch_completed`, `report_available`, `provenance_available`.
+Tool `inspect_results` (owner `agent`): via `read`; requires any of (`run_completed`, `report_available`, `batch_completed`, `artifacts_supplied`); adds `results_interpreted`.
+Tool `compare_artifacts` (owner `agent`): via `read`; requires `artifacts_supplied`; adds `results_interpreted`.
+Initially true: none.
+Initially: `task_resolved` == false.
+Initially: `checkout_found` == false.
+Initially: `dataset_adapted` == false.
+Initially: `engine_validated` == false.
+Initially: `gt_cache_ready` == false.
+Initially: `run_completed` == false.
+Initially: `predictions_available` == false.
+Initially: `report_available` == false.
+Initially: `provenance_available` == false.
+Initially: `batch_completed` == false.
+Initially: `results_interpreted` == false.
+Initially: `artifacts_supplied` == false.
+Initially: `completed_run_available` == false.
+Initially: `gt_required` == false.
+Goal: `results_interpreted`.
+Protocol:
+  - `agent` uses `ask_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `execution_requested`:
+      - `agent` uses `find_checkout`.
+      - `agent` chooses one of (observed):
+        - branch `checkout_present`: none.
+        - branch `checkout_missing`:
+          - `agent` uses `clone_checkout`.
+      - `agent` chooses one of (observed):
+        - branch `adapt_needed`:
+          - `agent` uses `adapt_dataset`.
+        - branch `adapt_not_needed`: none.
+      - `agent` uses `smoke_check_engine`.
+      - `agent` chooses one of (observed):
+        - branch `inference_only`:
+          - `agent` uses `run_inference`.
+          - `agent` uses `inspect_results`.
+        - branch `inference_plus_scoring`:
+          - `agent` uses `build_gt_cache`.
+          - `agent` uses `run_pipeline`.
+          - `agent` uses `inspect_results`.
+        - branch `rescore_completed_run`:
+          - `agent` uses `build_gt_cache`.
+          - `agent` uses `rescore_run`.
+          - `agent` uses `inspect_results`.
+        - branch `batch_runs`:
+          - `agent` chooses one of (observed):
+            - branch `batch_with_gt`:
+              - `agent` uses `build_gt_cache`.
+            - branch `batch_without_gt`: none.
+          - `agent` uses `batch_run`.
+          - `agent` uses `inspect_results`.
+    - branch `analysis_only`:
+      - `agent` uses `compare_artifacts`.
+```

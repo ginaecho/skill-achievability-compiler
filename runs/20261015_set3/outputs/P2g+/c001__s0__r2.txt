@@ -1,0 +1,40 @@
+```ce
+Skill `render-deploy`.
+Roles: `agent`, `user`.
+Tool `ask_source_path` (owner `agent`): via `ask_user`; adds `source_path_known`.
+Tool `ask_infra_scope` (owner `agent`): via `ask_user`; requires `source_path_known`; adds `infra_scope_known`.
+Tool `check_git_remote` (owner `agent`): via `bash`; requires `source_path_known`; adds `git_remote_present`.
+Tool `write_blueprint` (owner `agent`): via `write`; requires `git_remote_present`; adds `render_yaml_written`.
+Tool `check_render_cli` (owner `agent`): via `bash`; adds `render_cli_available`.
+Tool `validate_blueprint` (owner `agent`): via `bash`; requires `render_yaml_written` and `render_cli_available`; adds `render_yaml_valid`.
+Tool `commit_and_push_blueprint` (owner `agent`): via `bash`; requires `render_yaml_written` and `git_remote_present`; adds `render_yaml_pushed`.
+Tool `create_deeplink_reply` (owner `agent`): via `reply`; requires `render_yaml_written` and `render_yaml_pushed`; adds `deployment_guidance_delivered`.
+Tool `docker_dashboard_guidance_reply` (owner `agent`): via `reply`; requires `source_path_known`; adds `deployment_guidance_delivered`.
+Tool `no_remote_guidance_reply` (owner `agent`): via `reply`; requires `source_path_known`; adds `deployment_guidance_delivered`.
+Initially true: none.
+Goal: `deployment_guidance_delivered`.
+Protocol:
+  - `agent` uses `ask_source_path`.
+  - `agent` uses `ask_infra_scope`.
+  - `user` chooses one of (observed):
+    - branch `docker_image_path` (assuming `docker_image_chosen`):
+      - `agent` uses `docker_dashboard_guidance_reply`.
+    - branch `git_repo_path` (assuming `git_repo_chosen`):
+      - `agent` uses `check_git_remote`.
+      - `user` chooses one of (observed):
+        - branch `remote_missing` (assuming `git_remote_missing`):
+          - `agent` uses `no_remote_guidance_reply`.
+        - branch `remote_present` (assuming `git_remote_present`):
+          - `user` chooses one of (observed):
+            - branch `blueprint_method` (assuming `blueprint_method_chosen`):
+              - `agent` uses `write_blueprint`.
+              - `agent` uses `check_render_cli`.
+              - `user` chooses one of (observed):
+                - branch `cli_available` (assuming `render_cli_available`):
+                  - `agent` uses `validate_blueprint`.
+                - branch `cli_missing` (assuming `render_cli_missing`): none.
+              - `agent` uses `commit_and_push_blueprint`.
+              - `agent` uses `create_deeplink_reply`.
+            - branch `direct_creation_method` (assuming `direct_creation_method_chosen`):
+              - `agent` uses `docker_dashboard_guidance_reply`.
+```

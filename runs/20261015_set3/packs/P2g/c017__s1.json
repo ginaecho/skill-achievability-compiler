@@ -1,0 +1,1164 @@
+{
+  "pack": {
+    "name": "nextflow-development",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "fetch_study_info": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "study_info_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "download_public_data": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "study_info_available"
+          ]
+        },
+        "add": [
+          "input_data_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "environment_ok": {
+            "or": [
+              {
+                "cmp": [
+                  "environment_ok",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "environment_ok",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "run_test_profile": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            {
+              "cmp": [
+                "environment_ok",
+                "==",
+                1
+              ]
+            },
+            "pipeline_selected"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "test_ok": {
+            "or": [
+              {
+                "cmp": [
+                  "test_ok",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "test_ok",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "create_samplesheet": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "input_data_available",
+            "pipeline_selected"
+          ]
+        },
+        "add": [
+          "samplesheet_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_genome": {
+        "owner": "agent",
+        "pre": "genome_confirmed",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "genome_available": {
+            "or": [
+              {
+                "cmp": [
+                  "genome_available",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "genome_available",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "download_genome": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "genome_confirmed"
+          ]
+        },
+        "add": [
+          "genome_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            {
+              "cmp": [
+                "environment_ok",
+                "==",
+                1
+              ]
+            },
+            "pipeline_selected",
+            {
+              "cmp": [
+                "test_ok",
+                "==",
+                1
+              ]
+            },
+            "samplesheet_ready",
+            "genome_confirmed",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "genome_available",
+                    "==",
+                    1
+                  ]
+                },
+                "genome_installed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "pipeline_run_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_outputs": {
+        "owner": "agent",
+        "pre": "pipeline_run_done",
+        "add": [
+          "outputs_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "public_data": [
+              {
+                "act": {
+                  "cap": "fetch_study_info",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "download_subset": [
+                      {
+                        "act": {
+                          "cap": "download_public_data",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "local_data": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "local_input_ready": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "mark_input_ready": [
+                              {
+                                "act": {
+                                  "cap": "create_samplesheet",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "check_environment",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "select_rnaseq": [
+              {
+                "act": {
+                  "cap": "run_test_profile",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_genome_and_options": [
+                      {
+                        "act": {
+                          "cap": "check_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "genome_present": [
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "download_genome_needed": [
+                              {
+                                "act": {
+                                  "cap": "download_genome",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "select_sarek": [
+              {
+                "act": {
+                  "cap": "run_test_profile",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_genome_and_options": [
+                      {
+                        "act": {
+                          "cap": "check_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "genome_present": [
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "download_genome_needed": [
+                              {
+                                "act": {
+                                  "cap": "download_genome",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "select_atacseq": [
+              {
+                "act": {
+                  "cap": "run_test_profile",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_genome_and_options": [
+                      {
+                        "act": {
+                          "cap": "check_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "genome_present": [
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "download_genome_needed": [
+                              {
+                                "act": {
+                                  "cap": "download_genome",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "pipeline_selected",
+        {
+          "cmp": [
+            "environment_ok",
+            "==",
+            1
+          ]
+        },
+        {
+          "cmp": [
+            "test_ok",
+            "==",
+            1
+          ]
+        },
+        "samplesheet_ready",
+        "genome_confirmed",
+        "pipeline_run_done",
+        "outputs_verified"
+      ]
+    },
+    "init_true": [
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "environment_ok",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "test_ok",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "genome_available",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "nextflow-development",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "fetch_study_info": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "study_info_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "download_public_data": {
+        "owner": "agent",
+        "pre": "study_info_available",
+        "add": [
+          "input_data_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "environment_ok": {
+            "or": [
+              {
+                "cmp": [
+                  "environment_ok",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "environment_ok",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "run_test_profile": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            {
+              "cmp": [
+                "environment_ok",
+                "==",
+                1
+              ]
+            },
+            "pipeline_selected"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "test_ok": {
+            "or": [
+              {
+                "cmp": [
+                  "test_ok",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "test_ok",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "create_samplesheet": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "input_data_available",
+            "pipeline_selected"
+          ]
+        },
+        "add": [
+          "samplesheet_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_genome": {
+        "owner": "agent",
+        "pre": "genome_confirmed",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "genome_available": {
+            "or": [
+              {
+                "cmp": [
+                  "genome_available",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "genome_available",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "download_genome": {
+        "owner": "agent",
+        "pre": "genome_confirmed",
+        "add": [
+          "genome_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            {
+              "cmp": [
+                "environment_ok",
+                "==",
+                1
+              ]
+            },
+            "pipeline_selected",
+            {
+              "cmp": [
+                "test_ok",
+                "==",
+                1
+              ]
+            },
+            "samplesheet_ready",
+            "genome_confirmed",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "genome_available",
+                    "==",
+                    1
+                  ]
+                },
+                "genome_installed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "pipeline_run_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_outputs": {
+        "owner": "agent",
+        "pre": "pipeline_run_done",
+        "add": [
+          "outputs_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "public_data": [
+              {
+                "act": {
+                  "cap": "fetch_study_info",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "download_subset": [
+                      {
+                        "act": {
+                          "cap": "download_public_data",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "local_data": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "local_input_ready": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "mark_input_ready": [
+                              {
+                                "act": {
+                                  "cap": "create_samplesheet",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "check_environment",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "select_rnaseq": [
+              {
+                "act": {
+                  "cap": "run_test_profile",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_genome_and_options": [
+                      {
+                        "act": {
+                          "cap": "check_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "genome_present": [
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "download_genome_needed": [
+                              {
+                                "act": {
+                                  "cap": "download_genome",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "select_sarek": [
+              {
+                "act": {
+                  "cap": "run_test_profile",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_genome_and_options": [
+                      {
+                        "act": {
+                          "cap": "check_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "genome_present": [
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "download_genome_needed": [
+                              {
+                                "act": {
+                                  "cap": "download_genome",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "select_atacseq": [
+              {
+                "act": {
+                  "cap": "run_test_profile",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_genome_and_options": [
+                      {
+                        "act": {
+                          "cap": "check_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "genome_present": [
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "download_genome_needed": [
+                              {
+                                "act": {
+                                  "cap": "download_genome",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_pipeline",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "verify_outputs",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "pipeline_selected",
+        {
+          "cmp": [
+            "environment_ok",
+            "==",
+            1
+          ]
+        },
+        {
+          "cmp": [
+            "test_ok",
+            "==",
+            1
+          ]
+        },
+        "samplesheet_ready",
+        "genome_confirmed",
+        "pipeline_run_done",
+        "outputs_verified"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "environment_ok",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "test_ok",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "genome_available",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "fetch_study_info": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "download_public_data": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "check_environment": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run_test_profile": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "create_samplesheet": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "check_genome": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "download_genome": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_pipeline": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "verify_outputs": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

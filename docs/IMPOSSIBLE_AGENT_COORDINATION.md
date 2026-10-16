@@ -4,8 +4,10 @@
 statically validate goal reachability, guarded preconditions, numeric
 constraints, and interactions among a main agent and subagents.
 
-The following skill declares every capability it needs. It is nevertheless
-impossible because one agent must react to a choice that it cannot observe.
+The following skill declares every capability it needs. Its goal is reachable,
+but its coordination cannot be realized: one agent must react to a choice that
+it cannot observe. `skillc` reports this as a protocol rejection, not as an
+impossible goal (see [verdict coverage](VERDICT_COVERAGE.md)).
 
 ## Natural-language skill
 
@@ -46,7 +48,7 @@ The task is complete when the editor has published the final report.
 The task finishes when `report_published` is true.
 ```
 
-## Why the declared interaction is impossible
+## Why the declared interaction is rejected
 
 The problem is not a missing tool. All four capabilities are declared. The
 problem is that the editor's required behavior depends on private state held by
@@ -69,14 +71,22 @@ The editor must call `publish_security` in one branch and
 distinguishing those branches, the global protocol cannot be projected into a
 realizable local contract for the editor.
 
-The expected refutation is:
+Each branch reaches `report_published` on its own, so the goal is not
+refuted. A run in which the editor happens to guess right succeeds. The
+protocol is still rejected, because T-Comm requires every branch to conform.
+The expected verdict is:
 
 ```text
-private-review-routing: IMPOSSIBLE [NON_PROJECTABLE]
-  role 'editor' must behave differently across an unobserved choice
+private-review-routing: ACHIEVABLE
+  ACHIEVABLE  goal reachable along witness path
+  PROTOCOL REJECTED (NON_PROJECTABLE): role 'editor' must act in a branch of
+    the main agent's choice but receives no message distinguishing the branches
+  coverage: none:witness-only
 ```
 
-An integrating runtime can use this result as a pre-execution gate. It avoids
+`admissible` is false, so `skillc check` exits 1, the gate reports `REJECTED`,
+and the monitor denies the plan. An integrating runtime can use this result as
+a pre-execution gate. It avoids
 launching the reviewer and editor, generating a review, waiting on an
 unresolvable handoff, and spending more tokens on retries.
 
@@ -117,23 +127,26 @@ capabilities, and goal, but that pack can come from three paths:
 
 The corpus descriptions for `deadlock_unobserved` and
 `nonconformant_handler` are accepted by the deterministic frontend and produce
-their intended protocol refutations without an LLM. The private-review example
+their intended protocol rejections without an LLM. The private-review example
 above would normally use LLM compaction unless it were rewritten into the
 deterministic frontend's recognized form or supplied as an embedded pack.
 
 LLM compaction is an untrusted translation step. Its output must pass the
 schema gate, and the deterministic checker—not the LLM—returns `ACHIEVABLE`,
-`IMPOSSIBLE`, or `UNKNOWN`.
+`IMPOSSIBLE`, or `UNKNOWN`, together with the protocol result.
 
 ## Protocol cases in the benchmark corpus
 
-Two impossible corpus cases are caused specifically by interaction protocols
-rather than unavailable tools:
+Two corpus cases are caused specifically by interaction protocols rather than
+unavailable tools. In both, one branch still reaches the goal, so the goal
+label is `ACHIEVABLE`. Earlier versions labelled both cases `IMPOSSIBLE`. That
+label claimed a goal refutation that no theorem covers, and it was false in
+the global semantics.
 
 | Case | Interaction defect | Reference verdict |
 |---|---|---|
-| `deadlock_unobserved` | A worker privately selects `ask` or `direct`; the planner must answer only in the `ask` branch but receives no distinguishing message | `IMPOSSIBLE / NON_PROJECTABLE` |
-| `nonconformant_handler` | A router may send `go_simple` or `go_complex`; the handler declares behavior only for `go_simple` | `IMPOSSIBLE / NON_CONFORMANT` |
+| `deadlock_unobserved` | A worker privately selects `ask` or `direct`; the planner must answer only in the `ask` branch but receives no distinguishing message | `ACHIEVABLE` (via `direct`) + protocol `REJECTED / NON_PROJECTABLE` |
+| `nonconformant_handler` | A router may send `go_simple` or `go_complex`; the handler declares behavior only for `go_simple` | `ACHIEVABLE` (via `simple`) + protocol `REJECTED / NON_CONFORMANT` |
 
 Two real-skill semantic-validation cases also caused the LLM compactor to
 propose an unobserved choice:
@@ -143,7 +156,8 @@ propose an unobserved choice:
   agent.
 
 Those two skills are not impossible examples. The checker rejected the
-defective generated protocols, the bounded repair step corrected them, and
+defective generated protocols (a protocol rejection, which fires the repair
+whatever the goal label is), the bounded repair step corrected them, and
 their final packs were `ACHIEVABLE`. They demonstrate checker-guided compaction
 repair rather than early termination of impossible work.
 
@@ -166,7 +180,8 @@ skill version; an unchecked deadlock pays its runtime cost on every
 invocation.
 
 The repository also publishes a generic median-skill model for both protocol
-failure reasons:
+rejection reasons (a rejected protocol is not a goal refutation, but a
+deadlocking run still wastes its tokens):
 
 | Reason | Check | Typical unchecked run | Leverage |
 |---|---:|---:|---:|

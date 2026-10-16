@@ -1,0 +1,43 @@
+```ce
+Skill `automate-this`.
+Roles: `agent`, `user`.
+Tool `check_prerequisites` (owner `agent`): via `bash`; requires `video_path_known`; adds `prerequisites_checked`.
+Tool `extract_recording_content` (owner `agent`): via `bash`; requires `video_path_known` and `prerequisites_checked`; adds `frames_extracted`, `audio_checked`; picks `frame_count` with `frame_count` >= 0.
+Tool `transcribe_audio` (owner `agent`): via `bash`; requires `frames_extracted` and `audio_checked` and `audio_present` and `whisper_available`; adds `transcript_available`.
+Tool `ask_whisper_choice` (owner `agent`): via `ask_user`; requires `audio_checked` and `audio_present` and `whisper_missing`; adds `whisper_choice_received`.
+Tool `write_reconstruction` (owner `agent`): via `reply`; requires `frames_extracted`; adds `reconstruction_presented`.
+Tool `check_environment` (owner `agent`): via `bash`; requires `reconstruction_confirmed`; adds `environment_fingerprinted`.
+Tool `write_automation_proposal` (owner `agent`): via `reply`; requires `environment_fingerprinted`; adds `automation_proposed`.
+Tool `ask_tier_choice` (owner `agent`): via `ask_user`; requires `automation_proposed`; adds `tier_choice_received`.
+Tool `build_and_test_automation` (owner `agent`): via `bash`; requires `tier_choice_received`; adds `automation_built`, `automation_tested`.
+Tool `cleanup_temp_files` (owner `agent`): via `bash`; requires `frames_extracted`; adds `temp_files_cleaned`.
+Tool `write_cleanup_notice` (owner `agent`): via `reply`; requires `temp_files_cleaned`; adds `cleanup_notice_given`.
+Initially true: none.
+Initially: `frame_count` == 0.
+Goal: `automation_proposed`.
+Protocol:
+  - `agent` uses `check_prerequisites`.
+  - `agent` uses `extract_recording_content`.
+  - `agent` chooses one of (observed):
+    - branch `audio_with_whisper` (assuming `audio_present`, `whisper_available`):
+      - `agent` uses `transcribe_audio`.
+    - branch `audio_without_whisper` (assuming `audio_present`, `whisper_missing`):
+      - `agent` uses `ask_whisper_choice`.
+      - `user` chooses one of (observed):
+        - branch `install_whisper`: none.
+        - branch `proceed_visual_only`: none.
+    - branch `no_audio`: none.
+  - `agent` uses `write_reconstruction`.
+  - `user` chooses one of (observed):
+    - branch `confirm_reconstruction` (assuming `reconstruction_confirmed`):
+      - `agent` uses `check_environment`.
+      - `agent` uses `write_automation_proposal`.
+      - `user` chooses one of (observed):
+        - branch `pick_tier`:
+          - `agent` uses `ask_tier_choice`.
+          - `agent` uses `build_and_test_automation`.
+        - branch `stop_after_proposal`: none.
+    - branch `correction_needed`: none.
+  - `agent` uses `cleanup_temp_files`.
+  - `agent` uses `write_cleanup_notice`.
+```

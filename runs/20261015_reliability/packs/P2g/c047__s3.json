@@ -1,0 +1,683 @@
+{
+  "pack": {
+    "name": "book-sft-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "extract_epub_text": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "needs:package_registries"
+          ]
+        },
+        "add": [
+          "epub_text_extracted",
+          "paragraph_text_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "segment_text": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "paragraph_text_available"
+          ]
+        },
+        "add": [
+          "chunks_created",
+          "natural_boundaries_preserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "chunk_word_count": {
+            "and": [
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  ">=",
+                  150
+                ]
+              },
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  "<=",
+                  400
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "generate_instructions": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "chunks_created"
+          ]
+        },
+        "add": [
+          "instructions_created",
+          "synthetic_descriptions_only",
+          "diverse_prompting_configured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_jsonl_dataset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "instructions_created",
+                "diverse_prompting_configured"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "dataset_jsonl_built",
+          "multiple_variants_per_chunk",
+          "system_user_assistant_format"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reserve_test_set": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "dataset_jsonl_built"
+          ]
+        },
+        "add": [
+          "test_set_reserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "test_example_count": {
+            "cmp": [
+              "test_example_count",
+              ">=",
+              50
+            ]
+          }
+        }
+      },
+      "train_lora_on_tinker": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:tinker_account",
+            "dataset_jsonl_built"
+          ]
+        },
+        "add": [
+          "lora_trained",
+          "base_model_used",
+          "rank_32_used",
+          "epochs_limited"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_modern_scenario_validation": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "lora_trained"
+          ]
+        },
+        "add": [
+          "modern_scenario_tested",
+          "style_transfer_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_originality": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "dataset_jsonl_built",
+                "lora_trained"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "originality_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "extract_epub_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "segment_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "generate_instructions",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "build_jsonl_dataset",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "reserve_test_set",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "train_lora_on_tinker",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_modern_scenario_validation",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_originality",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_ai_detector_testing",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "epub_text_extracted",
+        "chunks_created",
+        "natural_boundaries_preserved",
+        {
+          "and": [
+            {
+              "cmp": [
+                "chunk_word_count",
+                ">=",
+                150
+              ]
+            },
+            {
+              "cmp": [
+                "chunk_word_count",
+                "<=",
+                400
+              ]
+            }
+          ]
+        },
+        "instructions_created",
+        "synthetic_descriptions_only",
+        "diverse_prompting_configured",
+        "dataset_jsonl_built",
+        "multiple_variants_per_chunk",
+        "system_user_assistant_format",
+        "test_set_reserved",
+        {
+          "cmp": [
+            "test_example_count",
+            ">=",
+            50
+          ]
+        },
+        "lora_trained",
+        "base_model_used",
+        "rank_32_used",
+        "epochs_limited",
+        "modern_scenario_tested",
+        "style_transfer_validated",
+        "originality_verified",
+        "ai_detector_tested"
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:linux",
+      "needs:local_filesystem",
+      "needs:package_registries"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "chunk_word_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "test_example_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "book-sft-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "extract_epub_text": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "epub_text_extracted",
+          "paragraph_text_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "segment_text": {
+        "owner": "agent",
+        "pre": "paragraph_text_available",
+        "add": [
+          "chunks_created",
+          "natural_boundaries_preserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "chunk_word_count": {
+            "and": [
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  ">=",
+                  150
+                ]
+              },
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  "<=",
+                  400
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "generate_instructions": {
+        "owner": "agent",
+        "pre": "chunks_created",
+        "add": [
+          "instructions_created",
+          "synthetic_descriptions_only",
+          "diverse_prompting_configured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_jsonl_dataset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "instructions_created",
+            "diverse_prompting_configured"
+          ]
+        },
+        "add": [
+          "dataset_jsonl_built",
+          "multiple_variants_per_chunk",
+          "system_user_assistant_format"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reserve_test_set": {
+        "owner": "agent",
+        "pre": "dataset_jsonl_built",
+        "add": [
+          "test_set_reserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "test_example_count": {
+            "cmp": [
+              "test_example_count",
+              ">=",
+              50
+            ]
+          }
+        }
+      },
+      "train_lora_on_tinker": {
+        "owner": "agent",
+        "pre": "dataset_jsonl_built",
+        "add": [
+          "lora_trained",
+          "base_model_used",
+          "rank_32_used",
+          "epochs_limited"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_modern_scenario_validation": {
+        "owner": "agent",
+        "pre": "lora_trained",
+        "add": [
+          "modern_scenario_tested",
+          "style_transfer_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_originality": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dataset_jsonl_built",
+            "lora_trained"
+          ]
+        },
+        "add": [
+          "originality_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_ai_detector_testing": {
+        "owner": "agent",
+        "pre": "lora_trained",
+        "add": [
+          "ai_detector_tested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "extract_epub_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "segment_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "generate_instructions",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "build_jsonl_dataset",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "reserve_test_set",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "train_lora_on_tinker",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_modern_scenario_validation",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_originality",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_ai_detector_testing",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "epub_text_extracted",
+        "chunks_created",
+        "natural_boundaries_preserved",
+        {
+          "and": [
+            {
+              "cmp": [
+                "chunk_word_count",
+                ">=",
+                150
+              ]
+            },
+            {
+              "cmp": [
+                "chunk_word_count",
+                "<=",
+                400
+              ]
+            }
+          ]
+        },
+        "instructions_created",
+        "synthetic_descriptions_only",
+        "diverse_prompting_configured",
+        "dataset_jsonl_built",
+        "multiple_variants_per_chunk",
+        "system_user_assistant_format",
+        "test_set_reserved",
+        {
+          "cmp": [
+            "test_example_count",
+            ">=",
+            50
+          ]
+        },
+        "lora_trained",
+        "base_model_used",
+        "rank_32_used",
+        "epochs_limited",
+        "modern_scenario_tested",
+        "style_transfer_validated",
+        "originality_verified",
+        "ai_detector_tested"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "chunk_word_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "test_example_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "extract_epub_text": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "segment_text": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "generate_instructions": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "build_jsonl_dataset": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "reserve_test_set": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "train_lora_on_tinker": {
+      "via": "bash",
+      "needs": [
+        "tinker_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_modern_scenario_validation": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "verify_originality": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_ai_detector_testing": {
+      "via": "gptzero_or_pangram_or_zerogpt",
+      "needs": [
+        "ai_detector_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

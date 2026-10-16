@@ -1,0 +1,114 @@
+Skill `quarterly-finance-report`.
+Roles: `coordinator`, `fetcher`, `expense_analyst`, `revenue_analyst`, `tax_specialist`, `tax_verifier`, `writer`.
+
+Tool `fetch_financials` (owner `fetcher`): via `read`; needs `local_filesystem`; sets `revenue_total` to `revenue_total`; sets `expense_total` to `expense_total`; adds `financials_fetched`.
+Tool `analyze_expenses` (owner `expense_analyst`): via `mcp`; requires `raw_expense_received` and `expense_nonnegative`; adds `expense_analyzed`, `expense_analysis_ready`, `expense_analysis_substantive`; sets `analyzed_expense_total` to `analyzed_expense_total`.
+Tool `classify_revenue` (owner `revenue_analyst`): via `mcp`; requires `raw_revenue_received` and `expense_data_received` and `revenue_positive`; adds `revenue_classified`.
+Tool `lookup_tax_rules` (owner `tax_specialist`): via `search`; requires `high_branch`; adds `tax_rules_found`.
+Tool `audit_high_revenue` (owner `tax_specialist`): via `mcp`; requires `high_branch` and `tax_rules_found`; adds `audit_report_ready`, `audit_report_substantive`.
+Tool `approve_audited` (owner `tax_verifier`): via `write`; needs `local_filesystem`; requires `high_branch` and `high_notification_received` and `audit_report_received` and `audit_report_substantive`; adds `approval_recorded`, `approval_exists`, `approval_approved_or_verified`.
+Tool `approve_standard` (owner `tax_verifier`): via `write`; needs `local_filesystem`; requires `standard_branch` and `standard_notification_received`; adds `approval_recorded`, `approval_exists`, `approval_approved_or_verified`.
+Tool `write_revenue_analysis` (owner `revenue_analyst`): via `mcp`; requires `revenue_classified` and `approval_exists` and `approval_approved_or_verified`; adds `final_revenue_analysis_ready`, `final_revenue_analysis_substantive`.
+Tool `compose_report` (owner `writer`): via `mcp`; requires `branch_notified_to_writer` and `expense_analysis_received` and `final_revenue_analysis_received` and `approval_exists`; adds `report_composed`, `report_substantive`.
+Tool `deliver_report` (owner `writer`): via `write`; needs `local_filesystem`; requires `report_composed` and `report_substantive`; adds `report_delivered`, `delivered_path_known`.
+Tool `report_result` (owner `coordinator`): via `mcp`; requires `report_delivered` and `approval_exists` and (`high_branch` or `standard_branch`); adds `user_informed`.
+
+Initially true: none.
+Initially: `revenue_total` == 0.
+Initially: `expense_total` == 0.
+Initially: `analyzed_expense_total` == 0.
+
+Goal: `report_delivered` and `delivered_path_known` and `approval_exists` and `approval_approved_or_verified` and `user_informed` and (`high_branch` or `standard_branch`).
+
+Protocol:
+  - `fetcher` uses `fetch_financials`.
+  - `fetcher` tells `revenue_analyst` `RawRevenueData`.
+  - `fetcher` tells `expense_analyst` `RawExpenseData`.
+  - `expense_analyst` uses `analyze_expenses`.
+  - `expense_analyst` tells `revenue_analyst` `ExpenseData`.
+  - `expense_analyst` tells `writer` `ExpenseAnalysis`.
+  - `revenue_analyst` uses `classify_revenue`.
+  - `revenue_analyst` chooses one of (external):
+    - branch `high`:
+      - `revenue_analyst` tells `tax_verifier` `HighRevenueNotification`.
+      - `revenue_analyst` tells `writer` `HighBranchNotification`.
+      - `revenue_analyst` tells `tax_specialist` `NotifyTaxSpecialist`.
+      - `tax_specialist` uses `lookup_tax_rules`.
+      - `tax_specialist` uses `audit_high_revenue`.
+      - `tax_specialist` tells `tax_verifier` `AuditReport`.
+      - `tax_verifier` uses `approve_audited`.
+      - `tax_verifier` tells `revenue_analyst` `Approval`.
+    - branch `standard`:
+      - `revenue_analyst` tells `tax_verifier` `StandardRevenueNotification`.
+      - `revenue_analyst` tells `writer` `StandardBranchNotification`.
+      - `revenue_analyst` tells `tax_specialist` `NotifyStandardRole`.
+      - `tax_verifier` uses `approve_standard`.
+      - `tax_verifier` tells `revenue_analyst` `Approval`.
+  - `revenue_analyst` uses `write_revenue_analysis`.
+  - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.
+  - `writer` uses `compose_report`.
+  - `writer` uses `deliver_report`.
+  - `writer` tells `fetcher` `GenerateReport`.
+  - `coordinator` uses `report_result`.
+
+Behaviour of `fetcher`:
+  - use `fetch_financials`.
+  - send `RawRevenueData` to `revenue_analyst`.
+  - send `RawExpenseData` to `expense_analyst`.
+  - receive `GenerateReport` from `writer`.
+
+Behaviour of `expense_analyst`:
+  - receive `RawExpenseData` from `fetcher`.
+  - use `analyze_expenses`.
+  - send `ExpenseData` to `revenue_analyst`.
+  - send `ExpenseAnalysis` to `writer`.
+
+Behaviour of `revenue_analyst`:
+  - receive `RawRevenueData` from `fetcher`.
+  - receive `ExpenseData` from `expense_analyst`.
+  - use `classify_revenue`.
+  - branch on `coordinator` one of:
+    - branch `high`:
+      - send `HighRevenueNotification` to `tax_verifier`.
+      - send `HighBranchNotification` to `writer`.
+      - send `NotifyTaxSpecialist` to `tax_specialist`.
+    - branch `standard`:
+      - send `StandardRevenueNotification` to `tax_verifier`.
+      - send `StandardBranchNotification` to `writer`.
+      - send `NotifyStandardRole` to `tax_specialist`.
+  - receive `Approval` from `tax_verifier`.
+  - use `write_revenue_analysis`.
+  - send `FinalRevenueAnalysis` to `writer`.
+
+Behaviour of `tax_specialist`:
+  - branch on `revenue_analyst` one of:
+    - branch `NotifyTaxSpecialist`:
+      - use `lookup_tax_rules`.
+      - use `audit_high_revenue`.
+      - send `AuditReport` to `tax_verifier`.
+    - branch `NotifyStandardRole`: none.
+
+Behaviour of `tax_verifier`:
+  - branch on `revenue_analyst` one of:
+    - branch `HighRevenueNotification`:
+      - receive `AuditReport` from `tax_specialist`.
+      - use `approve_audited`.
+      - send `Approval` to `revenue_analyst`.
+    - branch `StandardRevenueNotification`:
+      - use `approve_standard`.
+      - send `Approval` to `revenue_analyst`.
+
+Behaviour of `writer`:
+  - branch on `revenue_analyst` one of:
+    - branch `HighBranchNotification`:
+      - receive `ExpenseAnalysis` from `expense_analyst`.
+      - receive `FinalRevenueAnalysis` from `revenue_analyst`.
+      - use `compose_report`.
+      - use `deliver_report`.
+      - send `GenerateReport` to `fetcher`.
+    - branch `StandardBranchNotification`:
+      - receive `ExpenseAnalysis` from `expense_analyst`.
+      - receive `FinalRevenueAnalysis` from `revenue_analyst`.
+      - use `compose_report`.
+      - use `deliver_report`.
+      - send `GenerateReport` to `fetcher`.

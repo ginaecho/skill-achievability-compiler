@@ -1,0 +1,64 @@
+```ce
+Skill `foundationpose-pipeline`.
+Roles: `agent`, `user`.
+Tool `ask_inputs` (owner `agent`): via `ask_user`; adds `task_resolved`.
+Tool `find_checkout` (owner `agent`): via `bash`; adds `checkout_found`.
+Tool `read_docs` (owner `agent`): via `read`; requires `checkout_found`; adds `docs_read`.
+Tool `adapt_dataset` (owner `agent`): via `bash`; requires `checkout_found` and `task_resolved`; adds `dataset_adapted`.
+Tool `smoke_check_engine` (owner `agent`): via `bash`; requires `checkout_found` and `task_resolved`; adds `engine_validated`.
+Tool `build_gt_cache` (owner `agent`): via `bash`; requires `checkout_found` and `task_resolved`; adds `gt_cache_ready`.
+Tool `run_inference_only` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated` and `task_resolved`; adds `run_completed`, `predictions_ready`.
+Tool `run_pipeline` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated` and `task_resolved`; adds `run_completed`, `predictions_ready`, `score_report_ready`.
+Tool `rescore_run` (owner `agent`): via `bash`; requires `checkout_found` and `task_resolved`; adds `score_report_ready`.
+Tool `run_batch_eval` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated` and `task_resolved`; adds `batch_completed`, `score_report_ready`.
+Tool `inspect_outputs` (owner `agent`): via `read`; requires any of (`run_completed`, `score_report_ready`, `batch_completed`); adds `results_interpreted`.
+Initially true: none.
+Goal: any of (`dataset_adapted`, `run_completed`, `score_report_ready`, `batch_completed`, `results_interpreted`).
+Protocol:
+  - `agent` uses `ask_inputs`.
+  - `agent` uses `find_checkout`.
+  - `agent` uses `read_docs`.
+  - `agent` chooses one of (observed):
+    - branch `adapt_only`:
+      - `agent` uses `adapt_dataset`.
+    - branch `inference_only`:
+      - `agent` chooses one of (observed):
+        - branch `adapt_first`:
+          - `agent` uses `adapt_dataset`.
+        - branch `already_adapted`: none.
+      - `agent` uses `smoke_check_engine`.
+      - `agent` uses `run_inference_only`.
+      - `agent` chooses one of (observed):
+        - branch `inspect`:
+          - `agent` uses `inspect_outputs`.
+        - branch `skip`: none.
+    - branch `run_and_score`:
+      - `agent` chooses one of (observed):
+        - branch `adapt_first`:
+          - `agent` uses `adapt_dataset`.
+        - branch `already_adapted`: none.
+      - `agent` uses `smoke_check_engine`.
+      - `agent` uses `build_gt_cache`.
+      - `agent` uses `run_pipeline`.
+      - `agent` chooses one of (observed):
+        - branch `inspect`:
+          - `agent` uses `inspect_outputs`.
+        - branch `skip`: none.
+    - branch `rescore_only`:
+      - `agent` chooses one of (observed):
+        - branch `build_cache`:
+          - `agent` uses `build_gt_cache`.
+        - branch `cache_ready`: none.
+      - `agent` uses `rescore_run`.
+      - `agent` chooses one of (observed):
+        - branch `inspect`:
+          - `agent` uses `inspect_outputs`.
+        - branch `skip`: none.
+    - branch `batch_run`:
+      - `agent` uses `smoke_check_engine`.
+      - `agent` uses `run_batch_eval`.
+      - `agent` chooses one of (observed):
+        - branch `inspect`:
+          - `agent` uses `inspect_outputs`.
+        - branch `skip`: none.
+```

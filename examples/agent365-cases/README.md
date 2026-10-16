@@ -41,7 +41,7 @@ Shared source pages do not mean shared workflows.
 
 ## Results and reproduction
 
-**123/123 scenario expectations matched:** 63 static-validation checks and 60
+**125/125 scenario expectations matched:** 65 static-validation checks (including two separation-of-duty checks) and 60
 runtime-verification checks. The runtime matrix has ten allowed operations and
 fifty denied attempted operations, with zero transport invocations on the denied
 attempts. Replay scenarios first consume a reference through a separate successful
@@ -69,3 +69,12 @@ unbounded-spawning stress variant that yields `UNKNOWN`.
 It does **not** measure field accuracy, customer vulnerability rates, task success,
 tenant authorization, content correctness or live Agent 365 integration.
 See the [short improvement report](../../docs/AGENT365_CASE_REPORT.md).
+
+## Compacted packs
+
+The results above use authored `intent.json` packs. [docs/HOSTS_E2E.md](../../docs/HOSTS_E2E.md)
+runs the static checks on packs gpt-5.4 compacted from each `intent.md` (3 samples, two arms).
+When the manifest names the state vocabulary, 189/195 agree. The 6 misses are the two
+separation-of-duty checks (`role_separation`, Genspark and Celonis): every compacted pack has a
+single role. When the manifest names no state, 0/195 agree, because every pack is unaligned and
+the checker abstains. The authored packs pass all 65 static checks, including the two new ones.

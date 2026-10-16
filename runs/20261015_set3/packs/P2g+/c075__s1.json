@@ -1,0 +1,697 @@
+{
+  "pack": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "collect_traces": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "traces_exist"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_eval_from_traces": {
+        "owner": "agent",
+        "pre": "traces_exist",
+        "add": [
+          "eval_harness_built",
+          "goldens_written",
+          "graders_written",
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_eval_from_synthetic_goldens": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "eval_harness_built",
+          "goldens_written",
+          "graders_written",
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "calibrate_judges": {
+        "owner": "agent",
+        "pre": "eval_harness_built",
+        "add": [
+          "judge_calibration_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_base_model_baseline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "eval_harness_built",
+            "drift_suite_frozen"
+          ]
+        },
+        "add": [
+          "baseline_written",
+          "results_written",
+          "results_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_checkpoint_inputs": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "checkpoint_handoff_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage1_data_quality_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkpoint_handoff_present",
+            "goldens_written"
+          ]
+        },
+        "add": [
+          "stage1_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage2_drift_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "stage1_passed",
+            "baseline_written",
+            "drift_suite_frozen"
+          ]
+        },
+        "add": [
+          "stage2_passed",
+          "results_written",
+          "results_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage3_paired_arena_gate": {
+        "owner": "agent",
+        "pre": "stage2_passed",
+        "add": [
+          "stage3_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage4_canary_gate": {
+        "owner": "agent",
+        "pre": "stage3_passed",
+        "add": [
+          "stage4_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "results_complete",
+            {
+              "or": [
+                "baseline_written",
+                "stage1_passed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "promotion_report_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase0_build_and_baseline": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "traces_available": [
+                      {
+                        "act": {
+                          "cap": "build_eval_from_traces",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_traces_available": [
+                      {
+                        "act": {
+                          "cap": "build_eval_from_synthetic_goldens",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "traces_available": [
+                      "traces_exist"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "judge_needed": [
+                      {
+                        "act": {
+                          "cap": "calibrate_judges",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "all_deterministic": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_base_model_baseline",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase5_gate_checkpoint": [
+              {
+                "act": {
+                  "cap": "check_checkpoint_inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_stage1_data_quality_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_stage2_drift_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_stage3_paired_arena_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "canary_applicable": [
+                      {
+                        "act": {
+                          "cap": "run_stage4_canary_gate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "local_only_deployment": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_promotion_report",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "baseline_written",
+            "results_written",
+            "results_complete"
+          ]
+        },
+        {
+          "and": [
+            "promotion_report_written",
+            "results_written",
+            "results_complete"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "collect_traces": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "traces_exist"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_eval_from_traces": {
+        "owner": "agent",
+        "pre": "traces_exist",
+        "add": [
+          "eval_harness_built",
+          "goldens_written",
+          "graders_written",
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_eval_from_synthetic_goldens": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "eval_harness_built",
+          "goldens_written",
+          "graders_written",
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "calibrate_judges": {
+        "owner": "agent",
+        "pre": "eval_harness_built",
+        "add": [
+          "judge_calibration_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_base_model_baseline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "eval_harness_built",
+            "drift_suite_frozen"
+          ]
+        },
+        "add": [
+          "baseline_written",
+          "results_written",
+          "results_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_checkpoint_inputs": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "checkpoint_handoff_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage1_data_quality_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkpoint_handoff_present",
+            "goldens_written"
+          ]
+        },
+        "add": [
+          "stage1_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage2_drift_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "stage1_passed",
+            "baseline_written",
+            "drift_suite_frozen"
+          ]
+        },
+        "add": [
+          "stage2_passed",
+          "results_written",
+          "results_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage3_paired_arena_gate": {
+        "owner": "agent",
+        "pre": "stage2_passed",
+        "add": [
+          "stage3_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_stage4_canary_gate": {
+        "owner": "agent",
+        "pre": "stage3_passed",
+        "add": [
+          "stage4_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "results_complete",
+            {
+              "or": [
+                "baseline_written",
+                "stage1_passed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "promotion_report_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase0_build_and_baseline": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "traces_available": [
+                      {
+                        "act": {
+                          "cap": "build_eval_from_traces",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_traces_available": [
+                      {
+                        "act": {
+                          "cap": "build_eval_from_synthetic_goldens",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "traces_available": [
+                      "traces_exist"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "judge_needed": [
+                      {
+                        "act": {
+                          "cap": "calibrate_judges",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "all_deterministic": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_base_model_baseline",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase5_gate_checkpoint": [
+              {
+                "act": {
+                  "cap": "check_checkpoint_inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_stage1_data_quality_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_stage2_drift_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_stage3_paired_arena_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "canary_applicable": [
+                      {
+                        "act": {
+                          "cap": "run_stage4_canary_gate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "local_only_deployment": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_promotion_report",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "baseline_written",
+            "results_written",
+            "results_complete"
+          ]
+        },
+        {
+          "and": [
+            "promotion_report_written",
+            "results_written",
+            "results_complete"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "collect_traces": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "build_eval_from_traces": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "build_eval_from_synthetic_goldens": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "calibrate_judges": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_base_model_baseline": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "check_checkpoint_inputs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_stage1_data_quality_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_stage2_drift_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_stage3_paired_arena_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "run_stage4_canary_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "write_promotion_report": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

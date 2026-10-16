@@ -1,0 +1,124 @@
+```ce
+Skill `book-sft-pipeline`.
+Roles: `orchestrator`, `extraction_agent`, `segmentation_agent`, `instruction_agent`, `dataset_builder`, `training_agent`, `validation_agent`, `user`.
+
+Tool `extract_epub_text` (owner `extraction_agent`):
+  via `bash`;
+  requires `epub_file_provided`;
+  adds `raw_text_extracted`, `paragraphs_preserved`.
+
+Tool `remove_front_back_matter` (owner `extraction_agent`):
+  via `bash`;
+  requires `raw_text_extracted`;
+  adds `cleaned_text`.
+
+Tool `segment_text` (owner `segmentation_agent`):
+  via `bash`;
+  requires `cleaned_text`;
+  adds `chunks_segmented`;
+  sets `chunk_count` to `chunk_count` + 1 for each chunk.
+
+Tool `generate_synthetic_instruction` (owner `instruction_agent`):
+  via `bash`;
+  requires `chunks_segmented`;
+  picks `instruction` with `instruction` != "";
+  adds `instruction_generated`.
+
+Tool `build_dataset` (owner `dataset_builder`):
+  via `bash`;
+  requires `instruction_generated` and `chunks_segmented`;
+  adds `dataset_ready`;
+  sets `example_count` to `example_count` + `variants`.
+
+Tool `train_lora` (owner `training_agent`):
+  via `bash`;
+  needs `tinker_platform`;
+  requires `dataset_ready`;
+  adds `lora_adapter_saved`;
+  sets `training_time_minutes` to 15;
+  sets `adapter_size_mb` to 350.
+
+Tool `run_modern_scenario_test` (owner `validation_agent`):
+  via `bash`;
+  requires `lora_adapter_saved`;
+  adds `style_transfer_evaluated`.
+
+Tool `verify_originality` (owner `validation_agent`):
+  via `bash`;
+  requires `lora_adapter_saved`;
+  adds `originality_passes`.
+
+Tool `run_ai_detector` (owner `validation_agent`):
+  via `bash`;
+  requires `lora_adapter_saved`;
+  adds `detector_score_ok`.
+
+Tool `provide_epub` (owner `user`):
+  via `ask_user`;
+  adds `epub_file_provided`;
+  removes all `epub_file_provided`.
+
+Initially true: none.
+Initially: `chunk_count` == 0.
+Initially: `example_count` == 0.
+Initially: `training_time_minutes` == 0.
+Initially: `adapter_size_mb` == 0.
+Goal: `lora_adapter_saved` and `style_transfer_evaluated` and `originality_passes` and (`detector_score_ok` or `not_required`).
+
+Protocol:
+  - `user` uses `provide_epub`.
+  - `orchestrator` spawn `extraction_agent`.
+  - `orchestrator` spawn `segmentation_agent`.
+  - `orchestrator` spawn `instruction_agent`.
+  - `orchestrator` spawn `dataset_builder`.
+  - `orchestrator` spawn `training_agent`.
+  - `orchestrator` spawn `validation_agent`.
+  - `extraction_agent` uses `extract_epub_text`.
+  - `extraction_agent` uses `remove_front_back_matter`.
+  - `segmentation_agent` uses `segment_text`.
+  - loop `for_chunks`:
+    - `instruction_agent` uses `generate_synthetic_instruction`.
+    - repeat `for_chunks`.
+  - `dataset_builder` uses `build_dataset`.
+  - `training_agent` uses `train_lora`.
+  - `validation_agent` uses `run_modern_scenario_test`.
+  - `validation_agent` uses `verify_originality`.
+  - `validation_agent` chooses one of (observed):
+    - branch `detector_available`:
+      - `validation_agent` uses `run_ai_detector`.
+    - branch `detector_unavailable`: none.
+
+Behaviour of `orchestrator`:
+  - select one of:
+    - spawn `extraction_agent`.
+    - spawn `segmentation_agent`.
+    - spawn `instruction_agent`.
+    - spawn `dataset_builder`.
+    - spawn `training_agent`.
+    - spawn `validation_agent`.
+
+Behaviour of `extraction_agent`:
+  - use `extract_epub_text`.
+  - use `remove_front_back_matter`.
+
+Behaviour of `segmentation_agent`:
+  - use `segment_text`.
+
+Behaviour of `instruction_agent`:
+  - loop `for_chunks`:
+    - use `generate_synthetic_instruction`.
+    - repeat `for_chunks`.
+
+Behaviour of `dataset_builder`:
+  - use `build_dataset`.
+
+Behaviour of `training_agent`:
+  - use `train_lora`.
+
+Behaviour of `validation_agent`:
+  - use `run_modern_scenario_test`.
+  - use `verify_originality`.
+  - select one of:
+    - use `run_ai_detector`.
+    - none.
+```

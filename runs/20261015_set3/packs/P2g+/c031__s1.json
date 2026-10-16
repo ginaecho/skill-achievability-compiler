@@ -1,0 +1,777 @@
+{
+  "pack": {
+    "name": "expo-migrate-module",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_expo_version": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "module_expo_checked",
+          "example_expo_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "warn_experimental_api": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "module_expo_ok",
+            "example_expo_ok"
+          ]
+        },
+        "add": [
+          "experimental_warning_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_repo_and_contract": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "module_expo_ok",
+            "example_expo_ok"
+          ]
+        },
+        "add": [
+          "contract_established",
+          "references_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_macro_surface": {
+        "owner": "agent",
+        "pre": "contract_established",
+        "add": [
+          "surface_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_migration": {
+        "owner": "agent",
+        "pre": "surface_verified",
+        "add": [
+          "migration_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_verification": {
+        "owner": "agent",
+        "pre": "migration_applied",
+        "add": [
+          "verification_run",
+          "example_app_checked",
+          "config_checked",
+          "surface_compared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_blocked_resolution": {
+        "owner": "agent",
+        "pre": "blocked_item_found",
+        "add": [
+          "resolution_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_issue_approval": {
+        "owner": "agent",
+        "pre": "blocked_item_found",
+        "add": [
+          "issue_approval_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "open_tracking_issue": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:github_account",
+            {
+              "and": [
+                "blocked_item_found",
+                "issue_approved"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "tracking_issue_opened"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_upgrade_required": {
+        "owner": "agent",
+        "pre": "upgrade_required",
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "migration_applied",
+            "verification_run"
+          ]
+        },
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_expo_version",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "version_too_old": [
+              {
+                "act": {
+                  "cap": "report_upgrade_required",
+                  "by": "agent"
+                }
+              }
+            ],
+            "version_ok": [
+              {
+                "act": {
+                  "cap": "warn_experimental_api",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_repo_and_contract",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "verify_macro_surface",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_blocked_items": [
+                      {
+                        "act": {
+                          "cap": "edit_migration",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "blocked_items_found": [
+                      {
+                        "act": {
+                          "cap": "ask_blocked_resolution",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "coexist": [
+                              {
+                                "act": {
+                                  "cap": "ask_issue_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "issue_yes": [
+                                      {
+                                        "act": {
+                                          "cap": "open_tracking_issue",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "issue_no": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "assumes": {
+                                    "issue_yes": [
+                                      "issue_approved"
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "revert": [
+                              {
+                                "act": {
+                                  "cap": "ask_issue_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "issue_yes": [
+                                      {
+                                        "act": {
+                                          "cap": "open_tracking_issue",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "issue_no": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "assumes": {
+                                    "issue_yes": [
+                                      "issue_approved"
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "coexist": [
+                              "coexist_chosen"
+                            ],
+                            "revert": [
+                              "revert_chosen"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "blocked_items_found": [
+                      "blocked_item_found"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_verification",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "version_ok": [
+              "example_expo_ok",
+              "module_expo_ok"
+            ],
+            "version_too_old": [
+              "upgrade_required"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "user_informed",
+    "init_true": [
+      "needs:github_account"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "expo-migrate-module",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_expo_version": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "module_expo_checked",
+          "example_expo_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "warn_experimental_api": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "module_expo_ok",
+            "example_expo_ok"
+          ]
+        },
+        "add": [
+          "experimental_warning_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_repo_and_contract": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "module_expo_ok",
+            "example_expo_ok"
+          ]
+        },
+        "add": [
+          "contract_established",
+          "references_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_macro_surface": {
+        "owner": "agent",
+        "pre": "contract_established",
+        "add": [
+          "surface_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_migration": {
+        "owner": "agent",
+        "pre": "surface_verified",
+        "add": [
+          "migration_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_verification": {
+        "owner": "agent",
+        "pre": "migration_applied",
+        "add": [
+          "verification_run",
+          "example_app_checked",
+          "config_checked",
+          "surface_compared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_blocked_resolution": {
+        "owner": "agent",
+        "pre": "blocked_item_found",
+        "add": [
+          "resolution_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_issue_approval": {
+        "owner": "agent",
+        "pre": "blocked_item_found",
+        "add": [
+          "issue_approval_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "open_tracking_issue": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "blocked_item_found",
+            "issue_approved"
+          ]
+        },
+        "add": [
+          "tracking_issue_opened"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_upgrade_required": {
+        "owner": "agent",
+        "pre": "upgrade_required",
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "migration_applied",
+            "verification_run"
+          ]
+        },
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_expo_version",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "version_too_old": [
+              {
+                "act": {
+                  "cap": "report_upgrade_required",
+                  "by": "agent"
+                }
+              }
+            ],
+            "version_ok": [
+              {
+                "act": {
+                  "cap": "warn_experimental_api",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_repo_and_contract",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "verify_macro_surface",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_blocked_items": [
+                      {
+                        "act": {
+                          "cap": "edit_migration",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "blocked_items_found": [
+                      {
+                        "act": {
+                          "cap": "ask_blocked_resolution",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "coexist": [
+                              {
+                                "act": {
+                                  "cap": "ask_issue_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "issue_yes": [
+                                      {
+                                        "act": {
+                                          "cap": "open_tracking_issue",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "issue_no": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "assumes": {
+                                    "issue_yes": [
+                                      "issue_approved"
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "revert": [
+                              {
+                                "act": {
+                                  "cap": "ask_issue_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "issue_yes": [
+                                      {
+                                        "act": {
+                                          "cap": "open_tracking_issue",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "issue_no": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_migration",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "assumes": {
+                                    "issue_yes": [
+                                      "issue_approved"
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "coexist": [
+                              "coexist_chosen"
+                            ],
+                            "revert": [
+                              "revert_chosen"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "blocked_items_found": [
+                      "blocked_item_found"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_verification",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "version_ok": [
+              "example_expo_ok",
+              "module_expo_ok"
+            ],
+            "version_too_old": [
+              "upgrade_required"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "user_informed",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_expo_version": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "warn_experimental_api": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "inspect_repo_and_contract": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "verify_macro_surface": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "edit_migration": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_verification": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "ask_blocked_resolution": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "ask_issue_approval": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "open_tracking_issue": {
+      "via": "bash",
+      "needs": [
+        "github_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "report_upgrade_required": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "report_results": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

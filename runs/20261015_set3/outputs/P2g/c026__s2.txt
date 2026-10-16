@@ -1,0 +1,34 @@
+```ce
+Skill `senior-pm`.
+Roles: `agent`, `user`.
+Tool `run_health_dashboard` (owner `agent`): via `bash`; requires `portfolio_data_available`; adds `health_assessed`, `health_output_available`, `composite_ok`, `critical_data_complete`.
+Tool `run_risk_analysis` (owner `agent`): via `bash`; requires `portfolio_data_available`; adds `risk_assessed`, `risk_output_available`, `no_avoid_threshold_risk`.
+Tool `run_capacity_analysis` (owner `agent`): via `bash`; requires `portfolio_data_available`; adds `capacity_assessed`, `capacity_output_available`, `utilization_in_range`.
+Tool `read_references` (owner `agent`): via `read`; adds `references_reviewed`.
+Tool `write_executive_report` (owner `agent`): via `write`; requires `health_output_available` and `risk_output_available` and `capacity_output_available`; adds `executive_report_written`.
+Tool `send_report_to_user` (owner `agent`): via `send_user_file`; requires `executive_report_written`; adds `report_delivered`.
+Tool `ask_user_to_resolve_data_issues` (owner `agent`): via `ask_user`; requires `health_assessed` and (not `composite_ok` or not `critical_data_complete`); adds `user_prompted_data_resolution`.
+Tool `ask_user_to_escalate_risk` (owner `agent`): via `ask_user`; requires `risk_assessed` and not `no_avoid_threshold_risk`; adds `user_prompted_risk_escalation`.
+Tool `ask_user_to_reallocate_capacity` (owner `agent`): via `ask_user`; requires `capacity_assessed` and not `utilization_in_range`; adds `user_prompted_capacity_reallocation`.
+Initially true: `portfolio_data_available`.
+Goal: any of (`report_delivered`, `user_prompted_data_resolution`, `user_prompted_risk_escalation`, `user_prompted_capacity_reallocation`).
+Protocol:
+  - `agent` uses `read_references`.
+  - `agent` uses `run_health_dashboard`.
+  - `agent` chooses one of (observed):
+    - branch `health_ok`:
+      - `agent` uses `run_risk_analysis`.
+      - `agent` chooses one of (observed):
+        - branch `risk_ok`:
+          - `agent` uses `run_capacity_analysis`.
+          - `agent` chooses one of (observed):
+            - branch `capacity_ok`:
+              - `agent` uses `write_executive_report`.
+              - `agent` uses `send_report_to_user`.
+            - branch `capacity_flagged`:
+              - `agent` uses `ask_user_to_reallocate_capacity`.
+        - branch `risk_escalation_needed`:
+          - `agent` uses `ask_user_to_escalate_risk`.
+    - branch `health_blocked`:
+      - `agent` uses `ask_user_to_resolve_data_issues`.
+```

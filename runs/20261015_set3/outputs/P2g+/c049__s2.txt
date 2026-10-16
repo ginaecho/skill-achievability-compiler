@@ -1,0 +1,29 @@
+```ce
+Skill `requesting-code-review`.
+Roles: `agent`, `reviewer`.
+Tool `get_git_shas` (owner `agent`): via `bash`; requires `git_repo_present`; adds `base_sha_known`, `head_sha_known`.
+Tool `read_reviewer_template` (owner `agent`): via `read`; adds `review_template_read`.
+Tool `spawn_reviewer` (owner `agent`): via `agent`; requires `base_sha_known` and `head_sha_known` and `review_template_read` and `description_prepared` and `requirements_prepared`; adds `review_requested`.
+Tool `perform_review` (owner `reviewer`): via `bash`; requires `review_requested`; picks `review_outcome` with (`review_outcome` == 0 or `review_outcome` == 1 or `review_outcome` == 2).
+Tool `fix_review_issues` (owner `agent`): via `bash`; requires `review_outcome` == 1; adds `important_issues_fixed`.
+Tool `record_minor_issues_for_later` (owner `agent`): via `reply`; requires `review_outcome` == 2; adds `minor_issues_noted`.
+Tool `deliver_review_result` (owner `agent`): via `reply`; requires `review_requested` and (`review_outcome` == 0 or (`review_outcome` == 1 and `important_issues_fixed`) or (`review_outcome` == 2 and `minor_issues_noted`)); adds `code_review_completed`.
+Initially true: `git_repo_present`, `description_prepared`, `requirements_prepared`.
+Initially: `review_outcome` == -1.
+Goal: `code_review_completed`.
+Protocol:
+  - `agent` uses `get_git_shas`.
+  - `agent` uses `read_reviewer_template`.
+  - spawn `reviewer`.
+  - `agent` uses `spawn_reviewer`.
+  - `reviewer` uses `perform_review`.
+  - `agent` chooses one of (observed):
+    - branch `critical_or_wrong` (assuming `review_outcome` == 0):
+      - `agent` uses `deliver_review_result`.
+    - branch `important` (assuming `review_outcome` == 1):
+      - `agent` uses `fix_review_issues`.
+      - `agent` uses `deliver_review_result`.
+    - branch `minor_only` (assuming `review_outcome` == 2):
+      - `agent` uses `record_minor_issues_for_later`.
+      - `agent` uses `deliver_review_result`.
+```

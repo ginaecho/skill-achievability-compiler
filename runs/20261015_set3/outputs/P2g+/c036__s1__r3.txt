@@ -1,0 +1,41 @@
+```ce
+Skill `nvidia-skill-finder`.
+Roles: `agent`, `user`.
+Tool `list_installed_skills` (owner `agent`): via `skill`; adds `installed_skills_checked`.
+Tool `list_nvidia_catalog_cli` (owner `agent`): via `bash`; requires `nvidia_relevant`; adds `catalog_checked`, `catalog_available`.
+Tool `fetch_nvidia_catalog_github` (owner `agent`): via `web_fetch`; requires `nvidia_relevant`; adds `catalog_checked`, `catalog_available`.
+Tool `fetch_nvidia_catalog_build` (owner `agent`): via `web_fetch`; requires `nvidia_relevant`; adds `catalog_checked`, `catalog_available`.
+Tool `fetch_nvidia_catalog_raw` (owner `agent`): via `web_fetch`; requires `nvidia_relevant`; adds `catalog_checked`, `catalog_available`.
+Tool `reply_recommend_skill` (owner `agent`): via `reply`; requires `catalog_checked`; requires `catalog_available`; requires `strong_match_found`; requires `skill_not_installed`; adds `recommendation_delivered`.
+Tool `reply_handoff_installed_skill` (owner `agent`): via `reply`; requires `installed_matching_skill`; adds `recommendation_delivered`.
+Tool `reply_shortlist_skills` (owner `agent`): via `reply`; requires `catalog_checked`; requires `catalog_available`; requires `medium_match_found`; adds `recommendation_delivered`.
+Tool `reply_no_strong_match` (owner `agent`): via `reply`; requires `catalog_checked`; requires `catalog_available`; requires `no_strong_match_found`; adds `recommendation_delivered`.
+Tool `reply_catalog_failed` (owner `agent`): via `reply`; requires `nvidia_relevant`; requires `catalog_checked`; requires `catalog_unavailable`; adds `recommendation_delivered`.
+Initially true: none.
+Goal: `recommendation_delivered`.
+Protocol:
+  - `agent` uses `list_installed_skills`.
+  - `agent` chooses one of (observed):
+    - branch `installed_match` (assuming `installed_matching_skill`):
+      - `agent` uses `reply_handoff_installed_skill`.
+    - branch `catalog_route` (assuming `nvidia_relevant`, `no_installed_matching_skill`):
+      - `agent` chooses one of (observed):
+        - branch `catalog_cli`:
+          - `agent` uses `list_nvidia_catalog_cli`.
+        - branch `catalog_github`:
+          - `agent` uses `fetch_nvidia_catalog_github`.
+        - branch `catalog_build`:
+          - `agent` uses `fetch_nvidia_catalog_build`.
+        - branch `catalog_raw`:
+          - `agent` uses `fetch_nvidia_catalog_raw`.
+        - branch `catalog_unavailable` (assuming `catalog_checked`, `catalog_unavailable`):
+          - `agent` uses `reply_catalog_failed`.
+      - `agent` chooses one of (observed):
+        - branch `strong_match` (assuming `catalog_available`, `strong_match_found`, `skill_not_installed`):
+          - `agent` uses `reply_recommend_skill`.
+        - branch `medium_match` (assuming `catalog_available`, `medium_match_found`):
+          - `agent` uses `reply_shortlist_skills`.
+        - branch `no_strong_match` (assuming `catalog_available`, `no_strong_match_found`):
+          - `agent` uses `reply_no_strong_match`.
+    - branch `not_nvidia_relevant` (assuming `not_nvidia_relevant`): none.
+```

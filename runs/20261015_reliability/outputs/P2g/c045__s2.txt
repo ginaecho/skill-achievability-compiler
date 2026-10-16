@@ -1,0 +1,33 @@
+```ce
+Skill `sandbox-next`.
+Roles: `agent`, `user`.
+Tool `inspect_app_line` (owner `agent`): via `read`; adds `app_inspected`.
+Tool `ask_porting_intent` (owner `agent`): via `ask_user`; requires `app_inspected`; adds `porting_intent_known`.
+Tool `load_sandbox_stable_skill` (owner `agent`): via `skill`; requires `app_inspected`; adds `stable_skill_loaded`.
+Tool `load_sandbox_migrate_to_next_skill` (owner `agent`): via `skill`; requires `porting_intent_known`; adds `migrate_skill_loaded`.
+Tool `fetch_next_docs` (owner `agent`): via `web_fetch`; requires `app_inspected`; needs `allowlisted_internet`; adds `next_docs_opened`.
+Tool `read_installed_next_types` (owner `agent`): via `read`; requires `app_inspected`; adds `next_types_checked`.
+Tool `edit_next_app_code` (owner `agent`): via `write`; requires `app_inspected` and `next_docs_opened` and `next_types_checked` and `is_next_package_line` and `image_matches_next_line` and not `bridge_only`; adds `code_updated`; removes `uses_stable_only_api`, `mixes_package_and_image_lines`, `stores_live_secrets_in_sandbox_env`.
+Tool `typecheck_next_app` (owner `agent`): via `bash`; requires `code_updated`; needs `shell`, `linux`, `package_registries`; adds `typecheck_passed`.
+Tool `inspect_ship_readiness` (owner `agent`): via `read`; requires `code_updated`; adds `ship_checked`.
+Initially true: none.
+Initially: not `app_inspected` and not `porting_intent_known` and not `stable_skill_loaded` and not `migrate_skill_loaded` and not `next_docs_opened` and not `next_types_checked` and not `code_updated` and not `typecheck_passed` and not `ship_checked`.
+Initially: not `is_next_package_line` and not `is_stable_package_line` and not `image_matches_next_line` and not `image_matches_stable_line` and not `bridge_only`.
+Initially: not `uses_stable_only_api` and not `mixes_package_and_image_lines` and not `stores_live_secrets_in_sandbox_env`.
+Goal: any of (`stable_skill_loaded`, `migrate_skill_loaded`, all of (`code_updated`, `typecheck_passed`, `ship_checked`, `is_next_package_line`, `image_matches_next_line`, not `bridge_only`, not `uses_stable_only_api`, not `mixes_package_and_image_lines`, not `stores_live_secrets_in_sandbox_env`)).
+Protocol:
+  - `agent` uses `inspect_app_line`.
+  - `agent` chooses one of (observed):
+    - branch `stable_line_found`:
+      - `agent` uses `load_sandbox_stable_skill`.
+    - branch `porting_requested`:
+      - `agent` uses `ask_porting_intent`.
+      - `agent` uses `load_sandbox_migrate_to_next_skill`.
+    - branch `bridge_only_found`: none.
+    - branch `next_line_confirmed`:
+      - `agent` uses `fetch_next_docs`.
+      - `agent` uses `read_installed_next_types`.
+      - `agent` uses `edit_next_app_code`.
+      - `agent` uses `typecheck_next_app`.
+      - `agent` uses `inspect_ship_readiness`.
+```

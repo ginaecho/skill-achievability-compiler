@@ -1,0 +1,58 @@
+```ce
+Skill `automate-this`.
+Roles: `agent`, `user`.
+Tool `check_prerequisites` (owner `agent`): via `bash`; requires `video_path_known`; adds `prerequisites_checked`, `ffmpeg_checked`, `whisper_checked`; picks `ffmpeg_available` with any of (`ffmpeg_available` == 0, `ffmpeg_available` == 1); picks `whisper_available` with any of (`whisper_available` == 0, `whisper_available` == 1).
+Tool `extract_recording_content` (owner `agent`): via `bash`; requires `video_path_known` and `ffmpeg_checked` and `ffmpeg_available` == 1; adds `work_dir_created`, `frames_extracted`, `audio_checked`; picks `long_recording` with any of (`long_recording` == 0, `long_recording` == 1); picks `audio_present` with any of (`audio_present` == 0, `audio_present` == 1).
+Tool `transcribe_audio` (owner `agent`): via `bash`; requires `audio_checked` and `audio_present` == 1 and `whisper_checked` and `whisper_available` == 1; adds `audio_transcribed`.
+Tool `reconstruct_process` (owner `agent`): adds `process_reconstructed`.
+Tool `ask_user_confirmation` (owner `agent`): via `ask_user`; requires `process_reconstructed`; picks `reconstruction_confirmed` with any of (`reconstruction_confirmed` == 0, `reconstruction_confirmed` == 1).
+Tool `fingerprint_environment` (owner `agent`): via `bash`; requires `reconstruction_confirmed` == 1; adds `environment_fingerprinted`.
+Tool `propose_automation_tiers` (owner `agent`): requires `environment_fingerprinted`; adds `tiers_proposed`.
+Tool `ask_user_tier_choice` (owner `agent`): via `ask_user`; requires `tiers_proposed`; picks `tier_selected` with `tier_selected` >= 0 and `tier_selected` <= 3.
+Tool `build_automation` (owner `agent`): via `write`; requires `tier_selected` >= 1; adds `automation_written`.
+Tool `test_and_fix_automation` (owner `agent`): via `bash`; requires `automation_written`; picks `automation_working` with any of (`automation_working` == 0, `automation_working` == 1).
+Tool `cleanup_temp_files` (owner `agent`): via `bash`; requires `work_dir_created`; adds `cleanup_done`; removes `work_dir_created`, `frames_extracted`, `audio_transcribed`.
+Initially true: none.
+Initially: `ffmpeg_available` == 0.
+Initially: `whisper_available` == 0.
+Initially: `long_recording` == 0.
+Initially: `audio_present` == 0.
+Initially: `reconstruction_confirmed` == 0.
+Initially: `tier_selected` == 0.
+Initially: `automation_working` == 0.
+Goal: `tiers_proposed` and any of ((`tier_selected` == 0), (`automation_written` and `automation_working`)) and `cleanup_done`.
+Protocol:
+  - `agent` uses `check_prerequisites`.
+  - `agent` chooses one of (observed):
+    - branch `ffmpeg_missing`: none.
+    - branch `ffmpeg_present`:
+      - `agent` uses `extract_recording_content`.
+      - `agent` chooses one of (observed):
+        - branch `no_audio`: none.
+        - branch `audio_with_whisper`:
+          - `agent` uses `transcribe_audio`.
+        - branch `audio_without_whisper_proceed`: none.
+      - `agent` uses `reconstruct_process`.
+      - loop `confirm_reconstruction`:
+        - `agent` uses `ask_user_confirmation`.
+        - `agent` chooses one of (observed):
+          - branch `confirmed`: none.
+          - branch `revise`:
+            - `agent` uses `reconstruct_process`.
+            - repeat `confirm_reconstruction`.
+      - `agent` uses `fingerprint_environment`.
+      - `agent` uses `propose_automation_tiers`.
+      - `agent` uses `ask_user_tier_choice`.
+      - `agent` chooses one of (observed):
+        - branch `no_build`: none.
+        - branch `build_selected_tier`:
+          - `agent` uses `build_automation`.
+          - loop `test_until_working`:
+            - `agent` uses `test_and_fix_automation`.
+            - `agent` chooses one of (observed):
+              - branch `working`: none.
+              - branch `fix_again`:
+                - `agent` uses `build_automation`.
+                - repeat `test_until_working`.
+      - `agent` uses `cleanup_temp_files`.
+```

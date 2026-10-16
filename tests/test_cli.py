@@ -227,6 +227,8 @@ def test_eval_reports_abstentions(capsys):
 def test_examples_check_out(capsys):
     root = Path(__file__).parent.parent / "examples"
     for skill in sorted(root.rglob("SKILL.md")):
+        if "skillc" in skill.relative_to(root).parts:
+            continue      # a vendored copy of the package (deploy staging), not an example
         assert main(["check", str(skill)]) == 0, skill
 
 
@@ -285,3 +287,43 @@ def test_check_with_vocabulary_abstains_on_undefined_conditions(tmp_path, capsys
     assert main(["check", str(pack_path), "--json", "--vocabulary", str(vocabulary)]) == 3
     result = json.loads(capsys.readouterr().out)
     assert (result["verdict"], result["reason"]) == ("UNKNOWN", "UNALIGNED_CONDITION")
+
+
+def _unobserved_pack(tmp_path):
+    pack = {"name": "unobserved", "roles": ["planner", "worker"],
+            "capabilities": {"answer": {"add": ["answered"]},
+                             "deliver": {"pre": "answered", "add": ["delivered"]},
+                             "deliver_direct": {"add": ["delivered"]}},
+            "protocol": [{"choice": {"by": "worker", "branches": {
+                "ask": [{"act": {"cap": "answer", "by": "planner"}},
+                        {"act": {"cap": "deliver", "by": "worker"}}],
+                "direct": [{"act": {"cap": "deliver_direct", "by": "worker"}}]}}}],
+            "goal": "delivered"}
+    path = tmp_path / "pack.json"
+    path.write_text(json.dumps(pack), encoding="utf-8")
+    return path
+
+
+def test_check_reports_protocol_rejection_separately_and_fails(tmp_path, capsys):
+    path = _unobserved_pack(tmp_path)
+    assert main(["check", str(path)]) == 1          # rejected protocol is not a pass
+    out = capsys.readouterr().out
+    assert "unobserved: ACHIEVABLE" in out
+    assert "ACHIEVABLE  goal reachable along witness path" in out
+    assert "PROTOCOL REJECTED (NON_PROJECTABLE): " in out
+    assert "coverage: none:witness-only" in out
+    assert main(["check", "--json", str(path)]) == 1
+    data = json.loads(capsys.readouterr().out)
+    assert data["schema"] == "skillc.verdict/2"
+    assert data["verdict"] == "ACHIEVABLE" and data["protocol"] == "REJECTED"
+    assert data["protocol_reason"] == "NON_PROJECTABLE" and data["admissible"] is False
+
+
+def test_scan_rows_carry_the_protocol_dimension(tmp_path, capsys):
+    _unobserved_pack(tmp_path)
+    assert main(["scan", str(tmp_path), "--glob", "*.json", "--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert rows[0]["protocol"] == "REJECTED"
+    assert rows[0]["protocol_reason"] == "NON_PROJECTABLE"
+    assert rows[0]["admissible"] is False
+

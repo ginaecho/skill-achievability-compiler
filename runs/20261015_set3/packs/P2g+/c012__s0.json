@@ -1,0 +1,635 @@
+{
+  "pack": {
+    "name": "transcribe",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_api_key": {
+        "owner": "agent",
+        "pre": "shell",
+        "add": [
+          "api_key_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_openai_with_uv": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "shell",
+            "package_registries"
+          ]
+        },
+        "add": [
+          "openai_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_openai_with_pip": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "shell",
+            "package_registries"
+          ]
+        },
+        "add": [
+          "openai_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_fast_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "api_key_present",
+                "openai_installed",
+                "audio_paths_provided"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_diarized_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "api_key_present",
+                "openai_installed",
+                "audio_paths_provided",
+                "diarization_requested"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rerun_fast_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "api_key_present",
+                "openai_installed",
+                "audio_paths_provided"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rerun_diarized_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "api_key_present",
+                "openai_installed",
+                "audio_paths_provided",
+                "diarization_requested"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_set_key_instructions": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "user_told_to_set_api_key"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_confirm_completion": {
+        "owner": "agent",
+        "pre": "transcription_output_saved",
+        "add": [
+          "transcription_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_api_key",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "key_present": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "uv_available": [
+                      {
+                        "act": {
+                          "cap": "install_openai_with_uv",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "uv_unavailable": [
+                      {
+                        "act": {
+                          "cap": "install_openai_with_pip",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "diarized_request": [
+                      {
+                        "act": {
+                          "cap": "run_diarized_transcription",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "accepted": [],
+                            "needs_single_targeted_change": [
+                              {
+                                "act": {
+                                  "cap": "rerun_diarized_transcription",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "fast_text_request": [
+                      {
+                        "act": {
+                          "cap": "run_fast_transcription",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "accepted": [],
+                            "needs_single_targeted_change": [
+                              {
+                                "act": {
+                                  "cap": "rerun_fast_transcription",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "diarized_request": [
+                      "audio_paths_provided",
+                      "diarization_requested"
+                    ],
+                    "fast_text_request": [
+                      "audio_paths_provided"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_confirm_completion",
+                  "by": "agent"
+                }
+              }
+            ],
+            "key_missing": [
+              {
+                "act": {
+                  "cap": "reply_set_key_instructions",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "key_present": [
+              "api_key_present"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "transcription_delivered",
+    "init_true": [
+      "shell",
+      "package_registries",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "transcribe",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_api_key": {
+        "owner": "agent",
+        "pre": "shell",
+        "add": [
+          "api_key_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_openai_with_uv": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "shell",
+            "package_registries"
+          ]
+        },
+        "add": [
+          "openai_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_openai_with_pip": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "shell",
+            "package_registries"
+          ]
+        },
+        "add": [
+          "openai_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_fast_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "api_key_present",
+            "openai_installed",
+            "audio_paths_provided"
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_diarized_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "api_key_present",
+            "openai_installed",
+            "audio_paths_provided",
+            "diarization_requested"
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rerun_fast_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "api_key_present",
+            "openai_installed",
+            "audio_paths_provided"
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rerun_diarized_transcription": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "api_key_present",
+            "openai_installed",
+            "audio_paths_provided",
+            "diarization_requested"
+          ]
+        },
+        "add": [
+          "transcription_output_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_set_key_instructions": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "user_told_to_set_api_key"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_confirm_completion": {
+        "owner": "agent",
+        "pre": "transcription_output_saved",
+        "add": [
+          "transcription_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_api_key",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "key_present": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "uv_available": [
+                      {
+                        "act": {
+                          "cap": "install_openai_with_uv",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "uv_unavailable": [
+                      {
+                        "act": {
+                          "cap": "install_openai_with_pip",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "diarized_request": [
+                      {
+                        "act": {
+                          "cap": "run_diarized_transcription",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "accepted": [],
+                            "needs_single_targeted_change": [
+                              {
+                                "act": {
+                                  "cap": "rerun_diarized_transcription",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "fast_text_request": [
+                      {
+                        "act": {
+                          "cap": "run_fast_transcription",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "accepted": [],
+                            "needs_single_targeted_change": [
+                              {
+                                "act": {
+                                  "cap": "rerun_fast_transcription",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "diarized_request": [
+                      "audio_paths_provided",
+                      "diarization_requested"
+                    ],
+                    "fast_text_request": [
+                      "audio_paths_provided"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_confirm_completion",
+                  "by": "agent"
+                }
+              }
+            ],
+            "key_missing": [
+              {
+                "act": {
+                  "cap": "reply_set_key_instructions",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "key_present": [
+              "api_key_present"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "transcription_delivered",
+    "init_true": [
+      "shell",
+      "package_registries"
+    ],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_api_key": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_openai_with_uv": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "install_openai_with_pip": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run_fast_transcription": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_diarized_transcription": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "rerun_fast_transcription": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "rerun_diarized_transcription": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "reply_set_key_instructions": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "reply_confirm_completion": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

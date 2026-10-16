@@ -1,0 +1,40 @@
+```ce
+Skill `comprehensive-research-agent`.
+Roles: `agent`, `user`.
+Tool `search_public_web` (owner `agent`): via `web_search`; needs `public_internet`; adds `search_results_available`.
+Tool `fetch_public_source` (owner `agent`): via `web_fetch`; needs `public_internet`; requires `sources_ranked`; adds `source_retrieved`.
+Tool `browse_public_source` (owner `agent`): via `browser`; needs `public_internet`; requires `sources_ranked`; adds `source_retrieved`.
+Tool `record_retrieval_failure` (owner `agent`): adds `failure_logged`, `gaps_documented`.
+Tool `track_sources` (owner `agent`): requires any of (`search_results_available`, `source_retrieved`, `failure_logged`); adds `source_tracking_updated`, `found_resources_tracked`.
+Tool `rank_sources` (owner `agent`): requires `search_results_available`; adds `sources_ranked`, `selection_rationale_documented`.
+Tool `synthesize_findings` (owner `agent`): requires `source_tracking_updated`; adds `validation_phase_done`, `coverage_summarized`.
+Tool `cross_validate_claims` (owner `agent`): requires `source_retrieved`; adds `claims_cross_validated`.
+Tool `write_report_file` (owner `agent`): via `write`; needs `local_filesystem`; requires all of (`validation_phase_done`, `source_tracking_updated`); adds `report_written`, `limitations_section_included`.
+Tool `verify_report_file` (owner `agent`): via `read`; needs `local_filesystem`; requires `report_written`; adds `file_verified`.
+Initially true: none.
+Goal: all of (`selection_rationale_documented`, `source_tracking_updated`, `found_resources_tracked`, `validation_phase_done`, `coverage_summarized`, `gaps_documented`, `claims_cross_validated`).
+Protocol:
+  - `agent` uses `search_public_web`.
+  - `agent` uses `rank_sources`.
+  - `agent` chooses one of (observed):
+    - branch `fetch_succeeds`:
+      - `agent` uses `fetch_public_source`.
+      - `agent` uses `track_sources`.
+    - branch `fetch_fails`:
+      - `agent` uses `record_retrieval_failure`.
+      - `agent` uses `track_sources`.
+      - `agent` chooses one of (observed):
+        - branch `browser_recovery_succeeds`:
+          - `agent` uses `browse_public_source`.
+          - `agent` uses `track_sources`.
+        - branch `browser_recovery_fails`:
+          - `agent` uses `record_retrieval_failure`.
+          - `agent` uses `track_sources`.
+  - `agent` uses `cross_validate_claims`.
+  - `agent` uses `synthesize_findings`.
+  - `agent` chooses one of (observed):
+    - branch `write_report_and_verify`:
+      - `agent` uses `write_report_file`.
+      - `agent` uses `verify_report_file`.
+    - branch `no_file_output`: none.
+```

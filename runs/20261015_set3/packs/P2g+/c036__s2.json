@@ -1,0 +1,663 @@
+{
+  "pack": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_skills_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_nvidia_catalog_cli": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet",
+            "nvidia_relevant"
+          ]
+        },
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_nvidia_catalog_fallback": {
+        "owner": "agent",
+        "pre": "nvidia_relevant",
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_taxonomy_reference": {
+        "owner": "agent",
+        "pre": "taxonomy_needed",
+        "add": [
+          "taxonomy_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_installed_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "installed_match_found"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_catalog_skills": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "catalog_checked",
+            "catalog_available",
+            "strong_or_medium_match_found"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_catalog_failure": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "catalog_checked",
+            "catalog_failed"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_no_strong_match": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "catalog_checked",
+            "catalog_available",
+            "no_strong_match_found"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "continue_general_help": {
+        "owner": "agent",
+        "pre": "generic_request",
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "nvidia_request": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "taxonomy_case": [
+                      {
+                        "act": {
+                          "cap": "read_taxonomy_reference",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "obvious_product_match": []
+                  },
+                  "assumes": {
+                    "taxonomy_case": [
+                      "taxonomy_needed"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_installed_skills",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "installed_match": [
+                      {
+                        "act": {
+                          "cap": "recommend_installed_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "not_installed": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "cli_catalog": [
+                              {
+                                "act": {
+                                  "cap": "list_nvidia_catalog_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "fallback_catalog": [
+                              {
+                                "act": {
+                                  "cap": "list_nvidia_catalog_fallback",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "catalog_failed": [
+                              {
+                                "act": {
+                                  "cap": "report_catalog_failure",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "catalog_available": [
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "matched": [
+                                      {
+                                        "act": {
+                                          "cap": "recommend_catalog_skills",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_match": [
+                                      {
+                                        "act": {
+                                          "cap": "report_no_strong_match",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "assumes": {
+                                    "matched": [
+                                      "strong_or_medium_match_found"
+                                    ],
+                                    "no_match": [
+                                      "no_strong_match_found"
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "catalog_available": [
+                              "catalog_available"
+                            ],
+                            "catalog_failed": [
+                              "catalog_failed"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "installed_match": [
+                      "installed_match_found"
+                    ]
+                  }
+                }
+              }
+            ],
+            "generic_request": [
+              {
+                "act": {
+                  "cap": "continue_general_help",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "generic_request": [
+              "generic_request"
+            ],
+            "nvidia_request": [
+              "nvidia_relevant"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "delivered",
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_skills_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_nvidia_catalog_cli": {
+        "owner": "agent",
+        "pre": "nvidia_relevant",
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_nvidia_catalog_fallback": {
+        "owner": "agent",
+        "pre": "nvidia_relevant",
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_taxonomy_reference": {
+        "owner": "agent",
+        "pre": "taxonomy_needed",
+        "add": [
+          "taxonomy_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_installed_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "installed_match_found"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_catalog_skills": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "catalog_checked",
+            "catalog_available",
+            "strong_or_medium_match_found"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_catalog_failure": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "catalog_checked",
+            "catalog_failed"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_no_strong_match": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "nvidia_relevant",
+            "catalog_checked",
+            "catalog_available",
+            "no_strong_match_found"
+          ]
+        },
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "continue_general_help": {
+        "owner": "agent",
+        "pre": "generic_request",
+        "add": [
+          "delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "nvidia_request": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "taxonomy_case": [
+                      {
+                        "act": {
+                          "cap": "read_taxonomy_reference",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "obvious_product_match": []
+                  },
+                  "assumes": {
+                    "taxonomy_case": [
+                      "taxonomy_needed"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_installed_skills",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "installed_match": [
+                      {
+                        "act": {
+                          "cap": "recommend_installed_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "not_installed": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "cli_catalog": [
+                              {
+                                "act": {
+                                  "cap": "list_nvidia_catalog_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "fallback_catalog": [
+                              {
+                                "act": {
+                                  "cap": "list_nvidia_catalog_fallback",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "catalog_failed": [
+                              {
+                                "act": {
+                                  "cap": "report_catalog_failure",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "catalog_available": [
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "matched": [
+                                      {
+                                        "act": {
+                                          "cap": "recommend_catalog_skills",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_match": [
+                                      {
+                                        "act": {
+                                          "cap": "report_no_strong_match",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  },
+                                  "assumes": {
+                                    "matched": [
+                                      "strong_or_medium_match_found"
+                                    ],
+                                    "no_match": [
+                                      "no_strong_match_found"
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "catalog_available": [
+                              "catalog_available"
+                            ],
+                            "catalog_failed": [
+                              "catalog_failed"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "installed_match": [
+                      "installed_match_found"
+                    ]
+                  }
+                }
+              }
+            ],
+            "generic_request": [
+              {
+                "act": {
+                  "cap": "continue_general_help",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "generic_request": [
+              "generic_request"
+            ],
+            "nvidia_request": [
+              "nvidia_relevant"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "delivered",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_installed_skills": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "list_nvidia_catalog_cli": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "list_nvidia_catalog_fallback": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "read_taxonomy_reference": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "recommend_installed_skill": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "recommend_catalog_skills": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "report_catalog_failure": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "report_no_strong_match": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "continue_general_help": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,48 @@
+```ce
+Skill `render-deploy`.
+Roles: `agent`, `user`.
+Tool `check_git_remote` (owner `agent`): via `bash`; requires `git_repo_present`; adds `git_remote_checked`; picks `has_git_remote` with true.
+Tool `check_git_remote_missing` (owner `agent`): via `bash`; requires `git_repo_present`; adds `git_remote_checked`.
+Tool `inspect_codebase` (owner `agent`): via `read`; adds `codebase_analyzed`.
+Tool `check_render_cli` (owner `agent`): via `bash`; adds `render_cli_checked`, `render_cli_available`.
+Tool `install_render_cli` (owner `agent`): via `bash`; requires `render_cli_checked`; needs `allowlisted_internet`; adds `render_cli_available`.
+Tool `write_render_blueprint` (owner `agent`): via `write`; requires `codebase_analyzed`; adds `render_yaml_created`.
+Tool `validate_render_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `render_cli_available`; adds `render_yaml_validated`.
+Tool `commit_and_push_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `has_git_remote`; adds `render_yaml_pushed`.
+Tool `derive_blueprint_deeplink` (owner `agent`): via `bash`; requires `has_git_remote` and `render_yaml_pushed`; adds `blueprint_deeplink_ready`.
+Tool `guide_dashboard_blueprint_deploy` (owner `agent`): via `ask_user`; requires `blueprint_deeplink_ready`; adds `user_guided_to_deploy`.
+Tool `guide_docker_dashboard_deploy` (owner `agent`): via `ask_user`; adds `docker_dashboard_guidance_given`.
+Tool `guide_create_git_remote` (owner `agent`): via `ask_user`; requires `git_remote_checked` and not `has_git_remote`; adds `git_remote_guidance_given`.
+
+Initially true: `git_repo_present`.
+Initially: true.
+Goal: any of (`docker_dashboard_guidance_given`, all of (`render_yaml_created`, `blueprint_deeplink_ready`, `user_guided_to_deploy`)).
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `git_repo_path`:
+      - `agent` chooses one of (observed):
+        - branch `remote_exists`:
+          - `agent` uses `check_git_remote`.
+          - `agent` uses `inspect_codebase`.
+          - `agent` chooses one of (observed):
+            - branch `single_service_direct_creation`: none.
+            - branch `blueprint_method`:
+              - `agent` uses `check_render_cli`.
+              - `agent` chooses one of (observed):
+                - branch `cli_already_available`: none.
+                - branch `install_cli`:
+                  - `agent` uses `install_render_cli`.
+              - `agent` uses `write_render_blueprint`.
+              - `agent` chooses one of (observed):
+                - branch `validate_now`:
+                  - `agent` uses `validate_render_blueprint`.
+                - branch `skip_validation`: none.
+              - `agent` uses `commit_and_push_blueprint`.
+              - `agent` uses `derive_blueprint_deeplink`.
+              - `agent` uses `guide_dashboard_blueprint_deploy`.
+        - branch `remote_missing`:
+          - `agent` uses `check_git_remote_missing`.
+          - `agent` uses `guide_create_git_remote`.
+    - branch `docker_image_path`:
+      - `agent` uses `guide_docker_dashboard_deploy`.
+```

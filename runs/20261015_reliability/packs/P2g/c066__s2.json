@@ -1,0 +1,1116 @@
+{
+  "pack": {
+    "name": "deploy-iac-execution-and-health-verification",
+    "roles": [
+      "agent",
+      "user",
+      "subagent"
+    ],
+    "capabilities": {
+      "read_preflight_template": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "preflight_template_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "dispatch_preflight_task": {
+        "owner": "agent",
+        "pre": "preflight_template_read",
+        "add": [
+          "preflight_task_dispatched",
+          "deploy_checklist_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_deploy_checklist": {
+        "owner": "agent",
+        "pre": "deploy_checklist_written",
+        "add": [
+          "deploy_checklist_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_upstream_artifacts": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "prepare_plan_read",
+          "scaffold_manifest_read",
+          "validation_result_checked",
+          "deployment_variables_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_deploy_schemas": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deploy_schemas_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_deploy_result_skeleton": {
+        "owner": "agent",
+        "pre": "deploy_schemas_read",
+        "add": [
+          "deploy_result_exists",
+          "deploy_result_in_progress"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight_checks": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:azure_account",
+            {
+              "and": [
+                "deploy_checklist_read",
+                "prepare_plan_read",
+                "scaffold_manifest_read",
+                "validation_result_checked",
+                "deployment_variables_resolved",
+                "deploy_result_exists"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "preflight_checks_passed",
+          "what_if_preview_done",
+          "auth_checked",
+          "rbac_checked",
+          "resource_group_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "execute_deployment": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:azure_account",
+            {
+              "and": [
+                "deploy_checklist_read",
+                "preflight_checks_passed",
+                "deploy_result_exists"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "portal_link_generated",
+          "secure_params_generated_or_reused",
+          "iac_deployed",
+          "code_deployed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "health_check_and_disable_scm": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:azure_account",
+            {
+              "and": [
+                "deploy_checklist_read",
+                "iac_deployed",
+                "code_deployed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "health_checked",
+          "scm_disabled_and_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_status": {
+            "or": [
+              {
+                "or": [
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      1
+                    ]
+                  },
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "read_error_classification": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "error_classification_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "heal_deployment": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:azure_account",
+            {
+              "and": [
+                "error_classification_read",
+                "deploy_checklist_read",
+                "deploy_result_exists"
+              ]
+            }
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "healing_attempts": {
+            "cmp": [
+              "healing_attempts",
+              ">=",
+              1
+            ]
+          },
+          "deployment_status": {
+            "or": [
+              {
+                "or": [
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      1
+                    ]
+                  },
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "ask_healing_approval": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "healing_attempts",
+            ">=",
+            3
+          ]
+        },
+        "add": [
+          "user_guidance_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "finalize_artifacts": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deploy_schemas_read",
+            "deploy_checklist_read",
+            "deploy_result_exists",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "deployment_status",
+                    "==",
+                    1
+                  ]
+                },
+                {
+                  "cmp": [
+                    "deployment_status",
+                    "==",
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "deploy_result_finalized",
+          "deployment_summary_written",
+          "context_updated",
+          "deploy_phase_completed"
+        ],
+        "del": [
+          "deploy_result_in_progress"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_preflight_template",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "dispatch_preflight_task",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_deploy_checklist",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_upstream_artifacts",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_deploy_schemas",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "write_deploy_result_skeleton",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_preflight_checks",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "approve_deploy": [
+              {
+                "act": {
+                  "cap": "execute_deployment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_deploy_checklist",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "health_check_and_disable_scm",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "clean_deploy": [
+                      {
+                        "act": {
+                          "cap": "read_deploy_schemas",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_deploy_checklist",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "finalize_artifacts",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "needs_healing": [
+                      {
+                        "act": {
+                          "cap": "read_error_classification",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "healing_loop",
+                          "body": [
+                            {
+                              "act": {
+                                "cap": "read_deploy_checklist",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "heal_deployment",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "choice": {
+                                "by": "agent",
+                                "observed": true,
+                                "branches": {
+                                  "resolved": [
+                                    {
+                                      "act": {
+                                        "cap": "read_deploy_schemas",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "act": {
+                                        "cap": "read_deploy_checklist",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "act": {
+                                        "cap": "finalize_artifacts",
+                                        "by": "agent"
+                                      }
+                                    }
+                                  ],
+                                  "continue_healing": [
+                                    {
+                                      "choice": {
+                                        "by": "agent",
+                                        "observed": true,
+                                        "branches": {
+                                          "ask_user_now": [
+                                            {
+                                              "act": {
+                                                "cap": "ask_healing_approval",
+                                                "by": "agent"
+                                              }
+                                            }
+                                          ],
+                                          "no_user_prompt": []
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "continue": "healing_loop"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deploy_checklist_read",
+        "prepare_plan_read",
+        "scaffold_manifest_read",
+        "validation_result_checked",
+        "deploy_result_exists",
+        "deploy_result_finalized",
+        "deployment_summary_written",
+        "context_updated",
+        "deploy_phase_completed",
+        {
+          "not": "deploy_result_in_progress"
+        },
+        {
+          "or": [
+            {
+              "cmp": [
+                "deployment_status",
+                "==",
+                1
+              ]
+            },
+            {
+              "cmp": [
+                "deployment_status",
+                "==",
+                2
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "healing_attempts",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "deployment_status",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "deploy-iac-execution-and-health-verification",
+    "roles": [
+      "agent",
+      "user",
+      "subagent"
+    ],
+    "capabilities": {
+      "read_preflight_template": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "preflight_template_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "dispatch_preflight_task": {
+        "owner": "agent",
+        "pre": "preflight_template_read",
+        "add": [
+          "preflight_task_dispatched",
+          "deploy_checklist_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_deploy_checklist": {
+        "owner": "agent",
+        "pre": "deploy_checklist_written",
+        "add": [
+          "deploy_checklist_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_upstream_artifacts": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "prepare_plan_read",
+          "scaffold_manifest_read",
+          "validation_result_checked",
+          "deployment_variables_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_deploy_schemas": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deploy_schemas_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_deploy_result_skeleton": {
+        "owner": "agent",
+        "pre": "deploy_schemas_read",
+        "add": [
+          "deploy_result_exists",
+          "deploy_result_in_progress"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight_checks": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deploy_checklist_read",
+            "prepare_plan_read",
+            "scaffold_manifest_read",
+            "validation_result_checked",
+            "deployment_variables_resolved",
+            "deploy_result_exists"
+          ]
+        },
+        "add": [
+          "preflight_checks_passed",
+          "what_if_preview_done",
+          "auth_checked",
+          "rbac_checked",
+          "resource_group_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "execute_deployment": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deploy_checklist_read",
+            "preflight_checks_passed",
+            "deploy_result_exists"
+          ]
+        },
+        "add": [
+          "portal_link_generated",
+          "secure_params_generated_or_reused",
+          "iac_deployed",
+          "code_deployed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "health_check_and_disable_scm": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deploy_checklist_read",
+            "iac_deployed",
+            "code_deployed"
+          ]
+        },
+        "add": [
+          "health_checked",
+          "scm_disabled_and_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_status": {
+            "or": [
+              {
+                "or": [
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      1
+                    ]
+                  },
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "read_error_classification": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "error_classification_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "heal_deployment": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "error_classification_read",
+            "deploy_checklist_read",
+            "deploy_result_exists"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "healing_attempts": {
+            "cmp": [
+              "healing_attempts",
+              ">=",
+              1
+            ]
+          },
+          "deployment_status": {
+            "or": [
+              {
+                "or": [
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      1
+                    ]
+                  },
+                  {
+                    "cmp": [
+                      "deployment_status",
+                      "==",
+                      2
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "ask_healing_approval": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "healing_attempts",
+            ">=",
+            3
+          ]
+        },
+        "add": [
+          "user_guidance_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "finalize_artifacts": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deploy_schemas_read",
+            "deploy_checklist_read",
+            "deploy_result_exists",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "deployment_status",
+                    "==",
+                    1
+                  ]
+                },
+                {
+                  "cmp": [
+                    "deployment_status",
+                    "==",
+                    2
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "deploy_result_finalized",
+          "deployment_summary_written",
+          "context_updated",
+          "deploy_phase_completed"
+        ],
+        "del": [
+          "deploy_result_in_progress"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_preflight_template",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "dispatch_preflight_task",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_deploy_checklist",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_upstream_artifacts",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_deploy_schemas",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "write_deploy_result_skeleton",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_preflight_checks",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "approve_deploy": [
+              {
+                "act": {
+                  "cap": "execute_deployment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_deploy_checklist",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "health_check_and_disable_scm",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "clean_deploy": [
+                      {
+                        "act": {
+                          "cap": "read_deploy_schemas",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_deploy_checklist",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "finalize_artifacts",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "needs_healing": [
+                      {
+                        "act": {
+                          "cap": "read_error_classification",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "healing_loop",
+                          "body": [
+                            {
+                              "act": {
+                                "cap": "read_deploy_checklist",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "heal_deployment",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "choice": {
+                                "by": "agent",
+                                "observed": true,
+                                "branches": {
+                                  "resolved": [
+                                    {
+                                      "act": {
+                                        "cap": "read_deploy_schemas",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "act": {
+                                        "cap": "read_deploy_checklist",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "act": {
+                                        "cap": "finalize_artifacts",
+                                        "by": "agent"
+                                      }
+                                    }
+                                  ],
+                                  "continue_healing": [
+                                    {
+                                      "choice": {
+                                        "by": "agent",
+                                        "observed": true,
+                                        "branches": {
+                                          "ask_user_now": [
+                                            {
+                                              "act": {
+                                                "cap": "ask_healing_approval",
+                                                "by": "agent"
+                                              }
+                                            }
+                                          ],
+                                          "no_user_prompt": []
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "continue": "healing_loop"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deploy_checklist_read",
+        "prepare_plan_read",
+        "scaffold_manifest_read",
+        "validation_result_checked",
+        "deploy_result_exists",
+        "deploy_result_finalized",
+        "deployment_summary_written",
+        "context_updated",
+        "deploy_phase_completed",
+        {
+          "not": "deploy_result_in_progress"
+        },
+        {
+          "or": [
+            {
+              "cmp": [
+                "deployment_status",
+                "==",
+                1
+              ]
+            },
+            {
+              "cmp": [
+                "deployment_status",
+                "==",
+                2
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "healing_attempts",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "deployment_status",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "read_preflight_template": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "dispatch_preflight_task": {
+      "via": "agent",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "read_deploy_checklist": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "read_upstream_artifacts": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "read_deploy_schemas": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "write_deploy_result_skeleton": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_preflight_checks": {
+      "via": "bash",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "execute_deployment": {
+      "via": "bash",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "health_check_and_disable_scm": {
+      "via": "bash",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "read_error_classification": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "heal_deployment": {
+      "via": "bash",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "ask_healing_approval": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    },
+    "finalize_artifacts": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 15
+    }
+  },
+  "live_goal": null
+}

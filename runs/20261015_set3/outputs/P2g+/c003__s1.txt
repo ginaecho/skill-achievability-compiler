@@ -1,0 +1,42 @@
+```ce
+Skill `burpsuite-project-parser`.
+Roles: `agent`, `user`.
+Tool `measure_query_size` (owner `agent`): via `bash`; requires `project_file_available` and `search_requested`; adds `size_checked`.
+Tool `run_burp_query` (owner `agent`): via `bash`; requires `project_file_available` and `search_requested` and `size_checked` and `safe_query`; adds `query_run`; picks `exit_code` with any of (`exit_code` == 0, `exit_code` == 1, `exit_code` == 3, `exit_code` == 4).
+Tool `run_control_query` (owner `agent`): via `bash`; requires `project_file_available` and `query_run` and `exit_code` == 3; adds `control_run`; picks `control_exit_code` with any of (`control_exit_code` == 0, `control_exit_code` == 3, `control_exit_code` == 4).
+Tool `write_verified_result` (owner `agent`): via `reply`; requires `query_run` and `exit_code` == 0; adds `deliverable_provided`.
+Tool `write_verified_empty_result` (owner `agent`): via `reply`; requires `control_run` and `control_exit_code` == 0; adds `deliverable_provided`.
+Tool `write_fix_path_guidance` (owner `agent`): via `reply`; requires `query_run` and `exit_code` == 1; adds `deliverable_provided`.
+Tool `write_extension_missing_result` (owner `agent`): via `reply`; requires any of ((`query_run` and `exit_code` == 4), (`control_run` and `control_exit_code` == 4)); adds `deliverable_provided`.
+Tool `write_inconclusive_result` (owner `agent`): via `reply`; requires `control_run` and `control_exit_code` == 3; adds `deliverable_provided`.
+
+Initially true: none.
+Initially: `exit_code` == 0.
+Initially: `control_exit_code` == 0.
+Goal: `deliverable_provided`.
+
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `safe_header_or_audit_query` (assuming all of (`project_file_available`, `search_requested`, `safe_query`)):
+      - `agent` uses `measure_query_size`.
+      - `agent` uses `run_burp_query`.
+      - `agent` chooses one of (observed):
+        - branch `output_returned` (assuming `exit_code` == 0):
+          - `agent` uses `write_verified_result`.
+        - branch `usage_or_path_error` (assuming `exit_code` == 1):
+          - `agent` uses `write_fix_path_guidance`.
+        - branch `non_json_output` (assuming `exit_code` == 4):
+          - `agent` uses `write_extension_missing_result`.
+        - branch `no_output` (assuming `exit_code` == 3):
+          - `agent` uses `run_control_query`.
+          - `agent` chooses one of (observed):
+            - branch `control_rows_returned` (assuming `control_exit_code` == 0):
+              - `agent` uses `write_verified_empty_result`.
+            - branch `control_non_json` (assuming `control_exit_code` == 4):
+              - `agent` uses `write_extension_missing_result`.
+            - branch `control_no_output` (assuming `control_exit_code` == 3):
+              - `agent` uses `write_inconclusive_result`.
+    - branch `unsafe_or_broad_query` (assuming all of (`project_file_available`, `search_requested`, not `safe_query`)):
+      - `agent` uses `measure_query_size`.
+      - `agent` uses `write_fix_path_guidance`.
+```

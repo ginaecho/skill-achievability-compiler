@@ -1,0 +1,53 @@
+```ce
+Skill `foundationpose-pipeline`.
+Roles: `agent`, `user`.
+Tool `find_checkout` (owner `agent`): via `read`; adds `checkout_found`.
+Tool `clone_checkout` (owner `agent`): via `bash`; needs `allowlisted_internet`; adds `checkout_found`.
+Tool `ask_missing_inputs` (owner `agent`): via `ask_user`; adds `inputs_resolved`.
+Tool `adapt_dataset` (owner `agent`): via `bash`; requires `checkout_found`; requires `inputs_resolved`; adds `dataset_adapted`.
+Tool `smoke_check_engine` (owner `agent`): via `bash`; requires `checkout_found`; requires `inputs_resolved`; requires `dataset_adapted`; adds `engine_validated`.
+Tool `build_gt_cache` (owner `agent`): via `bash`; requires `checkout_found`; requires `inputs_resolved`; requires `has_pose_gt`; adds `gt_cache_ready`.
+Tool `run_inference` (owner `agent`): via `bash`; requires `checkout_found`; requires `inputs_resolved`; requires `dataset_adapted`; requires `engine_validated`; adds `predictions_ready`; adds `provenance_preserved`.
+Tool `run_pipeline` (owner `agent`): via `bash`; requires `checkout_found`; requires `inputs_resolved`; requires `dataset_adapted`; requires `engine_validated`; requires `has_pose_gt`; adds `predictions_ready`; adds `evaluation_ready`; adds `provenance_preserved`.
+Tool `rescore_results` (owner `agent`): via `bash`; requires `checkout_found`; requires `inputs_resolved`; requires `completed_run_available`; adds `evaluation_ready`; adds `provenance_preserved`.
+Tool `inspect_outputs` (owner `agent`): via `read`; requires any of (`predictions_ready`, `evaluation_ready`); adds `results_interpreted`.
+Initially true: none.
+Initially: `has_pose_gt` or not `has_pose_gt`.
+Initially: `wants_adaptation` or not `wants_adaptation`.
+Initially: `wants_rescore_only` or not `wants_rescore_only`.
+Initially: `wants_batch_run` or not `wants_batch_run`.
+Initially: `completed_run_available` or not `completed_run_available`.
+Goal: (`predictions_ready` or `evaluation_ready`) and `provenance_preserved` and `results_interpreted`.
+Protocol:
+  - `agent` uses `find_checkout`.
+  - `user` chooses one of (observed):
+    - branch `checkout_found`: none.
+    - branch `checkout_missing`:
+      - `user` chooses one of (observed):
+        - branch `obtain_checkout`:
+          - `agent` uses `clone_checkout`.
+        - branch `no_checkout`: none.
+  - `agent` uses `ask_missing_inputs`.
+  - `user` chooses one of (observed):
+    - branch `adapt_first`:
+      - `agent` uses `adapt_dataset`.
+    - branch `already_adapted`: none.
+  - `user` chooses one of (observed):
+    - branch `validate_engine`:
+      - `agent` uses `smoke_check_engine`.
+    - branch `skip_engine_validation`: none.
+  - `user` chooses one of (observed):
+    - branch `rescore_only`:
+      - `agent` uses `rescore_results`.
+    - branch `new_run`:
+      - `user` chooses one of (observed):
+        - branch `inference_only`:
+          - `agent` uses `run_inference`.
+        - branch `inference_plus_scoring`:
+          - `user` chooses one of (observed):
+            - branch `build_cache`:
+              - `agent` uses `build_gt_cache`.
+            - branch `cache_already_ready`: none.
+          - `agent` uses `run_pipeline`.
+  - `agent` uses `inspect_outputs`.
+```

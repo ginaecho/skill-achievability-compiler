@@ -1,0 +1,76 @@
+```ce
+Skill `quarterly-finance-report`.
+Roles: `fetcher`, `expense_analyst`, `revenue_analyst`, `tax_specialist`, `tax_verifier`, `writer`.
+Tool `fetch_financials` (owner `fetcher`): via `a2a`; adds `financials_fetched`; adds `revenue_positive`; adds `expense_nonnegative`.
+Tool `analyze_expenses` (owner `expense_analyst`): via `a2a`; requires `expense_nonnegative`; adds `expense_data_ready`; adds `expense_analysis_ready`.
+Tool `classify_revenue` (owner `revenue_analyst`): via `a2a`; adds `revenue_classified`.
+Tool `lookup_tax_rules` (owner `tax_specialist`): via `a2a`; adds `tax_rules_found`.
+Tool `audit_high_revenue` (owner `tax_specialist`): via `a2a`; requires `tax_rules_found`; adds `audit_report_ready`.
+Tool `approve_audited` (owner `tax_verifier`): via `write`; needs `local_filesystem`; requires `audit_report_ready`; adds `approval_ready`; adds `approval_recorded`.
+Tool `approve_standard` (owner `tax_verifier`): via `write`; needs `local_filesystem`; adds `approval_ready`; adds `approval_recorded`.
+Tool `write_revenue_analysis` (owner `revenue_analyst`): via `a2a`; requires `approval_ready` and `revenue_classified` and `expense_data_ready`; adds `final_revenue_analysis_ready`.
+Tool `compose_report` (owner `writer`): via `a2a`; requires `expense_analysis_ready` and `final_revenue_analysis_ready`; adds `report_composed`.
+Tool `deliver_report` (owner `writer`): via `write`; needs `local_filesystem`; requires `report_composed`; adds `report_delivered`.
+Tool `return_generate_report` (owner `fetcher`): via `reply`; requires `report_delivered`; adds `report_returned`.
+Tool `return_rejected` (owner `fetcher`): via `reply`; adds `rejection_returned`.
+Initially true: none.
+Goal: `report_returned`.
+Protocol:
+  - `fetcher` uses `fetch_financials`.
+  - `fetcher` tells `expense_analyst` `RawExpenseData`.
+  - `expense_analyst` chooses one of (external):
+    - branch `rejected`:
+      - `fetcher` uses `return_rejected`.
+    - branch `analyzed`:
+      - `expense_analyst` uses `analyze_expenses`.
+      - `expense_analyst` tells `revenue_analyst` `ExpenseData`.
+      - `expense_analyst` tells `revenue_analyst` `ExpenseAnalysis`.
+      - `fetcher` tells `revenue_analyst` `RawRevenueData`.
+      - `revenue_analyst` uses `classify_revenue`.
+      - `revenue_analyst` chooses one of (external):
+        - branch `high_revenue`:
+          - `revenue_analyst` tells `tax_specialist` `NotifyTaxSpecialist`.
+          - `tax_specialist` uses `lookup_tax_rules`.
+          - `tax_specialist` uses `audit_high_revenue`.
+          - `tax_specialist` tells `tax_verifier` `AuditReport`.
+          - `revenue_analyst` tells `tax_verifier` `HighRevenueNotification`.
+          - `tax_verifier` chooses one of (external):
+            - branch `rejected`:
+              - `fetcher` uses `return_rejected`.
+            - branch `approved`:
+              - `tax_verifier` uses `approve_audited`.
+              - `tax_verifier` tells `revenue_analyst` `Approval`.
+              - `revenue_analyst` uses `write_revenue_analysis`.
+              - `revenue_analyst` tells `writer` `HighBranchNotification`.
+              - `revenue_analyst` tells `writer` `ExpenseAnalysis`.
+              - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.
+              - `writer` chooses one of (external):
+                - branch `rejected`:
+                  - `fetcher` uses `return_rejected`.
+                - branch `generated`:
+                  - `writer` uses `compose_report`.
+                  - `writer` uses `deliver_report`.
+                  - `writer` tells `fetcher` `GenerateReport`.
+                  - `fetcher` uses `return_generate_report`.
+        - branch `standard_revenue`:
+          - `revenue_analyst` tells `tax_specialist` `NotifyStandardRole`.
+          - `revenue_analyst` tells `tax_verifier` `StandardRevenueNotification`.
+          - `tax_verifier` chooses one of (external):
+            - branch `rejected`:
+              - `fetcher` uses `return_rejected`.
+            - branch `approved`:
+              - `tax_verifier` uses `approve_standard`.
+              - `tax_verifier` tells `revenue_analyst` `Approval`.
+              - `revenue_analyst` uses `write_revenue_analysis`.
+              - `revenue_analyst` tells `writer` `StandardBranchNotification`.
+              - `revenue_analyst` tells `writer` `ExpenseAnalysis`.
+              - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.
+              - `writer` chooses one of (external):
+                - branch `rejected`:
+                  - `fetcher` uses `return_rejected`.
+                - branch `generated`:
+                  - `writer` uses `compose_report`.
+                  - `writer` uses `deliver_report`.
+                  - `writer` tells `fetcher` `GenerateReport`.
+                  - `fetcher` uses `return_generate_report`.
+```

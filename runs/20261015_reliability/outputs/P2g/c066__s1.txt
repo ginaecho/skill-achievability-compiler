@@ -1,0 +1,52 @@
+```ce
+Skill `deploy-iac-execution-and-health-verification`.
+Roles: `agent`, `user`, `subagent`.
+Tool `read_preflight_template` (owner `agent`): via `read`; adds `preflight_template_read`.
+Tool `dispatch_preflight_subagent` (owner `agent`): via `agent`; requires `preflight_template_read`; adds `preflight_dispatched`, `deploy_checklist_written`.
+Tool `view_deploy_checklist` (owner `agent`): via `read`; requires `deploy_checklist_written`; adds `deploy_checklist_read`.
+Tool `read_upstream_artifacts` (owner `agent`): via `read`; adds `prepare_plan_read`, `scaffold_manifest_read`, `validation_checked`, `deployment_variables_resolved`.
+Tool `run_preflight_checks` (owner `agent`): via `bash`; requires `deploy_checklist_read` and `validation_checked`; adds `auth_checked`, `what_if_preview_done`, `rbac_checked`, `resource_group_checked`.
+Tool `read_deploy_schema` (owner `agent`): via `read`; adds `deploy_schema_read`.
+Tool `write_deploy_result_skeleton` (owner `agent`): via `write`; requires `deploy_schema_read`; adds `deploy_result_exists`, `deploy_result_in_progress`.
+Tool `ask_deploy_approval` (owner `agent`): via `ask_user`; requires `deploy_checklist_read` and `what_if_preview_done`; adds `approval_decided`.
+Tool `execute_deployment` (owner `agent`): via `bash`; needs `azure_account`; requires `deploy_result_exists` and `deploy_result_in_progress` and `approval_decided`; adds `portal_link_generated`, `deployment_executed`, `secure_params_generated_or_reused`.
+Tool `deploy_application_code` (owner `agent`): via `bash`; needs `azure_account`; requires `deployment_executed` and `prepare_plan_read` and `deploy_checklist_read`; adds `code_deployed`.
+Tool `health_check_and_disable_scm` (owner `agent`): via `bash`; needs `azure_account`; requires `code_deployed` and `deploy_checklist_read`; adds `health_checked`, `scm_disabled_verified`; picks `health_ok` with (`health_ok` or not `health_ok`).
+Tool `read_error_classification` (owner `agent`): via `read`; adds `error_classification_read`.
+Tool `finalize_artifacts` (owner `agent`): via `write`; requires `deploy_result_exists` and `deploy_schema_read` and `deploy_checklist_read`; removes `deploy_result_in_progress`; adds `deployment_summary_written`, `context_updated`, `deploy_result_finalized`; picks `deploy_succeeded` with (`deploy_succeeded` or not `deploy_succeeded`).
+
+Initially true: none.
+Initially: not `preflight_template_read` and not `preflight_dispatched` and not `deploy_checklist_written` and not `deploy_checklist_read` and not `prepare_plan_read` and not `scaffold_manifest_read` and not `validation_checked` and not `deployment_variables_resolved` and not `auth_checked` and not `what_if_preview_done` and not `rbac_checked` and not `resource_group_checked` and not `deploy_schema_read` and not `deploy_result_exists` and not `deploy_result_in_progress` and not `approval_decided` and not `deployment_executed` and not `secure_params_generated_or_reused` and not `code_deployed` and not `health_checked` and not `scm_disabled_verified` and not `error_classification_read` and not `deployment_summary_written` and not `context_updated` and not `deploy_result_finalized` and not `deploy_succeeded` and not `health_ok`.
+
+Goal: `deploy_result_exists` and `deploy_result_finalized` and not `deploy_result_in_progress` and `deployment_summary_written` and `context_updated`.
+
+Protocol:
+  - `agent` uses `read_preflight_template`.
+  - `agent` uses `dispatch_preflight_subagent`.
+  - `agent` uses `view_deploy_checklist`.
+  - `agent` uses `read_upstream_artifacts`.
+  - `agent` uses `run_preflight_checks`.
+  - `agent` uses `read_deploy_schema`.
+  - `agent` uses `write_deploy_result_skeleton`.
+  - `agent` uses `ask_deploy_approval`.
+  - `user` chooses one of (observed):
+    - branch `approve`:
+      - `agent` uses `execute_deployment`.
+      - `agent` uses `view_deploy_checklist`.
+      - `agent` uses `deploy_application_code`.
+      - `agent` uses `view_deploy_checklist`.
+      - `agent` uses `health_check_and_disable_scm`.
+      - `agent` chooses one of (observed):
+        - branch `clean`:
+          - `agent` uses `read_deploy_schema`.
+          - `agent` uses `view_deploy_checklist`.
+          - `agent` uses `finalize_artifacts`.
+        - branch `needs_healing`:
+          - `agent` uses `read_error_classification`.
+          - `agent` uses `view_deploy_checklist`.
+          - `agent` uses `read_deploy_schema`.
+          - `agent` uses `finalize_artifacts`.
+    - branch `decline`:
+      - `agent` uses `read_deploy_schema`.
+      - `agent` uses `finalize_artifacts`.
+```

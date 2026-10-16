@@ -1,0 +1,48 @@
+```ce
+Skill `aspire-project-v2-migration`.
+Roles: `agent`, `user`.
+Tool `check_local_override` (owner `agent`): via `read`; adds `override_checked`.
+Tool `inspect_workspace` (owner `agent`): via `read`; requires `override_checked`; adds `apphost_identified`, `local_changes_preserved`, `version_resolved`, `eligibility_assessed`, `candidates_assessed`, `references_assessed`, `gateway_assessed`, `no_edit_assessment_ready`.
+Tool `lookup_docs_and_api` (owner `agent`): via `bash`; needs `shell`, `windows`, `local_filesystem`; requires `apphost_identified`; adds `docs_checked`, `api_shapes_checked`.
+Tool `present_assessment_and_request_approval` (owner `agent`): via `ask_user`; requires `no_edit_assessment_ready`; adds `approval_requested`; picks `user_approved` with ( `user_approved` or not `user_approved` ).
+Tool `prepare_validation_baseline` (owner `agent`): via `bash`; needs `shell`, `windows`, `local_filesystem`; requires `user_approved`; adds `baseline_captured`.
+Tool `load_migration_patterns` (owner `agent`): via `read`; requires `user_approved`; adds `patterns_loaded`.
+Tool `apply_approved_edits` (owner `agent`): via `edit`; requires all of (`user_approved`, `patterns_loaded`, `eligibility_assessed`, `docs_checked`, `api_shapes_checked`); adds `approved_edits_applied`, `packages_updated`, `apphost_updated`, `references_cleaned_conservatively`, `warnings_scoped_narrowly`.
+Tool `restore_and_build` (owner `agent`): via `bash`; needs `shell`, `windows`, `local_filesystem`; requires `approved_edits_applied`; adds `restore_build_run`.
+Tool `start_apphost` (owner `agent`): via `bash`; needs `shell`, `windows`, `local_filesystem`; requires `restore_build_run`; adds `apphost_started`.
+Tool `wait_and_inspect_resources` (owner `agent`): via `bash`; needs `shell`, `windows`, `local_filesystem`; requires `apphost_started`; adds `validation_run`.
+Tool `reassess_idempotence` (owner `agent`): via `read`; requires `approved_edits_applied`; adds `idempotence_checked`.
+Tool `report_results` (owner `agent`): via `ask_user`; requires all of (`approved_edits_applied`, `idempotence_checked`); adds `results_reported`.
+Initially true: none.
+Initially: `user_approved` == false.
+Goal: any of (`approval_requested`, `results_reported`).
+Protocol:
+  - `agent` uses `check_local_override`.
+  - `agent` uses `inspect_workspace`.
+  - `agent` chooses one of (observed):
+    - branch `needs_api_lookup`:
+      - `agent` uses `lookup_docs_and_api`.
+    - branch `no_api_lookup_needed`: none.
+  - `agent` chooses one of (observed):
+    - branch `ineligible_or_unresolved_or_noop`:
+      - `agent` uses `present_assessment_and_request_approval`.
+    - branch `eligible_with_plan`:
+      - `agent` uses `present_assessment_and_request_approval`.
+      - `user` chooses one of (observed):
+        - branch `approve`:
+          - `agent` uses `load_migration_patterns`.
+          - `agent` chooses one of (observed):
+            - branch `baseline_authorized_and_feasible`:
+              - `agent` uses `prepare_validation_baseline`.
+            - branch `skip_baseline`: none.
+          - `agent` uses `apply_approved_edits`.
+          - `agent` chooses one of (observed):
+            - branch `validation_authorized`:
+              - `agent` uses `restore_and_build`.
+              - `agent` uses `start_apphost`.
+              - `agent` uses `wait_and_inspect_resources`.
+            - branch `skip_validation`: none.
+          - `agent` uses `reassess_idempotence`.
+          - `agent` uses `report_results`.
+        - branch `decline`: none.
+```

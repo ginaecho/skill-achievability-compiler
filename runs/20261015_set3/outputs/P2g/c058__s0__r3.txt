@@ -1,0 +1,45 @@
+```ce
+Skill `cli-exercise-explore`.
+Roles: `agent`, `user`.
+Tool `ask_for_authority` (owner `agent`): via `ask_user`; requires not `authority_resolved`; adds `authority_resolved`.
+Tool `inspect_context_and_docs` (owner `agent`): via `read`; adds `context_inspected`, `cases_defined`.
+Tool `read_cli_help` (owner `agent`): via `bash`; requires `authority_resolved`; adds `help_reviewed`.
+Tool `execute_case_run` (owner `agent`): via `bash`; requires `authority_resolved` and `cases_defined`; adds `case_executed`; picks `case_index` with `case_index` >= 0.
+Tool `record_evidence` (owner `agent`): via `write`; requires `case_executed`; adds `evidence_recorded`, `all_cases_executed_sequentially`.
+Tool `perform_cleanup` (owner `agent`): via `bash`; requires `case_executed`; adds `cleanup_done`, `cleanup_considered`.
+Tool `ask_for_interpretation` (owner `agent`): via `ask_user`; requires `material_ambiguity`; adds `interpretation_resolved`; removes `material_ambiguity`.
+Tool `prepare_final_report` (owner `agent`): via `write`; requires `evidence_recorded`; adds `final_report_ready`.
+Initially true: none.
+Initially: `case_index` == 0.
+Goal: all of (`authority_resolved`, `cases_defined`, `all_cases_executed_sequentially`, `evidence_recorded`, `final_report_ready`, `cleanup_considered`, not `unsupported_or_unsafe_interaction`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `authority_already_sufficient`: none.
+    - branch `authority_missing_or_unclear`:
+      - `agent` uses `ask_for_authority`.
+  - `agent` uses `inspect_context_and_docs`.
+  - `agent` chooses one of (observed):
+    - branch `no_material_ambiguity`: none.
+    - branch `material_ambiguity_present`:
+      - `agent` uses `ask_for_interpretation`.
+  - `agent` chooses one of (observed):
+    - branch `help_not_needed`: none.
+    - branch `help_useful_and_allowed`:
+      - `agent` uses `read_cli_help`.
+  - loop `run_cases`:
+    - `agent` uses `execute_case_run`.
+    - `agent` uses `record_evidence`.
+    - `agent` chooses one of (observed):
+      - branch `cleanup_needed_for_case`:
+        - `agent` uses `perform_cleanup`.
+      - branch `no_cleanup_needed_for_case`:
+        - `agent` uses `perform_cleanup`.
+    - `agent` chooses one of (observed):
+      - branch `more_cases_remaining`:
+        - repeat `run_cases`.
+      - branch `all_cases_done`: none.
+  - `agent` uses `prepare_final_report`.
+  - `agent` chooses one of (observed):
+    - branch `unsupported_or_unsafe_interaction_found`: none.
+    - branch `no_unsupported_or_unsafe_interaction`: none.
+```

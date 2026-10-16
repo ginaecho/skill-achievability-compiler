@@ -1,0 +1,82 @@
+```ce
+Skill `foundationpose-pipeline`.
+Roles: `agent`, `user`.
+
+Tool `resolve_checkout` (owner `agent`):
+  via `bash`;
+  requires `task_requested`;
+  adds `checkout_ready`;
+  picks `checkout_root` with true.
+
+Tool `adapt_dataset` (owner `agent`):
+  via `bash`;
+  requires `checkout_ready` and `profile_chosen` and `dataset_chosen`;
+  adds `dataset_adapted`;
+  picks `adapted_scene_path` with true.
+
+Tool `build_gt_cache` (owner `agent`):
+  via `bash`;
+  requires `dataset_adapted` and `pose_gt_available`;
+  adds `gt_cache_built`.
+
+Tool `validate_engine` (owner `agent`):
+  via `bash`;
+  requires `dataset_adapted` and `engine_available`;
+  adds `engine_validated`.
+
+Tool `run_pipeline` (owner `agent`):
+  via `bash`;
+  requires `checkout_ready` and `dataset_adapted` and `engine_validated`;
+  adds `pose_results_produced`;
+  picks `output_dir` with true.
+
+Tool `run_inference_only` (owner `agent`):
+  via `bash`;
+  requires `checkout_ready` and `dataset_adapted` and `engine_validated` and not `pose_gt_available`;
+  adds `pose_results_produced`;
+  picks `output_dir` with true.
+
+Tool `rescoring_evaluate` (owner `agent`):
+  via `bash`;
+  requires `checkout_ready` and `prior_run_complete`;
+  adds `rescoring_done`;
+  picks `rescoring_output_dir` with true.
+
+Tool `run_batch_eval` (owner `agent`):
+  via `bash`;
+  requires `checkout_ready` and `batch_requested`;
+  adds `batch_results_produced`;
+  picks `batch_output_root` with true.
+
+Initially true: `task_requested`.
+Initially: none.
+
+Goal: any of (
+  `pose_results_produced`,
+  `rescoring_done`,
+  `batch_results_produced`
+).
+
+Protocol:
+  - `agent` uses `resolve_checkout`.
+  - `agent` chooses one of (observed):
+    - branch `batch_eval_requested`:
+      - `agent` sets `batch_requested` to true.
+      - `agent` uses `run_batch_eval`.
+    - branch `rescoring_requested`:
+      - `agent` sets `prior_run_complete` to true.
+      - `agent` uses `rescoring_evaluate`.
+    - branch `inference_or_pipeline`:
+      - `agent` chooses one of (observed):
+        - branch `pose_gt_available`:
+          - `agent` sets `pose_gt_available` to true.
+          - `agent` uses `build_gt_cache`.
+        - branch `pose_gt_unavailable`: none.
+      - `agent` uses `adapt_dataset`.
+      - `agent` uses `validate_engine`.
+      - `agent` chooses one of (observed):
+        - branch `has_pose_gt`:
+          - `agent` uses `run_pipeline`.
+        - branch `inference_only`:
+          - `agent` uses `run_inference_only`.
+```

@@ -1,0 +1,43 @@
+```ce
+Skill `gh-fix-ci`.
+Roles: `agent`, `user`.
+Tool `check_gh_auth` (owner `agent`): via `bash`; needs `github_account`; adds `gh_auth_checked`.
+Tool `resolve_pr` (owner `agent`): via `bash`; needs `github_account`; requires `gh_auth_checked`; adds `pr_resolved`.
+Tool `inspect_pr_checks` (owner `agent`): via `bash`; needs `github_account`; requires `pr_resolved`; adds `failure_context_summarized`.
+Tool `report_external_check_urls` (owner `agent`): via `bash`; needs `github_account`; requires `pr_resolved`; adds `external_check_urls_reported`.
+Tool `draft_fix_plan_with_skill` (owner `agent`): via `skill`; requires `failure_context_summarized`; adds `fix_plan_drafted`.
+Tool `draft_fix_plan_inline` (owner `agent`): requires `failure_context_summarized`; adds `fix_plan_drafted`.
+Tool `implement_fix` (owner `agent`): via `bash`; requires `fix_plan_drafted` and `user_approved_plan`; adds `fix_implemented`.
+Tool `summarize_diffs_and_tests` (owner `agent`): via `bash`; requires `fix_implemented`; adds `diffs_and_tests_summarized`.
+Initially true: none.
+Goal: any of (`gh_auth_checked`, `user_prompted_to_login`) and `pr_resolved` and `failure_context_summarized` and `fix_plan_drafted` and any of ((not `user_approved_plan` and not `fix_implemented`), (`user_approved_plan` and `fix_implemented` and `diffs_and_tests_summarized`)).
+Protocol:
+  - `agent` uses `check_gh_auth`.
+  - `user` chooses one of (observed):
+    - branch `authenticated`:
+      - `agent` uses `resolve_pr`.
+      - `agent` uses `inspect_pr_checks`.
+      - `agent` uses `report_external_check_urls`.
+      - `agent` chooses one of (observed):
+        - branch `create_plan_skill_available`:
+          - `agent` uses `draft_fix_plan_with_skill`.
+        - branch `create_plan_skill_unavailable`:
+          - `agent` uses `draft_fix_plan_inline`.
+      - `user` chooses one of (observed):
+        - branch `approve_plan`:
+          - `agent` uses `implement_fix`.
+          - `agent` uses `summarize_diffs_and_tests`.
+        - branch `do_not_approve_plan`: none.
+    - branch `unauthenticated`: none.
+Behaviour of `agent`:
+  - select one of:
+    - branch `authenticated`:
+      - use `resolve_pr`.
+      - use `inspect_pr_checks`.
+      - use `report_external_check_urls`.
+    - branch `unauthenticated`:
+      - send `prompt_login` to `user`.
+Behaviour of `user`:
+  - branch on `agent` one of:
+    - branch `prompt_login`:
+```

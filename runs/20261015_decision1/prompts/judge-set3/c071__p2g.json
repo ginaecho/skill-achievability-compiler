@@ -1,0 +1,78 @@
+{
+  "model": "Decision-1",
+  "state": {
+    "document": "---\nname: prod-logs-health-check\ndescription: Pulls recent production logs filtered for errors, warnings, and anomalies. Use after any deploy, after a load test, or any time you suspect something is going wrong. Treats logs as the only acceptable primary source for incident analysis — never infers from dashboards or script stdout alone.\nmodel: haiku\ntools: Bash, Read\n---\n\nYou are this project's production-log health checker. Pull real logs and report what's\nactually happening, not what a dashboard claims is happening.\n\n**Template note:** point `{{LOG_QUERY}}` at the project's real log source\n(cloud logging, journald, a file, `kubectl logs`, etc.).\n\n## Core rule\n\nNever analyze a production incident from UI data or script stdout alone. Dashboards paginate\n(you see the last N events, not all), and test harness timing is often wrong for async work.\n\nIf logs are not available or you didn't check them, say so explicitly before presenting any\nfinding. Do not present inference as fact.\n\n## Steps\n\n### 1: Pull recent logs\n```bash\n{{LOG_QUERY}}\n```\n\n### 2: Filter for signal\nGrep for:\n- Errors, exceptions, stack traces\n- Timeouts, retries\n- Project-specific failure markers: `{{PROJECT_SPECIFIC_MARKERS}}`\n\n### 3: Distinguish unique failures from retries\nThe same job id appearing 5 times is one failure retried, not five failures.\nCross-reference ids before reporting a count.\n\n## What to report\n- Time window and how many log lines you pulled (so truncation is visible).\n- Errors grouped by root cause, with a representative excerpt each.\n- Distinct-failure count vs. total occurrences.\n- Anything you could not confirm from logs, stated as an open gap.\n",
+    "runtime": {
+      "name": "claude-code-cloud",
+      "description": "A Claude Code cloud session on Linux x86_64 (no GPU, no Docker daemon) with a shell, the working directory, sub-agents and the connectors listed as tools. Network egress goes through an allow-list proxy: the package registries and hosts pypi (PyPI), npm, GitHub (github.com, api.github.com, raw.githubusercontent.com), Ubuntu (apt archives), NuGet and the Go module proxy are open; other hosts are refused (for example huggingface, Microsoft Learn and Azure, Cloudflare, Expo, Neon and NVIDIA). The user's GitHub account is usable through the github connector and through the gh CLI via the proxy. There are no accounts or credentials for other external services.",
+      "tools": {
+        "bash": "run shell commands on Linux x86_64: install packages from the open registries (pip from PyPI, npm, apt from Ubuntu, go modules, nuget, GitHub release downloads), build, test, run CLIs and scripts, git, gh, start and stop local servers inside the session; network requests reach only the allow-listed hosts",
+        "read": "read files in the working directory; search them by name pattern or content (glob, grep)",
+        "write": "create and overwrite files",
+        "edit": "edit existing files and Jupyter notebooks",
+        "web_fetch": "fetch a web page or unauthenticated API by URL; hosts outside the egress allow-list are refused",
+        "web_search": "search the public web and read result snippets",
+        "ask_user": "ask the user a question (with options) and read the answer in the conversation",
+        "agent": "start sub-agents that work in parallel, send them messages and list them",
+        "skill": "load an installed Claude Code skill, list and search skills and plugins",
+        "tasks": "create, read, update and stop background tasks; schedule, list and delete cron jobs and wake-ups; monitor a condition; read notifications",
+        "artifact": "publish an HTML page as a private claude.ai artifact; read and answer its comments and its small data store",
+        "send_user_file": "send a file from the session to the user",
+        "push_notification": "send a push notification to the user",
+        "mcp_resources": "list and read resources of the connected MCP servers",
+        "github": "GitHub connector (the user's account): get_file_contents, create_pull_request, list_issues, issue_write, search_code, pull_request_read, actions_list, get_job_logs, create_branch, push_files",
+        "notion": "Notion connector (the user's workspace): notion-search, notion-fetch, notion-create-pages, notion-update-page, notion-create-database",
+        "google_drive": "Google Drive connector (the user's drive): search_files, read_file_content, create_file, update_file, share_file",
+        "jam": "Jam connector (bug-report recordings): search, getDetails, getConsoleLogs, getNetworkRequests, analyzeVideo",
+        "mem": "Mem connector (the user's notes): create_note, search_notes, get_note, update_note",
+        "bigdata_com": "Bigdata.com connector (financial data and documents): bigdata_company_tearsheet, bigdata_search, find_securities, bigdata_fetch_document",
+        "etoro": "eToro connector (the user's trading account): get-my-portfolio-summary, get-instruments-overview, prepare-trade",
+        "claude_docs": "Claude Docs connector (living documents on claude.ai): create, read, batch, update, export",
+        "reply": "the agent's own answer in the conversation: text, a plan, a document written inline"
+      }
+    },
+    "pack": "Skill `prod-logs-health-check`.\nRoles: `agent`, `user`.\nTool `pull_recent_logs` (owner `agent`): via `bash`; needs `shell`, `linux`, `allowlisted_internet`; adds `logs_pulled`, `logs_available`.\nTool `read_local_logs` (owner `agent`): via `read`; adds `logs_pulled`, `logs_available`.\nTool `report_no_logs_checked` (owner `agent`): via `write`; requires not `logs_available`; adds `no_logs_disclaimer_stated`.\nTool `report_log_findings` (owner `agent`): via `write`; requires `logs_pulled`; adds `time_window_reported`, `line_count_reported`, `errors_grouped_by_root_cause`, `representative_excerpts_reported`, `distinct_failure_count_reported`, `total_occurrence_count_reported`, `open_gaps_stated`, `report_prepared`.\nGoal: (`report_prepared` and (`time_window_reported` and `line_count_reported` and `errors_grouped_by_root_cause` and `representative_excerpts_reported` and `distinct_failure_count_reported` and `total_occurrence_count_reported` and `open_gaps_stated`)) or (`no_logs_disclaimer_stated` and `open_gaps_stated`).\nProtocol:\n  - `agent` chooses one of (observed):\n    - branch `query_real_log_source`:\n      - `agent` chooses one of (observed):\n        - branch `shell_log_query`:\n          - `agent` uses `pull_recent_logs`.\n        - branch `local_log_files`:\n          - `agent` uses `read_local_logs`.\n      - `agent` uses `report_log_findings`.\n    - branch `logs_not_available`:\n      - `agent` uses `report_no_logs_checked`.\n      - `agent` uses `report_log_findings`.\n"
+  },
+  "questions": {
+    "F1": {
+      "type": "noul",
+      "instructions": "no invented Tool (every Tool corresponds to an instruction)",
+      "criteria": {
+        "true": "Every Tool in the pack corresponds to an operation that some sentence of the document asks for, or the pack declares no Tool.",
+        "false": "At least one Tool in the pack is invented: no sentence of the document asks for that operation."
+      }
+    },
+    "F2": {
+      "type": "noul",
+      "instructions": "no omitted mandatory step",
+      "criteria": {
+        "true": "No mandatory step is omitted: every step without which the document's core deliverable cannot be produced appears in the pack. Optional or follow-up work may be omitted or skippable.",
+        "false": "The pack omits at least one mandatory step, a step without which the document's core deliverable cannot be produced."
+      }
+    },
+    "F3": {
+      "type": "noul",
+      "instructions": "the Goal states the document's deliverable",
+      "criteria": {
+        "true": "The pack's Goal names the deliverable of one representative request of the document.",
+        "false": "The pack's Goal does not name the deliverable of one representative request (for example it is `true`, empty, or names something else)."
+      }
+    },
+    "F4": {
+      "type": "noul",
+      "instructions": "no invented ordering (every protocol order is stated or implied by the document)",
+      "criteria": {
+        "true": "No ordering is invented: every order the protocol puts between two steps is stated or implied by the document (for example by data dependence), or the protocol imposes no order.",
+        "false": "The protocol puts at least two steps in an order the document neither states nor implies."
+      }
+    },
+    "F5": {
+      "type": "noul",
+      "instructions": "bindings plausible (each `via` names a runtime tool that can perform the Tool)",
+      "criteria": {
+        "true": "Bindings are plausible: each `via` names a tool from runtime.tools that can really perform the Tool; a `via` naming something outside that list is plausible only if the runtime indeed cannot perform the operation.",
+        "false": "At least one `via` names a tool that cannot perform the Tool, or names something outside runtime.tools although the runtime can perform the operation."
+      }
+    }
+  }
+}

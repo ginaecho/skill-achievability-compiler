@@ -1,0 +1,34 @@
+```ce
+Skill `requesting-code-review`.
+Roles: `agent`, `reviewer`.
+Tool `get_git_shas` (owner `agent`): via `bash`; requires `git_repo_present`; adds `base_sha_known`, `head_sha_known`.
+Tool `read_reviewer_template` (owner `agent`): via `read`; adds `review_template_read`.
+Tool `dispatch_reviewer` (owner `agent`): via `agent`; requires `base_sha_known` and `head_sha_known` and `review_template_read` and `description_prepared` and `requirements_prepared`; adds `review_requested`.
+Tool `perform_review` (owner `reviewer`): via `bash`; requires `review_requested`; adds `critical_issues_found`.
+Tool `perform_review_with_important_only` (owner `reviewer`): via `bash`; requires `review_requested`; adds `important_issues_found`.
+Tool `perform_review_with_minor_only` (owner `reviewer`): via `bash`; requires `review_requested`; adds `minor_issues_found`.
+Tool `perform_review_ready` (owner `reviewer`): via `bash`; requires `review_requested`; adds `ready_to_proceed`.
+Tool `fix_critical_issues` (owner `agent`): via `bash`; requires `critical_issues_found`; adds `critical_issues_fixed`.
+Tool `fix_important_issues` (owner `agent`): via `bash`; requires `important_issues_found`; adds `important_issues_fixed`.
+Tool `note_minor_issues` (owner `agent`): via `reply`; requires `minor_issues_found`; adds `minor_issues_noted`.
+Tool `deliver_review_completion` (owner `agent`): via `reply`; requires `review_requested` and any of (`ready_to_proceed`, `critical_issues_fixed`, `important_issues_fixed`, `minor_issues_noted`); adds `code_review_completed`.
+Initially true: `git_repo_present`, `description_prepared`, `requirements_prepared`.
+Goal: `code_review_completed`.
+Protocol:
+  - `agent` uses `get_git_shas`.
+  - `agent` uses `read_reviewer_template`.
+  - spawn `reviewer`.
+  - `agent` uses `dispatch_reviewer`.
+  - `reviewer` chooses one of (external):
+    - branch `critical` (assuming `critical_issues_found`):
+      - `agent` uses `fix_critical_issues`.
+      - `agent` uses `deliver_review_completion`.
+    - branch `important` (assuming `important_issues_found`):
+      - `agent` uses `fix_important_issues`.
+      - `agent` uses `deliver_review_completion`.
+    - branch `minor` (assuming `minor_issues_found`):
+      - `agent` uses `note_minor_issues`.
+      - `agent` uses `deliver_review_completion`.
+    - branch `ready` (assuming `ready_to_proceed`):
+      - `agent` uses `deliver_review_completion`.
+```

@@ -1,0 +1,68 @@
+```ce
+Skill `llm-finetuning-training-engineer`.
+Roles: `agent`, `eval_engineer`.
+Tool `prepare_dataset` (owner `agent`): via `bash`; requires `brief_present` and `method_chosen`; adds `dataset_built`, `dataset_card_committed`, `validation_report_written`, `packed_samples_attached`, `phase2_complete`.
+Tool `write_env_report` (owner `agent`): via `bash`; requires `phase2_complete`; adds `env_report_present`, `environment_checked`; sets `platform_generic` to 1.
+Tool `run_spark_preflight` (owner `agent`): via `spark_preflight`; requires `phase2_complete`; adds `env_report_present`, `environment_checked`.
+Tool `generate_training_files` (owner `agent`): via `bash`; requires `phase2_complete` and `env_report_present` and `environment_ready`; adds `train_config_written`, `train_script_written`.
+Tool `commit_training_files` (owner `agent`): via `bash`; requires `train_config_written` and `train_script_written`; adds `training_files_committed`.
+Tool `launch_training` (owner `agent`): via `bash`; requires `training_files_committed`; adds `training_running`.
+Tool `monitor_training` (owner `agent`): via `bash`; requires `training_running`; adds `structured_progress_emitted`; picks `run_outcome` with (`run_outcome` == 1 or `run_outcome` == 2).
+Tool `halt_training` (owner `agent`): via `bash`; requires `training_running`; removes `training_running`; adds `run_halted`.
+Tool `rerun_preflight` (owner `agent`): via `bash`; requires `environment_failure_detected`; adds `environment_checked`, `env_report_present`.
+Tool `triage_divergence` (owner `agent`): via `bash`; requires `divergence_detected`; adds `divergence_triaged`.
+Tool `apply_oom_ladder` (owner `agent`): via `bash`; requires `uma_oom_detected`; adds `oom_ladder_applied`.
+Tool `export_artifact` (owner `agent`): via `bash`; requires `promote_verdict_received` and `run_completed`; adds `artifact_exported`, `smoke_test_passed`, `export_written`.
+
+Initially true: `brief_present`, `method_chosen`, `run_directory_exists`.
+Initially: `platform_generic` == 0.
+Initially: `run_outcome` == 0.
+Goal: (`run_completed` and `structured_progress_emitted`) or (`artifact_exported` and `smoke_test_passed` and `export_written`).
+
+Protocol:
+  - `agent` chooses one of (external):
+    - branch `dgx_spark`:
+      - `agent` uses `prepare_dataset`.
+      - `agent` uses `run_spark_preflight`.
+      - `agent` chooses one of (external):
+        - branch `blocked`: none.
+        - branch `ready_with_warnings`: none.
+        - branch `ready`:
+          - `agent` uses `generate_training_files`.
+          - `agent` uses `commit_training_files`.
+          - `agent` uses `launch_training`.
+          - `agent` uses `monitor_training`.
+          - `agent` chooses one of (external):
+            - branch `completed`:
+              - `eval_engineer` tells `agent` `PROMOTE`.
+              - `agent` uses `export_artifact`.
+            - branch `environment_failure`:
+              - `agent` uses `rerun_preflight`.
+            - branch `divergence`:
+              - `agent` uses `halt_training`.
+              - `agent` uses `triage_divergence`.
+            - branch `uma_oom`:
+              - `agent` uses `apply_oom_ladder`.
+    - branch `generic_nvidia`:
+      - `agent` uses `prepare_dataset`.
+      - `agent` uses `write_env_report`.
+      - `agent` chooses one of (external):
+        - branch `blocked`: none.
+        - branch `ready_with_warnings`: none.
+        - branch `ready`:
+          - `agent` uses `generate_training_files`.
+          - `agent` uses `commit_training_files`.
+          - `agent` uses `launch_training`.
+          - `agent` uses `monitor_training`.
+          - `agent` chooses one of (external):
+            - branch `completed`:
+              - `eval_engineer` tells `agent` `PROMOTE`.
+              - `agent` uses `export_artifact`.
+            - branch `environment_failure`:
+              - `agent` uses `rerun_preflight`.
+            - branch `divergence`:
+              - `agent` uses `halt_training`.
+              - `agent` uses `triage_divergence`.
+            - branch `uma_oom`:
+              - `agent` uses `apply_oom_ladder`.
+```

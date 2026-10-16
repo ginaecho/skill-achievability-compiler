@@ -1,0 +1,84 @@
+```ce
+Skill `gh-fix-ci`.
+Roles: `agent`, `user`.
+
+Tool `gh_auth_status` (owner `agent`):
+  via `bash`;
+  picks `auth_status` with true.
+
+Tool `gh_auth_login` (owner `user`):
+  via `bash`;
+  adds `authenticated`.
+
+Tool `resolve_pr` (owner `agent`):
+  via `bash`;
+  requires `authenticated`;
+  adds `pr_resolved`;
+  picks `pr_number` with `pr_number` != "".
+
+Tool `inspect_checks` (owner `agent`):
+  via `bash`;
+  requires `pr_resolved`;
+  picks `failures` with true;
+  sets `failure_count` to `failure_count` + 1.
+
+Tool `examine_failures` (owner `agent`):
+  via `bash`;
+  requires `failures`;
+  removes `failures`;
+  adds `failures_examined`.
+
+Tool `summarize_failures` (owner `agent`):
+  requires `failures_examined`;
+  adds `failures_summarized`.
+
+Tool `draft_fix_plan` (owner `agent`):
+  via `skill`;
+  requires `failures_summarized`;
+  adds `plan_drafted`.
+
+Tool `implement_fix` (owner `agent`):
+  via `bash`;
+  requires `plan_approved`;
+  adds `fix_implemented` and `recheck_needed`.
+
+Tool `recheck_status` (owner `agent`):
+  via `bash`;
+  requires `recheck_needed`;
+  removes `recheck_needed`;
+  adds `checks_passing`.
+
+Tool `report_external` (owner `agent`):
+  requires `external_failures`;
+  removes `external_failures`;
+  adds `external_reported`.
+
+Initially true: none.
+Initially: `failure_count` == 0.
+Goal: `fix_implemented` and `checks_passing` and `external_reported`.
+
+Protocol:
+  - `agent` uses `gh_auth_status`.
+  - `user` chooses one of (observed):
+    - branch `authenticated`:
+      - `agent` uses `resolve_pr`.
+    - branch `unauthenticated`:
+      - `agent` tells `user` `login_needed`.
+      - `user` uses `gh_auth_login`.
+      - `agent` uses `resolve_pr`.
+  - `agent` uses `inspect_checks`.
+  - `user` chooses one of (observed):
+    - branch `failures_found`:
+      - `agent` uses `examine_failures`.
+      - `agent` uses `summarize_failures`.
+      - `agent` uses `draft_fix_plan`.
+      - `user` chooses one of (observed):
+        - branch `plan_approved`:
+          - `agent` uses `implement_fix`.
+          - `agent` uses `recheck_status`.
+        - branch `plan_rejected`: none.
+    - branch `external_only`:
+      - `agent` uses `report_external`.
+    - branch `all_passing`: none.
+  - checkpoint: `fix_implemented` and `checks_passing` and `external_reported`.
+```

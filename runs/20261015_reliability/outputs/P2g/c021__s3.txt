@@ -1,0 +1,26 @@
+```ce
+Skill `windows-builder`.
+Roles: `agent`, `user`.
+Tool `write_packer_windows_template` (owner `agent`): via `write`; adds `template_written`, `winrm_configured`, `powershell_provisioners_configured`, `windows_updates_configured`, `cleanup_configured`.
+Tool `write_winrm_setup_script` (owner `agent`): via `write`; adds `winrm_setup_script_written`.
+Tool `validate_packer_template` (owner `agent`): via `bash`; needs `shell`; requires `template_written`; adds `template_validated`.
+Tool `build_windows_image_with_packer` (owner `agent`): via `windows_desktop`; needs `cloud_account`; requires `template_validated` and `winrm_configured`; adds `windows_image_built`.
+Tool `verify_resource_cleanup` (owner `agent`): via `cloud_console`; needs `cloud_account`; requires `windows_image_built`; adds `cleanup_verified`.
+Initially true: none.
+Goal: `template_written` and `winrm_configured` and `powershell_provisioners_configured` and `windows_updates_configured` and `cleanup_configured` and `winrm_setup_script_written`.
+Protocol:
+  - `agent` uses `write_packer_windows_template`.
+  - `agent` uses `write_winrm_setup_script`.
+  - `user` chooses one of (observed):
+    - branch `validate_template`:
+      - `agent` uses `validate_packer_template`.
+    - branch `skip_validation`: none.
+  - `user` chooses one of (observed):
+    - branch `build_image`:
+      - `agent` uses `build_windows_image_with_packer`.
+      - `user` chooses one of (observed):
+        - branch `verify_cleanup`:
+          - `agent` uses `verify_resource_cleanup`.
+        - branch `skip_cleanup_verification`: none.
+    - branch `skip_build`: none.
+```

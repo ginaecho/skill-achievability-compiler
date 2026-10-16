@@ -5,8 +5,13 @@ Each entry pairs a natural-language skill (what an author writes) with its
 *reference compaction* (the formal pack an LLM distills from that NL), a
 ground-truth semantic label, and the failure category it exercises.
 
-Ground truth is the TRUE semantic achievability of the goal.  The eval then
-measures the checker against it.  The key claims under test:
+Ground truth is the TRUE semantic achievability of the goal in the global
+(may-reachability) semantics.  `protocol_truth` is the second, orthogonal
+dimension: whether the protocol types (WELL_TYPED / REJECTED; UNKNOWN when
+it is outside the projectable fragment).  A deadlocking protocol whose goal
+is reachable along some branch is ACHIEVABLE + REJECTED, not IMPOSSIBLE: a
+protocol rejection is not a goal refutation.  The eval then measures the
+checker against both.  The key claims under test:
 
   * NO false "IMPOSSIBLE"  (soundness, Coq T1)  -> false-negatives must be 0
   * SOME false "ACHIEVABLE" allowed (paper Incompleteness proposition) -> the spurious
@@ -24,8 +29,9 @@ import json
 
 C = []
 
-def add(id, category, ground_truth, nl, pack, note=""):
+def add(id, category, ground_truth, nl, pack, note="", protocol_truth="WELL_TYPED"):
     C.append({"id": id, "category": category, "ground_truth": ground_truth,
+              "protocol_truth": protocol_truth,
               "nl": nl.strip(), "pack": pack, "note": note})
 
 # ---------------------------------------------------------------- ACHIEVABLE
@@ -174,7 +180,7 @@ nothing in the plan ever approves it, so publish can never fire.
  "goal":"published"},
  note="guard 'approved' never establishable -> BLOCKED_GUARD (the retry-forever cause)")
 
-add("deadlock_unobserved", "DEADLOCK", "IMPOSSIBLE",
+add("deadlock_unobserved", "DEADLOCK", "ACHIEVABLE",
 """
 # Skill: Plan / worker collaboration
 Goal: the task result is delivered.
@@ -192,7 +198,10 @@ worker chose to ask, so it just keeps waiting for a result. Classic freeze.
              {"act":{"cap":"deliver","by":"worker"}}],  # ...but was never told
      "direct":[{"act":{"cap":"deliver_direct","by":"worker"}}]}}}],
  "goal":"delivered"},
- note="planner must act in 'ask' branch with no distinguishing receive -> NON_PROJECTABLE")
+ note="planner must act in 'ask' branch with no distinguishing receive -> protocol "
+      "REJECTED (NON_PROJECTABLE); the 'direct' branch still reaches 'delivered', so the "
+      "goal is ACHIEVABLE in the global semantics",
+ protocol_truth="REJECTED")
 
 add("missing_tool_chain", "HALLUCINATED_PLANNING", "IMPOSSIBLE",
 """
@@ -316,8 +325,9 @@ print("by ground truth:", dict(Counter(c["ground_truth"] for c in C)))
 
 E = []
 
-def add_ext(id, category, ground_truth, nl, pack, note=""):
+def add_ext(id, category, ground_truth, nl, pack, note="", protocol_truth="WELL_TYPED"):
     E.append({"id": id, "category": category, "ground_truth": ground_truth,
+              "protocol_truth": protocol_truth,
               "nl": nl.strip(), "pack": pack, "note": note})
 
 add_ext("retry_loop_ok", "TOLERANCE", "ACHIEVABLE",
@@ -361,7 +371,8 @@ Goal: report delivered. The planner spawns helper agents at run time.
  "protocol":[{"spawn":{"role":"helper"}},
              {"act":{"cap":"deliver","by":"planner"}}],
  "goal":"delivered"},
- note="dynamic topology -> outside the decidable fragment (thm:undec)")
+ note="dynamic topology -> outside the decidable fragment (thm:undec)",
+ protocol_truth="UNKNOWN")  # spawn is outside the projectable fragment
 
 add_ext("spawn_with_ghost_tool", "AUTONOMY", "IMPOSSIBLE",
 """
@@ -373,9 +384,10 @@ Goal: ledger updated. Spawns helpers AND invokes a tool nobody has.
  "protocol":[{"spawn":{"role":"helper"}},
              {"act":{"cap":"update_ledger","by":"planner"}}],
  "goal":"ledger_updated"},
- note="capability soundness survives autonomy: refute before degrading")
+ note="capability soundness survives autonomy: refute before degrading",
+ protocol_truth="UNKNOWN")  # spawn is outside the projectable fragment
 
-add_ext("nonconformant_handler", "CONFORMANCE", "IMPOSSIBLE",
+add_ext("nonconformant_handler", "CONFORMANCE", "ACHIEVABLE",
 """
 # Skill: Triage then handle -- but the declared handler only handles one path
 Goal: resolved. Contract informs the handler of go_simple/go_complex; the
@@ -393,7 +405,10 @@ declared handler behaviour only receives go_simple.
  "goal":"resolved",
  "skills":{"handler":[{"branch":{"from":"router","branches":{
      "go_simple":[{"act":{"cap":"resolve_simple"}}]}}}]}},
- note="S_handler drops an external choice -> S </= G|handler (Sub-Ext)")
+ note="S_handler drops an external choice -> S </= G|handler (Sub-Ext): protocol "
+      "REJECTED (NON_CONFORMANT); the 'simple' branch still reaches 'resolved', so the "
+      "goal is ACHIEVABLE in the global semantics",
+ protocol_truth="REJECTED")
 
 add_ext("conformant_tolerant_handler", "CONFORMANCE", "ACHIEVABLE",
 """

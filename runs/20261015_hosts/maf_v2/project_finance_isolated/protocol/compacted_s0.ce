@@ -1,0 +1,44 @@
+Skill `quarterly-finance-report`.
+Roles: `coordinator`, `fetcher`, `expense_analyst`, `revenue_analyst`, `tax_specialist`, `tax_verifier`, `writer`.
+Tool `fetch_financials` (owner `fetcher`): via `read`; requires `quarter_selected`; adds `financials_fetched`, `revenue_positive`, `expense_nonnegative`, `line_items_available`.
+Tool `analyze_expenses` (owner `expense_analyst`): via `reply`; requires `expense_nonnegative` and `line_items_available`; adds `expense_analyzed`, `expense_analysis_ready`, `expense_analysis_substantive`.
+Tool `classify_revenue` (owner `revenue_analyst`): via `reply`; requires `revenue_positive` and `expense_analyzed`; adds `revenue_classified`.
+Tool `lookup_tax_rules` (owner `tax_specialist`): via `web_search`; requires `high_branch`; adds `tax_rules_found`.
+Tool `audit_high_revenue` (owner `tax_specialist`): via `reply`; requires `high_branch` and `tax_rules_found`; adds `audit_report_ready`, `audit_report_substantive`.
+Tool `approve_audited` (owner `tax_verifier`): via `write`; requires `high_branch` and `audit_report_ready`; adds `approval_exists`, `approval_positive`, `approval_recorded`.
+Tool `approve_standard` (owner `tax_verifier`): via `write`; requires `standard_branch`; adds `approval_exists`, `approval_positive`, `approval_recorded`.
+Tool `write_revenue_analysis` (owner `revenue_analyst`): via `reply`; requires `revenue_classified` and `expense_analyzed` and `approval_exists` and `approval_positive`; adds `final_revenue_analysis_ready`, `final_revenue_analysis_substantive`.
+Tool `compose_report` (owner `writer`): via `reply`; requires `expense_analysis_ready` and `expense_analysis_substantive` and `final_revenue_analysis_ready` and `final_revenue_analysis_substantive` and (`high_branch` or `standard_branch`); adds `report_composed`, `report_substantive`.
+Tool `deliver_report` (owner `writer`): via `write`; requires `report_composed` and `report_substantive`; adds `report_delivered`, `delivered_path_known`.
+Tool `report_result_to_user` (owner `coordinator`): via `reply`; requires `report_delivered` and `delivered_path_known` and `approval_exists` and `approval_positive` and (`high_branch` or `standard_branch`); adds `user_reported`.
+Initially true: `quarter_selected`.
+Goal: `user_reported`.
+Protocol:
+  - `fetcher` uses `fetch_financials`.
+  - `coordinator` tells `expense_analyst` `RawExpenseData`.
+  - `expense_analyst` uses `analyze_expenses`.
+  - `coordinator` tells `revenue_analyst` `RawRevenueData`.
+  - `coordinator` tells `revenue_analyst` `ExpenseData`.
+  - `coordinator` tells `writer` `ExpenseAnalysis`.
+  - `revenue_analyst` uses `classify_revenue`.
+  - `revenue_analyst` chooses one of (external):
+    - branch `high` (assuming `high_branch`):
+      - `coordinator` tells `tax_verifier` `HighRevenueNotification`.
+      - `coordinator` tells `writer` `HighBranchNotification`.
+      - `coordinator` tells `tax_specialist` `NotifyTaxSpecialist`.
+      - `tax_specialist` uses `lookup_tax_rules`.
+      - `tax_specialist` uses `audit_high_revenue`.
+      - `coordinator` tells `tax_verifier` `AuditReport`.
+      - `tax_verifier` uses `approve_audited`.
+    - branch `standard` (assuming `standard_branch`):
+      - `coordinator` tells `tax_verifier` `StandardRevenueNotification`.
+      - `coordinator` tells `writer` `StandardBranchNotification`.
+      - `coordinator` tells `tax_specialist` `NotifyStandardRole`.
+      - `tax_verifier` uses `approve_standard`.
+  - `coordinator` tells `revenue_analyst` `Approval`.
+  - `revenue_analyst` uses `write_revenue_analysis`.
+  - `coordinator` tells `writer` `FinalRevenueAnalysis`.
+  - `writer` uses `compose_report`.
+  - `writer` uses `deliver_report`.
+  - `coordinator` tells `fetcher` `GenerateReport`.
+  - `coordinator` uses `report_result_to_user`.

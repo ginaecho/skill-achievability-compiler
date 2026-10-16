@@ -1,0 +1,923 @@
+{
+  "pack": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_repository": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "repo_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "analyze_traces_and_design_harness": {
+        "owner": "agent",
+        "pre": "repo_inspected",
+        "add": [
+          "harness_designed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_eval_harness_files": {
+        "owner": "agent",
+        "pre": "harness_designed",
+        "add": [
+          "eval_files_written",
+          "goldens_defined",
+          "graders_defined",
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_baseline_harness": {
+        "owner": "agent",
+        "pre": "eval_files_written",
+        "add": [
+          "baseline_run_written",
+          "baseline_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_checkpoint_inputs": {
+        "owner": "agent",
+        "pre": "eval_files_written",
+        "add": [
+          "checkpoint_inputs_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_data_quality_gate": {
+        "owner": "agent",
+        "pre": "checkpoint_inputs_inspected",
+        "add": [
+          "data_quality_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "data_quality_passed": {
+            "or": [
+              "data_quality_passed",
+              {
+                "not": "data_quality_passed"
+              }
+            ]
+          }
+        }
+      },
+      "run_checkpoint_harness": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "data_quality_checked",
+            "data_quality_passed"
+          ]
+        },
+        "add": [
+          "checkpoint_results_written",
+          "results_schema_complete",
+          "drift_evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "drift_gate_passed": {
+            "or": [
+              "drift_gate_passed",
+              {
+                "not": "drift_gate_passed"
+              }
+            ]
+          }
+        }
+      },
+      "run_paired_arena": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "drift_evaluated",
+            "drift_gate_passed"
+          ]
+        },
+        "add": [
+          "arena_evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "arena_passed": {
+            "or": [
+              "arena_passed",
+              {
+                "not": "arena_passed"
+              }
+            ]
+          }
+        }
+      },
+      "run_canary_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "arena_evaluated",
+            "arena_passed",
+            "canary_applicable"
+          ]
+        },
+        "add": [
+          "canary_evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "canary_passed": {
+            "or": [
+              "canary_passed",
+              {
+                "not": "canary_passed"
+              }
+            ]
+          }
+        }
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": "all_applicable_stages_complete",
+        "add": [
+          "promotion_report_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "promoted": {
+            "or": [
+              "promoted",
+              {
+                "not": "promoted"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_repository",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase_0_build_and_baseline": [
+              {
+                "act": {
+                  "cap": "analyze_traces_and_design_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_eval_harness_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_baseline_harness",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase_5_gate_checkpoint": [
+              {
+                "act": {
+                  "cap": "inspect_checkpoint_inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_data_quality_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "data_quality_failed": [
+                      {
+                        "act": {
+                          "cap": "write_promotion_report",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "data_quality_passed": [
+                      {
+                        "act": {
+                          "cap": "run_checkpoint_harness",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "drift_failed": [
+                              {
+                                "act": {
+                                  "cap": "write_promotion_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "drift_passed": [
+                              {
+                                "act": {
+                                  "cap": "run_paired_arena",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "arena_failed": [
+                                      {
+                                        "act": {
+                                          "cap": "write_promotion_report",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "arena_passed": [
+                                      {
+                                        "choice": {
+                                          "by": "user",
+                                          "observed": true,
+                                          "branches": {
+                                            "canary_not_applicable": [
+                                              {
+                                                "act": {
+                                                  "cap": "write_promotion_report",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "canary_applicable": [
+                                              {
+                                                "act": {
+                                                  "cap": "run_canary_gate",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "write_promotion_report",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "eval_files_written",
+            "goldens_defined",
+            "graders_defined",
+            "drift_suite_frozen",
+            "baseline_written",
+            "baseline_run_written",
+            "results_schema_complete"
+          ]
+        },
+        {
+          "and": [
+            "promotion_report_written",
+            "results_schema_complete",
+            {
+              "or": [
+                "promoted",
+                {
+                  "not": "promoted"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "not": "repo_inspected"
+      },
+      {
+        "not": "harness_designed"
+      },
+      {
+        "not": "eval_files_written"
+      },
+      {
+        "not": "goldens_defined"
+      },
+      {
+        "not": "graders_defined"
+      },
+      {
+        "not": "drift_suite_frozen"
+      },
+      {
+        "not": "baseline_run_written"
+      },
+      {
+        "not": "baseline_written"
+      },
+      {
+        "not": "results_schema_complete"
+      },
+      {
+        "not": "checkpoint_inputs_inspected"
+      },
+      {
+        "not": "data_quality_checked"
+      },
+      {
+        "not": "data_quality_passed"
+      },
+      {
+        "not": "checkpoint_results_written"
+      },
+      {
+        "not": "drift_evaluated"
+      },
+      {
+        "not": "drift_gate_passed"
+      },
+      {
+        "not": "arena_evaluated"
+      },
+      {
+        "not": "arena_passed"
+      },
+      {
+        "not": "canary_applicable"
+      },
+      {
+        "not": "canary_evaluated"
+      },
+      {
+        "not": "canary_passed"
+      },
+      {
+        "not": "all_applicable_stages_complete"
+      },
+      {
+        "not": "promotion_report_written"
+      },
+      {
+        "not": "promoted"
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_repository": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "repo_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "analyze_traces_and_design_harness": {
+        "owner": "agent",
+        "pre": "repo_inspected",
+        "add": [
+          "harness_designed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_eval_harness_files": {
+        "owner": "agent",
+        "pre": "harness_designed",
+        "add": [
+          "eval_files_written",
+          "goldens_defined",
+          "graders_defined",
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_baseline_harness": {
+        "owner": "agent",
+        "pre": "eval_files_written",
+        "add": [
+          "baseline_run_written",
+          "baseline_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_checkpoint_inputs": {
+        "owner": "agent",
+        "pre": "eval_files_written",
+        "add": [
+          "checkpoint_inputs_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_data_quality_gate": {
+        "owner": "agent",
+        "pre": "checkpoint_inputs_inspected",
+        "add": [
+          "data_quality_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "data_quality_passed": {
+            "or": [
+              "data_quality_passed",
+              {
+                "not": "data_quality_passed"
+              }
+            ]
+          }
+        }
+      },
+      "run_checkpoint_harness": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "data_quality_checked",
+            "data_quality_passed"
+          ]
+        },
+        "add": [
+          "checkpoint_results_written",
+          "results_schema_complete",
+          "drift_evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "drift_gate_passed": {
+            "or": [
+              "drift_gate_passed",
+              {
+                "not": "drift_gate_passed"
+              }
+            ]
+          }
+        }
+      },
+      "run_paired_arena": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "drift_evaluated",
+            "drift_gate_passed"
+          ]
+        },
+        "add": [
+          "arena_evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "arena_passed": {
+            "or": [
+              "arena_passed",
+              {
+                "not": "arena_passed"
+              }
+            ]
+          }
+        }
+      },
+      "run_canary_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "arena_evaluated",
+            "arena_passed",
+            "canary_applicable"
+          ]
+        },
+        "add": [
+          "canary_evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "canary_passed": {
+            "or": [
+              "canary_passed",
+              {
+                "not": "canary_passed"
+              }
+            ]
+          }
+        }
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": "all_applicable_stages_complete",
+        "add": [
+          "promotion_report_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "promoted": {
+            "or": [
+              "promoted",
+              {
+                "not": "promoted"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_repository",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase_0_build_and_baseline": [
+              {
+                "act": {
+                  "cap": "analyze_traces_and_design_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_eval_harness_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_baseline_harness",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase_5_gate_checkpoint": [
+              {
+                "act": {
+                  "cap": "inspect_checkpoint_inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_data_quality_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "data_quality_failed": [
+                      {
+                        "act": {
+                          "cap": "write_promotion_report",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "data_quality_passed": [
+                      {
+                        "act": {
+                          "cap": "run_checkpoint_harness",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "drift_failed": [
+                              {
+                                "act": {
+                                  "cap": "write_promotion_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "drift_passed": [
+                              {
+                                "act": {
+                                  "cap": "run_paired_arena",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "arena_failed": [
+                                      {
+                                        "act": {
+                                          "cap": "write_promotion_report",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "arena_passed": [
+                                      {
+                                        "choice": {
+                                          "by": "user",
+                                          "observed": true,
+                                          "branches": {
+                                            "canary_not_applicable": [
+                                              {
+                                                "act": {
+                                                  "cap": "write_promotion_report",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "canary_applicable": [
+                                              {
+                                                "act": {
+                                                  "cap": "run_canary_gate",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "write_promotion_report",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "eval_files_written",
+            "goldens_defined",
+            "graders_defined",
+            "drift_suite_frozen",
+            "baseline_written",
+            "baseline_run_written",
+            "results_schema_complete"
+          ]
+        },
+        {
+          "and": [
+            "promotion_report_written",
+            "results_schema_complete",
+            {
+              "or": [
+                "promoted",
+                {
+                  "not": "promoted"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "not": "repo_inspected"
+      },
+      {
+        "not": "harness_designed"
+      },
+      {
+        "not": "eval_files_written"
+      },
+      {
+        "not": "goldens_defined"
+      },
+      {
+        "not": "graders_defined"
+      },
+      {
+        "not": "drift_suite_frozen"
+      },
+      {
+        "not": "baseline_run_written"
+      },
+      {
+        "not": "baseline_written"
+      },
+      {
+        "not": "results_schema_complete"
+      },
+      {
+        "not": "checkpoint_inputs_inspected"
+      },
+      {
+        "not": "data_quality_checked"
+      },
+      {
+        "not": "data_quality_passed"
+      },
+      {
+        "not": "checkpoint_results_written"
+      },
+      {
+        "not": "drift_evaluated"
+      },
+      {
+        "not": "drift_gate_passed"
+      },
+      {
+        "not": "arena_evaluated"
+      },
+      {
+        "not": "arena_passed"
+      },
+      {
+        "not": "canary_applicable"
+      },
+      {
+        "not": "canary_evaluated"
+      },
+      {
+        "not": "canary_passed"
+      },
+      {
+        "not": "all_applicable_stages_complete"
+      },
+      {
+        "not": "promotion_report_written"
+      },
+      {
+        "not": "promoted"
+      }
+    ]
+  },
+  "bindings": {
+    "inspect_repository": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "analyze_traces_and_design_harness": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "write_eval_harness_files": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run_baseline_harness": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "inspect_checkpoint_inputs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_data_quality_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_checkpoint_harness": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_paired_arena": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_canary_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "write_promotion_report": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,39 @@
+```ce
+Skill `aspire-project-v2-migration`.
+Roles: `agent`, `user`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `apphost_identified`, `local_changes_preserved`, `workspace_assessed`.
+Tool `resolve_aspire_version` (owner `agent`): via `read`; requires `apphost_identified`; adds `version_resolved`.
+Tool `assess_capabilities_and_candidates` (owner `agent`): via `read`; requires `apphost_identified` and `version_resolved`; adds `candidates_assessed`, `references_assessed`, `packages_assessed`, `gateway_decision_resolved`.
+Tool `lookup_aspire_docs` (owner `agent`): via `bash`; adds `api_shapes_checked`.
+Tool `prepare_exact_plan` (owner `agent`): via `read`; requires `candidates_assessed` and `references_assessed` and `packages_assessed`; adds `exact_plan_prepared`.
+Tool `ask_for_approval` (owner `agent`): via `ask_user`; requires `exact_plan_prepared`; adds `approval_answered`; picks `approved_plan` with (`approved_plan` == 0 or `approved_plan` == 1).
+Tool `capture_baseline_validation_copy` (owner `agent`): via `bash`; requires `approved_plan` == 1; adds `baseline_captured`.
+Tool `apply_migration_edits` (owner `agent`): via `edit`; requires `approved_plan` == 1 and `exact_plan_prepared`; adds `files_edited`, `packages_updated`, `references_cleaned`, `suppressions_added`.
+Tool `regenerate_integrations` (owner `agent`): via `bash`; requires `files_edited`; adds `generated_files_regenerated`.
+Tool `validate_migration` (owner `agent`): via `bash`; requires `files_edited`; adds `restore_build_validated`, `run_validated`, `post_migration_assessed`.
+Tool `report_results` (owner `agent`): via `ask_user`; requires `post_migration_assessed`; adds `results_reported`.
+Initially true: none.
+Initially: `approved_plan` == 0.
+Goal: (`exact_plan_prepared` and `approval_answered` and `approved_plan` == 0) or (`exact_plan_prepared` and `approval_answered` and `approved_plan` == 1 and `files_edited` and `packages_updated` and `references_cleaned` and `suppressions_added` and `restore_build_validated` and `run_validated` and `post_migration_assessed` and `results_reported`).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `resolve_aspire_version`.
+  - `agent` chooses one of (external):
+    - branch `eligible_version`:
+      - `agent` uses `assess_capabilities_and_candidates`.
+      - `agent` uses `lookup_aspire_docs`.
+      - `agent` uses `prepare_exact_plan`.
+      - `agent` uses `ask_for_approval`.
+      - `user` chooses one of (observed):
+        - branch `approve_exact_plan`:
+          - `agent` chooses one of (observed):
+            - branch `capture_baseline_when_authorized`:
+              - `agent` uses `capture_baseline_validation_copy`.
+            - branch `skip_baseline`: none.
+          - `agent` uses `apply_migration_edits`.
+          - `agent` uses `regenerate_integrations`.
+          - `agent` uses `validate_migration`.
+          - `agent` uses `report_results`.
+        - branch `decline_or_partial_nonapproval`: none.
+    - branch `ineligible_or_unresolved_version`: none.
+```

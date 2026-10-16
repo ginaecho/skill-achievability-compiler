@@ -1,0 +1,38 @@
+```ce
+Skill `book-sft-pipeline`.
+Roles: `agent`, `user`.
+Tool `ask_for_book_epub` (owner `agent`): via `ask_user`; requires not `epub_available`; adds `epub_available`.
+Tool `extract_epub_text` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`, `package_registries`; requires `epub_available`; adds `book_text_extracted`; removes `front_back_matter_present`.
+Tool `segment_text` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `book_text_extracted`; adds `chunks_created`, `paragraph_boundaries_preserved`, `chunk_overlap_used`; picks `chunk_word_count` with `chunk_word_count` >= 150 and `chunk_word_count` <= 400.
+Tool `reserve_test_set` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `chunks_created`; adds `test_set_reserved`; picks `test_example_count` with `test_example_count` >= 50.
+Tool `generate_instructions` (owner `agent`): via `hosted_llm_service`; needs `llm_api_access`; requires `chunks_created`; adds `instructions_generated`; picks `prompt_template_count` with `prompt_template_count` >= 15; picks `system_prompt_count` with `system_prompt_count` >= 5.
+Tool `build_jsonl_dataset` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `instructions_generated` and `test_set_reserved`; adds `dataset_built`, `jsonl_rendered`, `tinker_format_ready`.
+Tool `train_lora_on_tinker` (owner `agent`): via `tinker_service`; needs `tinker_account`; requires `dataset_built`; adds `lora_trained`, `uses_base_model`, `uses_lora_rank_32`; sets `epochs` to 3.
+Tool `run_modern_scenario_validation` (owner `agent`): via `tinker_service`; needs `tinker_account`; requires `lora_trained`; adds `modern_scenario_tested`, `style_transfer_validated`.
+Tool `verify_originality` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `dataset_built` and `lora_trained`; adds `originality_verified`.
+Tool `run_ai_detector_test` (owner `agent`): via `ai_detector_service`; needs `ai_detector_account`; requires `lora_trained`; adds `ai_detector_tested`.
+Initially true: none.
+Initially: `chunk_word_count` == 0.
+Initially: `test_example_count` == 0.
+Initially: `prompt_template_count` == 0.
+Initially: `system_prompt_count` == 0.
+Initially: `epochs` == 0.
+Goal: `epub_available` and `book_text_extracted` and not `front_back_matter_present` and `chunks_created` and `paragraph_boundaries_preserved` and `chunk_overlap_used` and `chunk_word_count` >= 150 and `chunk_word_count` <= 400 and `test_set_reserved` and `test_example_count` >= 50 and `instructions_generated` and `prompt_template_count` >= 15 and `system_prompt_count` >= 5 and `dataset_built` and `jsonl_rendered` and `tinker_format_ready` and `lora_trained` and `uses_base_model` and `uses_lora_rank_32` and `epochs` == 3 and `modern_scenario_tested` and `style_transfer_validated` and `originality_verified`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `epub_already_available`: none.
+    - branch `need_user_to_provide_epub`:
+      - `agent` uses `ask_for_book_epub`.
+  - `agent` uses `extract_epub_text`.
+  - `agent` uses `segment_text`.
+  - `agent` uses `reserve_test_set`.
+  - `agent` uses `generate_instructions`.
+  - `agent` uses `build_jsonl_dataset`.
+  - `agent` uses `train_lora_on_tinker`.
+  - `agent` uses `run_modern_scenario_validation`.
+  - `agent` uses `verify_originality`.
+  - `agent` chooses one of (observed):
+    - branch `run_ai_detector`: 
+      - `agent` uses `run_ai_detector_test`.
+    - branch `skip_ai_detector`: none.
+```

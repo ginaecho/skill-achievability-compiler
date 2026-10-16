@@ -1,0 +1,44 @@
+```ce
+Skill `automate-this`.
+Roles: `agent`, `user`.
+Tool `check_prereqs` (owner `agent`): via `bash`; requires `video_provided`; adds `ffmpeg_checked`, `whisper_checked`; picks `ffmpeg_available` with true; picks `whisper_available` with true.
+Tool `inspect_video` (owner `agent`): via `bash`; requires `video_provided` and `ffmpeg_available`; adds `work_dir_ready`; picks `has_audio` with true; picks `long_recording` with true.
+Tool `extract_content` (owner `agent`): via `bash`; requires `work_dir_ready` and `ffmpeg_available`; adds `frames_extracted`; picks `transcript_extracted` with `has_audio` and `whisper_available`.
+Tool `fingerprint_environment` (owner `agent`): via `bash`; requires `reconstruction_confirmed`; adds `environment_fingerprinted`.
+Tool `write_automation` (owner `agent`): via `write`; requires `tier_selected`; adds `automation_written`, `code_available`.
+Tool `edit_automation` (owner `agent`): via `edit`; requires `automation_written`; adds `code_revised`.
+Tool `run_automation_test` (owner `agent`): via `bash`; requires `code_available`; picks `test_passed` with true.
+Tool `cleanup_temp` (owner `agent`): via `bash`; requires `work_dir_ready`; removes `work_dir_ready`, `frames_extracted`, `transcript_extracted`.
+Initially true: `video_provided`.
+Goal: `reconstruction_confirmed` and `environment_fingerprinted` and `tier_selected` and `automation_written` and `test_passed` and not `work_dir_ready`.
+Initially: true.
+Protocol:
+  - `agent` uses `check_prereqs`.
+  - `agent` uses `inspect_video`.
+  - `agent` chooses one of (observed):
+    - branch `audio_without_whisper`:
+      - `user` chooses one of (observed):
+        - branch `install_whisper`: none.
+        - branch `proceed_visual_only`: none.
+    - branch `no_audio_or_whisper_available`: none.
+  - `agent` uses `extract_content`.
+  - `user` chooses one of (observed):
+    - branch `confirm_reconstruction`:
+      - `agent` uses `fingerprint_environment`.
+    - branch `correct_reconstruction`: none.
+  - `user` chooses one of (observed):
+    - branch `tier_1`:
+      - `agent` uses `write_automation`.
+    - branch `tier_2`:
+      - `agent` uses `write_automation`.
+    - branch `tier_3`:
+      - `agent` uses `write_automation`.
+  - loop `fix_test`:
+    - `agent` uses `run_automation_test`.
+    - `user` chooses one of (observed):
+      - branch `test_failed_fix`:
+        - `agent` uses `edit_automation`.
+        - repeat `fix_test`.
+      - branch `test_passed`: none.
+  - `agent` uses `cleanup_temp`.
+```

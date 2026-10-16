@@ -1,0 +1,693 @@
+{
+  "pack": {
+    "name": "burpsuite-project-parser",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project_and_wrapper": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_file_known",
+          "wrapper_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_count": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "project_file_known",
+                "wrapper_known"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "size_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_success": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "project_file_known",
+                "wrapper_known",
+                "size_checked"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "verified_result"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_exit3": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "project_file_known",
+                "wrapper_known",
+                "size_checked"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "unverified_empty"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_exit4": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "project_file_known",
+                "wrapper_known",
+                "size_checked"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "extension_not_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_control_success": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "unverified_empty"
+          ]
+        },
+        "add": [
+          "verified_empty"
+        ],
+        "del": [
+          "unverified_empty"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_control_exit3": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "unverified_empty"
+          ]
+        },
+        "add": [
+          "control_inconclusive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_control_exit4": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "unverified_empty"
+          ]
+        },
+        "add": [
+          "extension_not_loaded"
+        ],
+        "del": [
+          "unverified_empty"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_confirm_extension": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation",
+            "control_inconclusive"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "user_confirmation": {
+            "or": [
+              {
+                "cmp": [
+                  "user_confirmation",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "user_confirmation",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_project_and_wrapper",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_query_count",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "query_success": [
+              {
+                "act": {
+                  "cap": "run_query_success",
+                  "by": "agent"
+                }
+              }
+            ],
+            "query_exit3": [
+              {
+                "act": {
+                  "cap": "run_query_exit3",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "control_success": [
+                      {
+                        "act": {
+                          "cap": "run_control_success",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "control_exit3": [
+                      {
+                        "act": {
+                          "cap": "run_control_exit3",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "ask_user_confirm_extension",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "control_exit4": [
+                      {
+                        "act": {
+                          "cap": "run_control_exit4",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "query_exit4": [
+              {
+                "act": {
+                  "cap": "run_query_exit4",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "verified_result",
+        "verified_empty",
+        "extension_not_loaded",
+        {
+          "and": [
+            "control_inconclusive",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "user_confirmation",
+                    "==",
+                    0
+                  ]
+                },
+                {
+                  "cmp": [
+                    "user_confirmation",
+                    "==",
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:linux",
+      "needs:local_filesystem",
+      "needs:user_conversation"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "user_confirmation",
+          "==",
+          -1
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "burpsuite-project-parser",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project_and_wrapper": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_file_known",
+          "wrapper_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_count": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_file_known",
+            "wrapper_known"
+          ]
+        },
+        "add": [
+          "size_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_success": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_file_known",
+            "wrapper_known",
+            "size_checked"
+          ]
+        },
+        "add": [
+          "verified_result"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_exit3": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_file_known",
+            "wrapper_known",
+            "size_checked"
+          ]
+        },
+        "add": [
+          "unverified_empty"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_query_exit4": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_file_known",
+            "wrapper_known",
+            "size_checked"
+          ]
+        },
+        "add": [
+          "extension_not_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_control_success": {
+        "owner": "agent",
+        "pre": "unverified_empty",
+        "add": [
+          "verified_empty"
+        ],
+        "del": [
+          "unverified_empty"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_control_exit3": {
+        "owner": "agent",
+        "pre": "unverified_empty",
+        "add": [
+          "control_inconclusive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_control_exit4": {
+        "owner": "agent",
+        "pre": "unverified_empty",
+        "add": [
+          "extension_not_loaded"
+        ],
+        "del": [
+          "unverified_empty"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_confirm_extension": {
+        "owner": "agent",
+        "pre": "control_inconclusive",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "user_confirmation": {
+            "or": [
+              {
+                "cmp": [
+                  "user_confirmation",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "user_confirmation",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_project_and_wrapper",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_query_count",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "query_success": [
+              {
+                "act": {
+                  "cap": "run_query_success",
+                  "by": "agent"
+                }
+              }
+            ],
+            "query_exit3": [
+              {
+                "act": {
+                  "cap": "run_query_exit3",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "control_success": [
+                      {
+                        "act": {
+                          "cap": "run_control_success",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "control_exit3": [
+                      {
+                        "act": {
+                          "cap": "run_control_exit3",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "ask_user_confirm_extension",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "control_exit4": [
+                      {
+                        "act": {
+                          "cap": "run_control_exit4",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "query_exit4": [
+              {
+                "act": {
+                  "cap": "run_query_exit4",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "verified_result",
+        "verified_empty",
+        "extension_not_loaded",
+        {
+          "and": [
+            "control_inconclusive",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "user_confirmation",
+                    "==",
+                    0
+                  ]
+                },
+                {
+                  "cmp": [
+                    "user_confirmation",
+                    "==",
+                    1
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "user_confirmation",
+          "==",
+          -1
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "inspect_project_and_wrapper": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "run_query_count": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "run_query_success": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run_query_exit3": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_query_exit4": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_control_success": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_control_exit3": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_control_exit4": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "ask_user_confirm_extension": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

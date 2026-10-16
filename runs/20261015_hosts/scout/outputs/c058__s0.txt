@@ -1,0 +1,42 @@
+```ce
+Skill `property-based-testing`.
+Roles: `agent`, `user`.
+Tool `read_task_reference` (owner `agent`): via `read`; requires `task_reference_available`; adds `task_reference_loaded`.
+Tool `inspect_codebase` (owner `agent`): via `read`; requires `codebase_available`; adds `code_inspected`.
+Tool `propose_pbt_dependency` (owner `agent`): via `ask_user`; requires `not_pbt_library_present`; adds `dependency_decision_requested`.
+Tool `apply_property_tests` (owner `agent`): via `write`; requires `code_inspected` and `property_shape_found` and any of (`pbt_library_present`, `dependency_approved`); adds `property_tests_written`.
+Tool `review_property_tests` (owner `agent`): via `read`; requires `code_inspected` and `existing_property_tests_present`; adds `review_done`.
+Tool `debug_property_failure` (owner `agent`): via `read`; requires `counterexample_present`; adds `failure_interpreted`.
+Initially true: none.
+Initially: true.
+Goal: any of (`property_tests_written`, `review_done`, `failure_interpreted`, `poor_pbt_candidate_reported`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `write_new_tests`:
+      - `agent` uses `read_task_reference`.
+      - `agent` uses `inspect_codebase`.
+      - `agent` chooses one of (observed):
+        - branch `property_shape_found`:
+          - `agent` chooses one of (observed):
+            - branch `library_present`:
+              - `agent` uses `apply_property_tests`.
+            - branch `library_missing`:
+              - `agent` uses `propose_pbt_dependency`.
+              - `user` chooses one of (observed):
+                - branch `approve_dependency`:
+                  - `agent` uses `apply_property_tests`.
+                - branch `decline_dependency`: none.
+        - branch `no_property_shape`:
+          - `agent` chooses one of (observed):
+            - branch `can_refactor_to_expose_property`: none.
+            - branch `poor_candidate`:
+              - `agent` chooses one of (observed):
+                - branch `report_poor_candidate`: none.
+    - branch `review_existing_tests`:
+      - `agent` uses `read_task_reference`.
+      - `agent` uses `inspect_codebase`.
+      - `agent` uses `review_property_tests`.
+    - branch `debug_failed_property_test`:
+      - `agent` uses `read_task_reference`.
+      - `agent` uses `debug_property_failure`.
+```

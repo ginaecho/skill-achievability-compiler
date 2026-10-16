@@ -1,0 +1,50 @@
+```ce
+Skill `genotoxic`.
+Roles: `agent`, `user`.
+Tool `read_references` (owner `agent`): via `read`; adds `references_read`.
+Tool `install_trailmark` (owner `agent`): via `bash`; requires `python_project`; adds `trailmark_installed`.
+Tool `build_graph` (owner `agent`): via `bash`; requires `trailmark_installed`; adds `graph_built`, `preanalysis_done`, `graph_exported`.
+Tool `install_mutation_framework` (owner `agent`): via `bash`; requires `mutation_framework_needed`; adds `mutation_framework_installed`.
+Tool `run_mutation_testing` (owner `agent`): via `bash`; requires `tests_exist`, `tests_pass`, `mutation_framework_installed`; adds `mutation_run_complete`, `survived_mutants_captured`.
+Tool `install_necessist` (owner `agent`): via `bash`; requires `necessist_supported`; adds `necessist_installed`.
+Tool `run_necessist` (owner `agent`): via `bash`; requires `tests_exist`, `tests_pass`, `necessist_supported`, `necessist_installed`; adds `necessist_run_complete`, `necessist_removals_captured`.
+Tool `write_report_file` (owner `agent`): via `write`; requires `graph_built`, `preanalysis_done`, `survived_mutants_captured`; adds `report_written`, `all_survived_mutants_triaged`, `summary_statistics_ready`.
+Tool `write_report_file_with_necessist` (owner `agent`): via `write`; requires `graph_built`, `preanalysis_done`, `survived_mutants_captured`, `necessist_removals_captured`; adds `report_written`, `all_survived_mutants_triaged`, `all_necessist_removals_triaged`, `corroborated_findings_identified`, `summary_statistics_ready`.
+Tool `notify_user` (owner `agent`): via `reply`; requires `report_written`, `summary_statistics_ready`; adds `user_notified_with_summary`.
+Initially true: none.
+Goal: `report_written` and `user_notified_with_summary`.
+Protocol:
+  - `agent` uses `read_references`.
+  - `user` chooses one of (observed):
+    - branch `python_project` (assuming `python_project`):
+      - `agent` chooses one of (observed):
+        - branch `trailmark_present`:
+          - `agent` uses `build_graph`.
+        - branch `trailmark_missing`:
+          - `agent` uses `install_trailmark`.
+          - `agent` uses `build_graph`.
+    - branch `other_project`:
+      - `agent` chooses one of (observed):
+        - branch `trailmark_present`:
+          - `agent` uses `build_graph`.
+        - branch `trailmark_missing`: none.
+  - `user` chooses one of (observed):
+    - branch `framework_installed`:
+      - `agent` uses `run_mutation_testing`.
+    - branch `framework_missing` (assuming `mutation_framework_needed`):
+      - `agent` uses `install_mutation_framework`.
+      - `agent` uses `run_mutation_testing`.
+  - `user` chooses one of (observed):
+    - branch `necessist_supported` (assuming `necessist_supported`):
+      - `agent` chooses one of (observed):
+        - branch `necessist_installed`:
+          - `agent` uses `run_necessist`.
+          - `agent` uses `write_report_file_with_necessist`.
+        - branch `necessist_missing`:
+          - `agent` uses `install_necessist`.
+          - `agent` uses `run_necessist`.
+          - `agent` uses `write_report_file_with_necessist`.
+    - branch `necessist_not_applicable`:
+      - `agent` uses `write_report_file`.
+  - `agent` uses `notify_user`.
+```

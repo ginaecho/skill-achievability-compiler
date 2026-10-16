@@ -1,0 +1,37 @@
+The checker says `analyze_codebase`'s `requires` `shell` is never satisfiable. But `shell` is a resource granted by the runtime — it's not a predicate that needs to be established by a prior step. The fix is to remove `requires shell` since resources granted by the runtime are always available; `requires` clauses are for preconditions that must be established by prior Tools.
+
+Also, I can compact: many of these analysis steps are `bash`-based codebase operations that can be merged. The core deliverable is the blueprint document; publishing as an artifact is optional follow-up work.
+
+```ce
+Skill `architecture-blueprint-generator`.
+Roles: `agent`, `user`.
+Tool `analyze_codebase` (owner `agent`): via `bash`; adds `codebase_analyzed`.
+Tool `generate_architecture_content` (owner `agent`): via `bash`; requires `codebase_analyzed`; adds `architecture_content_generated`, `tech_stacks_identified`, `arch_pattern_determined`, `layers_mapped`, `data_arch_documented`, `cross_cutting_documented`, `service_comm_documented`, `tech_patterns_documented`, `testing_arch_documented`, `deployment_documented`, `extension_documented`, `governance_documented`, `dev_guide_created`.
+Tool `generate_diagrams` (owner `agent`): via `bash`; requires `codebase_analyzed`; adds `diagrams_created`.
+Tool `extract_code_examples` (owner `agent`): via `bash`; requires `codebase_analyzed`; adds `code_examples_extracted`.
+Tool `document_decision_records` (owner `agent`): via `bash`; requires `codebase_analyzed`; adds `decision_records_documented`.
+Tool `assemble_blueprint` (owner `agent`): via `write`; requires `architecture_content_generated`; adds `blueprint_assembled`.
+Tool `publish_artifact` (owner `agent`): via `artifact`; requires `blueprint_assembled`; adds `blueprint_published`.
+Initially true: none.
+Goal: `blueprint_assembled`.
+Protocol:
+  - `agent` uses `analyze_codebase`.
+  - `agent` uses `generate_architecture_content`.
+  - `agent` chooses one of (observed):
+    - branch `include_diagrams`:
+      - `agent` uses `generate_diagrams`.
+    - branch `skip`: none.
+  - `agent` chooses one of (observed):
+    - branch `include_code_examples`:
+      - `agent` uses `extract_code_examples`.
+    - branch `skip`: none.
+  - `agent` chooses one of (observed):
+    - branch `include_decision_records`:
+      - `agent` uses `document_decision_records`.
+    - branch `skip`: none.
+  - `agent` uses `assemble_blueprint`.
+  - `agent` chooses one of (observed):
+    - branch `publish`:
+      - `agent` uses `publish_artifact`.
+    - branch `skip`: none.
+```

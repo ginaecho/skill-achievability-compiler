@@ -1,0 +1,57 @@
+```ce
+Skill `imagegen`.
+Roles: `agent`, `user`.
+Tool `read_shared_prompting_docs` (owner `agent`): via `read`; adds `shared_docs_read`.
+Tool `inspect_local_image_for_builtin_edit` (owner `agent`): via `read`; adds `local_edit_target_inspected`.
+Tool `generate_image_builtin` (owner `agent`): via `write`; requires `shared_docs_read`; adds `image_generated`, `builtin_mode_used`.
+Tool `edit_image_builtin` (owner `agent`): via `write`; requires `shared_docs_read` and any of (`edit_target_in_conversation`, `local_edit_target_inspected`); adds `image_generated`, `builtin_mode_used`, `edited`.
+Tool `place_workspace_asset` (owner `agent`): via `write`; requires `image_generated` and `project_bound`; adds `workspace_asset_saved`, `final_path_reported`.
+Tool `place_user_named_destination` (owner `agent`): via `write`; requires `image_generated` and `destination_named`; adds `workspace_asset_saved`, `final_path_reported`.
+Tool `read_cli_docs_and_script` (owner `agent`): via `read`; requires `cli_mode_requested`; adds `cli_docs_read`.
+Tool `install_cli_dependency` (owner `agent`): via `bash`; requires `cli_mode_requested`; adds `cli_dependency_installed`.
+Tool `run_cli_generate` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `cli_mode_requested` and `cli_docs_read` and `openai_api_key_available`; adds `image_generated`, `cli_mode_used`.
+Tool `run_cli_edit` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `cli_mode_requested` and `cli_docs_read` and `openai_api_key_available`; adds `image_generated`, `cli_mode_used`, `edited`.
+Tool `run_cli_generate_batch` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `cli_mode_requested` and `cli_docs_read` and `openai_api_key_available` and `many_assets_requested`; adds `image_generated`, `cli_mode_used`, `batch_used`.
+Initially true: none.
+Initially: not `shared_docs_read` and not `local_edit_target_inspected` and not `image_generated` and not `builtin_mode_used` and not `edited` and not `workspace_asset_saved` and not `final_path_reported` and not `cli_mode_requested` and not `cli_docs_read` and not `cli_dependency_installed` and not `cli_mode_used` and not `batch_used`.
+Goal: `image_generated` and `final_path_reported` and any of (`builtin_mode_used`, `cli_mode_used`) and ((`project_bound` and `workspace_asset_saved`) or (not `project_bound`)).
+Protocol:
+  - `agent` uses `read_shared_prompting_docs`.
+  - `user` chooses one of (observed):
+    - branch `builtin_mode`:
+      - `user` chooses one of (observed):
+        - branch `generate`:
+          - `agent` uses `generate_image_builtin`.
+        - branch `edit`:
+          - `user` chooses one of (observed):
+            - branch `edit_target_in_conversation`:
+              - `agent` uses `edit_image_builtin`.
+            - branch `edit_target_local_file`:
+              - `agent` uses `inspect_local_image_for_builtin_edit`.
+              - `agent` uses `edit_image_builtin`.
+      - `user` chooses one of (observed):
+        - branch `destination_named`:
+          - `agent` uses `place_user_named_destination`.
+        - branch `project_bound`:
+          - `agent` uses `place_workspace_asset`.
+        - branch `preview_only`: none.
+    - branch `cli_mode_explicit`:
+      - `agent` uses `read_cli_docs_and_script`.
+      - `user` chooses one of (observed):
+        - branch `openai_api_key_ready`:
+          - `agent` uses `install_cli_dependency`.
+          - `user` chooses one of (observed):
+            - branch `generate_single`:
+              - `agent` uses `run_cli_generate`.
+            - branch `edit_single`:
+              - `agent` uses `run_cli_edit`.
+            - branch `generate_batch`:
+              - `agent` uses `run_cli_generate_batch`.
+          - `user` chooses one of (observed):
+            - branch `destination_named`:
+              - `agent` uses `place_user_named_destination`.
+            - branch `project_bound`:
+              - `agent` uses `place_workspace_asset`.
+            - branch `preview_only`: none.
+        - branch `openai_api_key_missing`: none.
+```

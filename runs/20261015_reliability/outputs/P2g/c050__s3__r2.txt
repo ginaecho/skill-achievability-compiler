@@ -1,0 +1,41 @@
+```ce
+Skill `aspire-project-v2-migration`.
+Roles: `agent`, `user`.
+Tool `check_local_override` (owner `agent`): via `read`; adds `override_checked`, `apphost_identified`.
+Tool `inspect_workspace_readonly` (owner `agent`): via `read`; requires `override_checked` and `apphost_identified`; adds `local_changes_identified`, `version_resolved`, `eligibility_confirmed`, `resources_assessed`, `plan_prepared`.
+Tool `lookup_aspire_docs` (owner `agent`): via `bash`; requires `plan_prepared`; adds `apis_verified`.
+Tool `ask_for_approval` (owner `agent`): via `ask_user`; requires `plan_prepared`; adds `approval_requested`.
+Tool `apply_approved_edits` (owner `agent`): via `edit`; requires `approved` and `plan_prepared`; adds `migration_applied`, `packages_updated`, `suppressions_applied`, `references_cleaned`.
+Tool `regenerate_sdk_files` (owner `agent`): via `bash`; requires `approved` and `migration_applied`; adds `sdk_regenerated`.
+Tool `restore_and_build` (owner `agent`): via `bash`; requires `migration_applied`; adds `restored`, `built`.
+Tool `start_apphost` (owner `agent`): via `bash`; requires `built`; adds `apphost_started`.
+Tool `wait_for_resources` (owner `agent`): via `bash`; requires `apphost_started`; adds `resources_ready`.
+Tool `reassess_idempotence` (owner `agent`): via `read`; requires `migration_applied`; adds `idempotence_checked`.
+Tool `report_results` (owner `agent`): via `ask_user`; requires `migration_applied` and `idempotence_checked`; adds `results_reported`.
+Initially true: none.
+Goal: any of ((`plan_prepared` and `approval_requested` and not `approved`) or (`migration_applied` and `idempotence_checked` and `results_reported`)).
+Protocol:
+  - `agent` uses `check_local_override`.
+  - `agent` uses `inspect_workspace_readonly`.
+  - `agent` chooses one of (observed):
+    - branch `api_lookup_needed`:
+      - `agent` uses `lookup_aspire_docs`.
+    - branch `api_lookup_not_needed`: none.
+  - `agent` uses `ask_for_approval`.
+  - `user` chooses one of (observed):
+    - branch `approve`:
+      - `agent` uses `apply_approved_edits`.
+      - `agent` chooses one of (observed):
+        - branch `regenerate_needed`:
+          - `agent` uses `regenerate_sdk_files`.
+        - branch `regenerate_not_needed`: none.
+      - `agent` chooses one of (observed):
+        - branch `validation_authorized`:
+          - `agent` uses `restore_and_build`.
+          - `agent` uses `start_apphost`.
+          - `agent` uses `wait_for_resources`.
+        - branch `validation_not_authorized`: none.
+      - `agent` uses `reassess_idempotence`.
+      - `agent` uses `report_results`.
+    - branch `decline`: none.
+```

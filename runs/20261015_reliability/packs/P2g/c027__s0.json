@@ -1,0 +1,833 @@
+{
+  "pack": {
+    "name": "declarative-agent-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_atk_cli": {
+        "owner": "agent",
+        "pre": "workspace_checked",
+        "add": [
+          "atk_cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_atk_skill_env": {
+        "owner": "agent",
+        "pre": "atk_cli_checked",
+        "add": [
+          "atk_skill_env_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_agent_project": {
+        "owner": "agent",
+        "pre": "atk_skill_env_set",
+        "add": [
+          "manifest_exists",
+          "app_package_exists",
+          "agent_project"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_manifest_and_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace_checked",
+            "manifest_exists"
+          ]
+        },
+        "add": [
+          "manifest_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "schema_version": {
+            "cmp": [
+              "schema_version",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "edit_agent_files": {
+        "owner": "agent",
+        "pre": "manifest_checked",
+        "add": [
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_api_plugin_via_atk": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_skill_env_set",
+            "manifest_checked"
+          ]
+        },
+        "add": [
+          "app_package_changed",
+          "plugin_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "discover_mcp_tools": {
+        "owner": "agent",
+        "pre": "mcp_server_url_provided",
+        "add": [
+          "mcp_tools_discovered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "configure_mcp_plugin": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "manifest_checked",
+            "mcp_tools_discovered"
+          ]
+        },
+        "add": [
+          "app_package_changed",
+          "plugin_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_agent_local": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_skill_env_set",
+            "app_package_changed",
+            {
+              "not": "manifest_errors"
+            },
+            {
+              "not": "user_declined_deploy"
+            }
+          ]
+        },
+        "add": [
+          "deployed",
+          "test_link_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_title_id": {
+        "owner": "agent",
+        "pre": "deployed",
+        "add": [
+          "title_id_read",
+          "test_link_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_project_files": {
+        "owner": "agent",
+        "pre": "agent_project",
+        "add": [
+          "files_sent_to_user"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_atk_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "non_agent_project_reject": [
+              {
+                "msg": {
+                  "from": "agent",
+                  "to": "user",
+                  "label": "rejected_with_explanation"
+                }
+              }
+            ],
+            "missing_manifest_edit_or_deploy_reject": [
+              {
+                "msg": {
+                  "from": "agent",
+                  "to": "user",
+                  "label": "rejected_with_explanation"
+                }
+              }
+            ],
+            "missing_manifest_new_project": [
+              {
+                "act": {
+                  "cap": "set_atk_skill_env",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "scaffold_agent_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "send_project_files",
+                  "by": "agent"
+                }
+              }
+            ],
+            "manifest_exists_with_errors": [
+              {
+                "act": {
+                  "cap": "validate_manifest_and_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "msg": {
+                  "from": "agent",
+                  "to": "user",
+                  "label": "asked_user_how_to_proceed"
+                }
+              }
+            ],
+            "valid_project_review_or_edit": [
+              {
+                "act": {
+                  "cap": "validate_manifest_and_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "edit_manifest_or_instructions": [
+                      {
+                        "act": {
+                          "cap": "edit_agent_files",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "add_api_plugin": [
+                      {
+                        "act": {
+                          "cap": "set_atk_skill_env",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "add_api_plugin_via_atk",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "add_mcp_plugin": [
+                      {
+                        "act": {
+                          "cap": "discover_mcp_tools",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "configure_mcp_plugin",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_file_changes": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "deploy_after_change": [
+                      {
+                        "act": {
+                          "cap": "set_atk_skill_env",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "deploy_agent_local",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_title_id",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_deploy_user_requested": [
+                      {
+                        "msg": {
+                          "from": "agent",
+                          "to": "user",
+                          "label": "user_declined_deploy"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "rejected_with_explanation",
+        "asked_user_how_to_proceed",
+        {
+          "and": [
+            "agent_project",
+            "files_sent_to_user"
+          ]
+        },
+        {
+          "and": [
+            "app_package_changed",
+            {
+              "or": [
+                "user_declined_deploy",
+                {
+                  "and": [
+                    "deployed",
+                    "test_link_available"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "schema_version",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "declarative-agent-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_atk_cli": {
+        "owner": "agent",
+        "pre": "workspace_checked",
+        "add": [
+          "atk_cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_atk_skill_env": {
+        "owner": "agent",
+        "pre": "atk_cli_checked",
+        "add": [
+          "atk_skill_env_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_agent_project": {
+        "owner": "agent",
+        "pre": "atk_skill_env_set",
+        "add": [
+          "manifest_exists",
+          "app_package_exists",
+          "agent_project"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_manifest_and_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace_checked",
+            "manifest_exists"
+          ]
+        },
+        "add": [
+          "manifest_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "schema_version": {
+            "cmp": [
+              "schema_version",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "edit_agent_files": {
+        "owner": "agent",
+        "pre": "manifest_checked",
+        "add": [
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_api_plugin_via_atk": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_skill_env_set",
+            "manifest_checked"
+          ]
+        },
+        "add": [
+          "app_package_changed",
+          "plugin_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "discover_mcp_tools": {
+        "owner": "agent",
+        "pre": "mcp_server_url_provided",
+        "add": [
+          "mcp_tools_discovered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "configure_mcp_plugin": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "manifest_checked",
+            "mcp_tools_discovered"
+          ]
+        },
+        "add": [
+          "app_package_changed",
+          "plugin_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_agent_local": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_skill_env_set",
+            "app_package_changed",
+            {
+              "not": "manifest_errors"
+            },
+            {
+              "not": "user_declined_deploy"
+            }
+          ]
+        },
+        "add": [
+          "deployed",
+          "test_link_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_title_id": {
+        "owner": "agent",
+        "pre": "deployed",
+        "add": [
+          "title_id_read",
+          "test_link_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_project_files": {
+        "owner": "agent",
+        "pre": "agent_project",
+        "add": [
+          "files_sent_to_user"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_atk_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "non_agent_project_reject": [
+              {
+                "msg": {
+                  "from": "agent",
+                  "to": "user",
+                  "label": "rejected_with_explanation"
+                }
+              }
+            ],
+            "missing_manifest_edit_or_deploy_reject": [
+              {
+                "msg": {
+                  "from": "agent",
+                  "to": "user",
+                  "label": "rejected_with_explanation"
+                }
+              }
+            ],
+            "missing_manifest_new_project": [
+              {
+                "act": {
+                  "cap": "set_atk_skill_env",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "scaffold_agent_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "send_project_files",
+                  "by": "agent"
+                }
+              }
+            ],
+            "manifest_exists_with_errors": [
+              {
+                "act": {
+                  "cap": "validate_manifest_and_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "msg": {
+                  "from": "agent",
+                  "to": "user",
+                  "label": "asked_user_how_to_proceed"
+                }
+              }
+            ],
+            "valid_project_review_or_edit": [
+              {
+                "act": {
+                  "cap": "validate_manifest_and_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "edit_manifest_or_instructions": [
+                      {
+                        "act": {
+                          "cap": "edit_agent_files",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "add_api_plugin": [
+                      {
+                        "act": {
+                          "cap": "set_atk_skill_env",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "add_api_plugin_via_atk",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "add_mcp_plugin": [
+                      {
+                        "act": {
+                          "cap": "discover_mcp_tools",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "configure_mcp_plugin",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_file_changes": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "deploy_after_change": [
+                      {
+                        "act": {
+                          "cap": "set_atk_skill_env",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "deploy_agent_local",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_title_id",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_deploy_user_requested": [
+                      {
+                        "msg": {
+                          "from": "agent",
+                          "to": "user",
+                          "label": "user_declined_deploy"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "rejected_with_explanation",
+        "asked_user_how_to_proceed",
+        {
+          "and": [
+            "agent_project",
+            "files_sent_to_user"
+          ]
+        },
+        {
+          "and": [
+            "app_package_changed",
+            {
+              "or": [
+                "user_declined_deploy",
+                {
+                  "and": [
+                    "deployed",
+                    "test_link_available"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "schema_version",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_atk_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "set_atk_skill_env": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "scaffold_agent_project": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "validate_manifest_and_project": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "edit_agent_files": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "add_api_plugin_via_atk": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "discover_mcp_tools": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "configure_mcp_plugin": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "deploy_agent_local": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "read_title_id": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "send_project_files": {
+      "via": "send_user_file",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

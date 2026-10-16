@@ -1,0 +1,41 @@
+{
+  "case": "c012",
+  "kind": "skill",
+  "source_text": "---\nname: optimize-simplicite-logs\ndescription: capability to parse Simplicité logs from a raw `.txt` file, filter fields to reduce noise, and output the result as structured JSON.\n---\n\n# Optimize Simplicite Logs\n\nThis skill provides the capability to parse Simplicité logs from a raw `.txt` file, filter fields to reduce noise, and output the result as structured JSON. This is critical for optimizing AI context size (saving ~56% of tokens) and providing structured, predictable data for troubleshooting.\n\n## When to Use This Skill\n\nUse this skill when you need to:\n- Analyze user-provided Simplicité log files in `.txt` format.\n- Avoid ingesting massive raw log files into your context window.\n- Extract structured fields (like `timestamp`, `level`, `body`) from verbose multi-line log output.\n\n**IMPORTANT:** Instead of directly reading a raw `.txt` log file provided by the user using file read tools, you **must** use one of the log converter scripts (PowerShell or Python) to parse the file into a JSON format first, optionally extracting only the fields needed.\n\n## Prerequisites\n\n- Access to either the PowerShell script (`/scripts/SimpliciteLog2Json.ps1`) or the Python script (`/scripts/simplicite-log2json.py`).\n\n## Core Capabilities\n\n### 1. Context Optimization\nReduces the tokens consumed by large Simplicité logs by extracting only relevant log fields (e.g. `body`, `timestamp`, `level`) and discarding non-relevant structural log data (like `app`, `endpoint`, `contextPath`).\n\n### 2. Multi-line Support\nProperly captures stack traces and multiline errors inside the `body` field of the JSON structure, which a simple text search might miss.\n\n### 3. Stdout Support\nIf no output path is provided for the JSON file (e.g. omitting `--output` or `-Output`), the parsed JSON will be printed directly to stdout, allowing you to pipe the output to other tools.\n\n## Output Summary\n\nAfter processing, the tool prints a summary to stderr (or console):\n```\nProcessed: 123 entries, Skipped: 2 entries\n```\n\n## Usage Examples\n\n### Example 1: Python Version (Recommended)\nConvert a log file to JSON, keeping only the most important fields:\n```sh\npython /absolute/path/to/skills/optimize-simplicite-logs/scripts/simplicite-log2json.py <input.txt> --include timestamp,level,body --output <output.json>\n```\n\n### Example 2: PowerShell Version\n```powershell\n/python /absolute/path/to/skills/optimize-simplicite-logs/scripts/SimpliciteLog2Json.ps1 -InputPath \"<input.txt>\" -Output \"<output.json>\" -Include \"body,timestamp,level\"\n```\n\nAfter generating the `<output.json>`, you can safely read the resulting file to perform your analysis.\n\n## Guidelines\n\n1. **Always Convert First:** Never directly read `.txt` log files from Simplicité using standard text reading tools. Always convert them to JSON using the available scripts.\n2. **Filter Fields:** Use `--include` (Python) or `-Include` (PowerShell) to restrict fields to what is absolutely necessary to diagnose the issue (usually `timestamp,level,body`).\n3. **Available Fields:** The fields you can filter include: `timestamp`, `app`, `level`, `endpoint`, `contextPath`, `event`, `user`, `class`, `function`, `rowId`, `body`.\n\n## Common Patterns\n\n### Pattern: Fast Contextual Troubleshooting\n```sh\n# 1. Run the script to generate a minified JSON output in the current directory\npython /absolute/path/to/skills/optimize-simplicite-logs/scripts/simplicite-log2json.py logs.txt --include timestamp,level,body --output logs_minified.json\n\n# 2. Then read logs_minified.json to understand the context.\n```\n\n## Limitations\n\n- The parser depends on a fixed regex pattern that matches the standard Simplicité log output. If the log format has been heavily customized, parsing might fail or degrade.\n",
+  "ce": "Skill `optimize-simplicite-logs`.\nRoles: `agent`, `user`.\nTool `convert_simplicite_log_to_json` (owner `agent`): via `bash`; requires `input_txt_available`; adds `json_available`, `logs_converted`, `summary_available`; sets `included_field_count` to 3.\nTool `read_structured_json` (owner `agent`): via `read`; requires `json_available`; adds `json_ready_for_analysis`.\nInitially: `included_field_count` == 0.\nGoal: `logs_converted` and `json_ready_for_analysis` and `summary_available` and `included_field_count` == 3.\nProtocol:\n  - `agent` uses `convert_simplicite_log_to_json`.\n  - `agent` uses `read_structured_json`.\n",
+  "runtime": {
+    "name": "claude-code-cloud",
+    "description": "A Claude Code cloud session on Linux x86_64 (no GPU, no Docker daemon) with a shell, the working directory, sub-agents and the connectors listed as tools. Network egress goes through an allow-list proxy: the package registries and hosts pypi (PyPI), npm, GitHub (github.com, api.github.com, raw.githubusercontent.com), Ubuntu (apt archives), NuGet and the Go module proxy are open; other hosts are refused (for example huggingface, Microsoft Learn and Azure, Cloudflare, Expo, Neon and NVIDIA). The user's GitHub account is usable through the github connector and through the gh CLI via the proxy. There are no accounts or credentials for other external services.",
+    "tools": {
+      "bash": "run shell commands on Linux x86_64: install packages from the open registries (pip from PyPI, npm, apt from Ubuntu, go modules, nuget, GitHub release downloads), build, test, run CLIs and scripts, git, gh, start and stop local servers inside the session; network requests reach only the allow-listed hosts",
+      "read": "read files in the working directory; search them by name pattern or content (glob, grep)",
+      "write": "create and overwrite files",
+      "edit": "edit existing files and Jupyter notebooks",
+      "web_fetch": "fetch a web page or unauthenticated API by URL; hosts outside the egress allow-list are refused",
+      "web_search": "search the public web and read result snippets",
+      "ask_user": "ask the user a question (with options) and read the answer in the conversation",
+      "agent": "start sub-agents that work in parallel, send them messages and list them",
+      "skill": "load an installed Claude Code skill, list and search skills and plugins",
+      "tasks": "create, read, update and stop background tasks; schedule, list and delete cron jobs and wake-ups; monitor a condition; read notifications",
+      "artifact": "publish an HTML page as a private claude.ai artifact; read and answer its comments and its small data store",
+      "send_user_file": "send a file from the session to the user",
+      "push_notification": "send a push notification to the user",
+      "mcp_resources": "list and read resources of the connected MCP servers",
+      "github": "GitHub connector (the user's account): get_file_contents, create_pull_request, list_issues, issue_write, search_code, pull_request_read, actions_list, get_job_logs, create_branch, push_files",
+      "notion": "Notion connector (the user's workspace): notion-search, notion-fetch, notion-create-pages, notion-update-page, notion-create-database",
+      "google_drive": "Google Drive connector (the user's drive): search_files, read_file_content, create_file, update_file, share_file",
+      "jam": "Jam connector (bug-report recordings): search, getDetails, getConsoleLogs, getNetworkRequests, analyzeVideo",
+      "mem": "Mem connector (the user's notes): create_note, search_notes, get_note, update_note",
+      "bigdata_com": "Bigdata.com connector (financial data and documents): bigdata_company_tearsheet, bigdata_search, find_securities, bigdata_fetch_document",
+      "etoro": "eToro connector (the user's trading account): get-my-portfolio-summary, get-instruments-overview, prepare-trade",
+      "claude_docs": "Claude Docs connector (living documents on claude.ai): create, read, batch, update, export"
+    }
+  },
+  "rubric": {
+    "F1": "no invented Tool (every Tool corresponds to an instruction)",
+    "F2": "no omitted mandatory step",
+    "F3": "the Goal states the document's deliverable",
+    "F4": "no invented ordering (every protocol order is stated or implied by the document)",
+    "F5": "bindings plausible (each `via` names a runtime tool that can perform the Tool)"
+  }
+}

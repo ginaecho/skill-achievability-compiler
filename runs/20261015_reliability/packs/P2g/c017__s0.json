@@ -1,0 +1,716 @@
+{
+  "pack": {
+    "name": "huggingface-spaces",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_hf_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "hf_cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_hf_cli": {
+        "owner": "agent",
+        "pre": "hf_cli_checked",
+        "add": [
+          "hf_cli_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_hf_auth": {
+        "owner": "agent",
+        "pre": "hf_cli_checked",
+        "add": [
+          "hf_auth_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "login_hf_oauth": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation",
+            "hf_auth_checked"
+          ]
+        },
+        "add": [
+          "hf_logged_in"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_space_options": {
+        "owner": "agent",
+        "pre": "hf_logged_in",
+        "add": [
+          "account_capabilities_known",
+          "prior_art_checked",
+          "sdk_hardware_decided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_space_repo": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "hf_logged_in",
+                "sdk_hardware_decided"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "space_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_space_files": {
+        "owner": "agent",
+        "pre": "space_created",
+        "add": [
+          "space_files_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_space_files": {
+        "owner": "agent",
+        "pre": "space_files_prepared",
+        "add": [
+          "space_files_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "py_compile_app": {
+        "owner": "agent",
+        "pre": "space_files_prepared",
+        "add": [
+          "local_sanity_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "upload_space_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "hf_logged_in",
+                "space_files_prepared"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "space_uploaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_space_runtime": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "space_uploaded"
+          ]
+        },
+        "add": [
+          "space_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "repair_space": {
+        "owner": "agent",
+        "pre": "space_uploaded",
+        "add": [
+          "space_files_prepared"
+        ],
+        "del": [
+          "space_verified"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_hf_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hf_present": [],
+            "hf_missing": [
+              {
+                "act": {
+                  "cap": "install_hf_cli",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "check_hf_auth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "already_logged_in": [
+              {
+                "act": {
+                  "cap": "inspect_space_options",
+                  "by": "agent"
+                }
+              }
+            ],
+            "needs_login": [
+              {
+                "act": {
+                  "cap": "login_hf_oauth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_space_options",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "create_space_repo",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "write_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "needs_edits": [
+              {
+                "act": {
+                  "cap": "edit_space_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "py_compile_app",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_python_check_needed": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "upload_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "fix_until_verified",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "verified_now": [
+                    {
+                      "act": {
+                        "cap": "verify_space_runtime",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "needs_fix": [
+                    {
+                      "act": {
+                        "cap": "repair_space",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "upload_space_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "fix_until_verified"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "hf_logged_in",
+        "prior_art_checked",
+        "sdk_hardware_decided",
+        "space_created",
+        "space_files_prepared",
+        "space_uploaded",
+        "space_verified"
+      ]
+    },
+    "init_true": [
+      "needs:user_conversation",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "huggingface-spaces",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_hf_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "hf_cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_hf_cli": {
+        "owner": "agent",
+        "pre": "hf_cli_checked",
+        "add": [
+          "hf_cli_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_hf_auth": {
+        "owner": "agent",
+        "pre": "hf_cli_checked",
+        "add": [
+          "hf_auth_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "login_hf_oauth": {
+        "owner": "agent",
+        "pre": "hf_auth_checked",
+        "add": [
+          "hf_logged_in"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_space_options": {
+        "owner": "agent",
+        "pre": "hf_logged_in",
+        "add": [
+          "account_capabilities_known",
+          "prior_art_checked",
+          "sdk_hardware_decided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_space_repo": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "hf_logged_in",
+            "sdk_hardware_decided"
+          ]
+        },
+        "add": [
+          "space_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_space_files": {
+        "owner": "agent",
+        "pre": "space_created",
+        "add": [
+          "space_files_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_space_files": {
+        "owner": "agent",
+        "pre": "space_files_prepared",
+        "add": [
+          "space_files_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "py_compile_app": {
+        "owner": "agent",
+        "pre": "space_files_prepared",
+        "add": [
+          "local_sanity_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "upload_space_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "hf_logged_in",
+            "space_files_prepared"
+          ]
+        },
+        "add": [
+          "space_uploaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_space_runtime": {
+        "owner": "agent",
+        "pre": "space_uploaded",
+        "add": [
+          "space_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "repair_space": {
+        "owner": "agent",
+        "pre": "space_uploaded",
+        "add": [
+          "space_files_prepared"
+        ],
+        "del": [
+          "space_verified"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_hf_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hf_present": [],
+            "hf_missing": [
+              {
+                "act": {
+                  "cap": "install_hf_cli",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "check_hf_auth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "already_logged_in": [
+              {
+                "act": {
+                  "cap": "inspect_space_options",
+                  "by": "agent"
+                }
+              }
+            ],
+            "needs_login": [
+              {
+                "act": {
+                  "cap": "login_hf_oauth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_space_options",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "create_space_repo",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "write_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "needs_edits": [
+              {
+                "act": {
+                  "cap": "edit_space_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "py_compile_app",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_python_check_needed": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "upload_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "fix_until_verified",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "verified_now": [
+                    {
+                      "act": {
+                        "cap": "verify_space_runtime",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "needs_fix": [
+                    {
+                      "act": {
+                        "cap": "repair_space",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "upload_space_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "fix_until_verified"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "hf_logged_in",
+        "prior_art_checked",
+        "sdk_hardware_decided",
+        "space_created",
+        "space_files_prepared",
+        "space_uploaded",
+        "space_verified"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_hf_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_hf_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "check_hf_auth": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "login_hf_oauth": {
+      "via": "bash",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "inspect_space_options": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "create_space_repo": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "write_space_files": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "edit_space_files": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "py_compile_app": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "upload_space_files": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "verify_space_runtime": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "repair_space": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

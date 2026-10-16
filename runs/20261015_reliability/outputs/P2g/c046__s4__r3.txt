@@ -1,0 +1,45 @@
+```ce
+Skill `nextjs-on-cloudflare`.
+Roles: `agent`, `user`.
+Tool `check_vinext_skill_installed` (owner `agent`): via `skill`; picks `vinext_skill_available` with any of (`vinext_skill_available`, not `vinext_skill_available`).
+Tool `install_vinext_skills` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `vinext_skill_available`.
+Tool `read_upstream_skill_docs` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `upstream_docs_read`.
+Tool `load_local_vinext_skill` (owner `agent`): via `skill`; requires `vinext_skill_available`; adds `upstream_docs_read`.
+Tool `inspect_project_state` (owner `agent`): via `read`; picks `project_exists` with any of (`project_exists`, not `project_exists`); picks `existing_opennext_setup` with any of (`existing_opennext_setup`, not `existing_opennext_setup`).
+Tool `ask_user_intent` (owner `agent`): via `ask_user`; picks `new_project_requested` with any of (`new_project_requested`, not `new_project_requested`); picks `migration_requested` with any of (`migration_requested`, not `migration_requested`); picks `deployment_requested` with any of (`deployment_requested`, not `deployment_requested`); picks `explicit_opennext_choice` with any of (`explicit_opennext_choice`, not `explicit_opennext_choice`).
+Tool `create_vinext_cloudflare_project` (owner `agent`): via `bash`; needs `shell`, `package_registries`, `local_filesystem`; requires `new_project_requested` and not `explicit_opennext_choice`; adds `vinext_configured`, `cloudflare_target_selected`.
+Tool `migrate_nextjs_project_to_vinext` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `migration_requested` and `project_exists` and not `existing_opennext_setup` and not `explicit_opennext_choice`; adds `compatibility_checked`, `vinext_configured`, `cloudflare_target_selected`.
+Tool `preserve_opennext_setup` (owner `agent`): via `read`; requires any of (`existing_opennext_setup`, `explicit_opennext_choice`); adds `opennext_preserved`.
+Tool `prepare_workers_deployment` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `vinext_configured` and `cloudflare_target_selected`; adds `workers_deploy_workflow_prepared`.
+Initially true: none.
+Goal: any of (`opennext_preserved`, all of (`upstream_docs_read`, any of (`vinext_configured`, `opennext_preserved`), any of (not `migration_requested`, `compatibility_checked`), any of (not `deployment_requested`, `workers_deploy_workflow_prepared`))).
+Protocol:
+  - `agent` uses `check_vinext_skill_installed`.
+  - `agent` chooses one of (observed):
+    - branch `skills_available`:
+      - `agent` uses `load_local_vinext_skill`.
+    - branch `skills_missing`:
+      - `agent` chooses one of (observed):
+        - branch `install_available`:
+          - `agent` uses `install_vinext_skills`.
+          - `agent` uses `load_local_vinext_skill`.
+        - branch `install_unavailable`:
+          - `agent` uses `read_upstream_skill_docs`.
+  - `agent` uses `inspect_project_state`.
+  - `agent` uses `ask_user_intent`.
+  - `agent` chooses one of (observed):
+    - branch `preserve_opennext`:
+      - `agent` uses `preserve_opennext_setup`.
+    - branch `new_project`:
+      - `agent` uses `create_vinext_cloudflare_project`.
+      - `agent` chooses one of (observed):
+        - branch `deploy_now`:
+          - `agent` uses `prepare_workers_deployment`.
+        - branch `skip_deploy`: none.
+    - branch `migrate_existing_project`:
+      - `agent` uses `migrate_nextjs_project_to_vinext`.
+      - `agent` chooses one of (observed):
+        - branch `deploy_now`:
+          - `agent` uses `prepare_workers_deployment`.
+        - branch `skip_deploy`: none.
+```

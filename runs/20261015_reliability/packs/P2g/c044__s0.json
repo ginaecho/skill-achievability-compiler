@@ -1,0 +1,691 @@
+{
+  "pack": {
+    "name": "isaac-mission-control-showcase",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_dependencies": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "dependencies_prepared",
+          "skill_dir_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_runtime_state": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "runtime_inspected",
+          "installation_detected",
+          "display_checked",
+          "running_isaac_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "runtime_selected"
+          ]
+        },
+        "add": [
+          "preflight_passed",
+          "container_conflicts_reported",
+          "port_free"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_runtime_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "runtime_inspected",
+            "selection_prompt_needed"
+          ]
+        },
+        "add": [
+          "user_chose_runtime"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "handoff_installation_skill": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "installation_handoff_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_stop_containers": {
+        "owner": "agent",
+        "pre": "container_conflicts_reported",
+        "add": [
+          "user_resolved_container_choice"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_idle": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed",
+            "port_free"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "robot_idle_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_demo": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed",
+            "port_free"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "robot_idle_ready",
+          "mission_completed",
+          "motion_confirmed",
+          "run_result_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_run_status": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "showcase_started"
+          ]
+        },
+        "add": [
+          "run_status_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_showcase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "showcase_started"
+          ]
+        },
+        "add": [
+          "showcase_stopped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_dependencies",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_runtime_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "usable_runtime_auto_selected": [],
+            "prompt_for_runtime_choice": [
+              {
+                "act": {
+                  "cap": "ask_runtime_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "use_detected_runtime": [],
+                    "handoff_installation": [
+                      {
+                        "act": {
+                          "cap": "handoff_installation_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "no_installation_detected": [
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_preflight",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "container_conflicts_present": [
+              {
+                "act": {
+                  "cap": "ask_user_stop_containers",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_container_conflicts": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "idle_showcase": [
+              {
+                "act": {
+                  "cap": "start_showcase_idle",
+                  "by": "agent"
+                }
+              }
+            ],
+            "demo_showcase": [
+              {
+                "act": {
+                  "cap": "start_showcase_demo",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "inspect_status": [
+              {
+                "act": {
+                  "cap": "inspect_run_status",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_status_inspection": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "stop_recorded_resources": [
+              {
+                "act": {
+                  "cap": "stop_showcase",
+                  "by": "agent"
+                }
+              }
+            ],
+            "leave_running": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "robot_idle_ready",
+        {
+          "and": [
+            "mission_completed",
+            "motion_confirmed",
+            "run_result_written"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      false
+    ]
+  },
+  "pre_binding": {
+    "name": "isaac-mission-control-showcase",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_dependencies": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "dependencies_prepared",
+          "skill_dir_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_runtime_state": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "runtime_inspected",
+          "installation_detected",
+          "display_checked",
+          "running_isaac_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "runtime_selected"
+          ]
+        },
+        "add": [
+          "preflight_passed",
+          "container_conflicts_reported",
+          "port_free"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_runtime_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "runtime_inspected",
+            "selection_prompt_needed"
+          ]
+        },
+        "add": [
+          "user_chose_runtime"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "handoff_installation_skill": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "installation_handoff_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_stop_containers": {
+        "owner": "agent",
+        "pre": "container_conflicts_reported",
+        "add": [
+          "user_resolved_container_choice"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_idle": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed",
+            "port_free"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "robot_idle_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_demo": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed",
+            "port_free"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "robot_idle_ready",
+          "mission_completed",
+          "motion_confirmed",
+          "run_result_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_run_status": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "showcase_started"
+          ]
+        },
+        "add": [
+          "run_status_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_showcase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "showcase_started"
+          ]
+        },
+        "add": [
+          "showcase_stopped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_dependencies",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_runtime_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "usable_runtime_auto_selected": [],
+            "prompt_for_runtime_choice": [
+              {
+                "act": {
+                  "cap": "ask_runtime_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "use_detected_runtime": [],
+                    "handoff_installation": [
+                      {
+                        "act": {
+                          "cap": "handoff_installation_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "no_installation_detected": [
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_preflight",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "container_conflicts_present": [
+              {
+                "act": {
+                  "cap": "ask_user_stop_containers",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_container_conflicts": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "idle_showcase": [
+              {
+                "act": {
+                  "cap": "start_showcase_idle",
+                  "by": "agent"
+                }
+              }
+            ],
+            "demo_showcase": [
+              {
+                "act": {
+                  "cap": "start_showcase_demo",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "inspect_status": [
+              {
+                "act": {
+                  "cap": "inspect_run_status",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_status_inspection": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "stop_recorded_resources": [
+              {
+                "act": {
+                  "cap": "stop_showcase",
+                  "by": "agent"
+                }
+              }
+            ],
+            "leave_running": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "robot_idle_ready",
+        {
+          "and": [
+            "mission_completed",
+            "motion_confirmed",
+            "run_result_written"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      false
+    ]
+  },
+  "bindings": {
+    "prepare_dependencies": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_runtime_state": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "run_preflight": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_runtime_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "handoff_installation_skill": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "ask_user_stop_containers": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "start_showcase_idle": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "start_showcase_demo": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "inspect_run_status": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "stop_showcase": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

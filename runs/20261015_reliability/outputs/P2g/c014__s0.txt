@@ -1,0 +1,43 @@
+```ce
+Skill `web-design-reviewer`.
+Roles: `agent`, `user`.
+Tool `ask_url_and_scope` (owner `agent`): via `ask_user`; requires not `target_url_known`; adds `target_url_known`, `review_scope_known`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `project_detected`, `framework_detected`, `styling_detected`, `source_locations_known`.
+Tool `review_checklist` (owner `agent`): via `read`; adds `checklist_loaded`.
+Tool `fetch_target_page` (owner `agent`): via `web_fetch`; requires `target_url_known`; adds `page_fetched`.
+Tool `capture_baseline` (owner `agent`): via `bash`; requires `target_url_known`; needs `shell`, `linux`; adds `baseline_captured`, `dom_observed`, `issues_detected`.
+Tool `inspect_additional_pages` (owner `agent`): via `bash`; requires `baseline_captured`; needs `shell`, `linux`; adds `additional_pages_checked`.
+Tool `apply_design_fixes` (owner `agent`): via `edit`; requires `issues_detected` and `source_locations_known`; adds `source_changed`, `issues_fixed`.
+Tool `save_fix_notes` (owner `agent`): via `write`; requires `issues_fixed`; adds `fix_notes_saved`.
+Tool `reverify_design` (owner `agent`): via `bash`; requires `issues_fixed`; needs `shell`, `linux`; adds `reverified`; picks `issues_remaining` with (`issues_remaining` == 0 or `issues_remaining` > 0).
+Initially true: none.
+Initially: `issues_remaining` == 0.
+Goal: all of (`target_url_known`, `checklist_loaded`, `issues_detected`, any of (`issues_fixed`, true), any of ((`issues_fixed` and `reverified`), not `issues_fixed`)).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `url_known`: none.
+    - branch `url_needed`:
+      - `agent` uses `ask_url_and_scope`.
+  - `agent` chooses one of (observed):
+    - branch `fixes_in_workspace`:
+      - `agent` uses `inspect_workspace`.
+    - branch `review_only`: none.
+  - `agent` uses `review_checklist`.
+  - `agent` uses `fetch_target_page`.
+  - `agent` uses `capture_baseline`.
+  - `agent` chooses one of (observed):
+    - branch `check_more_pages`:
+      - `agent` uses `inspect_additional_pages`.
+    - branch `single_page_only`: none.
+  - `agent` chooses one of (observed):
+    - branch `fix_detected_issues`:
+      - loop `fix_loop`:
+        - `agent` uses `apply_design_fixes`.
+        - `agent` uses `save_fix_notes`.
+        - `agent` uses `reverify_design`.
+        - `agent` chooses one of (observed):
+          - branch `issues_remain`:
+            - repeat `fix_loop`.
+          - branch `no_issues_remain`: none.
+    - branch `report_only`: none.
+```

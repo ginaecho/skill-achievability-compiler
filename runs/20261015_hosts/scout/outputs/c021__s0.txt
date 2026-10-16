@@ -1,0 +1,28 @@
+```ce
+Skill `windows-builder`.
+Roles: `agent`, `user`.
+Tool `write_packer_windows_template` (owner `agent`): via `write`; needs `local_filesystem`; adds `template_written`.
+Tool `write_winrm_setup_script` (owner `agent`): via `write`; needs `local_filesystem`; adds `winrm_script_written`.
+Tool `build_windows_image_with_packer` (owner `agent`): via `bash`; needs `shell`, `windows`, `local_filesystem`; requires `template_written`; adds `build_started`; picks `image_type` with any of (`is_aws`, `is_azure`, `is_vmware`).
+Tool `configure_aws_winrm` (owner `agent`): via `write`; needs `local_filesystem`; requires `template_written`; adds `is_aws`, `winrm_configured`, `powershell_provisioners_configured`, `cleanup_configured`, `windows_updates_configured`.
+Tool `configure_azure_winrm` (owner `agent`): via `write`; needs `local_filesystem`; requires `template_written`; adds `is_azure`, `winrm_configured`, `powershell_provisioners_configured`, `cleanup_configured`, `windows_updates_configured`.
+Tool `configure_vmware_winrm` (owner `agent`): via `write`; needs `local_filesystem`; requires `template_written`; adds `is_vmware`, `winrm_configured`, `powershell_provisioners_configured`, `cleanup_configured`, `windows_updates_configured`.
+Tool `advise_costs_and_cleanup_risk` (owner `agent`): via `ask_user`; needs `user_conversation`; adds `user_warned`.
+Initially true: none.
+Goal: all of (`template_written`, `winrm_configured`, `powershell_provisioners_configured`, `windows_updates_configured`, `cleanup_configured`, `user_warned`).
+Protocol:
+  - `agent` uses `advise_costs_and_cleanup_risk`.
+  - `agent` uses `write_packer_windows_template`.
+  - `user` chooses one of (observed):
+    - branch `aws`:
+      - `agent` uses `write_winrm_setup_script`.
+      - `agent` uses `configure_aws_winrm`.
+    - branch `azure`:
+      - `agent` uses `configure_azure_winrm`.
+    - branch `vmware`:
+      - `agent` uses `configure_vmware_winrm`.
+  - `user` chooses one of (observed):
+    - branch `build_now`:
+      - `agent` uses `build_windows_image_with_packer`.
+    - branch `template_only`: none.
+```

@@ -1,0 +1,40 @@
+```ce
+Skill `render-deploy`.
+Roles: `agent`, `user`.
+Tool `check_git_remote` (owner `agent`): via `bash`; requires `git_repo_present`; adds `git_remote_known`.
+Tool `inspect_codebase` (owner `agent`): via `read`; requires `project_present`; adds `deployment_shape_known`.
+Tool `write_render_blueprint` (owner `agent`): via `write`; requires `deployment_shape_known` and `blueprint_method`; adds `render_yaml_created`.
+Tool `check_render_cli` (owner `agent`): via `bash`; adds `render_cli_checked`.
+Tool `validate_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `render_cli_available`; adds `render_yaml_validated`.
+Tool `commit_and_push_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `git_remote_present`; adds `render_yaml_pushed`.
+Tool `derive_repo_link` (owner `agent`): via `bash`; requires `git_remote_present`; adds `repo_https_url_known`.
+Tool `reply_with_blueprint_result` (owner `agent`): via `reply`; requires `render_yaml_created` and `repo_https_url_known`; adds `blueprint_guidance_delivered`.
+Tool `reply_with_stop_no_remote` (owner `agent`): via `reply`; requires `git_remote_known` and not `git_remote_present`; adds `stopped_for_missing_remote`.
+Tool `reply_with_docker_guidance` (owner `agent`): via `reply`; requires `docker_image_path`; adds `docker_dashboard_guidance_delivered`.
+Initially true: `project_present`.
+Initially: true.
+Goal: `blueprint_guidance_delivered` or `docker_dashboard_guidance_delivered` or `stopped_for_missing_remote`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `git_repo_path` (assuming `git_based_path`):
+      - `agent` uses `check_git_remote`.
+      - `user` chooses one of (observed):
+        - branch `remote_missing` (assuming not `git_remote_present`):
+          - `agent` uses `reply_with_stop_no_remote`.
+        - branch `remote_present` (assuming `git_remote_present`):
+          - `agent` uses `inspect_codebase`.
+          - `user` chooses one of (observed):
+            - branch `blueprint` (assuming `blueprint_method`):
+              - `agent` uses `write_render_blueprint`.
+              - `agent` uses `check_render_cli`.
+              - `agent` chooses one of (observed):
+                - branch `cli_available` (assuming `render_cli_available`):
+                  - `agent` uses `validate_blueprint`.
+                - branch `cli_unavailable`: none.
+              - `agent` uses `commit_and_push_blueprint`.
+              - `agent` uses `derive_repo_link`.
+              - `agent` uses `reply_with_blueprint_result`.
+            - branch `direct_creation`: none.
+    - branch `docker_image_path` (assuming `docker_image_path`):
+      - `agent` uses `reply_with_docker_guidance`.
+```

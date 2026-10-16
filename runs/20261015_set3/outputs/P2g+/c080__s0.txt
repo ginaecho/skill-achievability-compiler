@@ -1,0 +1,34 @@
+```ce
+Skill `playwright`.
+Roles: `agent`.
+Tool `read_state` (owner `agent`): via `read`; adds `state_read`.
+Tool `read_agents_md` (owner `agent`): via `read`; adds `agents_md_read`.
+Tool `read_orchestrator_output` (owner `agent`): via `read`; requires `frontend_task`; adds `acceptance_criteria_read`.
+Tool `start_dev_server` (owner `agent`): via `bash`; requires `frontend_task` and `agents_md_read`; needs `shell`, `linux`, `package_registries`, `local_servers`; adds `dev_server_running`.
+Tool `wait_for_dev_server_ready` (owner `agent`): via `bash`; requires `dev_server_running`; needs `shell`, `linux`, `local_servers`; adds `dev_server_ready`.
+Tool `write_playwright_tests` (owner `agent`): via `write`; requires `frontend_task` and `agents_md_read` and `acceptance_criteria_read`; adds `page_objects_written`, `playwright_tests_written`.
+Tool `run_playwright_tests` (owner `agent`): via `bash`; requires `frontend_task` and `dev_server_ready` and `playwright_tests_written`; needs `shell`, `linux`, `package_registries`, `local_servers`; adds `test_results_captured`.
+Tool `append_qa_report` (owner `agent`): via `bash`; requires `test_results_captured`; needs `shell`, `linux`, `local_filesystem`; adds `qa_report_updated`.
+Tool `update_state_skipped` (owner `agent`): via `bash`; requires `state_read` and `backend_task`; needs `shell`, `linux`, `local_filesystem`; adds `playwright_skipped`.
+Tool `update_state_completed` (owner `agent`): via `bash`; requires `test_results_captured` and `all_tests_passed`; needs `shell`, `linux`, `local_filesystem`; adds `playwright_completed`, `stage_complete`.
+Initially true: none.
+Goal: (`backend_task` and `playwright_skipped`) or (`frontend_task` and `page_objects_written` and `playwright_tests_written` and `qa_report_updated` and ((`all_tests_passed` and `playwright_completed` and `stage_complete`) or `any_test_failed`)).
+Protocol:
+  - `agent` uses `read_state`.
+  - `agent` chooses one of (observed):
+    - branch `backend` (assuming `backend_task`):
+      - `agent` uses `update_state_skipped`.
+    - branch `frontend` (assuming `frontend_task`):
+      - `agent` uses `read_agents_md`.
+      - `agent` uses `read_orchestrator_output`.
+      - `agent` uses `start_dev_server`.
+      - `agent` uses `wait_for_dev_server_ready`.
+      - `agent` uses `write_playwright_tests`.
+      - `agent` uses `run_playwright_tests`.
+      - `agent` uses `append_qa_report`.
+      - `agent` chooses one of (observed):
+        - branch `pass` (assuming `all_tests_passed`):
+          - `agent` uses `update_state_completed`.
+        - branch `fail` (assuming `any_test_failed`):
+          - none.
+```

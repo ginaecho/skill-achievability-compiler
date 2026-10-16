@@ -1,0 +1,30 @@
+```ce
+Skill `receipt-verifier`.
+Roles: `agent`, `user`.
+Tool `ask_for_key` (owner `agent`): via `ask_user`; needs `user_conversation`; adds `public_key_provided`.
+Tool `verify_single_receipt` (owner `agent`): via `bash`; needs `shell`, `linux`, `package_registries`, `local_filesystem`; requires `single_receipt_path_known` and `public_key_provided`; adds `single_receipt_checked`; picks `verify_exit_code` with any of (`verify_exit_code` < 1, `verify_exit_code` == 1, `verify_exit_code` > 1).
+Tool `verify_receipts_file` (owner `agent`): via `bash`; needs `shell`, `linux`, `package_registries`, `local_filesystem`; requires `receipts_file_path_known` and `public_key_provided`; adds `receipts_file_checked`; picks `verify_exit_code` with any of (`verify_exit_code` < 1, `verify_exit_code` == 1, `verify_exit_code` > 1).
+Tool `reply_single_valid` (owner `agent`): via `reply`; requires `single_receipt_checked` and `verify_exit_code` < 1; adds `verification_report_delivered`.
+Tool `reply_single_invalid` (owner `agent`): via `reply`; requires `single_receipt_checked` and `verify_exit_code` == 1; adds `verification_report_delivered`.
+Tool `reply_single_undecidable` (owner `agent`): via `reply`; requires `single_receipt_checked` and `verify_exit_code` > 1; adds `verification_report_delivered`.
+Tool `reply_file_audit` (owner `agent`): via `reply`; requires `receipts_file_checked`; adds `verification_report_delivered`.
+Initially true: none.
+Initially: `verify_exit_code` == 0.
+Goal: `verification_report_delivered`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `single_receipt` (assuming `single_receipt_path_known`):
+      - `agent` uses `ask_for_key`.
+      - `agent` uses `verify_single_receipt`.
+      - `agent` chooses one of (observed):
+        - branch `valid` (assuming `verify_exit_code` < 1):
+          - `agent` uses `reply_single_valid`.
+        - branch `invalid` (assuming `verify_exit_code` == 1):
+          - `agent` uses `reply_single_invalid`.
+        - branch `undecidable` (assuming `verify_exit_code` > 1):
+          - `agent` uses `reply_single_undecidable`.
+    - branch `receipts_file` (assuming `receipts_file_path_known`):
+      - `agent` uses `ask_for_key`.
+      - `agent` uses `verify_receipts_file`.
+      - `agent` uses `reply_file_audit`.
+```

@@ -1,0 +1,50 @@
+```ce
+Skill `dossier`.
+Roles: `agent`, `user`.
+Tool `ask_subject_identity` (owner `agent`): via `ask_user`; adds `q1_answered`.
+Tool `ask_subject_type` (owner `agent`): via `ask_user`; requires `q1_answered`; adds `q2_answered`.
+Tool `ask_purpose` (owner `agent`): via `ask_user`; requires `q2_answered`; adds `q3_answered`.
+Tool `ask_hypothesis` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_provided`.
+Tool `ask_hypothesis_pushback` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_provided`.
+Tool `ask_depth` (owner `agent`): via `ask_user`; requires `hypothesis_provided`; adds `depth_answered`.
+Tool `ask_sensitivities` (owner `agent`): via `ask_user`; requires `depth_answered`; adds `sensitivities_answered`.
+Tool `resolve_disambiguation` (owner `agent`): via `ask_user`; requires `q1_answered`; adds `subject_resolved`.
+Tool `research_public_sources` (owner `agent`): via `web_fetch`; requires `subject_resolved` and `depth_answered`; adds `research_complete`, `supporting_evidence_collected`, `disconfirming_evidence_collected`, `timeline_built`, `network_built`, `reputation_built`, `red_flags_built`, `hooks_built`, `audit_log_built`, `sections_ready`; adds `disconfirming_budget_met`.
+Tool `generate_docx` (owner `agent`): via `bash`; requires `sections_ready`; needs `shell`, `windows`, `local_filesystem`, `package_registries`; adds `docx_created`, `json_fallback_created`.
+Tool `validate_docx` (owner `agent`): via `bash`; requires `docx_created`; needs `shell`, `windows`, `local_filesystem`; adds `docx_validated`, `required_sections_present`.
+Tool `save_output_file` (owner `agent`): via `write`; requires `docx_created`; adds `output_saved`.
+
+Initially true: none.
+Initially: true.
+Goal: `subject_resolved` and `hypothesis_provided` and `research_complete` and `supporting_evidence_collected` and `disconfirming_evidence_collected` and `disconfirming_budget_met` and `timeline_built` and `network_built` and `reputation_built` and `red_flags_built` and `hooks_built` and `audit_log_built` and `docx_created` and `output_saved` and ( `docx_validated` or `json_fallback_created` ).
+
+Protocol:
+  - `agent` uses `ask_subject_identity`.
+  - loop `disambiguate_subject`:
+    - `user` chooses one of (observed):
+      - branch `resolved_now`:
+        - `agent` uses `resolve_disambiguation`.
+      - branch `still_ambiguous`:
+        - `agent` uses `resolve_disambiguation`.
+        - repeat `disambiguate_subject`.
+  - `agent` uses `ask_subject_type`.
+  - `agent` uses `ask_purpose`.
+  - `user` chooses one of (observed):
+    - branch `gives_hypothesis`:
+      - `agent` uses `ask_hypothesis`.
+    - branch `refuses_hypothesis_once`:
+      - `agent` uses `ask_hypothesis_pushback`.
+  - `agent` uses `ask_depth`.
+  - `user` chooses one of (observed):
+    - branch `needs_sensitivity_question`:
+      - `agent` uses `ask_sensitivities`.
+    - branch `skip_sensitivity_question`: none.
+  - `agent` uses `research_public_sources`.
+  - `user` chooses one of (observed):
+    - branch `docx_generation_succeeds`:
+      - `agent` uses `generate_docx`.
+      - `agent` uses `save_output_file`.
+      - `agent` uses `validate_docx`.
+    - branch `docx_generation_fails`:
+      - `agent` uses `generate_docx`.
+```

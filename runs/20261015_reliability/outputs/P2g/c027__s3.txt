@@ -1,0 +1,44 @@
+```ce
+Skill `declarative-agent-developer`.
+Roles: `agent`, `user`.
+Tool `check_atk_cli` (owner `agent`): via `bash`; requires `workspace_checked`; adds `atk_cli_checked`, `atk_cli_available`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_checked`; picks `project_kind` with any of (`project_kind` == 1, `project_kind` == 2, `project_kind` == 3, `project_kind` == 4, `project_kind` == 5, `project_kind` == 6).
+Tool `report_rejection` (owner `agent`): via `ask_user`; requires any of (`project_kind` == 1, `project_kind` == 2, not `atk_cli_available`); adds `user_informed`.
+Tool `report_errors_and_ask` (owner `agent`): via `ask_user`; requires any of (`project_kind` == 4, `project_kind` == 5); adds `user_informed`, `user_decision_requested`.
+Tool `scaffold_project` (owner `agent`): via `bash`; requires `atk_cli_available` and `project_kind` == 3; adds `project_scaffolded`, `apppackage_changed`, `manifest_present`.
+Tool `edit_agent_project` (owner `agent`): via `edit`; requires `manifest_present` and `project_kind` == 6; adds `apppackage_changed`.
+Tool `validate_manifest_and_version` (owner `agent`): via `read`; requires `manifest_present`; picks `project_kind` with any of (`project_kind` == 4, `project_kind` == 5, `project_kind` == 6).
+Tool `deploy_agent` (owner `agent`): via `bash`; requires `atk_cli_available` and `apppackage_changed` and not `project_kind` == 4 and not `project_kind` == 5 and not `user_requested_no_deploy`; adds `deployed`, `test_link_available`.
+Tool `present_test_link` (owner `agent`): via `ask_user`; requires `deployed` and `test_link_available`; adds `user_informed`.
+Initially true: none.
+Initially: `project_kind` == 0.
+Goal: any of ((`user_informed` and any of (`project_kind` == 1, `project_kind` == 2, not `atk_cli_available`, `project_kind` == 4, `project_kind` == 5)), (`deployed` and `test_link_available` and `user_informed`)).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `check_atk_cli`.
+  - `agent` chooses one of (observed):
+    - branch `reject_or_missing_cli`:
+      - `agent` uses `report_rejection`.
+    - branch `scaffold_new_project`:
+      - `agent` uses `scaffold_project`.
+      - `agent` uses `validate_manifest_and_version`.
+      - `user` chooses one of (observed):
+        - branch `deploy`:
+          - `agent` uses `deploy_agent`.
+          - `agent` uses `present_test_link`.
+        - branch `no_deploy`: none.
+    - branch `inform_errors_and_wait`:
+      - `agent` uses `report_errors_and_ask`.
+    - branch `edit_existing_project`:
+      - `agent` uses `edit_agent_project`.
+      - `agent` uses `validate_manifest_and_version`.
+      - `agent` chooses one of (observed):
+        - branch `errors_found_after_edit`:
+          - `agent` uses `report_errors_and_ask`.
+        - branch `valid_after_edit`:
+          - `user` chooses one of (observed):
+            - branch `deploy`:
+              - `agent` uses `deploy_agent`.
+              - `agent` uses `present_test_link`.
+            - branch `no_deploy`: none.
+```

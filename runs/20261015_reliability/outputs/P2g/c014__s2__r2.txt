@@ -1,0 +1,50 @@
+```ce
+Skill `web-design-reviewer`.
+Roles: `agent`, `user`.
+Tool `ask_target_url` (owner `agent`): via `ask_user`; requires not `url_known`; adds `url_known`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `project_inspected`, `framework_detected`, `styling_detected`, `source_location_known`.
+Tool `inspect_site` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_servers`; requires `url_known`; adds `screenshots_captured`, `dom_observed`, `issues_detected`, `viewports_tested`.
+Tool `apply_fixes` (owner `agent`): via `edit`; requires `issues_detected` and `source_location_known`; adds `source_changed`, `issues_fixed`.
+Tool `reverify_site` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_servers`; requires `url_known` and `issues_fixed`; adds `postfix_verified`.
+Tool `report_results` (owner `agent`): via `write`; requires `url_known` and `issues_detected`; adds `report_written`.
+
+Initially true: none.
+Initially: not `url_known`.
+Initially: not `project_inspected`.
+Initially: not `framework_detected`.
+Initially: not `styling_detected`.
+Initially: not `source_location_known`.
+Initially: not `screenshots_captured`.
+Initially: not `dom_observed`.
+Initially: not `issues_detected`.
+Initially: not `viewports_tested`.
+Initially: not `source_changed`.
+Initially: not `issues_fixed`.
+Initially: not `postfix_verified`.
+Initially: not `report_written`.
+
+Goal: `url_known` and `issues_detected` and `viewports_tested` and `report_written` and ( not `issues_fixed` or `postfix_verified` ).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `url_already_provided`: none.
+    - branch `need_url`:
+      - `agent` uses `ask_target_url`.
+  - `agent` chooses one of (observed):
+    - branch `fixes_with_workspace_access`:
+      - `agent` uses `inspect_workspace`.
+      - loop `review_cycle`:
+        - `agent` uses `inspect_site`.
+        - `agent` chooses one of (observed):
+          - branch `fix_detected_issues`:
+            - `agent` uses `apply_fixes`.
+            - `agent` uses `reverify_site`.
+            - `agent` chooses one of (observed):
+              - branch `issues_remaining`:
+                - repeat `review_cycle`.
+              - branch `no_issues_remaining`: none.
+          - branch `report_only`: none.
+      - `agent` uses `report_results`.
+    - branch `read_only_review`:
+      - `agent` uses `inspect_site`.
+      - `agent` uses `report_results`.
+```

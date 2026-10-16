@@ -1,0 +1,823 @@
+{
+  "pack": {
+    "name": "isaac-mission-control-showcase",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_dependencies": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "dependencies_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_runtime_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "runtime_state_inspected",
+          "installation_detected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "preflight_passed",
+          "verified_warehouse_uri",
+          "launcher_ready",
+          "ros_bridge_ready",
+          "display_available",
+          "isaac_port_free"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_idle": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_prepared",
+            "preflight_passed",
+            "runtime_selected"
+          ]
+        },
+        "add": [
+          "stack_started",
+          "readiness_satisfied",
+          "isaac_gui_open",
+          "robot_idle"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_demo": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_prepared",
+            "preflight_passed",
+            "runtime_selected"
+          ]
+        },
+        "add": [
+          "stack_started",
+          "readiness_satisfied",
+          "isaac_gui_open",
+          "mission_completed",
+          "robot_idle",
+          "motion_confirmed",
+          "acceptance_artifact_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_showcase": {
+        "owner": "agent",
+        "pre": "stack_started",
+        "add": [
+          "showcase_stopped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_run_status": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "run_status_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "handoff_installation_skill": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "installation_handoff_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_upstream_skill_md": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "upstream_skill_md_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_runtime_choice": {
+        "owner": "agent",
+        "pre": "runtime_state_inspected",
+        "add": [
+          "runtime_choice_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_dependencies",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_runtime_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "request_install_or_version_change": [
+              {
+                "act": {
+                  "cap": "read_upstream_skill_md",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "continue_showcase": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "nothing_installed": [
+              {
+                "act": {
+                  "cap": "read_upstream_skill_md",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "usable_runtime_detected": [
+              {
+                "act": {
+                  "cap": "run_preflight",
+                  "by": "agent"
+                }
+              }
+            ],
+            "runtime_choice_required": [
+              {
+                "act": {
+                  "cap": "ask_runtime_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "use_detected_runtime": [
+                      {
+                        "act": {
+                          "cap": "run_preflight",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "install_or_select_another_version": [
+                      {
+                        "act": {
+                          "cap": "read_upstream_skill_md",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "handoff_installation_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "demo": [
+              {
+                "act": {
+                  "cap": "start_showcase_demo",
+                  "by": "agent"
+                }
+              }
+            ],
+            "idle_only": [
+              {
+                "act": {
+                  "cap": "start_showcase_idle",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "stop_showcase",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_run_status",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "mission_completed",
+        "robot_idle",
+        "motion_confirmed",
+        "acceptance_artifact_written",
+        "isaac_gui_open"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      "skill_dir_known",
+      {
+        "not": "dependencies_prepared"
+      },
+      {
+        "not": "runtime_state_inspected"
+      },
+      {
+        "not": "installation_detected"
+      },
+      {
+        "not": "runtime_selected"
+      },
+      {
+        "not": "preflight_passed"
+      },
+      {
+        "not": "verified_warehouse_uri"
+      },
+      {
+        "not": "launcher_ready"
+      },
+      {
+        "not": "ros_bridge_ready"
+      },
+      {
+        "not": "display_available"
+      },
+      {
+        "not": "isaac_port_free"
+      },
+      {
+        "not": "stack_started"
+      },
+      {
+        "not": "readiness_satisfied"
+      },
+      {
+        "not": "isaac_gui_open"
+      },
+      {
+        "not": "robot_idle"
+      },
+      {
+        "not": "mission_completed"
+      },
+      {
+        "not": "motion_confirmed"
+      },
+      {
+        "not": "acceptance_artifact_written"
+      },
+      {
+        "not": "showcase_stopped"
+      },
+      {
+        "not": "run_status_reported"
+      },
+      {
+        "not": "installation_handoff_done"
+      },
+      {
+        "not": "upstream_skill_md_read"
+      },
+      {
+        "not": "runtime_choice_received"
+      },
+      {
+        "not": "install_or_change_requested"
+      },
+      {
+        "not": "nothing_installed"
+      },
+      {
+        "not": "runtime_usable_automatically"
+      },
+      {
+        "not": "runtime_choice_needed"
+      },
+      {
+        "not": "user_approved_detected_runtime"
+      },
+      {
+        "not": "demo_mode"
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "isaac-mission-control-showcase",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_dependencies": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "dependencies_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_runtime_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "runtime_state_inspected",
+          "installation_detected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "preflight_passed",
+          "verified_warehouse_uri",
+          "launcher_ready",
+          "ros_bridge_ready",
+          "display_available",
+          "isaac_port_free"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_idle": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_prepared",
+            "preflight_passed",
+            "runtime_selected"
+          ]
+        },
+        "add": [
+          "stack_started",
+          "readiness_satisfied",
+          "isaac_gui_open",
+          "robot_idle"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_showcase_demo": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "dependencies_prepared",
+            "preflight_passed",
+            "runtime_selected"
+          ]
+        },
+        "add": [
+          "stack_started",
+          "readiness_satisfied",
+          "isaac_gui_open",
+          "mission_completed",
+          "robot_idle",
+          "motion_confirmed",
+          "acceptance_artifact_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_showcase": {
+        "owner": "agent",
+        "pre": "stack_started",
+        "add": [
+          "showcase_stopped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_run_status": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "run_status_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "handoff_installation_skill": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "installation_handoff_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_upstream_skill_md": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "upstream_skill_md_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_runtime_choice": {
+        "owner": "agent",
+        "pre": "runtime_state_inspected",
+        "add": [
+          "runtime_choice_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_dependencies",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_runtime_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "request_install_or_version_change": [
+              {
+                "act": {
+                  "cap": "read_upstream_skill_md",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "continue_showcase": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "nothing_installed": [
+              {
+                "act": {
+                  "cap": "read_upstream_skill_md",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "usable_runtime_detected": [
+              {
+                "act": {
+                  "cap": "run_preflight",
+                  "by": "agent"
+                }
+              }
+            ],
+            "runtime_choice_required": [
+              {
+                "act": {
+                  "cap": "ask_runtime_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "use_detected_runtime": [
+                      {
+                        "act": {
+                          "cap": "run_preflight",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "install_or_select_another_version": [
+                      {
+                        "act": {
+                          "cap": "read_upstream_skill_md",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "handoff_installation_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "demo": [
+              {
+                "act": {
+                  "cap": "start_showcase_demo",
+                  "by": "agent"
+                }
+              }
+            ],
+            "idle_only": [
+              {
+                "act": {
+                  "cap": "start_showcase_idle",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "stop_showcase",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_run_status",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "mission_completed",
+        "robot_idle",
+        "motion_confirmed",
+        "acceptance_artifact_written",
+        "isaac_gui_open"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      "skill_dir_known",
+      {
+        "not": "dependencies_prepared"
+      },
+      {
+        "not": "runtime_state_inspected"
+      },
+      {
+        "not": "installation_detected"
+      },
+      {
+        "not": "runtime_selected"
+      },
+      {
+        "not": "preflight_passed"
+      },
+      {
+        "not": "verified_warehouse_uri"
+      },
+      {
+        "not": "launcher_ready"
+      },
+      {
+        "not": "ros_bridge_ready"
+      },
+      {
+        "not": "display_available"
+      },
+      {
+        "not": "isaac_port_free"
+      },
+      {
+        "not": "stack_started"
+      },
+      {
+        "not": "readiness_satisfied"
+      },
+      {
+        "not": "isaac_gui_open"
+      },
+      {
+        "not": "robot_idle"
+      },
+      {
+        "not": "mission_completed"
+      },
+      {
+        "not": "motion_confirmed"
+      },
+      {
+        "not": "acceptance_artifact_written"
+      },
+      {
+        "not": "showcase_stopped"
+      },
+      {
+        "not": "run_status_reported"
+      },
+      {
+        "not": "installation_handoff_done"
+      },
+      {
+        "not": "upstream_skill_md_read"
+      },
+      {
+        "not": "runtime_choice_received"
+      },
+      {
+        "not": "install_or_change_requested"
+      },
+      {
+        "not": "nothing_installed"
+      },
+      {
+        "not": "runtime_usable_automatically"
+      },
+      {
+        "not": "runtime_choice_needed"
+      },
+      {
+        "not": "user_approved_detected_runtime"
+      },
+      {
+        "not": "demo_mode"
+      }
+    ]
+  },
+  "bindings": {
+    "prepare_dependencies": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_runtime_state": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "run_preflight": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "start_showcase_idle": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "start_showcase_demo": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "stop_showcase": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "inspect_run_status": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "handoff_installation_skill": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "read_upstream_skill_md": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "ask_runtime_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

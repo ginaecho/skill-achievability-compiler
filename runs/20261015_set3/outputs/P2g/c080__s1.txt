@@ -1,0 +1,37 @@
+```ce
+Skill `playwright`.
+Roles: `agent`, `developer`.
+Tool `read_state_and_inputs` (owner `agent`): via `read`; adds `state_read`, `inputs_read`, `agents_read`.
+Tool `update_state_skipped` (owner `agent`): via `write`; requires `state_read`; adds `state_updated`, `playwright_skipped`.
+Tool `start_dev_server` (owner `agent`): via `bash`; requires `agents_read`; adds `dev_server_started`.
+Tool `wait_for_dev_server_ready` (owner `agent`): via `bash`; requires `dev_server_started`; adds `dev_server_ready`.
+Tool `write_playwright_tests` (owner `agent`): via `write`; requires `inputs_read` and `agents_read` and `dev_server_ready`; adds `page_objects_written`, `tests_written`.
+Tool `run_playwright_tests` (owner `agent`): via `bash`; requires `tests_written` and `dev_server_ready`; adds `tests_executed`; picks `failure_count` with `failure_count` >= 0.
+Tool `append_qa_report` (owner `agent`): via `write`; requires `tests_executed`; adds `qa_report_written`.
+Tool `update_state_completed` (owner `agent`): via `write`; requires `qa_report_written`; adds `state_updated`, `playwright_completed`, `stage_complete`.
+Tool `route_failure_to_developer` (owner `agent`): via `write`; requires `tests_executed`; adds `developer_routed`.
+Tool `escalate_to_human` (owner `agent`): via `ask_user`; requires `tests_executed` and `second_playwright_failure`; adds `human_escalated`.
+Initially true: none.
+Initially: `failure_count` == 0.
+Goal: any of (`playwright_skipped`, all of (`playwright_completed`, `stage_complete`)).
+Protocol:
+  - `agent` uses `read_state_and_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `backend_task`:
+      - `agent` uses `update_state_skipped`.
+    - branch `frontend_task`:
+      - `agent` uses `start_dev_server`.
+      - `agent` uses `wait_for_dev_server_ready`.
+      - `agent` uses `write_playwright_tests`.
+      - `agent` uses `run_playwright_tests`.
+      - `agent` uses `append_qa_report`.
+      - `agent` chooses one of (observed):
+        - branch `all_tests_pass`:
+          - `agent` uses `update_state_completed`.
+        - branch `some_test_failed`:
+          - `agent` uses `route_failure_to_developer`.
+          - `agent` chooses one of (observed):
+            - branch `first_failure`: none.
+            - branch `second_failure`:
+              - `agent` uses `escalate_to_human`.
+```

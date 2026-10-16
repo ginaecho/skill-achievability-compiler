@@ -1,0 +1,38 @@
+```ce
+Skill `web-design-reviewer`.
+Roles: `agent`, `user`.
+Tool `ask_url` (owner `agent`): via `ask_user`; requires not `url_known`; adds `url_known`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `project_structure_known`, `framework_known`, `styling_known`, `review_checklist_known`.
+Tool `capture_review_evidence` (owner `agent`): via `bash`; requires `url_known`; needs `shell`, `linux`, `local_filesystem`; adds `visual_issues_identified`, `screenshots_captured`, `responsive_tested`, `dom_reviewed`.
+Tool `locate_source_files` (owner `agent`): via `read`; requires `visual_issues_identified`; adds `source_files_identified`.
+Tool `apply_design_fixes` (owner `agent`): via `edit`; requires `source_files_identified`; adds `fixes_applied`; removes `visual_issues_identified`.
+Tool `reverify_design` (owner `agent`): via `bash`; requires `fixes_applied`; needs `shell`, `linux`, `local_filesystem`; adds `verification_done`.
+Tool `request_user_consultation` (owner `agent`): via `ask_user`; requires `three_fix_attempts_reached`; adds `user_consulted`.
+Tool `prepare_report` (owner `agent`): adds `report_prepared`.
+
+Initially true: none.
+Initially: `fix_attempts` == 0.
+Goal: `report_prepared` and `screenshots_captured` and `responsive_tested` and `verification_done` and ( `url_known` ).
+
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `url_already_provided`: none.
+    - branch `need_url`:
+      - `agent` uses `ask_url`.
+  - `agent` uses `inspect_workspace`.
+  - loop `review_cycle`:
+    - `agent` uses `capture_review_evidence`.
+    - `agent` chooses one of (observed):
+      - branch `issues_found_and_fixable`:
+        - `agent` uses `locate_source_files`.
+        - `agent` uses `apply_design_fixes`.
+        - `agent` uses `reverify_design`.
+        - `agent` chooses one of (observed):
+          - branch `more_attempts_allowed`:
+            - repeat `review_cycle`.
+          - branch `three_attempts_reached`:
+            - `agent` uses `request_user_consultation`.
+      - branch `no_fixes_needed_or_read_only_review`:
+        - `agent` uses `reverify_design`.
+  - `agent` uses `prepare_report`.
+```

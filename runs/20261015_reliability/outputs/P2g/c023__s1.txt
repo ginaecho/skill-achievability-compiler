@@ -1,0 +1,85 @@
+```ce
+Skill `dossier`.
+Roles: `agent`, `user`.
+Tool `ask_subject_identity` (owner `agent`): via `ask_user`; adds `q1_answered`.
+Tool `ask_subject_type` (owner `agent`): via `ask_user`; requires `q1_answered`; adds `q2_answered`.
+Tool `ask_purpose` (owner `agent`): via `ask_user`; requires `q2_answered`; adds `q3_answered`.
+Tool `ask_hypothesis` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_provided`.
+Tool `ask_hypothesis_pushback` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_pushback_done`.
+Tool `set_fallback_hypothesis` (owner `agent`): via `write`; requires `hypothesis_pushback_done`; adds `hypothesis_provided`, `fallback_hypothesis_used`, `audit_log_ready`.
+Tool `ask_depth` (owner `agent`): via `ask_user`; requires `hypothesis_provided`; adds `q5_answered`.
+Tool `ask_sensitivities` (owner `agent`): via `ask_user`; requires `q5_answered`, `sensitivity_context`; adds `q6_answered`.
+Tool `research_entity` (owner `agent`): via `bash`; requires `subject_disambiguated`, `q5_answered`; adds `research_completed`, `audit_log_ready`, `disconfirming_balance_met`, `timeline_ready`, `network_ready`, `reputation_ready`, `red_flags_ready`, `conversation_hooks_ready`, `sections_ready`, `verdict_ready`.
+Tool `generate_docx` (owner `agent`): via `bash`; requires `research_completed`; adds `docx_created`.
+Tool `validate_docx` (owner `agent`): via `bash`; requires `docx_created`, `sections_ready`; adds `docx_validated`, `required_sections_present`.
+Tool `save_json_fallback` (owner `agent`): via `write`; requires `research_completed`; adds `json_fallback_created`.
+Tool `send_docx_to_user` (owner `agent`): via `send_user_file`; requires `docx_validated`; adds `user_received_dossier`.
+
+Initially true: none.
+Initially: `q1_answered` == false.
+Initially: `q2_answered` == false.
+Initially: `q3_answered` == false.
+Initially: `hypothesis_provided` == false.
+Initially: `hypothesis_pushback_done` == false.
+Initially: `fallback_hypothesis_used` == false.
+Initially: `q5_answered` == false.
+Initially: `q6_answered` == false.
+Initially: `sensitivity_context` == false.
+Initially: `subject_disambiguated` == false.
+Initially: `research_completed` == false.
+Initially: `audit_log_ready` == false.
+Initially: `disconfirming_balance_met` == false.
+Initially: `timeline_ready` == false.
+Initially: `network_ready` == false.
+Initially: `reputation_ready` == false.
+Initially: `red_flags_ready` == false.
+Initially: `conversation_hooks_ready` == false.
+Initially: `sections_ready` == false.
+Initially: `verdict_ready` == false.
+Initially: `docx_created` == false.
+Initially: `docx_validated` == false.
+Initially: `required_sections_present` == false.
+Initially: `json_fallback_created` == false.
+Initially: `user_received_dossier` == false.
+
+Goal: `user_received_dossier` and `verdict_ready` and `audit_log_ready` and `disconfirming_balance_met` and `timeline_ready` and `network_ready` and `reputation_ready` and `red_flags_ready` and `conversation_hooks_ready` and `required_sections_present`.
+
+Protocol:
+  - loop `identify_subject`:
+    - `agent` uses `ask_subject_identity`.
+    - `user` chooses one of (observed):
+      - branch `ambiguous`:
+        - repeat `identify_subject`.
+      - branch `specific`:
+        - `agent` uses `ask_subject_type`.
+  - `agent` uses `ask_purpose`.
+  - `user` chooses one of (observed):
+    - branch `has_hypothesis`:
+      - `agent` uses `ask_hypothesis`.
+    - branch `no_hypothesis`:
+      - `agent` uses `ask_hypothesis_pushback`.
+      - `user` chooses one of (observed):
+        - branch `provides_after_pushback`:
+          - `agent` uses `ask_hypothesis`.
+        - branch `still_refuses`:
+          - `agent` uses `set_fallback_hypothesis`.
+  - `agent` uses `ask_depth`.
+  - `user` chooses one of (observed):
+    - branch `sensitive_context`:
+      - `agent` uses `ask_sensitivities`.
+    - branch `non_sensitive_context`: none.
+  - loop `disambiguate_subject`:
+    - `user` chooses one of (observed):
+      - branch `still_ambiguous`:
+        - `agent` uses `ask_subject_identity`.
+        - repeat `disambiguate_subject`.
+      - branch `disambiguated`:
+        - `agent` uses `research_entity`.
+  - `agent` chooses one of (observed):
+    - branch `docx_success`:
+      - `agent` uses `generate_docx`.
+      - `agent` uses `validate_docx`.
+      - `agent` uses `send_docx_to_user`.
+    - branch `docx_failure`:
+      - `agent` uses `save_json_fallback`.
+```

@@ -1,0 +1,34 @@
+```ce
+Skill `security-and-hardening`.
+Roles: `agent`, `user`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_inspected`, `trust_boundaries_mapped`, `assets_named`.
+Tool `review_security_references` (owner `agent`): via `read`; requires `workspace_inspected`; adds `checklist_reviewed`.
+Tool `detect_dependency_manager` (owner `agent`): via `read`; requires `workspace_inspected`; adds `dependency_boundary_identified`.
+Tool `run_native_audit` (owner `agent`): via `bash`; needs `shell`, `package_registries`, `allowlisted_internet`; requires `dependency_boundary_identified`; adds `native_audit_run`.
+Tool `inspect_code_for_hardening` (owner `agent`): via `read`; requires `workspace_inspected`; adds `security_gaps_identified`.
+Tool `apply_security_fixes` (owner `agent`): via `edit`; requires `security_gaps_identified`; adds `security_controls_implemented`; removes `security_gaps_identified`.
+Tool `update_dependency_policy` (owner `agent`): via `edit`; requires `native_audit_run`; adds `dependency_policy_updated`.
+Tool `verify_hardening` (owner `agent`): via `bash`; needs `shell`; requires `security_controls_implemented`; adds `verification_run`; picks `reachable_high_critical_findings` with `reachable_high_critical_findings` == 0.
+Tool `scan_for_secrets` (owner `agent`): via `bash`; needs `shell`; requires `workspace_inspected`; adds `secret_scan_run`, `no_secrets_found`.
+Tool `ask_for_approval` (owner `agent`): via `ask_user`; needs `user_conversation`; adds `approval_answered`.
+Initially true: none.
+Initially: `reachable_high_critical_findings` == 1.
+Goal: all of (`trust_boundaries_mapped`, `assets_named`, `checklist_reviewed`, `native_audit_run`, `secret_scan_run`, `no_secrets_found`, `verification_run`, `reachable_high_critical_findings` == 0, any of (`security_controls_implemented`, `approval_answered`)).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `review_security_references`.
+  - `agent` uses `detect_dependency_manager`.
+  - `agent` uses `run_native_audit`.
+  - `agent` uses `inspect_code_for_hardening`.
+  - `agent` chooses one of (observed):
+    - branch `approval_required`:
+      - `agent` uses `ask_for_approval`.
+    - branch `no_approval_required`: none.
+  - `agent` chooses one of (observed):
+    - branch `apply_code_fixes`:
+      - `agent` uses `apply_security_fixes`.
+    - branch `dependency_policy_only`:
+      - `agent` uses `update_dependency_policy`.
+  - `agent` uses `scan_for_secrets`.
+  - `agent` uses `verify_hardening`.
+```

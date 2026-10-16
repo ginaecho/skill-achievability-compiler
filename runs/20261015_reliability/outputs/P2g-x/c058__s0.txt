@@ -1,0 +1,86 @@
+```ce
+Skill `property-based-testing`.
+Roles: `agent`, `user`.
+
+Tool `check_shape` (owner `agent`):
+  via `bash`;
+  picks `code_has_shape` with
+    `code_has_shape` == (`shape_roundtrip` or `shape_inverse` or `shape_oracle` or `shape_idempotence`
+                         or `shape_invariant` or `shape_easy_verify` or `shape_commutativity`
+                         or `shape_associativity` or `shape_identity`);
+  picks `strongest_property` with
+    `strongest_property` in [`no_crash`, `type_preservation`, `invariant`, `idempotence`, `roundtrip_oracle`].
+
+Tool `offer_library` (owner `agent`):
+  via `ask_user`;
+  requires `code_has_shape`;
+  adds `library_decided`;
+  picks `library_choice` with true.
+
+Tool `write_tests` (owner `agent`):
+  via `bash`;
+  requires `library_decided` or `project_has_pbt`;
+  adds `tests_written`.
+
+Tool `review_tests` (owner `agent`):
+  via `bash`;
+  requires `existing_tests_requested`;
+  adds `review_done`;
+  picks `tests_are_genuine` with true.
+
+Tool `diagnose_failure` (owner `agent`):
+  via `bash`;
+  requires `test_failed`;
+  adds `diagnosis_done`;
+  picks `is_genuine_bug` with true.
+
+Tool `suggest_refactoring` (owner `agent`):
+  via `bash`;
+  adds `refactoring_suggested`.
+
+Tool `report_no_shape` (owner `agent`):
+  via `ask_user`;
+  adds `shape_analysis_done`.
+
+Tool `ask_library_choice` (owner `agent`):
+  via `ask_user`;
+  adds `library_decided`.
+
+Initially true: none.
+Initially: true.
+
+Goal:
+  any of (
+    `tests_written` and `tests_are_genuine`,
+    `review_done` and `tests_are_genuine`,
+    `diagnosis_done` and `is_genuine_bug`,
+    `refactoring_suggested`,
+    `report_no_shape` and not `code_has_shape`
+  ).
+
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `report_no_shape_possible`:
+      - `agent` uses `check_shape`.
+      - `user` chooses one of (observed):
+        - branch `try_refactoring`:
+          - `agent` uses `suggest_refactoring`.
+        - branch `accept_no_shape`:
+          - `agent` uses `report_no_shape`.
+    - branch `write_tests`:
+      - `agent` chooses one of (observed):
+        - branch `project_has_pbt_library`:
+          - `agent` uses `write_tests`.
+        - branch `no_pbt_library`:
+          - `agent` uses `offer_library`.
+          - `user` chooses one of (observed):
+            - branch `accept_library`:
+              - `agent` uses `ask_library_choice`.
+              - `agent` uses `write_tests`.
+            - branch `decline_library`:
+              - none.
+    - branch `review_existing_tests`:
+      - `agent` uses `review_tests`.
+    - branch `diagnose_failure`:
+      - `agent` uses `diagnose_failure`.
+```

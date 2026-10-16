@@ -128,9 +128,12 @@ def test_non_projectable_unobserved_choice():
             "ask": [act("answer", "planner"), act("deliver", "worker")],
             "direct": [act("deliver_direct", "worker")]}}}],
         goal="delivered"))
-    assert not v.achievable
-    assert v.reason == "NON_PROJECTABLE"
-    assert "planner" in v.detail
+    # the 'direct' branch reaches the goal: a typing failure, not a refutation
+    assert v.label == "ACHIEVABLE" and not v.refuted
+    assert v.protocol == "REJECTED"
+    assert v.protocol_reason == "NON_PROJECTABLE"
+    assert "planner" in v.protocol_detail
+    assert not v.admissible
 
 
 def test_informed_choice_is_projectable_and_achievable():
@@ -268,9 +271,10 @@ def test_direct_typing_checks_every_choice_branch_at_one_initial_world():
             "zero": [act("zero")],
             "one": [act("one")]}}}],
         goal="done"))
-    assert v.refuted
-    assert v.reason == "NON_CONFORMANT"
-    assert "same initial world" in v.detail
+    assert v.label == "ACHIEVABLE"
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
+    assert "same initial world" in v.protocol_detail
+    assert not v.admissible
 
 
 def test_direct_typing_checks_goal_marker_on_every_choice_branch():
@@ -280,8 +284,8 @@ def test_direct_typing_checks_goal_marker_on_every_choice_branch():
             "valid": [act("finish"), {"goal": "done"}],
             "invalid": [{"goal": "done"}]}}}],
         goal="done"))
-    assert v.refuted
-    assert v.reason == "NON_CONFORMANT"
+    assert v.label == "ACHIEVABLE"
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
 
 
 def test_terminal_goal_and_conformance_share_initial_world():
@@ -294,8 +298,10 @@ def test_terminal_goal_and_conformance_share_initial_world():
             "first": [act("finish")],
             "second": [act("require_one")]}}}],
         goal={"and": ["done", {"cmp": ["x", "==", 0]}]}))
-    assert v.refuted
-    assert v.reason == "NON_CONFORMANT"
+    assert v.label == "ACHIEVABLE"
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
+    # the goal witness comes from the may-reachability search
+    assert ("choose", "first") in v.witness
 
 
 def test_joint_typing_search_tries_another_goal_witness():
@@ -549,3 +555,117 @@ def test_observed_choice_without_messages_still_projects_on_choice_labels():
     local = project(protocol, "owner")
 
     assert local[0] == "branch" and [label for label, _ in local[2]] == ["a", "b"]
+
+
+# --------------------------------------------------------------------------
+# Two orthogonal dimensions: goal reachability vs protocol typing.
+# A protocol rejection is a typing failure; it never proves the goal
+# unreachable, so it is never folded into IMPOSSIBLE.
+# --------------------------------------------------------------------------
+
+def test_one_nonconformant_branch_does_not_refute_a_goal_another_branch_reaches():
+    """The reviewers' scenario: T-Comm requires every branch to conform, so
+    the handler's missing 'go_complex' case rejects the protocol, while the
+    'simple' branch still reaches the goal."""
+    v = check(pack(
+        roles=["router", "handler"],
+        capabilities={
+            "resolve_simple": {"owner": "handler", "add": ["resolved"]},
+            "resolve_complex": {"owner": "handler", "add": ["resolved"]}},
+        protocol=[{"choice": {"by": "router", "branches": {
+            "simple": [{"msg": {"from": "router", "to": "handler", "label": "go_simple"}},
+                       act("resolve_simple", "handler")],
+            "complex": [{"msg": {"from": "router", "to": "handler", "label": "go_complex"}},
+                        act("resolve_complex", "handler")]}}}],
+        goal="resolved",
+        skills={"handler": [{"branch": {"from": "router", "branches": {
+            "go_simple": [{"act": {"cap": "resolve_simple"}}]}}}]}))
+    assert v.label == "ACHIEVABLE" and not v.refuted
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
+    assert v.protocol_detail
+    assert v.admissible is False
+    assert v.coverage == "none:witness-only"
+    assert v.witness
+
+
+def _unobserved(goal_cap_adds):
+    return pack(
+        roles=["planner", "worker"],
+        capabilities={
+            "answer": {"add": ["answered"]},
+            "deliver": {"pre": "answered", "add": goal_cap_adds},
+            "deliver_direct": {"add": goal_cap_adds}},
+        protocol=[{"choice": {"by": "worker", "branches": {
+            "ask": [act("answer", "planner"), act("deliver", "worker")],
+            "direct": [act("deliver_direct", "worker")]}}}],
+        goal="delivered")
+
+
+def test_unobserved_choice_with_reachable_goal_is_achievable_and_rejected():
+    v = check(_unobserved(["delivered"]))
+    assert v.label == "ACHIEVABLE"
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_PROJECTABLE"
+    assert not v.admissible
+
+
+def test_unobserved_choice_with_unreachable_goal_reports_both_dimensions():
+    # 'delivered' is establishable in Gamma (by a capability the protocol
+    # never invokes), but no branch of the protocol establishes it: a
+    # may-reachability refutation (thm1), and independently a protocol
+    # rejection.  Both dimensions are reported.
+    p = _unobserved(["done"])
+    p["capabilities"]["deliver_late"] = {"add": ["delivered"]}
+    v = check(p)
+    assert v.label == "IMPOSSIBLE" and v.reason == "GOAL_UNSAT"
+    assert "thm1" in v.coverage and v.coverage == "thm1+lem3"
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_PROJECTABLE"
+    assert not v.admissible
+
+
+def test_establisher_refutation_returns_before_typing_runs():
+    # nothing in Gamma establishes 'delivered': refuted over every protocol,
+    # decided before the interaction checks, so typing is NOT_CHECKED
+    v = check(_unobserved(["done"]))
+    assert v.label == "IMPOSSIBLE" and v.reason == "GOAL_UNSAT"
+    assert v.coverage == "thm1+lem3+establisher"
+    assert v.protocol == "NOT_CHECKED" and v.protocol_coverage == "not-checked"
+
+
+def test_verdict_schema_v2_and_admissible():
+    from skillc.checker import VERDICT_SCHEMA
+    assert VERDICT_SCHEMA == "skillc.verdict/2"
+    keys = {"protocol", "protocol_reason", "protocol_detail", "admissible",
+            "coverage", "protocol_coverage"}
+    ok = check(pack(capabilities={"f": {"add": ["done"]}},
+                    protocol=[act("f")], goal="done"))
+    impossible = check(pack(capabilities={"f": {"add": ["x"]}},
+                            protocol=[act("f")], goal="done"))
+    unknown = check(pack(protocol=[{"spawn": {"role": "helper"}}], goal=True))
+    rejected = check(_unobserved(["delivered"]))
+    for v in (ok, impossible, unknown, rejected):
+        d = v.to_dict()
+        assert d["schema"] == "skillc.verdict/2"
+        assert keys <= set(d)
+        assert d["admissible"] == v.admissible
+    assert ok.admissible and ok.protocol == "WELL_TYPED"
+    assert ok.protocol_coverage.startswith("t-comm")
+    assert not impossible.admissible
+    assert not unknown.admissible and unknown.protocol == "NOT_CHECKED"
+    assert unknown.coverage == "thm-undec:abstention"
+    assert unknown.protocol_coverage == "not-checked"
+    assert not rejected.admissible and rejected.label == "ACHIEVABLE"
+
+
+def test_goal_scope_reports_protocol_rejection_orthogonally():
+    v = check(_unobserved(["delivered"]), scope="goal")
+    assert v.label == "ACHIEVABLE"
+    assert v.protocol == "REJECTED" and not v.admissible
+
+
+def test_adversarial_refutation_is_paper_only():
+    v = check(pack(
+        capabilities={"f": {"add": ["done"]}},
+        protocol=[{"choice": {"by": "env", "external": True, "branches": {
+            "good": [act("f")], "bad": []}}}],
+        goal="done"), semantics="adversarial")
+    assert v.refuted and v.coverage == "paper-only:adversarial"

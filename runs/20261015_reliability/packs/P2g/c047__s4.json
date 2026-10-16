@@ -1,0 +1,663 @@
+{
+  "pack": {
+    "name": "book-sft-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_for_book_epub": {
+        "owner": "agent",
+        "pre": {
+          "not": "epub_available"
+        },
+        "add": [
+          "epub_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_epub_text": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "needs:package_registries",
+            "epub_available"
+          ]
+        },
+        "add": [
+          "book_text_extracted"
+        ],
+        "del": [
+          "front_back_matter_present"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "segment_text": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "book_text_extracted"
+          ]
+        },
+        "add": [
+          "chunks_created",
+          "paragraph_boundaries_preserved",
+          "chunk_overlap_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "chunk_word_count": {
+            "and": [
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  ">=",
+                  150
+                ]
+              },
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  "<=",
+                  400
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "reserve_test_set": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "chunks_created"
+          ]
+        },
+        "add": [
+          "test_set_reserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "test_example_count": {
+            "cmp": [
+              "test_example_count",
+              ">=",
+              50
+            ]
+          }
+        }
+      },
+      "build_jsonl_dataset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "chunks_created",
+                "test_set_reserved"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "instructions_generated",
+          "dataset_built",
+          "jsonl_rendered",
+          "tinker_format_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "prompt_template_count": {
+            "cmp": [
+              "prompt_template_count",
+              ">=",
+              15
+            ]
+          },
+          "system_prompt_count": {
+            "cmp": [
+              "system_prompt_count",
+              ">=",
+              5
+            ]
+          }
+        }
+      },
+      "verify_originality": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "dataset_built"
+          ]
+        },
+        "add": [
+          "originality_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "epub_already_available": [],
+            "need_user_to_provide_epub": [
+              {
+                "act": {
+                  "cap": "ask_for_book_epub",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "extract_epub_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "segment_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "reserve_test_set",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "build_jsonl_dataset",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_originality",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "epub_available",
+        "book_text_extracted",
+        {
+          "not": "front_back_matter_present"
+        },
+        "chunks_created",
+        "paragraph_boundaries_preserved",
+        "chunk_overlap_used",
+        {
+          "cmp": [
+            "chunk_word_count",
+            ">=",
+            150
+          ]
+        },
+        {
+          "cmp": [
+            "chunk_word_count",
+            "<=",
+            400
+          ]
+        },
+        "test_set_reserved",
+        {
+          "cmp": [
+            "test_example_count",
+            ">=",
+            50
+          ]
+        },
+        "instructions_generated",
+        {
+          "cmp": [
+            "prompt_template_count",
+            ">=",
+            15
+          ]
+        },
+        {
+          "cmp": [
+            "system_prompt_count",
+            ">=",
+            5
+          ]
+        },
+        "dataset_built",
+        "jsonl_rendered",
+        "tinker_format_ready",
+        "lora_trained",
+        "uses_base_model",
+        "uses_lora_rank_32",
+        {
+          "cmp": [
+            "epochs",
+            "==",
+            3
+          ]
+        },
+        "modern_scenario_tested",
+        "style_transfer_validated",
+        "originality_verified"
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:linux",
+      "needs:local_filesystem",
+      "needs:package_registries"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "chunk_word_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "test_example_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "prompt_template_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "system_prompt_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "epochs",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "book-sft-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_for_book_epub": {
+        "owner": "agent",
+        "pre": {
+          "not": "epub_available"
+        },
+        "add": [
+          "epub_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_epub_text": {
+        "owner": "agent",
+        "pre": "epub_available",
+        "add": [
+          "book_text_extracted"
+        ],
+        "del": [
+          "front_back_matter_present"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "segment_text": {
+        "owner": "agent",
+        "pre": "book_text_extracted",
+        "add": [
+          "chunks_created",
+          "paragraph_boundaries_preserved",
+          "chunk_overlap_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "chunk_word_count": {
+            "and": [
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  ">=",
+                  150
+                ]
+              },
+              {
+                "cmp": [
+                  "chunk_word_count",
+                  "<=",
+                  400
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "reserve_test_set": {
+        "owner": "agent",
+        "pre": "chunks_created",
+        "add": [
+          "test_set_reserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "test_example_count": {
+            "cmp": [
+              "test_example_count",
+              ">=",
+              50
+            ]
+          }
+        }
+      },
+      "build_jsonl_dataset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "chunks_created",
+            "test_set_reserved"
+          ]
+        },
+        "add": [
+          "instructions_generated",
+          "dataset_built",
+          "jsonl_rendered",
+          "tinker_format_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "prompt_template_count": {
+            "cmp": [
+              "prompt_template_count",
+              ">=",
+              15
+            ]
+          },
+          "system_prompt_count": {
+            "cmp": [
+              "system_prompt_count",
+              ">=",
+              5
+            ]
+          }
+        }
+      },
+      "verify_originality": {
+        "owner": "agent",
+        "pre": "dataset_built",
+        "add": [
+          "originality_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "epub_already_available": [],
+            "need_user_to_provide_epub": [
+              {
+                "act": {
+                  "cap": "ask_for_book_epub",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "extract_epub_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "segment_text",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "reserve_test_set",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "build_jsonl_dataset",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_originality",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "epub_available",
+        "book_text_extracted",
+        {
+          "not": "front_back_matter_present"
+        },
+        "chunks_created",
+        "paragraph_boundaries_preserved",
+        "chunk_overlap_used",
+        {
+          "cmp": [
+            "chunk_word_count",
+            ">=",
+            150
+          ]
+        },
+        {
+          "cmp": [
+            "chunk_word_count",
+            "<=",
+            400
+          ]
+        },
+        "test_set_reserved",
+        {
+          "cmp": [
+            "test_example_count",
+            ">=",
+            50
+          ]
+        },
+        "instructions_generated",
+        {
+          "cmp": [
+            "prompt_template_count",
+            ">=",
+            15
+          ]
+        },
+        {
+          "cmp": [
+            "system_prompt_count",
+            ">=",
+            5
+          ]
+        },
+        "dataset_built",
+        "jsonl_rendered",
+        "tinker_format_ready",
+        "lora_trained",
+        "uses_base_model",
+        "uses_lora_rank_32",
+        {
+          "cmp": [
+            "epochs",
+            "==",
+            3
+          ]
+        },
+        "modern_scenario_tested",
+        "style_transfer_validated",
+        "originality_verified"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "chunk_word_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "test_example_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "prompt_template_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "system_prompt_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "epochs",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "ask_for_book_epub": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "extract_epub_text": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "segment_text": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "reserve_test_set": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "build_jsonl_dataset": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "verify_originality": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    }
+  },
+  "live_goal": null
+}

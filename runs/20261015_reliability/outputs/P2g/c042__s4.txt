@@ -1,0 +1,63 @@
+```ce
+Skill `executing-plans`.
+Roles: `agent`, `user`.
+Tool `prepare_workspace_and_ledger` (owner `agent`): via `bash`; requires `plan_available`; adds `workspace_ready`, `ledger_ready`, `safe_worktree`.
+Tool `read_plan_and_spec` (owner `agent`): via `read`; requires `plan_available`; adds `plan_read`, `spec_checked`.
+Tool `load_tdd_skill` (owner `agent`): via `skill`; adds `tdd_loaded`.
+Tool `preflight_scan_and_record` (owner `agent`): via `bash`; requires `workspace_ready` and `ledger_ready` and `plan_read`; adds `preflight_recorded`.
+Tool `task_start` (owner `agent`): via `bash`; requires `workspace_ready` and `ledger_ready` and `plan_read`; adds `task_brief_read`, `task_in_progress`, `base_known`.
+Tool `implement_task_with_tdd` (owner `agent`): via `bash`; requires `task_brief_read` and `task_in_progress` and `tdd_loaded`; adds `task_steps_executed`, `expected_outputs_checked`, `tests_failed_then_passed`.
+Tool `record_ruling` (owner `agent`): via `bash`; requires `ledger_ready`; adds `ruling_recorded`.
+Tool `task_done` (owner `agent`): via `bash`; requires `task_in_progress` and `task_steps_executed` and `expected_outputs_checked` and `tests_failed_then_passed` and `base_known`; adds `task_complete`, `completion_recorded`; removes `task_in_progress`.
+Tool `self_review_branch` (owner `agent`): via `bash`; requires `plan_read` and `workspace_ready`; adds `final_review_done`, `self_review_recorded`.
+Tool `fix_review_findings_with_tdd` (owner `agent`): via `bash`; requires `final_review_done` and `tdd_loaded`; adds `important_findings_resolved`, `deferred_minors_recorded`, `final_fixes_verified`.
+Tool `delete_plan_workspace` (owner `agent`): via `bash`; requires `workspace_ready` and `final_review_done`; adds `workspace_deleted`.
+Initially true: `plan_available`.
+Initially: not `workspace_ready`.
+Initially: not `ledger_ready`.
+Initially: not `safe_worktree`.
+Initially: not `plan_read`.
+Initially: not `spec_checked`.
+Initially: not `tdd_loaded`.
+Initially: not `preflight_recorded`.
+Initially: not `task_brief_read`.
+Initially: not `task_in_progress`.
+Initially: not `base_known`.
+Initially: not `task_steps_executed`.
+Initially: not `expected_outputs_checked`.
+Initially: not `tests_failed_then_passed`.
+Initially: not `task_complete`.
+Initially: not `completion_recorded`.
+Initially: not `ruling_recorded`.
+Initially: not `final_review_done`.
+Initially: not `self_review_recorded`.
+Initially: not `important_findings_resolved`.
+Initially: not `deferred_minors_recorded`.
+Initially: not `final_fixes_verified`.
+Initially: not `workspace_deleted`.
+Goal: all of (`safe_worktree`, `workspace_ready`, `ledger_ready`, `plan_read`, `tdd_loaded`, `preflight_recorded`, `task_complete`, `completion_recorded`, `final_review_done`, `self_review_recorded`, `deferred_minors_recorded`, `workspace_deleted`).
+Protocol:
+  - `agent` uses `prepare_workspace_and_ledger`.
+  - `agent` uses `read_plan_and_spec`.
+  - `agent` uses `load_tdd_skill`.
+  - `agent` uses `preflight_scan_and_record`.
+  - loop `execute_tasks`:
+    - `agent` chooses one of (observed):
+      - branch `resume_or_take_next_task`:
+        - `agent` uses `task_start`.
+        - `agent` uses `implement_task_with_tdd`.
+        - `agent` chooses one of (observed):
+          - branch `needs_ruling`:
+            - `agent` uses `record_ruling`.
+          - branch `no_ruling`: none.
+        - `agent` uses `task_done`.
+        - repeat `execute_tasks`.
+      - branch `no_more_tasks`: none.
+  - `agent` uses `self_review_branch`.
+  - `agent` chooses one of (observed):
+    - branch `fix_important_or_critical_findings`:
+      - `agent` uses `fix_review_findings_with_tdd`.
+    - branch `no_fix_pass_needed`:
+      - `agent` uses `record_ruling`.
+  - `agent` uses `delete_plan_workspace`.
+```

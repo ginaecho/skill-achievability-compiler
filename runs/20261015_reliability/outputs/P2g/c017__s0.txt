@@ -1,0 +1,47 @@
+```ce
+Skill `huggingface-spaces`.
+Roles: `agent`, `user`.
+Tool `check_hf_cli` (owner `agent`): via `bash`; adds `hf_cli_checked`.
+Tool `install_hf_cli` (owner `agent`): via `bash`; requires `hf_cli_checked`; adds `hf_cli_installed`.
+Tool `check_hf_auth` (owner `agent`): via `bash`; requires `hf_cli_checked`; adds `hf_auth_checked`.
+Tool `login_hf_oauth` (owner `agent`): via `bash`; requires `hf_auth_checked`; needs `user_conversation`; adds `hf_logged_in`.
+Tool `inspect_space_options` (owner `agent`): via `bash`; requires `hf_logged_in`; adds `account_capabilities_known`, `prior_art_checked`, `sdk_hardware_decided`.
+Tool `create_space_repo` (owner `agent`): via `bash`; requires `hf_logged_in` and `sdk_hardware_decided`; needs `allowlisted_internet`; adds `space_created`.
+Tool `write_space_files` (owner `agent`): via `write`; requires `space_created`; adds `space_files_prepared`.
+Tool `edit_space_files` (owner `agent`): via `edit`; requires `space_files_prepared`; adds `space_files_prepared`.
+Tool `py_compile_app` (owner `agent`): via `bash`; requires `space_files_prepared`; adds `local_sanity_checked`.
+Tool `upload_space_files` (owner `agent`): via `bash`; requires `hf_logged_in` and `space_files_prepared`; needs `allowlisted_internet`; adds `space_uploaded`.
+Tool `verify_space_runtime` (owner `agent`): via `bash`; requires `space_uploaded`; needs `allowlisted_internet`; adds `space_verified`.
+Tool `repair_space` (owner `agent`): via `edit`; requires `space_uploaded`; adds `space_files_prepared`; removes `space_verified`.
+Initially true: none.
+Goal: all of (`hf_logged_in`, `prior_art_checked`, `sdk_hardware_decided`, `space_created`, `space_files_prepared`, `space_uploaded`, `space_verified`).
+Protocol:
+  - `agent` uses `check_hf_cli`.
+  - `agent` chooses one of (observed):
+    - branch `hf_present`: none.
+    - branch `hf_missing`:
+      - `agent` uses `install_hf_cli`.
+  - `agent` uses `check_hf_auth`.
+  - `agent` chooses one of (observed):
+    - branch `already_logged_in`:
+      - `agent` uses `inspect_space_options`.
+    - branch `needs_login`:
+      - `agent` uses `login_hf_oauth`.
+      - `agent` uses `inspect_space_options`.
+  - `agent` uses `create_space_repo`.
+  - `agent` uses `write_space_files`.
+  - `agent` chooses one of (observed):
+    - branch `needs_edits`:
+      - `agent` uses `edit_space_files`.
+      - `agent` uses `py_compile_app`.
+    - branch `no_python_check_needed`: none.
+  - `agent` uses `upload_space_files`.
+  - loop `fix_until_verified`:
+    - `agent` chooses one of (external):
+      - branch `verified_now`:
+        - `agent` uses `verify_space_runtime`.
+      - branch `needs_fix`:
+        - `agent` uses `repair_space`.
+        - `agent` uses `upload_space_files`.
+        - repeat `fix_until_verified`.
+```

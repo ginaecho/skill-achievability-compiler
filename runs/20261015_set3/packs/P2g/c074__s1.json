@@ -1,0 +1,774 @@
+{
+  "pack": {
+    "name": "implement",
+    "roles": [
+      "agent"
+    ],
+    "capabilities": {
+      "read_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "agents_rules_read",
+          "architect_plan_read",
+          "orchestrator_output_read",
+          "scope_understood"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_plan_feasibility": {
+        "owner": "agent",
+        "pre": "architect_plan_read",
+        "add": [
+          "plan_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "plan_issue_count": {
+            "cmp": [
+              "plan_issue_count",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "write_plan_deviation_notice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "plan_checked",
+            {
+              "cmp": [
+                "plan_issue_count",
+                ">",
+                0
+              ]
+            }
+          ]
+        },
+        "add": [
+          "plan_deviation_flagged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_codebase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "architect_plan_read",
+            "agents_rules_read"
+          ]
+        },
+        "add": [
+          "relevant_files_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_plan_changes": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "scope_understood",
+            "plan_checked",
+            "relevant_files_inspected"
+          ]
+        },
+        "add": [
+          "implementation_done"
+        ],
+        "del": [
+          "has_todos",
+          "has_commented_out_code",
+          "has_debug_logs",
+          "has_unused_imports",
+          "has_inline_style_violations",
+          "has_hardcoded_secrets"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_tests": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "implementation_done",
+            "agents_rules_read",
+            "orchestrator_output_read"
+          ]
+        },
+        "add": [
+          "tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_test_suite": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "needs:package_registries",
+            "tests_written"
+          ]
+        },
+        "add": [
+          "tests_passing"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_coverage_threshold": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "tests_written"
+          ]
+        },
+        "add": [
+          "coverage_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "coverage_ok": {
+            "or": [
+              "coverage_ok",
+              {
+                "not": "coverage_ok"
+              }
+            ]
+          }
+        }
+      },
+      "review_security_sensitive_scope": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "architect_plan_read",
+            "relevant_files_inspected"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "security_sensitive_scope_found": {
+            "or": [
+              "security_sensitive_scope_found",
+              {
+                "not": "security_sensitive_scope_found"
+              }
+            ]
+          }
+        }
+      },
+      "update_pipeline_state": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "implementation_done",
+            "tests_passing"
+          ]
+        },
+        "add": [
+          "state_updated",
+          "implement_completed",
+          "stage_review"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "print_completion_message": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "state_updated"
+          ]
+        },
+        "add": [
+          "completion_announced"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_plan_feasibility",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "plan_deviation_required": [
+              {
+                "act": {
+                  "cap": "write_plan_deviation_notice",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_plan_deviation": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_codebase",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "review_security_sensitive_scope",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "security_sensitive_scope_found": [],
+            "no_security_sensitive_scope": [
+              {
+                "act": {
+                  "cap": "implement_plan_changes",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_tests",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_test_suite",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_coverage_threshold",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "update_pipeline_state",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "print_completion_message",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "agents_rules_read",
+        "architect_plan_read",
+        "orchestrator_output_read",
+        "plan_checked",
+        "implementation_done",
+        "tests_written",
+        "tests_passing",
+        "coverage_checked",
+        "state_updated",
+        "implement_completed",
+        "stage_review",
+        "completion_announced",
+        {
+          "not": "security_sensitive_scope_found"
+        },
+        {
+          "not": "has_todos"
+        },
+        {
+          "not": "has_commented_out_code"
+        },
+        {
+          "not": "has_debug_logs"
+        },
+        {
+          "not": "has_unused_imports"
+        },
+        {
+          "not": "has_hardcoded_secrets"
+        }
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:linux",
+      "needs:local_filesystem",
+      "needs:package_registries"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "plan_issue_count",
+          "==",
+          0
+        ]
+      },
+      false
+    ]
+  },
+  "pre_binding": {
+    "name": "implement",
+    "roles": [
+      "agent"
+    ],
+    "capabilities": {
+      "read_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "agents_rules_read",
+          "architect_plan_read",
+          "orchestrator_output_read",
+          "scope_understood"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_plan_feasibility": {
+        "owner": "agent",
+        "pre": "architect_plan_read",
+        "add": [
+          "plan_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "plan_issue_count": {
+            "cmp": [
+              "plan_issue_count",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "write_plan_deviation_notice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "plan_checked",
+            {
+              "cmp": [
+                "plan_issue_count",
+                ">",
+                0
+              ]
+            }
+          ]
+        },
+        "add": [
+          "plan_deviation_flagged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_codebase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "architect_plan_read",
+            "agents_rules_read"
+          ]
+        },
+        "add": [
+          "relevant_files_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_plan_changes": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "scope_understood",
+            "plan_checked",
+            "relevant_files_inspected"
+          ]
+        },
+        "add": [
+          "implementation_done"
+        ],
+        "del": [
+          "has_todos",
+          "has_commented_out_code",
+          "has_debug_logs",
+          "has_unused_imports",
+          "has_inline_style_violations",
+          "has_hardcoded_secrets"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_tests": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "implementation_done",
+            "agents_rules_read",
+            "orchestrator_output_read"
+          ]
+        },
+        "add": [
+          "tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_test_suite": {
+        "owner": "agent",
+        "pre": "tests_written",
+        "add": [
+          "tests_passing"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_coverage_threshold": {
+        "owner": "agent",
+        "pre": "tests_written",
+        "add": [
+          "coverage_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "coverage_ok": {
+            "or": [
+              "coverage_ok",
+              {
+                "not": "coverage_ok"
+              }
+            ]
+          }
+        }
+      },
+      "review_security_sensitive_scope": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "architect_plan_read",
+            "relevant_files_inspected"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "security_sensitive_scope_found": {
+            "or": [
+              "security_sensitive_scope_found",
+              {
+                "not": "security_sensitive_scope_found"
+              }
+            ]
+          }
+        }
+      },
+      "update_pipeline_state": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "implementation_done",
+            "tests_passing"
+          ]
+        },
+        "add": [
+          "state_updated",
+          "implement_completed",
+          "stage_review"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "print_completion_message": {
+        "owner": "agent",
+        "pre": "state_updated",
+        "add": [
+          "completion_announced"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_plan_feasibility",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "plan_deviation_required": [
+              {
+                "act": {
+                  "cap": "write_plan_deviation_notice",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_plan_deviation": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_codebase",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "review_security_sensitive_scope",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "security_sensitive_scope_found": [],
+            "no_security_sensitive_scope": [
+              {
+                "act": {
+                  "cap": "implement_plan_changes",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_tests",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_test_suite",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_coverage_threshold",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "update_pipeline_state",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "print_completion_message",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "agents_rules_read",
+        "architect_plan_read",
+        "orchestrator_output_read",
+        "plan_checked",
+        "implementation_done",
+        "tests_written",
+        "tests_passing",
+        "coverage_checked",
+        "state_updated",
+        "implement_completed",
+        "stage_review",
+        "completion_announced",
+        {
+          "not": "security_sensitive_scope_found"
+        },
+        {
+          "not": "has_todos"
+        },
+        {
+          "not": "has_commented_out_code"
+        },
+        {
+          "not": "has_debug_logs"
+        },
+        {
+          "not": "has_unused_imports"
+        },
+        {
+          "not": "has_hardcoded_secrets"
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "plan_issue_count",
+          "==",
+          0
+        ]
+      },
+      false
+    ]
+  },
+  "bindings": {
+    "read_inputs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "verify_plan_feasibility": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "write_plan_deviation_notice": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "inspect_codebase": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "implement_plan_changes": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "write_tests": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_test_suite": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "check_coverage_threshold": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "review_security_sensitive_scope": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "update_pipeline_state": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "print_completion_message": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,664 @@
+{
+  "pack": {
+    "name": "build-agent",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_capture_reference": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "capture_reference_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_authoring_reference": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "authoring_reference_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_gotchas_reference": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "gotchas_reference_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_for_task_walkthrough": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "task_described"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "draft_skill_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "authoring_reference_read",
+            "gotchas_reference_read",
+            {
+              "or": [
+                "task_described",
+                "task_transcript_available"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "skill_drafted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_skill_on_known_case": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "test_run_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "revise_skill_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_drafted",
+            "test_run_completed",
+            "test_failed"
+          ]
+        },
+        "add": [
+          "skill_drafted"
+        ],
+        "del": [
+          "test_failed"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "register_with_router": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "router_registered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "share_with_team": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "sharing_offered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "offer_schedule": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "schedule_offered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_built_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_drafted",
+            "test_run_completed",
+            {
+              "not": "test_failed"
+            },
+            "router_registered"
+          ]
+        },
+        "add": [
+          "built_skill_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_capture_reference",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_authoring_reference",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_gotchas_reference",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "transcript_available": [],
+            "describe_task": [
+              {
+                "act": {
+                  "cap": "ask_for_task_walkthrough",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "transcript_available": [
+              "task_transcript_available"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "draft_skill_files",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "fix_until_match",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "test_matches": [
+                    {
+                      "act": {
+                        "cap": "test_skill_on_known_case",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "test_needs_fix": [
+                    {
+                      "act": {
+                        "cap": "test_skill_on_known_case",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "revise_skill_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "fix_until_match"
+                    }
+                  ]
+                },
+                "assumes": {
+                  "test_needs_fix": [
+                    "test_failed"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "act": {
+          "cap": "register_with_router",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "recurring_task": [
+              {
+                "act": {
+                  "cap": "offer_schedule",
+                  "by": "agent"
+                }
+              }
+            ],
+            "not_recurring": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "share_with_team": [
+              {
+                "act": {
+                  "cap": "share_with_team",
+                  "by": "agent"
+                }
+              }
+            ],
+            "do_not_share": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "deliver_built_skill",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "built_skill_delivered",
+    "init_true": [],
+    "init_constraints": [
+      true
+    ]
+  },
+  "pre_binding": {
+    "name": "build-agent",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_capture_reference": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "capture_reference_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_authoring_reference": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "authoring_reference_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_gotchas_reference": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "gotchas_reference_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_for_task_walkthrough": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "task_described"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "draft_skill_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "authoring_reference_read",
+            "gotchas_reference_read",
+            {
+              "or": [
+                "task_described",
+                "task_transcript_available"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "skill_drafted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_skill_on_known_case": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "test_run_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "revise_skill_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_drafted",
+            "test_run_completed",
+            "test_failed"
+          ]
+        },
+        "add": [
+          "skill_drafted"
+        ],
+        "del": [
+          "test_failed"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "register_with_router": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "router_registered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "share_with_team": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "sharing_offered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "offer_schedule": {
+        "owner": "agent",
+        "pre": "skill_drafted",
+        "add": [
+          "schedule_offered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_built_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_drafted",
+            "test_run_completed",
+            {
+              "not": "test_failed"
+            },
+            "router_registered"
+          ]
+        },
+        "add": [
+          "built_skill_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_capture_reference",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_authoring_reference",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_gotchas_reference",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "transcript_available": [],
+            "describe_task": [
+              {
+                "act": {
+                  "cap": "ask_for_task_walkthrough",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "transcript_available": [
+              "task_transcript_available"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "draft_skill_files",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "fix_until_match",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "test_matches": [
+                    {
+                      "act": {
+                        "cap": "test_skill_on_known_case",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "test_needs_fix": [
+                    {
+                      "act": {
+                        "cap": "test_skill_on_known_case",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "revise_skill_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "fix_until_match"
+                    }
+                  ]
+                },
+                "assumes": {
+                  "test_needs_fix": [
+                    "test_failed"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "act": {
+          "cap": "register_with_router",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "recurring_task": [
+              {
+                "act": {
+                  "cap": "offer_schedule",
+                  "by": "agent"
+                }
+              }
+            ],
+            "not_recurring": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "share_with_team": [
+              {
+                "act": {
+                  "cap": "share_with_team",
+                  "by": "agent"
+                }
+              }
+            ],
+            "do_not_share": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "deliver_built_skill",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "built_skill_delivered",
+    "init_true": [],
+    "init_constraints": [
+      true
+    ]
+  },
+  "bindings": {
+    "read_capture_reference": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_authoring_reference": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "read_gotchas_reference": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_for_task_walkthrough": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "draft_skill_files": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "test_skill_on_known_case": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "revise_skill_files": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "register_with_router": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "share_with_team": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "offer_schedule": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "deliver_built_skill": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

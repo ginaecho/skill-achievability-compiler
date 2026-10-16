@@ -1,0 +1,40 @@
+```ce
+Skill `context-engine`.
+Roles: `agent`, `user`.
+Tool `check_context_file` (owner `agent`): via `read`; adds `context_file_exists`.
+Tool `load_context_file` (owner `agent`): via `read`; requires `context_file_exists`; adds `context_loaded`, `working_memory_populated`.
+Tool `check_anonymization_reference` (owner `agent`): via `read`; adds `anonymization_rules_available`.
+Tool `ask_setup_prompt` (owner `agent`): via `ask_user`; adds `setup_prompt_shown`.
+Tool `ask_stale_continue_prompt` (owner `agent`): via `ask_user`; requires `context_is_stale`; adds `stale_prompt_shown`.
+Tool `ask_missing_context_question` (owner `agent`): via `ask_user`; requires `missing_required_field`; adds `missing_context_asked`.
+Tool `propose_context_update` (owner `agent`): via `ask_user`; requires `new_context_learned`; adds `update_confirmation_asked`.
+Tool `append_context_update` (owner `agent`): via `edit`; requires all of (`context_file_exists`, `new_context_learned`, `user_approved_context_write`); adds `context_file_updated`; removes `context_is_stale`; sets `context_age_days` to 0.
+Initially true: `session_start`.
+Initially: `context_age_days` == 0.
+Goal: all of ((`context_file_exists` and `context_loaded` and `working_memory_populated`) or (`setup_prompt_shown` and not `context_file_exists`), (`context_is_stale` implies `stale_prompt_shown`), (`missing_required_field` implies `missing_context_asked`), (`new_context_learned` implies `update_confirmation_asked`), `anonymization_rules_available`).
+Protocol:
+  - `agent` uses `check_context_file`.
+  - `agent` chooses one of (observed):
+    - branch `context_missing`:
+      - `agent` uses `ask_setup_prompt`.
+      - `agent` uses `check_anonymization_reference`.
+    - branch `context_exists`:
+      - `agent` uses `load_context_file`.
+      - `agent` chooses one of (observed):
+        - branch `stale`:
+          - `agent` uses `ask_stale_continue_prompt`.
+        - branch `fresh`: none.
+      - `agent` chooses one of (observed):
+        - branch `required_fields_missing`:
+          - `agent` uses `ask_missing_context_question`.
+        - branch `required_fields_present`: none.
+      - `agent` uses `check_anonymization_reference`.
+      - `agent` chooses one of (observed):
+        - branch `new_context_learned`:
+          - `agent` uses `propose_context_update`.
+          - `user` chooses one of (observed):
+            - branch `approve_update`:
+              - `agent` uses `append_context_update`.
+            - branch `decline_update`: none.
+        - branch `no_new_context`: none.
+```

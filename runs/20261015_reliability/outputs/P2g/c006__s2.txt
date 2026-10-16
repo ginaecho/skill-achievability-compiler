@@ -1,0 +1,42 @@
+```ce
+Skill `neon-postgres-egress-optimizer`.
+Roles: `agent`, `user`.
+Tool `check_parent_neon_skill` (owner `agent`): via `skill`; adds `parent_neon_skill_ready`.
+Tool `install_parent_neon_skill` (owner `agent`): via `bash`; requires not `parent_neon_skill_ready`; needs `shell`, `package_registries`, `allowlisted_internet`; adds `parent_neon_skill_ready`.
+Tool `ask_about_db_stats_access` (owner `agent`): via `ask_user`; picks `has_db_stats_access` with true.
+Tool `ask_about_pg_stat_statements` (owner `agent`): via `ask_user`; picks `pg_stat_statements_available` with true.
+Tool `ask_about_stats_state` (owner `agent`): via `ask_user`; picks `stats_ready` with true.
+Tool `inspect_codebase` (owner `agent`): via `read`; adds `codebase_analyzed`.
+Tool `edit_code_for_egress` (owner `agent`): via `edit`; requires `codebase_analyzed`; adds `egress_fixes_applied`.
+Tool `run_existing_tests` (owner `agent`): via `bash`; requires `egress_fixes_applied`; adds `tests_run`, `nothing_broke`.
+Tool `review_response_shapes` (owner `agent`): via `read`; requires `egress_fixes_applied`; adds `response_shapes_checked`.
+Tool `advise_measurement_with_pg_stats` (owner `agent`): via `ask_user`; requires `pg_stat_statements_available`; adds `measurement_guidance_given`.
+Initially true: none.
+Initially: `has_db_stats_access` == 0.
+Initially: `pg_stat_statements_available` == 0.
+Initially: `stats_ready` == 0.
+Goal: `codebase_analyzed` and `egress_fixes_applied` and `tests_run` and `nothing_broke` and `response_shapes_checked` and any of (`measurement_guidance_given`, not `pg_stat_statements_available`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `parent_skill_already_ready`:
+      - `agent` uses `check_parent_neon_skill`.
+    - branch `install_parent_skill`:
+      - `agent` uses `install_parent_neon_skill`.
+  - `agent` uses `ask_about_db_stats_access`.
+  - `agent` chooses one of (observed):
+    - branch `has_stats_access`:
+      - `agent` uses `ask_about_pg_stat_statements`.
+      - `agent` chooses one of (observed):
+        - branch `pg_stat_statements_available_now`:
+          - `agent` uses `ask_about_stats_state`.
+        - branch `pg_stat_statements_not_available_or_unknown`: none.
+    - branch `no_stats_access`: none.
+  - `agent` uses `inspect_codebase`.
+  - `agent` uses `edit_code_for_egress`.
+  - `agent` uses `run_existing_tests`.
+  - `agent` uses `review_response_shapes`.
+  - `agent` chooses one of (observed):
+    - branch `verify_with_pg_stats`:
+      - `agent` uses `advise_measurement_with_pg_stats`.
+    - branch `skip_pg_stats_verification`: none.
+```

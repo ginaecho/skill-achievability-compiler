@@ -1,0 +1,31 @@
+```ce
+Skill `nvidia-skill-finder`.
+Roles: `agent`, `user`.
+Tool `check_installed_skills` (owner `agent`): via `skill`; adds `installed_skills_checked`.
+Tool `query_catalog_cli` (owner `agent`): via `bash`; needs `shell`, `package_registries`, `allowlisted_internet`; adds `catalog_checked`.
+Tool `query_catalog_fallback` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `catalog_checked`.
+Tool `install_nvidia_skill` (owner `agent`): via `bash`; needs `shell`, `package_registries`, `allowlisted_internet`; requires `user_approved_install` and `catalog_match_found`; adds `skill_installed`.
+Tool `ask_install_approval` (owner `agent`): via `ask_user`; requires `catalog_match_found`; adds `user_approved_install`.
+Initially true: none.
+Goal: any of (`catalog_match_found`, `no_strong_match`, `catalog_check_failed`, `installed_skill_already_available`).
+Protocol:
+  - `agent` uses `check_installed_skills`.
+  - `agent` chooses one of (observed):
+    - branch `already_installed`:
+      - checkpoint: any of (`catalog_match_found`, `no_strong_match`, `catalog_check_failed`, `installed_skill_already_available`).
+    - branch `not_installed`:
+      - `agent` chooses one of (observed):
+        - branch `cli_catalog_check_succeeds`:
+          - `agent` uses `query_catalog_cli`.
+        - branch `cli_unavailable_or_fails`:
+          - `agent` uses `query_catalog_fallback`.
+      - `agent` chooses one of (observed):
+        - branch `strong_match_found`:
+          - `agent` chooses one of (observed):
+            - branch `recommend_only`: none.
+            - branch `user_wants_install`:
+              - `agent` uses `ask_install_approval`.
+              - `agent` uses `install_nvidia_skill`.
+        - branch `no_strong_match_found`: none.
+        - branch `catalog_lookup_failed`: none.
+```

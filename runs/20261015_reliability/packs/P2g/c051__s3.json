@@ -1,0 +1,603 @@
+{
+  "pack": {
+    "name": "make-repo-contribution",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "search_repo_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "guidance_checked",
+          "repo_guidance_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "search_existing_issues": {
+        "owner": "agent",
+        "pre": "guidance_checked",
+        "add": [
+          "issues_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_to_choose_issue": {
+        "owner": "agent",
+        "pre": "issues_checked",
+        "add": [
+          "issue_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_to_confirm_prereqs": {
+        "owner": "agent",
+        "pre": "repo_guidance_known",
+        "add": [
+          "prereqs_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_issue": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:github_account",
+            "guidance_checked"
+          ]
+        },
+        "add": [
+          "issue_created",
+          "issue_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_branch": {
+        "owner": "agent",
+        "pre": "guidance_checked",
+        "add": [
+          "branch_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_commits": {
+        "owner": "agent",
+        "pre": "branch_created",
+        "add": [
+          "commits_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "push_branch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:github_account",
+            {
+              "and": [
+                "branch_created",
+                "commits_created"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "branch_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_pull_request": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:github_account",
+            {
+              "and": [
+                "guidance_checked",
+                "branch_pushed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "pr_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "search_repo_guidance",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "issue_or_pr_or_commit_or_push_requested": [
+              {
+                "act": {
+                  "cap": "search_existing_issues",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "existing_issue_found_and_user_selects_one": [
+                      {
+                        "act": {
+                          "cap": "ask_user_to_choose_issue",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_existing_issue_selected": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "issue_required_and_user_wants_issue_created": [
+                              {
+                                "act": {
+                                  "cap": "create_issue",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "issue_not_required_or_user_declines_issue_creation": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_user_to_confirm_prereqs",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "create_branch_only": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "commit_changes": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_commits",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "push_code": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_commits",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "push_branch",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "create_pr": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_commits",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "push_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_pull_request",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "guidance_lookup_only": []
+          }
+        }
+      }
+    ],
+    "goal": "guidance_checked",
+    "init_true": [
+      "needs:github_account"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "make-repo-contribution",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "search_repo_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "guidance_checked",
+          "repo_guidance_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "search_existing_issues": {
+        "owner": "agent",
+        "pre": "guidance_checked",
+        "add": [
+          "issues_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_to_choose_issue": {
+        "owner": "agent",
+        "pre": "issues_checked",
+        "add": [
+          "issue_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_to_confirm_prereqs": {
+        "owner": "agent",
+        "pre": "repo_guidance_known",
+        "add": [
+          "prereqs_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_issue": {
+        "owner": "agent",
+        "pre": "guidance_checked",
+        "add": [
+          "issue_created",
+          "issue_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_branch": {
+        "owner": "agent",
+        "pre": "guidance_checked",
+        "add": [
+          "branch_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_commits": {
+        "owner": "agent",
+        "pre": "branch_created",
+        "add": [
+          "commits_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "push_branch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "branch_created",
+            "commits_created"
+          ]
+        },
+        "add": [
+          "branch_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_pull_request": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "guidance_checked",
+            "branch_pushed"
+          ]
+        },
+        "add": [
+          "pr_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "search_repo_guidance",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "issue_or_pr_or_commit_or_push_requested": [
+              {
+                "act": {
+                  "cap": "search_existing_issues",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "existing_issue_found_and_user_selects_one": [
+                      {
+                        "act": {
+                          "cap": "ask_user_to_choose_issue",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_existing_issue_selected": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "issue_required_and_user_wants_issue_created": [
+                              {
+                                "act": {
+                                  "cap": "create_issue",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "issue_not_required_or_user_declines_issue_creation": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_user_to_confirm_prereqs",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "create_branch_only": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "commit_changes": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_commits",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "push_code": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_commits",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "push_branch",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "create_pr": [
+                      {
+                        "act": {
+                          "cap": "create_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_commits",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "push_branch",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "create_pull_request",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "guidance_lookup_only": []
+          }
+        }
+      }
+    ],
+    "goal": "guidance_checked",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "search_repo_guidance": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "search_existing_issues": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "ask_user_to_choose_issue": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_user_to_confirm_prereqs": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "create_issue": {
+      "via": "bash",
+      "needs": [
+        "github_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "create_branch": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "create_commits": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "push_branch": {
+      "via": "bash",
+      "needs": [
+        "github_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "create_pull_request": {
+      "via": "bash",
+      "needs": [
+        "github_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

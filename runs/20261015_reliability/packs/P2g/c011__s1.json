@@ -1,0 +1,617 @@
+{
+  "pack": {
+    "name": "foundationpose-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "locate_checkout": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clone_checkout": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "adapt_bop_dataset": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "dataset_adapted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_engine_depth_smoke": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "engine_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_gt_cache": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "gt_cache_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_inference_only": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "dataset_adapted",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "inference_completed",
+          "provenance_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline_scored": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "dataset_adapted",
+            "engine_validated",
+            "gt_cache_built"
+          ]
+        },
+        "add": [
+          "inference_completed",
+          "evaluation_completed",
+          "provenance_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rescore_completed_run": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "evaluation_completed",
+          "baseline_preserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_batch_eval": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "batch_completed",
+          "provenance_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_results": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "results_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "locate_checkout",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "checkout_present": [],
+            "need_clone_and_setup": [
+              {
+                "act": {
+                  "cap": "clone_checkout",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "adapt_dataset_and_run": [
+              {
+                "act": {
+                  "cap": "adapt_bop_dataset",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_engine_depth_smoke",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "inference_only": [
+                      {
+                        "act": {
+                          "cap": "run_inference_only",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "inference_plus_scoring": [
+                      {
+                        "act": {
+                          "cap": "build_gt_cache",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_pipeline_scored",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "rescore_existing_run": [
+              {
+                "act": {
+                  "cap": "rescore_completed_run",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "batch_run": [
+              {
+                "act": {
+                  "cap": "run_batch_eval",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "compare_supplied_artifacts_only": [
+              {
+                "act": {
+                  "cap": "inspect_results",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "inference_completed",
+        "evaluation_completed",
+        "batch_completed",
+        "results_interpreted"
+      ]
+    },
+    "init_true": [
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "foundationpose-pipeline",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "locate_checkout": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clone_checkout": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checkout_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "adapt_bop_dataset": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "dataset_adapted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_engine_depth_smoke": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "engine_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_gt_cache": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "gt_cache_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_inference_only": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "dataset_adapted",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "inference_completed",
+          "provenance_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline_scored": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "dataset_adapted",
+            "engine_validated",
+            "gt_cache_built"
+          ]
+        },
+        "add": [
+          "inference_completed",
+          "evaluation_completed",
+          "provenance_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rescore_completed_run": {
+        "owner": "agent",
+        "pre": "checkout_found",
+        "add": [
+          "evaluation_completed",
+          "baseline_preserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_batch_eval": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkout_found",
+            "engine_validated"
+          ]
+        },
+        "add": [
+          "batch_completed",
+          "provenance_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_results": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "results_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "locate_checkout",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "checkout_present": [],
+            "need_clone_and_setup": [
+              {
+                "act": {
+                  "cap": "clone_checkout",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "adapt_dataset_and_run": [
+              {
+                "act": {
+                  "cap": "adapt_bop_dataset",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_engine_depth_smoke",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "inference_only": [
+                      {
+                        "act": {
+                          "cap": "run_inference_only",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "inference_plus_scoring": [
+                      {
+                        "act": {
+                          "cap": "build_gt_cache",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_pipeline_scored",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_results",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "rescore_existing_run": [
+              {
+                "act": {
+                  "cap": "rescore_completed_run",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "batch_run": [
+              {
+                "act": {
+                  "cap": "run_batch_eval",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "compare_supplied_artifacts_only": [
+              {
+                "act": {
+                  "cap": "inspect_results",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "inference_completed",
+        "evaluation_completed",
+        "batch_completed",
+        "results_interpreted"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "locate_checkout": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "clone_checkout": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "adapt_bop_dataset": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "check_engine_depth_smoke": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "build_gt_cache": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_inference_only": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_pipeline_scored": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "rescore_completed_run": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_batch_eval": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "inspect_results": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

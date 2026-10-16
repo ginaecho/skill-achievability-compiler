@@ -1,0 +1,732 @@
+{
+  "pack": {
+    "name": "aspire-project-v2-migration",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "apphost_identified",
+          "local_changes_preserved",
+          "workspace_assessed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "resolve_aspire_version": {
+        "owner": "agent",
+        "pre": "apphost_identified",
+        "add": [
+          "version_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "assess_capabilities_and_candidates": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "apphost_identified",
+            "version_resolved"
+          ]
+        },
+        "add": [
+          "candidates_assessed",
+          "references_assessed",
+          "packages_assessed",
+          "gateway_decision_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "lookup_aspire_docs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "api_shapes_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_exact_plan": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "candidates_assessed",
+            "references_assessed",
+            "packages_assessed"
+          ]
+        },
+        "add": [
+          "exact_plan_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_for_approval": {
+        "owner": "agent",
+        "pre": "exact_plan_prepared",
+        "add": [
+          "approval_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "approved_plan": {
+            "or": [
+              {
+                "cmp": [
+                  "approved_plan",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "approved_plan",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "capture_baseline_validation_copy": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "approved_plan",
+            "==",
+            1
+          ]
+        },
+        "add": [
+          "baseline_captured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_migration_edits": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            {
+              "cmp": [
+                "approved_plan",
+                "==",
+                1
+              ]
+            },
+            "exact_plan_prepared"
+          ]
+        },
+        "add": [
+          "files_edited",
+          "packages_updated",
+          "references_cleaned",
+          "suppressions_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "regenerate_integrations": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "generated_files_regenerated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_migration": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "restore_build_validated",
+          "run_validated",
+          "post_migration_assessed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": "post_migration_assessed",
+        "add": [
+          "results_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "resolve_aspire_version",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "eligible_version": [
+              {
+                "act": {
+                  "cap": "assess_capabilities_and_candidates",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "lookup_aspire_docs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "prepare_exact_plan",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_for_approval",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_exact_plan": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "capture_baseline_when_authorized": [
+                              {
+                                "act": {
+                                  "cap": "capture_baseline_validation_copy",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "skip_baseline": []
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "apply_migration_edits",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "regenerate_integrations",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "validate_migration",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_or_partial_nonapproval": []
+                  }
+                }
+              }
+            ],
+            "ineligible_or_unresolved_version": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "exact_plan_prepared",
+            "approval_answered",
+            {
+              "cmp": [
+                "approved_plan",
+                "==",
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "and": [
+            "exact_plan_prepared",
+            "approval_answered",
+            {
+              "cmp": [
+                "approved_plan",
+                "==",
+                1
+              ]
+            },
+            "files_edited",
+            "packages_updated",
+            "references_cleaned",
+            "suppressions_added",
+            "restore_build_validated",
+            "run_validated",
+            "post_migration_assessed",
+            "results_reported"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "approved_plan",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "aspire-project-v2-migration",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "apphost_identified",
+          "local_changes_preserved",
+          "workspace_assessed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "resolve_aspire_version": {
+        "owner": "agent",
+        "pre": "apphost_identified",
+        "add": [
+          "version_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "assess_capabilities_and_candidates": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "apphost_identified",
+            "version_resolved"
+          ]
+        },
+        "add": [
+          "candidates_assessed",
+          "references_assessed",
+          "packages_assessed",
+          "gateway_decision_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "lookup_aspire_docs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "api_shapes_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_exact_plan": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "candidates_assessed",
+            "references_assessed",
+            "packages_assessed"
+          ]
+        },
+        "add": [
+          "exact_plan_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_for_approval": {
+        "owner": "agent",
+        "pre": "exact_plan_prepared",
+        "add": [
+          "approval_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "approved_plan": {
+            "or": [
+              {
+                "cmp": [
+                  "approved_plan",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "approved_plan",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "capture_baseline_validation_copy": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "approved_plan",
+            "==",
+            1
+          ]
+        },
+        "add": [
+          "baseline_captured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_migration_edits": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            {
+              "cmp": [
+                "approved_plan",
+                "==",
+                1
+              ]
+            },
+            "exact_plan_prepared"
+          ]
+        },
+        "add": [
+          "files_edited",
+          "packages_updated",
+          "references_cleaned",
+          "suppressions_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "regenerate_integrations": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "generated_files_regenerated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_migration": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "restore_build_validated",
+          "run_validated",
+          "post_migration_assessed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": "post_migration_assessed",
+        "add": [
+          "results_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "resolve_aspire_version",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "eligible_version": [
+              {
+                "act": {
+                  "cap": "assess_capabilities_and_candidates",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "lookup_aspire_docs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "prepare_exact_plan",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_for_approval",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_exact_plan": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "capture_baseline_when_authorized": [
+                              {
+                                "act": {
+                                  "cap": "capture_baseline_validation_copy",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "skip_baseline": []
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "apply_migration_edits",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "regenerate_integrations",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "validate_migration",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_results",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_or_partial_nonapproval": []
+                  }
+                }
+              }
+            ],
+            "ineligible_or_unresolved_version": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "exact_plan_prepared",
+            "approval_answered",
+            {
+              "cmp": [
+                "approved_plan",
+                "==",
+                0
+              ]
+            }
+          ]
+        },
+        {
+          "and": [
+            "exact_plan_prepared",
+            "approval_answered",
+            {
+              "cmp": [
+                "approved_plan",
+                "==",
+                1
+              ]
+            },
+            "files_edited",
+            "packages_updated",
+            "references_cleaned",
+            "suppressions_added",
+            "restore_build_validated",
+            "run_validated",
+            "post_migration_assessed",
+            "results_reported"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "approved_plan",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "resolve_aspire_version": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "assess_capabilities_and_candidates": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "lookup_aspire_docs": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "prepare_exact_plan": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "ask_for_approval": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "capture_baseline_validation_copy": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "apply_migration_edits": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "regenerate_integrations": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "validate_migration": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "report_results": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

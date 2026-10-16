@@ -1,0 +1,37 @@
+```ce
+Skill `hf-cloud-sagemaker-iam-preflight`.
+Roles: `agent`, `user`.
+Tool `ask_for_role_input` (owner `agent`): via `ask_user`; adds `role_input_resolved`.
+Tool `validate_provided_role` (owner `agent`): via `bash`; needs `shell`, `linux`; requires `role_input_resolved` and `user_provided_role`; adds `usable_execution_role_found`, `selected_role_is_validated`, `selected_role_arn_known`.
+Tool `discover_existing_role` (owner `agent`): via `bash`; needs `shell`, `linux`; requires `role_input_resolved` and not `user_provided_role`; adds `usable_execution_role_found`, `selected_role_is_validated`, `selected_role_arn_known`.
+Tool `ask_if_user_can_create_role` (owner `agent`): via `ask_user`; requires `role_input_resolved` and not `usable_execution_role_found`; adds `creation_path_resolved`.
+Tool `create_execution_role` (owner `agent`): via `windows_desktop`; needs `aws_account`; requires `creation_path_resolved` and `user_can_create_role`; adds `usable_execution_role_found`, `selected_role_is_validated`, `selected_role_arn_known`, `role_created`.
+Tool `reply_with_selected_role` (owner `agent`): via `reply`; requires `usable_execution_role_found` and `selected_role_is_validated` and `selected_role_arn_known`; adds `preflight_delivered`.
+Tool `reply_with_blocked_sso_instructions` (owner `agent`): via `reply`; requires `creation_path_resolved` and `user_cannot_create_role`; adds `preflight_delivered`.
+Tool `reply_with_broken_role_problem` (owner `agent`): via `reply`; requires `role_input_resolved` and `user_provided_role` and not `usable_execution_role_found`; adds `preflight_delivered`.
+Initially true: none.
+Goal: `preflight_delivered`.
+Protocol:
+  - `agent` uses `ask_for_role_input`.
+  - `user` chooses one of (observed):
+    - branch `provided_role` (assuming `user_provided_role`):
+      - `agent` chooses one of (external):
+        - branch `role_valid`:
+          - `agent` uses `validate_provided_role`.
+          - `agent` uses `reply_with_selected_role`.
+        - branch `role_invalid`:
+          - `agent` uses `reply_with_broken_role_problem`.
+    - branch `no_role_provided` (assuming not `user_provided_role`):
+      - `agent` chooses one of (external):
+        - branch `existing_role_found`:
+          - `agent` uses `discover_existing_role`.
+          - `agent` uses `reply_with_selected_role`.
+        - branch `no_existing_role_found`:
+          - `agent` uses `ask_if_user_can_create_role`.
+          - `user` chooses one of (observed):
+            - branch `can_create` (assuming `user_can_create_role`):
+              - `agent` uses `create_execution_role`.
+              - `agent` uses `reply_with_selected_role`.
+            - branch `cannot_create` (assuming `user_cannot_create_role`):
+              - `agent` uses `reply_with_blocked_sso_instructions`.
+```

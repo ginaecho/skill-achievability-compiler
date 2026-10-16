@@ -1,0 +1,45 @@
+```ce
+Skill `nvidia-skill-finder`.
+Roles: `agent`, `user`.
+Tool `check_installed_skills` (owner `agent`): via `skill`; adds `installed_checked`.
+Tool `read_taxonomy_guidance` (owner `agent`): via `read`; adds `taxonomy_read`.
+Tool `query_catalog_cli` (owner `agent`): via `bash`; needs `shell`, `package_registries`, `allowlisted_internet`; adds `catalog_checked`, `catalog_available`.
+Tool `query_catalog_github` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `catalog_checked`, `catalog_available`.
+Tool `recommend_installed_skill` (owner `agent`): via `ask_user`; requires `installed_match`; adds `recommendation_given`.
+Tool `recommend_catalog_skill` (owner `agent`): via `ask_user`; requires `catalog_available` and `strong_match` and not `installed_match`; adds `recommendation_given`, `approval_requested`.
+Tool `report_no_catalog_match` (owner `agent`): via `ask_user`; requires `catalog_checked` and not `strong_match`; adds `no_match_reported`.
+Tool `report_catalog_failure` (owner `agent`): via `ask_user`; requires not `catalog_available`; adds `catalog_failure_reported`.
+Tool `install_skill` (owner `agent`): via `bash`; needs `shell`, `package_registries`, `allowlisted_internet`; requires `approval_granted` and `strong_match` and not `installed_match`; adds `skill_installed`.
+Tool `send_post_install_guidance` (owner `agent`): via `ask_user`; requires `skill_installed`; adds `restart_guidance_sent`.
+Initially true: none.
+Goal: any of (`recommendation_given`, `no_match_reported`, `catalog_failure_reported`, `skill_installed`).
+Protocol:
+  - `agent` uses `check_installed_skills`.
+  - `agent` chooses one of (observed):
+    - branch `obvious_product_match`: none.
+    - branch `taxonomy_or_ambiguous`:
+      - `agent` uses `read_taxonomy_guidance`.
+  - `agent` chooses one of (observed):
+    - branch `installed_match_found`:
+      - `agent` uses `recommend_installed_skill`.
+    - branch `no_installed_match`:
+      - `agent` chooses one of (observed):
+        - branch `cli_catalog_lookup_succeeds`:
+          - `agent` uses `query_catalog_cli`.
+        - branch `cli_unavailable_or_fails`:
+          - `agent` uses `query_catalog_github`.
+      - `agent` chooses one of (observed):
+        - branch `catalog_check_failed`:
+          - `agent` uses `report_catalog_failure`.
+        - branch `catalog_checked`:
+          - `agent` chooses one of (observed):
+            - branch `strong_match_found`:
+              - `agent` uses `recommend_catalog_skill`.
+              - `user` chooses one of (observed):
+                - branch `approve_install`:
+                  - `agent` uses `install_skill`.
+                  - `agent` uses `send_post_install_guidance`.
+                - branch `decline_install`: none.
+            - branch `no_strong_match`:
+              - `agent` uses `report_no_catalog_match`.
+```

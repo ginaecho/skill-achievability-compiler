@@ -1,0 +1,53 @@
+```ce
+Skill `property-based-testing`.
+Roles: `agent`, `user`.
+Tool `inspect_codebase` (owner `agent`): via `read`; adds `codebase_inspected`.
+Tool `review_existing_pbt` (owner `agent`): via `read`; requires `codebase_inspected`; adds `existing_pbt_reviewed`.
+Tool `inspect_references` (owner `agent`): via `read`; adds `guidance_inspected`.
+Tool `write_property_tests` (owner `agent`): via `edit`; requires `codebase_inspected`; adds `tests_written`.
+Tool `revise_property_tests` (owner `agent`): via `edit`; requires `tests_written`; adds `tests_revised`.
+Tool `install_pbt_dependency` (owner `agent`): via `bash`; needs `package_registries`; adds `pbt_dependency_installed`.
+Tool `run_property_tests` (owner `agent`): via `bash`; requires `tests_written`; adds `tests_executed`.
+Tool `debug_failure` (owner `agent`): via `read`; requires `tests_executed`; adds `failure_interpreted`.
+Initially true: none.
+Goal: any of (`tests_written`, `existing_pbt_reviewed`, `failure_interpreted`, `poor_pbt_candidate_reported`).
+Protocol:
+  - `agent` uses `inspect_codebase`.
+  - `agent` chooses one of (observed):
+    - branch `write_new_tests`:
+      - `agent` uses `inspect_references`.
+      - `user` chooses one of (observed):
+        - branch `dependency_already_present`:
+          - `agent` uses `write_property_tests`.
+          - `agent` chooses one of (observed):
+            - branch `run_tests`:
+              - `agent` uses `run_property_tests`.
+              - `agent` chooses one of (observed):
+                - branch `failure_found`:
+                  - `agent` uses `debug_failure`.
+                - branch `no_failure`: none.
+            - branch `skip_run`: none.
+        - branch `dependency_missing_accept_install`:
+          - `agent` uses `install_pbt_dependency`.
+          - `agent` uses `write_property_tests`.
+          - `agent` chooses one of (observed):
+            - branch `run_tests`:
+              - `agent` uses `run_property_tests`.
+              - `agent` chooses one of (observed):
+                - branch `failure_found`:
+                  - `agent` uses `debug_failure`.
+                - branch `no_failure`: none.
+            - branch `skip_run`: none.
+        - branch `dependency_missing_decline_install`:
+          - `agent` chooses one of (observed):
+            - branch `poor_candidate`:
+              - `agent` uses `inspect_references`.
+            - branch `report_specific_property_only`: none.
+    - branch `review_existing_tests`:
+      - `agent` uses `review_existing_pbt`.
+    - branch `debug_existing_failure`:
+      - `agent` uses `inspect_references`.
+      - `agent` uses `debug_failure`.
+    - branch `not_a_good_pbt_candidate`:
+      - `agent` uses `inspect_references`.
+```

@@ -1,0 +1,549 @@
+{
+ "group": [
+  {
+   "job": "group_azure",
+   "variant": "main",
+   "compacted_under": "azure.yaml",
+   "sample": 0,
+   "rounds": [
+    "first"
+   ],
+   "round_errors": [
+    null
+   ],
+   "ok": true,
+   "error": null,
+   "repaired": false,
+   "repair_rejected": [],
+   "compaction_label": "ACHIEVABLE",
+   "compaction_reason": "OK",
+   "effective_tools": [
+    "a2a",
+    "code_interpreter",
+    "read",
+    "web_fetch",
+    "web_search",
+    "write"
+   ],
+   "ce": "Skill `quarterly-finance-report`.\nRoles: `fetcher`, `expense_analyst`, `revenue_analyst`, `tax_specialist`, `tax_verifier`, `writer`.\nTool `fetch_financials` (owner `fetcher`): via `a2a`; requires `quarter_requested`; adds `raw_revenue_ready`, `raw_expense_ready`, `revenue_positive`, `expense_nonnegative`.\nTool `analyze_expenses` (owner `expense_analyst`): via `a2a`; requires `raw_expense_ready` and `expense_nonnegative`; adds `expense_data_ready`, `expense_analysis_ready`.\nTool `classify_revenue` (owner `revenue_analyst`): via `a2a`; requires `raw_revenue_ready` and `revenue_positive`; adds `revenue_classified`.\nTool `lookup_tax_rules` (owner `tax_specialist`): via `a2a`; requires `high_branch`; adds `tax_rules_found`.\nTool `audit_high_revenue` (owner `tax_specialist`): via `a2a`; requires `high_branch` and `tax_rules_found`; adds `audit_report_ready`.\nTool `approve_audited` (owner `tax_verifier`): via `write`; needs `local_filesystem`; requires `high_branch` and `audit_report_ready`; adds `approval_ready`, `approval_recorded`.\nTool `approve_standard` (owner `tax_verifier`): via `write`; needs `local_filesystem`; requires `standard_branch` and `revenue_classified`; adds `approval_ready`, `approval_recorded`.\nTool `write_revenue_analysis` (owner `revenue_analyst`): via `a2a`; requires `approval_ready` and `revenue_classified` and `expense_data_ready`; adds `final_revenue_analysis_ready`.\nTool `compose_report` (owner `writer`): via `a2a`; requires `expense_analysis_ready` and `final_revenue_analysis_ready` and any of (`high_branch`, `standard_branch`); adds `report_composed`.\nTool `deliver_report` (owner `writer`): via `write`; needs `local_filesystem`; requires `report_composed`; adds `report_delivered`, `generate_report_ready`.\nTool `return_generate_report` (owner `fetcher`): via `reply`; requires `generate_report_ready`; adds `report_returned_to_user`.\nInitially true: `quarter_requested`.\nGoal: `report_returned_to_user`.\nProtocol:\n  - `fetcher` uses `fetch_financials`.\n  - `fetcher` tells `expense_analyst` `RawExpenseData`.\n  - `expense_analyst` uses `analyze_expenses`.\n  - `expense_analyst` tells `revenue_analyst` `ExpenseData`.\n  - `expense_analyst` tells `writer` `ExpenseAnalysis`.\n  - `fetcher` tells `revenue_analyst` `RawRevenueData`.\n  - `revenue_analyst` uses `classify_revenue`.\n  - `revenue_analyst` chooses one of (external):\n    - branch `high` (assuming `high_branch`):\n      - `revenue_analyst` tells `tax_specialist` `NotifyTaxSpecialist`.\n      - `tax_specialist` uses `lookup_tax_rules`.\n      - `tax_specialist` uses `audit_high_revenue`.\n      - `tax_specialist` tells `tax_verifier` `AuditReport`.\n      - `revenue_analyst` tells `tax_verifier` `HighRevenueNotification`.\n      - `tax_verifier` uses `approve_audited`.\n    - branch `standard` (assuming `standard_branch`):\n      - `revenue_analyst` tells `tax_specialist` `NotifyStandardRole`.\n      - `revenue_analyst` tells `tax_verifier` `StandardRevenueNotification`.\n      - `tax_verifier` uses `approve_standard`.\n  - `tax_verifier` tells `revenue_analyst` `Approval`.\n  - `revenue_analyst` uses `write_revenue_analysis`.\n  - `revenue_analyst` chooses one of (external):\n    - branch `high_writer` (assuming `high_branch`):\n      - `revenue_analyst` tells `writer` `HighBranchNotification`.\n    - branch `standard_writer` (assuming `standard_branch`):\n      - `revenue_analyst` tells `writer` `StandardBranchNotification`.\n  - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.\n  - `writer` uses `compose_report`.\n  - `writer` uses `deliver_report`.\n  - `writer` tells `fetcher` `GenerateReport`.\n  - `fetcher` uses `return_generate_report`.\n",
+   "gate": {
+    "azure.yaml": {
+     "verdict": "REJECTED",
+     "reason": "protocol rejected (NON_PROJECTABLE): role 'tax_verifier' must act in a branch of the choice by 'revenue_analyst' but receives no message distinguishing the branches, and the branch behaviours do not merge (unobserved choice -> deadlock/handoff failure); goal reachable along witness; this is not a goal-impossibility claim (the goal is not refuted)",
+     "fixes": [
+      "rewrite the protocol so every role can observe the branch it must act in, and every declared role behaviour refines its projection"
+     ],
+     "assumptions": [],
+     "via": [
+      "a2a",
+      "reply",
+      "write"
+     ],
+     "withdrawn": {},
+     "blocked": {},
+     "pruned": [],
+     "pure_verdict": "ACHIEVABLE",
+     "bound_verdict": "ACHIEVABLE",
+     "bound_protocol": "REJECTED",
+     "report_verdict": "REJECTED",
+     "skills": {
+      "Fetcher.md": "ACHIEVABLE",
+      "ExpenseAnalyst.md": "ACHIEVABLE",
+      "RevenueAnalyst.md": "ACHIEVABLE",
+      "TaxSpecialist.md": "ACHIEVABLE",
+      "TaxVerifier.md": "ACHIEVABLE",
+      "Writer.md": "ACHIEVABLE"
+     },
+     "topology": [
+      {
+       "name": "compacted_s0.ce: fetcher -> expense_analyst (RawExpenseData)",
+       "verdict": "UNKNOWN",
+       "reason": "role `expense_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: expense_analyst -> revenue_analyst (ExpenseData)",
+       "verdict": "UNKNOWN",
+       "reason": "role `expense_analyst`, `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: expense_analyst -> writer (ExpenseAnalysis)",
+       "verdict": "UNKNOWN",
+       "reason": "role `expense_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: fetcher -> revenue_analyst (RawRevenueData)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: revenue_analyst -> tax_specialist (NotifyTaxSpecialist, NotifyStandardRole)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst`, `tax_specialist` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: tax_specialist -> tax_verifier (AuditReport)",
+       "verdict": "UNKNOWN",
+       "reason": "role `tax_specialist`, `tax_verifier` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: revenue_analyst -> tax_verifier (HighRevenueNotification, StandardRevenueNotification)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst`, `tax_verifier` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: tax_verifier -> revenue_analyst (Approval)",
+       "verdict": "UNKNOWN",
+       "reason": "role `tax_verifier`, `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: revenue_analyst -> writer (HighBranchNotification, StandardBranchNotification, FinalRevenueAnalysis)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s0.ce: writer -> fetcher (GenerateReport)",
+       "verdict": "ACHIEVABLE",
+       "reason": "finance-writer -> finance-fetcher over connection writer-to-fetcher"
+      }
+     ],
+     "topology_note": "6 agents declared; every message between two agents needs a RemoteA2A connection, an a2a toolbox tool on the sender and a2a on the receiver's endpoint",
+     "authored_reference": {
+      "verdict": "ACHIEVABLE",
+      "reason": "via code_interpreter, write",
+      "fixes": [],
+      "assumptions": [],
+      "via": [
+       "code_interpreter",
+       "write"
+      ],
+      "withdrawn": {},
+      "blocked": {},
+      "pruned": [],
+      "pure_verdict": "ACHIEVABLE",
+      "bound_verdict": "ACHIEVABLE",
+      "bound_protocol": "WELL_TYPED"
+     }
+    }
+   },
+   "structure": {
+    "roles": [
+     "expense_analyst",
+     "fetcher",
+     "revenue_analyst",
+     "tax_specialist",
+     "tax_verifier",
+     "writer"
+    ],
+    "roles_normalized": [
+     "expenseanalyst",
+     "fetcher",
+     "revenueanalyst",
+     "taxspecialist",
+     "taxverifier",
+     "writer"
+    ],
+    "tool_count": 11,
+    "tools": [
+     "analyze_expenses",
+     "approve_audited",
+     "approve_standard",
+     "audit_high_revenue",
+     "classify_revenue",
+     "compose_report",
+     "deliver_report",
+     "fetch_financials",
+     "lookup_tax_rules",
+     "return_generate_report",
+     "write_revenue_analysis"
+    ],
+    "message_count": 14,
+    "via": [
+     "a2a",
+     "reply",
+     "write"
+    ],
+    "goal": [
+     "report_returned_to_user"
+    ],
+    "revenue_analysis_tool": "write_revenue_analysis",
+    "approval_gates_revenue_analysis": true,
+    "requires_approved_literal": false,
+    "approving_tool_owners": {
+     "approve_audited": "tax_verifier",
+     "approve_standard": "tax_verifier"
+    },
+    "has_choice": true,
+    "behaviours": []
+   },
+   "rule14": {
+    "approving_tools": {
+     "approve_audited": "tax_verifier",
+     "approve_standard": "tax_verifier"
+    },
+    "non_verifier_owns_approving_tool": false,
+    "violations": {}
+   }
+  },
+  {
+   "job": "group_azure",
+   "variant": "main",
+   "compacted_under": "azure.yaml",
+   "sample": 1,
+   "rounds": [
+    "first",
+    "retry",
+    "retry"
+   ],
+   "round_errors": [
+    "CEError: line 27, column 71: expected ')', got word 'and'",
+    "CEError: line 10, column 94: expected '.', got sym ','",
+    null
+   ],
+   "ok": true,
+   "error": null,
+   "repaired": false,
+   "repair_rejected": [],
+   "compaction_label": "ACHIEVABLE",
+   "compaction_reason": "OK",
+   "effective_tools": [
+    "a2a",
+    "code_interpreter",
+    "read",
+    "web_fetch",
+    "web_search",
+    "write"
+   ],
+   "ce": "Skill `quarterly-finance-report`.\nRoles: `fetcher`, `expense_analyst`, `revenue_analyst`, `tax_specialist`, `tax_verifier`, `writer`.\nTool `fetch_financials` (owner `fetcher`): via `a2a`; adds `financials_fetched`; adds `revenue_positive`; adds `expense_nonnegative`.\nTool `analyze_expenses` (owner `expense_analyst`): via `a2a`; requires `expense_nonnegative`; adds `expense_data_ready`; adds `expense_analysis_ready`.\nTool `classify_revenue` (owner `revenue_analyst`): via `a2a`; adds `revenue_classified`.\nTool `lookup_tax_rules` (owner `tax_specialist`): via `a2a`; adds `tax_rules_found`.\nTool `audit_high_revenue` (owner `tax_specialist`): via `a2a`; requires `tax_rules_found`; adds `audit_report_ready`.\nTool `approve_audited` (owner `tax_verifier`): via `write`; needs `local_filesystem`; requires `audit_report_ready`; adds `approval_ready`; adds `approval_recorded`.\nTool `approve_standard` (owner `tax_verifier`): via `write`; needs `local_filesystem`; adds `approval_ready`; adds `approval_recorded`.\nTool `write_revenue_analysis` (owner `revenue_analyst`): via `a2a`; requires `approval_ready` and `revenue_classified` and `expense_data_ready`; adds `final_revenue_analysis_ready`.\nTool `compose_report` (owner `writer`): via `a2a`; requires `expense_analysis_ready` and `final_revenue_analysis_ready`; adds `report_composed`.\nTool `deliver_report` (owner `writer`): via `write`; needs `local_filesystem`; requires `report_composed`; adds `report_delivered`.\nTool `return_generate_report` (owner `fetcher`): via `reply`; requires `report_delivered`; adds `report_returned`.\nTool `return_rejected` (owner `fetcher`): via `reply`; adds `rejection_returned`.\nInitially true: none.\nGoal: `report_returned`.\nProtocol:\n  - `fetcher` uses `fetch_financials`.\n  - `fetcher` tells `expense_analyst` `RawExpenseData`.\n  - `expense_analyst` chooses one of (external):\n    - branch `rejected`:\n      - `fetcher` uses `return_rejected`.\n    - branch `analyzed`:\n      - `expense_analyst` uses `analyze_expenses`.\n      - `expense_analyst` tells `revenue_analyst` `ExpenseData`.\n      - `expense_analyst` tells `revenue_analyst` `ExpenseAnalysis`.\n      - `fetcher` tells `revenue_analyst` `RawRevenueData`.\n      - `revenue_analyst` uses `classify_revenue`.\n      - `revenue_analyst` chooses one of (external):\n        - branch `high_revenue`:\n          - `revenue_analyst` tells `tax_specialist` `NotifyTaxSpecialist`.\n          - `tax_specialist` uses `lookup_tax_rules`.\n          - `tax_specialist` uses `audit_high_revenue`.\n          - `tax_specialist` tells `tax_verifier` `AuditReport`.\n          - `revenue_analyst` tells `tax_verifier` `HighRevenueNotification`.\n          - `tax_verifier` chooses one of (external):\n            - branch `rejected`:\n              - `fetcher` uses `return_rejected`.\n            - branch `approved`:\n              - `tax_verifier` uses `approve_audited`.\n              - `tax_verifier` tells `revenue_analyst` `Approval`.\n              - `revenue_analyst` uses `write_revenue_analysis`.\n              - `revenue_analyst` tells `writer` `HighBranchNotification`.\n              - `revenue_analyst` tells `writer` `ExpenseAnalysis`.\n              - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.\n              - `writer` chooses one of (external):\n                - branch `rejected`:\n                  - `fetcher` uses `return_rejected`.\n                - branch `generated`:\n                  - `writer` uses `compose_report`.\n                  - `writer` uses `deliver_report`.\n                  - `writer` tells `fetcher` `GenerateReport`.\n                  - `fetcher` uses `return_generate_report`.\n        - branch `standard_revenue`:\n          - `revenue_analyst` tells `tax_specialist` `NotifyStandardRole`.\n          - `revenue_analyst` tells `tax_verifier` `StandardRevenueNotification`.\n          - `tax_verifier` chooses one of (external):\n            - branch `rejected`:\n              - `fetcher` uses `return_rejected`.\n            - branch `approved`:\n              - `tax_verifier` uses `approve_standard`.\n              - `tax_verifier` tells `revenue_analyst` `Approval`.\n              - `revenue_analyst` uses `write_revenue_analysis`.\n              - `revenue_analyst` tells `writer` `StandardBranchNotification`.\n              - `revenue_analyst` tells `writer` `ExpenseAnalysis`.\n              - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.\n              - `writer` chooses one of (external):\n                - branch `rejected`:\n                  - `fetcher` uses `return_rejected`.\n                - branch `generated`:\n                  - `writer` uses `compose_report`.\n                  - `writer` uses `deliver_report`.\n                  - `writer` tells `fetcher` `GenerateReport`.\n                  - `fetcher` uses `return_generate_report`.\n",
+   "gate": {
+    "azure.yaml": {
+     "verdict": "REJECTED",
+     "reason": "protocol rejected (NON_PROJECTABLE): role 'fetcher' must act in a branch of the choice by 'writer' but receives no message distinguishing the branches, and the branch behaviours do not merge (unobserved choice -> deadlock/handoff failure); goal reachable along witness; this is not a goal-impossibility claim (the goal is not refuted)",
+     "fixes": [
+      "rewrite the protocol so every role can observe the branch it must act in, and every declared role behaviour refines its projection"
+     ],
+     "assumptions": [],
+     "via": [
+      "a2a",
+      "reply",
+      "write"
+     ],
+     "withdrawn": {},
+     "blocked": {},
+     "pruned": [],
+     "pure_verdict": "ACHIEVABLE",
+     "bound_verdict": "ACHIEVABLE",
+     "bound_protocol": "REJECTED",
+     "report_verdict": "REJECTED",
+     "skills": {
+      "Fetcher.md": "ACHIEVABLE",
+      "ExpenseAnalyst.md": "ACHIEVABLE",
+      "RevenueAnalyst.md": "ACHIEVABLE",
+      "TaxSpecialist.md": "ACHIEVABLE",
+      "TaxVerifier.md": "ACHIEVABLE",
+      "Writer.md": "ACHIEVABLE"
+     },
+     "topology": [
+      {
+       "name": "compacted_s1.ce: fetcher -> expense_analyst (RawExpenseData)",
+       "verdict": "UNKNOWN",
+       "reason": "role `expense_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: expense_analyst -> revenue_analyst (ExpenseData, ExpenseAnalysis)",
+       "verdict": "UNKNOWN",
+       "reason": "role `expense_analyst`, `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: fetcher -> revenue_analyst (RawRevenueData)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: revenue_analyst -> tax_specialist (NotifyTaxSpecialist, NotifyStandardRole)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst`, `tax_specialist` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: tax_specialist -> tax_verifier (AuditReport)",
+       "verdict": "UNKNOWN",
+       "reason": "role `tax_specialist`, `tax_verifier` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: revenue_analyst -> tax_verifier (HighRevenueNotification, StandardRevenueNotification)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst`, `tax_verifier` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: tax_verifier -> revenue_analyst (Approval)",
+       "verdict": "UNKNOWN",
+       "reason": "role `tax_verifier`, `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: revenue_analyst -> writer (HighBranchNotification, ExpenseAnalysis, FinalRevenueAnalysis, StandardBranchNotification)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s1.ce: writer -> fetcher (GenerateReport)",
+       "verdict": "ACHIEVABLE",
+       "reason": "finance-writer -> finance-fetcher over connection writer-to-fetcher"
+      }
+     ],
+     "topology_note": "6 agents declared; every message between two agents needs a RemoteA2A connection, an a2a toolbox tool on the sender and a2a on the receiver's endpoint",
+     "authored_reference": {
+      "verdict": "ACHIEVABLE",
+      "reason": "via code_interpreter, write",
+      "fixes": [],
+      "assumptions": [],
+      "via": [
+       "code_interpreter",
+       "write"
+      ],
+      "withdrawn": {},
+      "blocked": {},
+      "pruned": [],
+      "pure_verdict": "ACHIEVABLE",
+      "bound_verdict": "ACHIEVABLE",
+      "bound_protocol": "WELL_TYPED"
+     }
+    }
+   },
+   "structure": {
+    "roles": [
+     "expense_analyst",
+     "fetcher",
+     "revenue_analyst",
+     "tax_specialist",
+     "tax_verifier",
+     "writer"
+    ],
+    "roles_normalized": [
+     "expenseanalyst",
+     "fetcher",
+     "revenueanalyst",
+     "taxspecialist",
+     "taxverifier",
+     "writer"
+    ],
+    "tool_count": 12,
+    "tools": [
+     "analyze_expenses",
+     "approve_audited",
+     "approve_standard",
+     "audit_high_revenue",
+     "classify_revenue",
+     "compose_report",
+     "deliver_report",
+     "fetch_financials",
+     "lookup_tax_rules",
+     "return_generate_report",
+     "return_rejected",
+     "write_revenue_analysis"
+    ],
+    "message_count": 19,
+    "via": [
+     "a2a",
+     "reply",
+     "write"
+    ],
+    "goal": [
+     "report_returned"
+    ],
+    "revenue_analysis_tool": "write_revenue_analysis",
+    "approval_gates_revenue_analysis": true,
+    "requires_approved_literal": false,
+    "approving_tool_owners": {
+     "approve_audited": "tax_verifier",
+     "approve_standard": "tax_verifier"
+    },
+    "has_choice": true,
+    "behaviours": []
+   },
+   "rule14": {
+    "approving_tools": {
+     "approve_audited": "tax_verifier",
+     "approve_standard": "tax_verifier"
+    },
+    "non_verifier_owns_approving_tool": false,
+    "violations": {}
+   }
+  },
+  {
+   "job": "group_azure",
+   "variant": "main",
+   "compacted_under": "azure.yaml",
+   "sample": 2,
+   "rounds": [
+    "first",
+    "retry",
+    "retry"
+   ],
+   "round_errors": [
+    "CEError: line 4, column 91: expected '.', got sym ','",
+    "CEError: line 6, column 136: expected '.', got word 'or'",
+    null
+   ],
+   "ok": true,
+   "error": null,
+   "repaired": false,
+   "repair_rejected": [],
+   "compaction_label": "ACHIEVABLE",
+   "compaction_reason": "OK",
+   "effective_tools": [
+    "a2a",
+    "code_interpreter",
+    "read",
+    "web_fetch",
+    "web_search",
+    "write"
+   ],
+   "ce": "Skill `quarterly_finance_report`.\nRoles: `fetcher`, `expense_analyst`, `revenue_analyst`, `tax_specialist`, `tax_verifier`, `writer`, `user`.\nTool `fetch_financials` (owner `fetcher`): via `read`; adds `raw_revenue_ready`, `raw_expense_ready`, `revenue_positive`, `expense_nonnegative`.\nTool `expenseanalyst_call` (owner `fetcher`): via `a2a`; requires `raw_expense_ready`; requires `expense_nonnegative`; adds `expense_data_ready`, `expense_analysis_ready`.\nTool `classify_revenue` (owner `revenue_analyst`): via `a2a`; requires `raw_revenue_ready`; requires `revenue_positive`; adds `revenue_classified`.\nTool `taxspecialist_call_high` (owner `revenue_analyst`): via `a2a`; requires `high_branch`; adds `audit_report_ready`.\nTool `taxspecialist_call_standard` (owner `revenue_analyst`): via `a2a`; requires `standard_branch`; adds `standard_acknowledged`.\nTool `approve_audited` (owner `tax_verifier`): via `write`; requires `high_branch`; requires `audit_report_ready`; adds `approval_ready`, `approval_recorded`.\nTool `approve_standard` (owner `tax_verifier`): via `write`; requires `standard_branch`; adds `approval_ready`, `approval_recorded`.\nTool `write_revenue_analysis` (owner `revenue_analyst`): via `a2a`; requires `revenue_classified`; requires `expense_data_ready`; requires `expense_analysis_ready`; requires `approval_ready`; adds `final_revenue_analysis_ready`.\nTool `writer_call` (owner `revenue_analyst`): via `a2a`; requires `final_revenue_analysis_ready`; requires `expense_analysis_ready`; adds `generate_report_ready`.\nTool `return_generate_report` (owner `fetcher`): via `reply`; requires `generate_report_ready`; requires `approval_ready`; adds `report_returned`.\nTool `return_rejected` (owner `fetcher`): via `reply`; adds `report_returned`.\nInitially true: none.\nGoal: `report_returned`.\nProtocol:\n  - `fetcher` uses `fetch_financials`.\n  - `fetcher` tells `expense_analyst` `RawExpenseData`.\n  - `fetcher` uses `expenseanalyst_call`.\n  - `fetcher` tells `revenue_analyst` `RawRevenueData`.\n  - `fetcher` tells `revenue_analyst` `ExpenseData`.\n  - `fetcher` tells `revenue_analyst` `ExpenseAnalysis`.\n  - `revenue_analyst` uses `classify_revenue`.\n  - `revenue_analyst` chooses one of (external):\n    - branch `high` (assuming `high_branch`):\n      - `revenue_analyst` tells `tax_specialist` `NotifyTaxSpecialist`.\n      - `revenue_analyst` uses `taxspecialist_call_high`.\n      - `revenue_analyst` tells `tax_verifier` `HighRevenueNotification`.\n      - `revenue_analyst` tells `tax_verifier` `AuditReport`.\n      - `tax_verifier` chooses one of (external):\n        - branch `approved`:\n          - `tax_verifier` uses `approve_audited`.\n          - `tax_verifier` tells `revenue_analyst` `Approval`.\n          - `revenue_analyst` uses `write_revenue_analysis`.\n          - `revenue_analyst` tells `writer` `HighBranchNotification`.\n          - `revenue_analyst` tells `writer` `ExpenseAnalysis`.\n          - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.\n          - `revenue_analyst` uses `writer_call`.\n          - `writer` tells `fetcher` `GenerateReport`.\n          - `fetcher` uses `return_generate_report`.\n        - branch `rejected`:\n          - `tax_verifier` tells `revenue_analyst` `Rejected`.\n          - `fetcher` uses `return_rejected`.\n    - branch `standard` (assuming `standard_branch`):\n      - `revenue_analyst` tells `tax_specialist` `NotifyStandardRole`.\n      - `revenue_analyst` uses `taxspecialist_call_standard`.\n      - `revenue_analyst` tells `tax_verifier` `StandardRevenueNotification`.\n      - `tax_verifier` chooses one of (external):\n        - branch `approved`:\n          - `tax_verifier` uses `approve_standard`.\n          - `tax_verifier` tells `revenue_analyst` `Approval`.\n          - `revenue_analyst` uses `write_revenue_analysis`.\n          - `revenue_analyst` tells `writer` `StandardBranchNotification`.\n          - `revenue_analyst` tells `writer` `ExpenseAnalysis`.\n          - `revenue_analyst` tells `writer` `FinalRevenueAnalysis`.\n          - `revenue_analyst` uses `writer_call`.\n          - `writer` tells `fetcher` `GenerateReport`.\n          - `fetcher` uses `return_generate_report`.\n        - branch `rejected`:\n          - `tax_verifier` tells `revenue_analyst` `Rejected`.\n          - `fetcher` uses `return_rejected`.\n",
+   "gate": {
+    "azure.yaml": {
+     "verdict": "REJECTED",
+     "reason": "protocol rejected (NON_PROJECTABLE): role 'fetcher' must act in a branch of the choice by 'tax_verifier' but receives no message distinguishing the branches, and the branch behaviours do not merge (unobserved choice -> deadlock/handoff failure); goal reachable along witness; this is not a goal-impossibility claim (the goal is not refuted)",
+     "fixes": [
+      "rewrite the protocol so every role can observe the branch it must act in, and every declared role behaviour refines its projection"
+     ],
+     "assumptions": [],
+     "via": [
+      "a2a",
+      "read",
+      "reply",
+      "write"
+     ],
+     "withdrawn": {},
+     "blocked": {},
+     "pruned": [],
+     "pure_verdict": "ACHIEVABLE",
+     "bound_verdict": "ACHIEVABLE",
+     "bound_protocol": "REJECTED",
+     "report_verdict": "REJECTED",
+     "skills": {
+      "Fetcher.md": "ACHIEVABLE",
+      "ExpenseAnalyst.md": "ACHIEVABLE",
+      "RevenueAnalyst.md": "ACHIEVABLE",
+      "TaxSpecialist.md": "ACHIEVABLE",
+      "TaxVerifier.md": "ACHIEVABLE",
+      "Writer.md": "ACHIEVABLE"
+     },
+     "topology": [
+      {
+       "name": "compacted_s2.ce: fetcher -> expense_analyst (RawExpenseData)",
+       "verdict": "UNKNOWN",
+       "reason": "role `expense_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s2.ce: fetcher -> revenue_analyst (RawRevenueData, ExpenseData, ExpenseAnalysis)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s2.ce: revenue_analyst -> tax_specialist (NotifyTaxSpecialist, NotifyStandardRole)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst`, `tax_specialist` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s2.ce: revenue_analyst -> tax_verifier (HighRevenueNotification, AuditReport, StandardRevenueNotification)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst`, `tax_verifier` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s2.ce: tax_verifier -> revenue_analyst (Approval, Rejected)",
+       "verdict": "UNKNOWN",
+       "reason": "role `tax_verifier`, `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s2.ce: revenue_analyst -> writer (HighBranchNotification, ExpenseAnalysis, FinalRevenueAnalysis, StandardBranchNotification)",
+       "verdict": "UNKNOWN",
+       "reason": "role `revenue_analyst` maps to no declared agent"
+      },
+      {
+       "name": "compacted_s2.ce: writer -> fetcher (GenerateReport)",
+       "verdict": "ACHIEVABLE",
+       "reason": "finance-writer -> finance-fetcher over connection writer-to-fetcher"
+      }
+     ],
+     "topology_note": "6 agents declared; every message between two agents needs a RemoteA2A connection, an a2a toolbox tool on the sender and a2a on the receiver's endpoint",
+     "authored_reference": {
+      "verdict": "ACHIEVABLE",
+      "reason": "via code_interpreter, write",
+      "fixes": [],
+      "assumptions": [],
+      "via": [
+       "code_interpreter",
+       "write"
+      ],
+      "withdrawn": {},
+      "blocked": {},
+      "pruned": [],
+      "pure_verdict": "ACHIEVABLE",
+      "bound_verdict": "ACHIEVABLE",
+      "bound_protocol": "WELL_TYPED"
+     }
+    }
+   },
+   "structure": {
+    "roles": [
+     "expense_analyst",
+     "fetcher",
+     "revenue_analyst",
+     "tax_specialist",
+     "tax_verifier",
+     "user",
+     "writer"
+    ],
+    "roles_normalized": [
+     "expenseanalyst",
+     "fetcher",
+     "revenueanalyst",
+     "taxspecialist",
+     "taxverifier",
+     "user",
+     "writer"
+    ],
+    "tool_count": 11,
+    "tools": [
+     "approve_audited",
+     "approve_standard",
+     "classify_revenue",
+     "expenseanalyst_call",
+     "fetch_financials",
+     "return_generate_report",
+     "return_rejected",
+     "taxspecialist_call_high",
+     "taxspecialist_call_standard",
+     "write_revenue_analysis",
+     "writer_call"
+    ],
+    "message_count": 21,
+    "via": [
+     "a2a",
+     "read",
+     "reply",
+     "write"
+    ],
+    "goal": [
+     "report_returned"
+    ],
+    "revenue_analysis_tool": "write_revenue_analysis",
+    "approval_gates_revenue_analysis": true,
+    "requires_approved_literal": false,
+    "approving_tool_owners": {
+     "approve_audited": "tax_verifier",
+     "approve_standard": "tax_verifier"
+    },
+    "has_choice": true,
+    "behaviours": []
+   },
+   "rule14": {
+    "approving_tools": {
+     "approve_audited": "tax_verifier",
+     "approve_standard": "tax_verifier"
+    },
+    "non_verifier_owns_approving_tool": false,
+    "violations": {}
+   }
+  }
+ ]
+}

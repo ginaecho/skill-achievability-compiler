@@ -1,0 +1,39 @@
+```ce
+Skill `vercel-deploy`.
+Roles: `agent`, `user`.
+Tool `check_vercel_cli` (owner `agent`): via `bash`; requires `shell`; adds `cli_checked`.
+Tool `deploy_preview_cli` (owner `agent`): via `bash`; requires `cli_checked`; adds `deployment_ready`, `preview_deploy`; picks `deployment_url` with `deployment_url` > 0.
+Tool `deploy_production_cli` (owner `agent`): via `bash`; requires `cli_checked`; adds `deployment_ready`, `production_deploy`; picks `deployment_url` with `deployment_url` > 0.
+Tool `deploy_fallback_script` (owner `agent`): via `bash`; adds `deployment_ready`, `preview_deploy`, `claim_url_available`; picks `deployment_url` with `deployment_url` > 0; picks `claim_url` with `claim_url` > 0.
+Tool `ask_escalation_permission` (owner `agent`): via `ask_user`; adds `escalation_answered`.
+Initially true: `shell`, `user_conversation`.
+Initially: `deployment_url` == 0.
+Initially: `claim_url` == 0.
+Goal: `deployment_ready` and `deployment_url` > 0 and ( (`preview_deploy` and not `claim_url_available`) or (`preview_deploy` and `claim_url_available` and `claim_url` > 0) or (`production_deploy` and not `claim_url_available`) ).
+Protocol:
+  - `agent` uses `check_vercel_cli`.
+  - `user` chooses one of (observed):
+    - branch `preview_request`:
+      - `agent` chooses one of (observed):
+        - branch `cli_deploy_succeeds`:
+          - `agent` uses `deploy_preview_cli`.
+        - branch `cli_missing_or_no_credentials`:
+          - `agent` uses `deploy_fallback_script`.
+        - branch `network_blocked`:
+          - `agent` uses `ask_escalation_permission`.
+          - `user` chooses one of (observed):
+            - branch `approve_escalation`:
+              - `agent` uses `deploy_preview_cli`.
+            - branch `decline_escalation`:
+              - `agent` uses `deploy_fallback_script`.
+    - branch `production_request`:
+      - `agent` chooses one of (observed):
+        - branch `cli_deploy_succeeds`:
+          - `agent` uses `deploy_production_cli`.
+        - branch `network_blocked`:
+          - `agent` uses `ask_escalation_permission`.
+          - `user` chooses one of (observed):
+            - branch `approve_escalation`:
+              - `agent` uses `deploy_production_cli`.
+            - branch `decline_escalation`: none.
+```

@@ -1,0 +1,50 @@
+```ce
+Skill `make-repo-contribution`.
+Roles: `agent`, `user`.
+Tool `search_repo_guidance` (owner `agent`): via `read`; adds `guidance_searched`.
+Tool `inspect_git_state` (owner `agent`): via `bash`; adds `git_state_known`.
+Tool `search_related_issues` (owner `agent`): via `github`; requires `guidance_searched`; adds `related_issues_checked`.
+Tool `ask_user_issue_choice` (owner `agent`): via `ask_user`; requires `related_issues_checked`; picks `issue_selected` with (`issue_selected` == 0 or `issue_selected` > 0).
+Tool `prepare_issue_content` (owner `agent`): via `read`; requires `guidance_searched`; adds `issue_content_prepared`.
+Tool `create_issue` (owner `agent`): via `github`; requires `issue_content_prepared`; adds `issue_created`; picks `issue_selected` with `issue_selected` > 0.
+Tool `create_branch` (owner `agent`): via `bash`; requires `guidance_searched` and `git_state_known`; adds `branch_ready`; removes `on_default_branch`.
+Tool `prepare_commit_plan` (owner `agent`): via `read`; requires `guidance_searched`; adds `commit_plan_prepared`.
+Tool `ask_user_prereq_confirmation` (owner `agent`): via `ask_user`; requires `guidance_searched`; adds `prereqs_confirmed`.
+Tool `commit_changes` (owner `agent`): via `bash`; requires `branch_ready` and `commit_plan_prepared`; adds `committed`.
+Tool `push_branch` (owner `agent`): via `bash`; requires `branch_ready` and `committed`; adds `branch_pushed`.
+Tool `create_pr` (owner `agent`): via `github`; requires `guidance_searched` and `branch_pushed`; adds `pr_created`.
+Initially true: none.
+Initially: `issue_selected` == 0.
+Goal: any of (`issue_created`, `branch_ready`, `committed`, `branch_pushed`, `pr_created`) implies all of (`guidance_searched`, `related_issues_checked`).
+Protocol:
+  - `agent` uses `search_repo_guidance`.
+  - `agent` uses `inspect_git_state`.
+  - `agent` uses `search_related_issues`.
+  - `user` chooses one of (observed):
+    - branch `use_existing_issue`:
+      - `agent` uses `ask_user_issue_choice`.
+    - branch `no_existing_issue_or_not_needed`: none.
+  - `user` chooses one of (observed):
+    - branch `create_issue_requested_or_required`:
+      - `agent` uses `prepare_issue_content`.
+      - `agent` uses `create_issue`.
+    - branch `skip_issue_creation`: none.
+  - `user` chooses one of (observed):
+    - branch `branch_needed`:
+      - `agent` uses `create_branch`.
+    - branch `branch_already_ready`: none.
+  - `agent` uses `prepare_commit_plan`.
+  - `agent` uses `ask_user_prereq_confirmation`.
+  - `user` chooses one of (observed):
+    - branch `commit_requested`:
+      - `agent` uses `commit_changes`.
+    - branch `skip_commit`: none.
+  - `user` chooses one of (observed):
+    - branch `push_requested`:
+      - `agent` uses `push_branch`.
+    - branch `skip_push`: none.
+  - `user` chooses one of (observed):
+    - branch `create_pr_requested`:
+      - `agent` uses `create_pr`.
+    - branch `skip_pr`: none.
+```

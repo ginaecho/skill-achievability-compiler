@@ -1,0 +1,55 @@
+```ce
+Skill `libfuzzer`.
+Roles: `agent`, `user`.
+Tool `install_clang_llvm` (owner `agent`): via `bash`; requires `linux`; adds `clang_available` and `llvm_tools_available`.
+Tool `verify_clang` (owner `agent`): via `bash`; requires `clang_available`; adds `clang_verified`.
+Tool `fetch_fuzzed_data_provider` (owner `agent`): via `bash`; requires `allowlisted_internet`; adds `fdp_header_available`.
+Tool `build_fuzzer_basic` (owner `agent`): via `bash`; requires `clang_verified`; adds `fuzzer_built`.
+Tool `build_fuzzer_asan` (owner `agent`): via `bash`; requires `clang_verified`; adds `fuzzer_built` and `asan_enabled`.
+Tool `build_fuzzer_ubsan` (owner `agent`): via `bash`; requires `clang_verified`; adds `fuzzer_built` and `ubsan_enabled`.
+Tool `prepare_corpus` (owner `agent`): via `bash`; adds `corpus_ready`.
+Tool `prepare_dictionary` (owner `agent`): via `bash`; adds `dictionary_ready`.
+Tool `run_fuzz_campaign` (owner `agent`): via `bash`; requires `fuzzer_built` and `corpus_ready`; adds `campaign_run`; picks `coverage` with `coverage` >= 0.
+Tool `minimize_corpus` (owner `agent`): via `bash`; requires `fuzzer_built` and `corpus_ready`; adds `corpus_minimized`.
+Tool `collect_coverage_report` (owner `agent`): via `bash`; requires `clang_verified` and `corpus_ready`; adds `coverage_report_ready`.
+Tool `reproduce_crash` (owner `agent`): via `bash`; requires `fuzzer_built` and `campaign_run` and `crash_found`; adds `crash_reproduced`.
+Initially true: `linux`.
+Initially: `coverage` == 0.
+Goal: `clang_verified` and `fuzzer_built` and `corpus_ready` and `campaign_run`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `clang_already_installed`:
+      - `agent` uses `verify_clang`.
+    - branch `install_clang_first`:
+      - `agent` uses `install_clang_llvm`.
+      - `agent` uses `verify_clang`.
+  - `user` chooses one of (observed):
+    - branch `simple_byte_harness`: none.
+    - branch `structured_input_harness`:
+      - `agent` uses `fetch_fuzzed_data_provider`.
+  - `user` chooses one of (observed):
+    - branch `basic_libfuzzer_build`:
+      - `agent` uses `build_fuzzer_basic`.
+    - branch `asan_build`:
+      - `agent` uses `build_fuzzer_asan`.
+    - branch `ubsan_build`:
+      - `agent` uses `build_fuzzer_ubsan`.
+  - `agent` uses `prepare_corpus`.
+  - `user` chooses one of (observed):
+    - branch `use_dictionary`:
+      - `agent` uses `prepare_dictionary`.
+    - branch `no_dictionary`: none.
+  - `agent` uses `run_fuzz_campaign`.
+  - `user` chooses one of (observed):
+    - branch `minimize_corpus`:
+      - `agent` uses `minimize_corpus`.
+    - branch `skip_minimization`: none.
+  - `user` chooses one of (observed):
+    - branch `analyze_coverage`:
+      - `agent` uses `collect_coverage_report`.
+    - branch `skip_coverage_report`: none.
+  - `user` chooses one of (observed):
+    - branch `reproduce_found_crash`:
+      - `agent` uses `reproduce_crash`.
+    - branch `no_crash_reproduction`: none.
+```

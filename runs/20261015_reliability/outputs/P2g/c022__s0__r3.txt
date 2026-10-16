@@ -1,0 +1,48 @@
+```ce
+Skill `neon-auth`.
+Roles: `agent`, `user`.
+Tool `load_parent_neon_skill` (owner `agent`): via `skill`; adds `parent_skill_available`.
+Tool `fetch_parent_neon_skill_doc` (owner `agent`): via `web_fetch`; requires not `parent_skill_available`; adds `parent_skill_available`.
+Tool `inspect_project_auth_setup` (owner `agent`): via `read`; adds `auth_setup_inspected`, `existing_identity_known`, `requested_features_known`.
+Tool `query_neon_docs` (owner `agent`): via `web_fetch`; requires `allowlisted_docs_only`; adds `managed_constraints_checked`.
+Tool `edit_neon_config` (owner `agent`): via `edit`; adds `managed_path_selected`, `auth_declared_in_config`.
+Tool `deploy_neon_config` (owner `agent`): via `bash`; requires `auth_declared_in_config`; needs `shell`, `linux`, `local_filesystem`, `allowlisted_internet`; adds `auth_deployed`.
+Tool `check_neon_auth_status` (owner `agent`): via `bash`; requires `auth_deployed`; needs `shell`, `linux`, `allowlisted_internet`; adds `auth_status_checked`, `managed_auth_enabled`.
+Tool `update_app_for_managed_auth` (owner `agent`): via `edit`; requires `managed_auth_enabled`; adds `managed_client_integrated`, `login_flow_implemented`, `wrapper_preserved`.
+Tool `update_app_for_self_managed_or_existing_idp` (owner `agent`): via `edit`; adds `login_flow_implemented`.
+Tool `configure_trusted_domains` (owner `agent`): via `bash`; requires `managed_auth_enabled`; needs `shell`, `linux`, `allowlisted_internet`; adds `trusted_domains_configured`.
+Tool `run_auth_verification` (owner `agent`): via `bash`; requires `login_flow_implemented`; needs `shell`, `linux`, `local_filesystem`; adds `verification_run`; picks `unverified_flow_count` with `unverified_flow_count` >= 0.
+Tool `ask_user_for_identity_decision` (owner `agent`): via `ask_user`; requires `existing_identity_known` and `requested_features_known`; adds `identity_decision_confirmed`.
+
+Initially true: `allowlisted_docs_only`.
+Initially: `unverified_flow_count` == 0.
+Goal: all of (`parent_skill_available`, `auth_setup_inspected`, `existing_identity_known`, `requested_features_known`, `identity_decision_confirmed`, `login_flow_implemented`, `verification_run`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `parent_skill_installed`:
+      - `agent` uses `load_parent_neon_skill`.
+    - branch `parent_skill_missing`:
+      - `agent` chooses one of (observed):
+        - branch `load_from_skill_tool`:
+          - `agent` uses `load_parent_neon_skill`.
+        - branch `fetch_skill_doc`:
+          - `agent` uses `fetch_parent_neon_skill_doc`.
+  - `agent` uses `inspect_project_auth_setup`.
+  - `agent` uses `query_neon_docs`.
+  - `agent` uses `ask_user_for_identity_decision`.
+  - `user` chooses one of (observed):
+    - branch `managed_better_auth`:
+      - `agent` uses `edit_neon_config`.
+      - `agent` uses `deploy_neon_config`.
+      - `agent` uses `check_neon_auth_status`.
+      - `agent` uses `update_app_for_managed_auth`.
+      - `agent` chooses one of (observed):
+        - branch `configure_domains`:
+          - `agent` uses `configure_trusted_domains`.
+        - branch `skip_domains`: none.
+    - branch `self_managed_better_auth`:
+      - `agent` uses `update_app_for_self_managed_or_existing_idp`.
+    - branch `keep_existing_identity`:
+      - `agent` uses `update_app_for_self_managed_or_existing_idp`.
+  - `agent` uses `run_auth_verification`.
+```

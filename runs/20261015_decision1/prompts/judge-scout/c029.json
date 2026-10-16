@@ -1,0 +1,67 @@
+{
+  "model": "Decision-1",
+  "state": {
+    "document": "---\nname: aws-ami-builder\ndescription: Build Amazon Machine Images (AMIs) with Packer using the amazon-ebs builder. Use when creating custom AMIs for EC2 instances.\nmetadata:\n  lifecycle-status: active\n---\n\n# AWS AMI Builder\n\nBuild Amazon Machine Images (AMIs) using Packer's `amazon-ebs` builder.\n\n**Reference:** [Amazon EBS Builder](https://developer.hashicorp.com/packer/integrations/hashicorp/amazon/latest/components/builder/ebs)\n\n> **Note:** Building AMIs incurs AWS costs (EC2 instances, EBS storage, data transfer). Builds typically take 10-30 minutes depending on provisioning complexity.\n\n## Basic AMI Template\n\n```hcl\npacker {\n  required_plugins {\n    amazon = {\n      source  = \"github.com/hashicorp/amazon\"\n      version = \"~> 1.3\"\n    }\n  }\n}\n\nvariable \"region\" {\n  type    = string\n  default = \"us-west-2\"\n}\n\nlocals {\n  timestamp = regex_replace(timestamp(), \"[- TZ:]\", \"\")\n}\n\nsource \"amazon-ebs\" \"ubuntu\" {\n  region        = var.region\n  instance_type = \"t3.micro\"\n\n  source_ami_filter {\n    filters = {\n      name                = \"ubuntu/images/*ubuntu-jammy-22.04-amd64-server-*\"\n      root-device-type    = \"ebs\"\n      virtualization-type = \"hvm\"\n    }\n    most_recent = true\n    owners      = [\"099720109477\"] # Canonical\n  }\n\n  ssh_username = \"ubuntu\"\n  ami_name     = \"my-app-${local.timestamp}\"\n\n  tags = {\n    Name      = \"my-app\"\n    BuildDate = local.timestamp\n  }\n}\n\nbuild {\n  sources = [\"source.amazon-ebs.ubuntu\"]\n\n  provisioner \"shell\" {\n    inline = [\n      \"sudo apt-get update\",\n      \"sudo apt-get upgrade -y\",\n    ]\n  }\n}\n```\n\n## Common Source AMI Filters\n\n### Ubuntu 22.04 LTS\n```hcl\nsource_ami_filter {\n  filters = {\n    name                = \"ubuntu/images/*ubuntu-jammy-22.04-amd64-server-*\"\n    root-device-type    = \"ebs\"\n    virtualization-type = \"hvm\"\n  }\n  most_recent = true\n  owners      = [\"099720109477\"] # Canonical\n}\n```\n\n### Amazon Linux 2023\n```hcl\nsource_ami_filter {\n  filters = {\n    name                = \"al2023-ami-*-x86_64\"\n    root-device-type    = \"ebs\"\n    virtualization-type = \"hvm\"\n  }\n  most_recent = true\n  owners      = [\"amazon\"]\n}\n```\n\n## Multi-Region AMI\n\n```hcl\nsource \"amazon-ebs\" \"ubuntu\" {\n  region        = \"us-west-2\"\n  instance_type = \"t3.micro\"\n\n  source_ami_filter {\n    filters = {\n      name = \"ubuntu/images/*ubuntu-jammy-22.04-amd64-server-*\"\n    }\n    most_recent = true\n    owners      = [\"099720109477\"]\n  }\n\n  ssh_username = \"ubuntu\"\n  ami_name     = \"my-app-${local.timestamp}\"\n\n  # Copy to additional regions\n  ami_regions = [\"us-east-1\", \"us-east-2\", \"eu-west-1\"]\n}\n```\n\n## Authentication\n\nPacker uses AWS credential resolution:\n\n1. Environment variables: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`\n2. AWS credentials file: `~/.aws/credentials`\n3. IAM instance profile (when running on EC2)\n\n```bash\nexport AWS_ACCESS_KEY_ID=\"your-access-key\"\nexport AWS_SECRET_ACCESS_KEY=\"your-secret-key\"\nexport AWS_REGION=\"us-west-2\"\n\npacker build .\n```\n\n## Build Commands\n\n```bash\n# Initialize plugins\npacker init .\n\n# Validate template\npacker validate .\n\n# Build AMI\npacker build .\n\n# Build with variables\npacker build -var \"region=us-east-1\" .\n```\n\n## Common Issues\n\n**SSH Timeout**\n- Ensure security group allows SSH (port 22)\n- Verify subnet has internet access\n\n**AMI Already Exists**\n- AMI names must be unique\n- Use timestamp in name: `my-app-${local.timestamp}`\n\n**Volume Size Too Small**\n- Check source AMI's volume size\n- Set `launch_block_device_mappings.volume_size` accordingly\n\n## References\n\n- [Amazon EBS Builder](https://developer.hashicorp.com/packer/integrations/hashicorp/amazon/latest/components/builder/ebs)\n- [AWS AMI Documentation](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AMIs.html)\n",
+    "runtime": {
+      "name": "scout-desktop",
+      "description": "Microsoft Scout on a Windows PC: a PowerShell shell, the local filesystem, the public web, a browser it can drive, and the signed-in user's own and shared Microsoft 365 work data (what they can access: their mail, calendar, the chats, meetings and channels they are in, files shared with them) through WorkIQ. No accounts or credentials for other external services.",
+      "tools": {
+        "bash": "run PowerShell commands on Windows: scripts, CLIs, git, package installs from public registries",
+        "read": "read files on the local filesystem",
+        "write": "create and overwrite files",
+        "edit": "edit existing files",
+        "web_fetch": "fetch public web pages and unauthenticated public APIs",
+        "web_search": "search the public web",
+        "browser": "drive a Microsoft Edge browser (Playwright): navigate, click, fill forms, take screenshots",
+        "m365": "read the signed-in user's own and shared Microsoft 365 work data (what they can access) through WorkIQ: mail, calendar, meetings, Teams chats and channels they are in, files, people",
+        "teams_message": "send a Teams message as the signed-in user",
+        "azure_devops_mcp": "read and update Azure DevOps work items, repos and pipelines the user can access",
+        "ask_user": "ask the user a question and read the answer in the conversation",
+        "windows_os": "Windows itself: winget, Windows apps and the Windows App SDK"
+      }
+    },
+    "pack": "Skill `aws-ami-builder`.\nRoles: `agent`, `user`.\nTool `write_packer_template` (owner `agent`): via `write`; requires `template_requested`; adds `template_written`.\nTool `install_packer` (owner `agent`): via `bash`; requires `build_requested`; adds `packer_installed`.\nTool `init_packer_plugins` (owner `agent`): via `bash`; needs `aws_account`; requires `template_written` and `packer_installed`; adds `plugins_initialized`.\nTool `validate_packer_template` (owner `agent`): via `bash`; needs `aws_account`; requires `template_written` and `packer_installed`; adds `template_valid`.\nTool `build_ami` (owner `agent`): via `bash`; needs `aws_account`; requires `template_valid` and `plugins_initialized`; adds `ami_built`.\nTool `ask_scope` (owner `agent`): via `ask_user`; picks `build_mode` with `build_mode` == 1 or `build_mode` == 2.\nInitially true: `template_requested`.\nInitially: `build_mode` == 0.\nGoal: `template_written` or `ami_built`.\nProtocol:\n  - `user` chooses one of (observed):\n    - branch `template_only`:\n      - `agent` uses `write_packer_template`.\n    - branch `build_with_packer`:\n      - `agent` uses `ask_scope`.\n      - `agent` uses `write_packer_template`.\n      - `agent` uses `install_packer`.\n      - `agent` uses `init_packer_plugins`.\n      - `agent` uses `validate_packer_template`.\n      - `agent` uses `build_ami`.\n"
+  },
+  "questions": {
+    "F1": {
+      "type": "noul",
+      "instructions": "no invented Tool (every Tool corresponds to an instruction)",
+      "criteria": {
+        "true": "Every Tool in the pack corresponds to an operation that some sentence of the document asks for, or the pack declares no Tool.",
+        "false": "At least one Tool in the pack is invented: no sentence of the document asks for that operation."
+      }
+    },
+    "F2": {
+      "type": "noul",
+      "instructions": "no omitted mandatory step",
+      "criteria": {
+        "true": "No mandatory step is omitted: every step without which the document's core deliverable cannot be produced appears in the pack. Optional or follow-up work may be omitted or skippable.",
+        "false": "The pack omits at least one mandatory step, a step without which the document's core deliverable cannot be produced."
+      }
+    },
+    "F3": {
+      "type": "noul",
+      "instructions": "the Goal states the document's deliverable",
+      "criteria": {
+        "true": "The pack's Goal names the deliverable of one representative request of the document.",
+        "false": "The pack's Goal does not name the deliverable of one representative request (for example it is `true`, empty, or names something else)."
+      }
+    },
+    "F4": {
+      "type": "noul",
+      "instructions": "no invented ordering (every protocol order is stated or implied by the document)",
+      "criteria": {
+        "true": "No ordering is invented: every order the protocol puts between two steps is stated or implied by the document (for example by data dependence), or the protocol imposes no order.",
+        "false": "The protocol puts at least two steps in an order the document neither states nor implies."
+      }
+    },
+    "F5": {
+      "type": "noul",
+      "instructions": "bindings plausible (each `via` names a runtime tool that can perform the Tool)",
+      "criteria": {
+        "true": "Bindings are plausible: each `via` names a tool from runtime.tools that can really perform the Tool; a `via` naming something outside that list is plausible only if the runtime indeed cannot perform the operation.",
+        "false": "At least one `via` names a tool that cannot perform the Tool, or names something outside runtime.tools although the runtime can perform the operation."
+      }
+    }
+  }
+}

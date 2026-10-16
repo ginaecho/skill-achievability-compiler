@@ -1,0 +1,42 @@
+```ce
+Skill `chrome-mcp-troubleshooting`.
+Roles: `agent`, `user`.
+Tool `inspect_macos_chrome_mcp_state` (owner `agent`): via `bash`; adds `state_inspected`.
+Tool `disable_claude_app_native_host` (owner `agent`): via `bash`; requires `user_uses_claude_code_cli`; adds `claude_app_config_disabled`.
+Tool `disable_claude_code_native_host` (owner `agent`): via `bash`; requires `user_uses_cowork`; adds `claude_code_config_disabled`.
+Tool `install_dynamic_wrapper` (owner `agent`): via `bash`; requires `user_uses_claude_code_cli`; adds `dynamic_wrapper_installed`; removes `hardcoded_wrapper`.
+Tool `set_tmpdir_in_shell_config` (owner `agent`): via `bash`; requires `tmpdir_missing`; adds `tmpdir_configured`; removes `tmpdir_missing`.
+Tool `clean_native_host_and_sockets` (owner `agent`): via `bash`; adds `native_host_cleaned`.
+Tool `restart_chrome` (owner `agent`): via `macos_desktop`; adds `chrome_restarted`.
+Tool `restart_claude_code` (owner `agent`): via `macos_desktop`; requires `user_uses_claude_code_cli`; adds `claude_code_restarted`.
+Tool `provide_toggle_script` (owner `agent`): via `write`; adds `toggle_script_provided`.
+Initially true: `issue_present`, `macos_user`.
+Goal: `issue_present` and `state_inspected` and ((`user_uses_claude_code_cli` and `claude_app_config_disabled` and `chrome_restarted` and `claude_code_restarted`) or (`user_uses_cowork` and `claude_code_config_disabled` and `chrome_restarted`)) and ((`user_uses_claude_code_cli` and `dynamic_wrapper_installed`) or not `user_uses_claude_code_cli` or not `hardcoded_wrapper`) and (`tmpdir_configured` or not `tmpdir_missing`).
+Protocol:
+  - `agent` uses `inspect_macos_chrome_mcp_state`.
+  - `user` chooses one of (observed):
+    - branch `use_claude_code_cli`:
+      - `agent` uses `disable_claude_app_native_host`.
+      - `user` chooses one of (observed):
+        - branch `hardcoded_wrapper`:
+          - `agent` uses `install_dynamic_wrapper`.
+        - branch `wrapper_ok`: none.
+      - `user` chooses one of (observed):
+        - branch `tmpdir_missing`:
+          - `agent` uses `set_tmpdir_in_shell_config`.
+        - branch `tmpdir_ok`: none.
+      - `agent` uses `clean_native_host_and_sockets`.
+      - `agent` uses `restart_chrome`.
+      - `agent` uses `restart_claude_code`.
+      - `user` chooses one of (observed):
+        - branch `want_toggle_script`:
+          - `agent` uses `provide_toggle_script`.
+        - branch `skip_toggle_script`: none.
+    - branch `use_cowork`:
+      - `agent` uses `disable_claude_code_native_host`.
+      - `agent` uses `restart_chrome`.
+      - `user` chooses one of (observed):
+        - branch `want_toggle_script`:
+          - `agent` uses `provide_toggle_script`.
+        - branch `skip_toggle_script`: none.
+```

@@ -1,0 +1,42 @@
+```ce
+Skill `llm-finetuning-eval-engineer`.
+Roles: `agent`, `user`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_inspected`.
+Tool `collect_traces` (owner `agent`): via `read`; requires `workspace_inspected`; adds `traces_exist`.
+Tool `build_eval_from_traces` (owner `agent`): via `write`; requires `traces_exist`; adds `eval_harness_built`, `goldens_written`, `graders_written`, `drift_suite_frozen`.
+Tool `build_eval_from_synthetic_goldens` (owner `agent`): via `write`; requires `workspace_inspected`; adds `eval_harness_built`, `goldens_written`, `graders_written`, `drift_suite_frozen`.
+Tool `calibrate_judges` (owner `agent`): via `bash`; requires `eval_harness_built`; adds `judge_calibration_done`.
+Tool `run_base_model_baseline` (owner `agent`): via `bash`; requires `eval_harness_built` and `drift_suite_frozen`; adds `baseline_written`, `results_written`, `results_complete`.
+Tool `check_checkpoint_inputs` (owner `agent`): via `read`; requires `workspace_inspected`; adds `checkpoint_handoff_present`.
+Tool `run_stage1_data_quality_gate` (owner `agent`): via `bash`; requires `checkpoint_handoff_present` and `goldens_written`; adds `stage1_passed`.
+Tool `run_stage2_drift_gate` (owner `agent`): via `bash`; requires `stage1_passed` and `baseline_written` and `drift_suite_frozen`; adds `stage2_passed`, `results_written`, `results_complete`.
+Tool `run_stage3_paired_arena_gate` (owner `agent`): via `bash`; requires `stage2_passed`; adds `stage3_passed`.
+Tool `run_stage4_canary_gate` (owner `agent`): via `bash`; requires `stage3_passed`; adds `stage4_passed`.
+Tool `write_promotion_report` (owner `agent`): via `write`; requires `results_complete` and ( `baseline_written` or `stage1_passed` ); adds `promotion_report_written`.
+Initially true: none.
+Goal: (`baseline_written` and `results_written` and `results_complete`) or (`promotion_report_written` and `results_written` and `results_complete`).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `user` chooses one of (observed):
+    - branch `phase0_build_and_baseline`:
+      - `agent` chooses one of (observed):
+        - branch `traces_available` (assuming `traces_exist`):
+          - `agent` uses `build_eval_from_traces`.
+        - branch `no_traces_available`:
+          - `agent` uses `build_eval_from_synthetic_goldens`.
+      - `agent` chooses one of (observed):
+        - branch `judge_needed`:
+          - `agent` uses `calibrate_judges`.
+        - branch `all_deterministic`: none.
+      - `agent` uses `run_base_model_baseline`.
+    - branch `phase5_gate_checkpoint`:
+      - `agent` uses `check_checkpoint_inputs`.
+      - `agent` uses `run_stage1_data_quality_gate`.
+      - `agent` uses `run_stage2_drift_gate`.
+      - `agent` uses `run_stage3_paired_arena_gate`.
+      - `user` chooses one of (observed):
+        - branch `canary_applicable`:
+          - `agent` uses `run_stage4_canary_gate`.
+        - branch `local_only_deployment`: none.
+      - `agent` uses `write_promotion_report`.
+```

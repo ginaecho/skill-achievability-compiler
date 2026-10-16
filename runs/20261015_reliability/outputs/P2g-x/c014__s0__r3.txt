@@ -1,0 +1,44 @@
+```ce
+Skill `web-design-reviewer`.
+Roles: `agent`, `user`.
+
+Tool `detect_project` (owner `agent`): via `bash`; adds `project_understood`.
+Tool `webpage_inspect` (owner `agent`): via `bash`; requires `target_url_known`; adds `visual_issues_detected`.
+Tool `fix_source` (owner `agent`): via `edit`; requires `source_located` and `issue_chosen`; removes `issue_chosen`; adds `fix_applied`.
+Tool `verify_fix` (owner `agent`): via `bash`; requires `fix_applied`; adds `fix_verified`.
+Tool `build_report` (owner `agent`): via `bash`; requires `fix_verified` and `all_issues_resolved`; adds `report_sent`.
+
+Initially true: none.
+Initially: `iteration_count` == 0.
+Goal: `report_sent`.
+
+Protocol:
+  - `agent` uses `detect_project`.
+  - `user` chooses one of (observed):
+    - branch `url_not_provided`:
+      - `agent` tells `user` `ask_url`.
+      - `user` tells `agent` `url_response`.
+    - branch `url_provided`: none.
+  - loop `main_loop`:
+    - `agent` uses `webpage_inspect`.
+    - `user` chooses one of (observed):
+      - branch `issue_selected`:
+        - `agent` uses `fix_source`.
+        - `agent` uses `verify_fix`.
+        - `user` chooses one of (observed):
+          - branch `fix_succeeded`: none.
+          - branch `fix_failed`:
+            - loop `retry_loop`:
+              - `agent` uses `fix_source`.
+              - `agent` uses `verify_fix`.
+              - `user` chooses one of (observed):
+                - branch `retry_succeeded`: none.
+                - branch `retry_exhausted`: none.
+              - repeat `retry_loop`.
+        - `user` chooses one of (observed):
+          - branch `more_issues_exist`:
+            - repeat `main_loop`.
+          - branch `no_more_issues`:
+            - `agent` uses `build_report`.
+      - branch `no_issues`: none.
+```

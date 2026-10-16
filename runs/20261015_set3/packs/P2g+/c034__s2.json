@@ -1,0 +1,1321 @@
+{
+  "pack": {
+    "name": "imagegen",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_requirements": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "inputs_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_shared_refs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "shared_refs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "view_local_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "built_in_mode",
+            "edit_intent",
+            "local_edit_target"
+          ]
+        },
+        "add": [
+          "edit_target_visible"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_builtin_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "built_in_mode",
+            "shared_refs_read",
+            "inputs_complete"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "inline_preview_ready",
+          "built_in_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_builtin_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "built_in_mode",
+            "shared_refs_read",
+            "inputs_complete",
+            {
+              "or": [
+                "edit_target_visible",
+                "conversation_edit_target"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "inline_preview_ready",
+          "built_in_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "copy_image_to_workspace": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "project_bound"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_non_destructive_version": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "project_bound",
+            "replacement_not_requested"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "non_destructive_save",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_cli_refs": {
+        "owner": "agent",
+        "pre": "cli_mode",
+        "add": [
+          "cli_refs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            {
+              "and": [
+                "cli_mode",
+                "generate_intent",
+                "inputs_complete",
+                "cli_refs_read",
+                "openai_api_key_set"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_edit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            {
+              "and": [
+                "cli_mode",
+                "edit_intent",
+                "inputs_complete",
+                "cli_refs_read",
+                "openai_api_key_set"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate_batch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            {
+              "and": [
+                "cli_mode",
+                "many_assets",
+                "inputs_complete",
+                "cli_refs_read",
+                "openai_api_key_set"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_result": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            {
+              "or": [
+                {
+                  "and": [
+                    "preview_only",
+                    "inline_preview_ready"
+                  ]
+                },
+                {
+                  "and": [
+                    "project_bound",
+                    "workspace_asset_saved"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "builtin_mode": [
+              {
+                "act": {
+                  "cap": "read_shared_refs",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "generate_builtin_image",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit_conversation_image": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "edit_builtin_image",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit_local_image": [
+                      {
+                        "act": {
+                          "cap": "view_local_image",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "edit_builtin_image",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "edit_conversation_image": [
+                      "conversation_edit_target",
+                      "edit_intent"
+                    ],
+                    "edit_local_image": [
+                      "edit_intent",
+                      "local_edit_target"
+                    ],
+                    "generate": [
+                      "generate_intent"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preview_only": [
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_replace": [
+                      {
+                        "act": {
+                          "cap": "copy_image_to_workspace",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_new_version": [
+                      {
+                        "act": {
+                          "cap": "write_non_destructive_version",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "preview_only": [
+                      "preview_only"
+                    ],
+                    "project_bound_new_version": [
+                      "project_bound",
+                      "replacement_not_requested"
+                    ],
+                    "project_bound_replace": [
+                      "project_bound",
+                      "replacement_requested"
+                    ]
+                  }
+                }
+              }
+            ],
+            "cli_mode": [
+              {
+                "act": {
+                  "cap": "read_shared_refs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_cli_refs",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate_single": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_cli_generate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit_single": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_cli_edit",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "generate_batch": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_cli_generate_batch",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "edit_single": [
+                      "edit_intent"
+                    ],
+                    "generate_batch": [
+                      "many_assets"
+                    ],
+                    "generate_single": [
+                      "generate_intent"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preview_only": [
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_replace": [
+                      {
+                        "act": {
+                          "cap": "copy_image_to_workspace",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_new_version": [
+                      {
+                        "act": {
+                          "cap": "write_non_destructive_version",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "preview_only": [
+                      "preview_only"
+                    ],
+                    "project_bound_new_version": [
+                      "project_bound",
+                      "replacement_not_requested"
+                    ],
+                    "project_bound_replace": [
+                      "project_bound",
+                      "replacement_requested"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "builtin_mode": [
+              "built_in_mode"
+            ],
+            "cli_mode": [
+              "cli_mode"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "result_reported",
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "imagegen",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_requirements": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "inputs_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_shared_refs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "shared_refs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "view_local_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "built_in_mode",
+            "edit_intent",
+            "local_edit_target"
+          ]
+        },
+        "add": [
+          "edit_target_visible"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_builtin_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "built_in_mode",
+            "shared_refs_read",
+            "inputs_complete"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "inline_preview_ready",
+          "built_in_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_builtin_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "built_in_mode",
+            "shared_refs_read",
+            "inputs_complete",
+            {
+              "or": [
+                "edit_target_visible",
+                "conversation_edit_target"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "inline_preview_ready",
+          "built_in_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "copy_image_to_workspace": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "project_bound"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_non_destructive_version": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "project_bound",
+            "replacement_not_requested"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "non_destructive_save",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_cli_refs": {
+        "owner": "agent",
+        "pre": "cli_mode",
+        "add": [
+          "cli_refs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_mode",
+            "generate_intent",
+            "inputs_complete",
+            "cli_refs_read",
+            "openai_api_key_set"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_edit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_mode",
+            "edit_intent",
+            "inputs_complete",
+            "cli_refs_read",
+            "openai_api_key_set"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate_batch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_mode",
+            "many_assets",
+            "inputs_complete",
+            "cli_refs_read",
+            "openai_api_key_set"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_result": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            {
+              "or": [
+                {
+                  "and": [
+                    "preview_only",
+                    "inline_preview_ready"
+                  ]
+                },
+                {
+                  "and": [
+                    "project_bound",
+                    "workspace_asset_saved"
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "builtin_mode": [
+              {
+                "act": {
+                  "cap": "read_shared_refs",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "generate_builtin_image",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit_conversation_image": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "edit_builtin_image",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit_local_image": [
+                      {
+                        "act": {
+                          "cap": "view_local_image",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "edit_builtin_image",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "edit_conversation_image": [
+                      "conversation_edit_target",
+                      "edit_intent"
+                    ],
+                    "edit_local_image": [
+                      "edit_intent",
+                      "local_edit_target"
+                    ],
+                    "generate": [
+                      "generate_intent"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preview_only": [
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_replace": [
+                      {
+                        "act": {
+                          "cap": "copy_image_to_workspace",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_new_version": [
+                      {
+                        "act": {
+                          "cap": "write_non_destructive_version",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "preview_only": [
+                      "preview_only"
+                    ],
+                    "project_bound_new_version": [
+                      "project_bound",
+                      "replacement_not_requested"
+                    ],
+                    "project_bound_replace": [
+                      "project_bound",
+                      "replacement_requested"
+                    ]
+                  }
+                }
+              }
+            ],
+            "cli_mode": [
+              {
+                "act": {
+                  "cap": "read_shared_refs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_cli_refs",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate_single": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_cli_generate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit_single": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_cli_edit",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "generate_batch": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "enough_inputs": [],
+                            "need_more_inputs": [
+                              {
+                                "act": {
+                                  "cap": "ask_requirements",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_inputs": [
+                              "inputs_complete"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_cli_generate_batch",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "edit_single": [
+                      "edit_intent"
+                    ],
+                    "generate_batch": [
+                      "many_assets"
+                    ],
+                    "generate_single": [
+                      "generate_intent"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preview_only": [
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_replace": [
+                      {
+                        "act": {
+                          "cap": "copy_image_to_workspace",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound_new_version": [
+                      {
+                        "act": {
+                          "cap": "write_non_destructive_version",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_result",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "preview_only": [
+                      "preview_only"
+                    ],
+                    "project_bound_new_version": [
+                      "project_bound",
+                      "replacement_not_requested"
+                    ],
+                    "project_bound_replace": [
+                      "project_bound",
+                      "replacement_requested"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "builtin_mode": [
+              "built_in_mode"
+            ],
+            "cli_mode": [
+              "cli_mode"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "result_reported",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_requirements": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_shared_refs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "view_local_image": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "generate_builtin_image": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "edit_builtin_image": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "copy_image_to_workspace": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "write_non_destructive_version": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "read_cli_refs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_cli_generate": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_cli_edit": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "run_cli_generate_batch": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "report_result": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

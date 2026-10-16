@@ -1,0 +1,59 @@
+```ce
+Skill `neon-auth`.
+Roles: `agent`, `user`.
+Tool `check_parent_skill` (owner `agent`): via `skill`; adds `parent_skill_ready`.
+Tool `install_parent_skill` (owner `agent`): via `bash`; requires not `parent_skill_ready`; adds `parent_skill_ready`.
+Tool `inspect_project_files` (owner `agent`): via `read`; adds `project_inspected`.
+Tool `ask_requirements` (owner `agent`): via `ask_user`; requires `project_inspected`; adds `requirements_known`.
+Tool `fetch_neon_docs` (owner `agent`): via `web_fetch`; adds `docs_checked`.
+Tool `edit_neon_config` (owner `agent`): via `edit`; requires all of (`project_inspected`, `requirements_known`); adds `managed_auth_configured`; removes `neon_config_missing_auth`.
+Tool `deploy_neon_auth` (owner `agent`): via `bash`; needs `shell`; requires `managed_auth_configured`; adds `managed_auth_enabled`.
+Tool `check_neon_auth_status` (owner `agent`): via `bash`; needs `shell`; requires `managed_auth_enabled`; adds `managed_auth_verified`.
+Tool `implement_auth_code` (owner `agent`): via `edit`; requires all of (`project_inspected`, `requirements_known`); adds `auth_flow_implemented`.
+Tool `verify_auth_flow` (owner `agent`): via `bash`; needs `shell`; requires `auth_flow_implemented`; adds `auth_flow_verified`.
+Tool `report_keep_existing_identity` (owner `agent`): via `write`; requires `requirements_known`; adds `existing_identity_kept`.
+Tool `report_self_managed_path` (owner `agent`): via `write`; requires all of (`requirements_known`, `docs_checked`); adds `self_managed_plan_provided`.
+
+Initially true: none.
+Initially: `parent_skill_ready` == false.
+Initially: `project_inspected` == false.
+Initially: `requirements_known` == false.
+Initially: `docs_checked` == false.
+Initially: `managed_auth_configured` == false.
+Initially: `managed_auth_enabled` == false.
+Initially: `managed_auth_verified` == false.
+Initially: `auth_flow_implemented` == false.
+Initially: `auth_flow_verified` == false.
+Initially: `existing_identity_kept` == false.
+Initially: `self_managed_plan_provided` == false.
+Initially: `neon_config_missing_auth` == true.
+
+Goal: any of (`auth_flow_verified`, `existing_identity_kept`, `self_managed_plan_provided`).
+
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `parent_present`:
+      - `agent` uses `check_parent_skill`.
+    - branch `parent_missing`:
+      - `agent` uses `install_parent_skill`.
+  - `agent` uses `inspect_project_files`.
+  - `agent` uses `ask_requirements`.
+  - `agent` chooses one of (observed):
+    - branch `no_existing_identity_and_managed_supported`:
+      - `agent` uses `edit_neon_config`.
+      - `agent` uses `deploy_neon_auth`.
+      - `agent` uses `check_neon_auth_status`.
+      - `agent` uses `implement_auth_code`.
+      - `agent` uses `verify_auth_flow`.
+    - branch `existing_working_identity_keep`:
+      - `agent` uses `report_keep_existing_identity`.
+    - branch `supabase_migration_to_managed`:
+      - `agent` uses `edit_neon_config`.
+      - `agent` uses `deploy_neon_auth`.
+      - `agent` uses `check_neon_auth_status`.
+      - `agent` uses `implement_auth_code`.
+      - `agent` uses `verify_auth_flow`.
+    - branch `managed_missing_required_plugin`:
+      - `agent` uses `fetch_neon_docs`.
+      - `agent` uses `report_self_managed_path`.
+```

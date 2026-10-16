@@ -1,0 +1,40 @@
+```ce
+Skill `playwright`.
+Roles: `agent`, `developer`, `human`.
+Tool `read_state` (owner `agent`): via `read`; picks `task_type_frontend` with any of (`task_type_frontend`, not `task_type_frontend`).
+Tool `read_guidance` (owner `agent`): via `read`; adds `agents_read`, `criteria_read`.
+Tool `start_dev_server` (owner `agent`): via `bash`; requires `task_type_frontend` and `agents_read`; adds `dev_server_running`.
+Tool `wait_for_dev_server` (owner `agent`): via `bash`; requires `dev_server_running`; adds `dev_server_ready`.
+Tool `write_playwright_tests` (owner `agent`): via `write`; requires `task_type_frontend` and `agents_read` and `criteria_read`; adds `tests_written`, `page_objects_written`.
+Tool `run_playwright_tests` (owner `agent`): via `bash`; requires `task_type_frontend` and `dev_server_ready` and `tests_written` and `page_objects_written`; adds `test_results_captured`; picks `tests_passed` with any of (`tests_passed`, not `tests_passed`); picks `failure_count_two_or_more` with any of (`failure_count_two_or_more`, not `failure_count_two_or_more`).
+Tool `append_qa_report` (owner `agent`): via `edit`; requires `task_type_frontend` and `test_results_captured`; adds `qa_report_updated`.
+Tool `mark_skipped` (owner `agent`): via `edit`; requires not `task_type_frontend`; adds `playwright_skipped`.
+Tool `mark_completed` (owner `agent`): via `edit`; requires `task_type_frontend` and `tests_passed`; adds `playwright_completed`, `stage_complete`.
+Initially true: none.
+Goal: (`playwright_skipped` and not `task_type_frontend`) or (`task_type_frontend` and `qa_report_updated` and ((`tests_passed` and `playwright_completed` and `stage_complete`) or (not `tests_passed` and ( `developer_routed` or `human_escalated` )))).
+Protocol:
+  - `agent` uses `read_state`.
+  - `agent` chooses one of (observed):
+    - branch `backend_task`:
+      - `agent` uses `mark_skipped`.
+    - branch `frontend_task`:
+      - `agent` uses `read_guidance`.
+      - `agent` uses `start_dev_server`.
+      - `agent` uses `wait_for_dev_server`.
+      - `agent` uses `write_playwright_tests`.
+      - `agent` uses `run_playwright_tests`.
+      - `agent` uses `append_qa_report`.
+      - `agent` chooses one of (observed):
+        - branch `all_pass`:
+          - `agent` uses `mark_completed`.
+        - branch `some_fail`:
+          - `agent` chooses one of (observed):
+            - branch `first_failure`:
+              - `agent` tells `developer` `playwright_failure_details`.
+            - branch `second_failure_or_more`:
+              - `agent` tells `human` `playwright_escalation`.
+Behaviour of `developer`:
+  - receive `playwright_failure_details` from `agent`.
+Behaviour of `human`:
+  - receive `playwright_escalation` from `agent`.
+```

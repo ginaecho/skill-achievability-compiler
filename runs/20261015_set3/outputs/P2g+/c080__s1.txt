@@ -1,0 +1,29 @@
+```ce
+Skill `playwright`.
+Roles: `agent`.
+Tool `read_state` (owner `agent`): via `read`; adds `state_read`.
+Tool `read_agents_md` (owner `agent`): via `read`; adds `agents_md_read`.
+Tool `read_orchestrator_output` (owner `agent`): via `read`; adds `orchestrator_output_read`.
+Tool `start_dev_server` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`, `local_servers`; requires `agents_md_read`; adds `dev_server_running`.
+Tool `run_playwright_tests` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`, `local_servers`, `package_registries`; requires `agents_md_read` and `orchestrator_output_read` and `dev_server_running`; adds `playwright_tests_written`, `playwright_tests_executed`; picks `playwright_failures` with `playwright_failures` >= 0.
+Tool `write_skipped_state` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `state_read`; adds `playwright_skipped`, `state_updated`.
+Tool `write_results_and_completed_state` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `state_read` and `playwright_tests_executed`; adds `qa_report_updated`, `state_updated`, `playwright_completed`, `stage_complete`.
+Tool `reply_skipped` (owner `agent`): via `reply`; requires `playwright_skipped`; adds `user_informed_skipped`.
+Tool `reply_completed` (owner `agent`): via `reply`; requires `playwright_completed`; adds `user_informed_completed`.
+Initially true: none.
+Initially: `playwright_failures` == 0.
+Goal: (`playwright_skipped` and `state_updated` and `user_informed_skipped`) or (`playwright_completed` and `state_updated` and `qa_report_updated` and `stage_complete` and `user_informed_completed`).
+Protocol:
+  - `agent` uses `read_state`.
+  - `agent` chooses one of (observed):
+    - branch `backend_task` (assuming `is_backend_task`):
+      - `agent` uses `write_skipped_state`.
+      - `agent` uses `reply_skipped`.
+    - branch `frontend_task` (assuming `is_frontend_task`):
+      - `agent` uses `read_agents_md`.
+      - `agent` uses `read_orchestrator_output`.
+      - `agent` uses `start_dev_server`.
+      - `agent` uses `run_playwright_tests`.
+      - `agent` uses `write_results_and_completed_state`.
+      - `agent` uses `reply_completed`.
+```

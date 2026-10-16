@@ -1,0 +1,35 @@
+```ce
+Skill `playwright`.
+Roles: `agent`.
+Tool `read_state` (owner `agent`): via `read`; adds `state_read`.
+Tool `read_inputs` (owner `agent`): via `read`; requires `state_read`; adds `agents_read`, `ac_read`.
+Tool `start_dev_server` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_servers`; requires `frontend_task` and `agents_read`; adds `dev_server_running`.
+Tool `write_playwright_files` (owner `agent`): via `write`; needs `local_filesystem`; requires `frontend_task` and `agents_read` and `ac_read`; adds `page_objects_written`, `tests_written`.
+Tool `run_playwright_tests` (owner `agent`): via `bash`; needs `shell`, `linux`, `package_registries`, `local_servers`; requires `frontend_task` and `dev_server_running` and `tests_written`; adds `test_run_finished`.
+Tool `append_qa_report` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `test_run_finished`; adds `qa_report_updated`.
+Tool `update_state_skipped` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `backend_task`; adds `state_updated`, `playwright_skipped`.
+Tool `update_state_completed` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `test_run_finished` and `tests_passed`; adds `state_updated`, `playwright_completed`, `stage_complete`.
+Tool `reply_skipped` (owner `agent`): via `reply`; requires `playwright_skipped`; adds `deliverable_done`.
+Tool `reply_completed` (owner `agent`): via `reply`; requires `qa_report_updated` and `playwright_completed` and `stage_complete`; adds `deliverable_done`.
+Tool `reply_failed` (owner `agent`): via `reply`; requires `qa_report_updated` and `test_run_finished` and `tests_failed`; adds `deliverable_done`.
+Initially true: none.
+Goal: `deliverable_done`.
+Protocol:
+  - `agent` uses `read_state`.
+  - `agent` chooses one of (observed):
+    - branch `backend` (assuming `backend_task`):
+      - `agent` uses `update_state_skipped`.
+      - `agent` uses `reply_skipped`.
+    - branch `frontend` (assuming `frontend_task`):
+      - `agent` uses `read_inputs`.
+      - `agent` uses `start_dev_server`.
+      - `agent` uses `write_playwright_files`.
+      - `agent` uses `run_playwright_tests`.
+      - `agent` uses `append_qa_report`.
+      - `agent` chooses one of (observed):
+        - branch `pass` (assuming `tests_passed`):
+          - `agent` uses `update_state_completed`.
+          - `agent` uses `reply_completed`.
+        - branch `fail` (assuming `tests_failed`):
+          - `agent` uses `reply_failed`.
+```

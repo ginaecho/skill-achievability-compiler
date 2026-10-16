@@ -1,0 +1,42 @@
+```ce
+Skill `expo-migrate-module`.
+Roles: `agent`, `user`.
+Tool `check_expo_version` (owner `agent`): via `read`; adds `module_expo_checked`, `example_expo_checked`.
+Tool `inspect_repo_and_contract` (owner `agent`): via `read`; requires `module_expo_ok` and `example_expo_ok`; adds `contract_established`, `references_read`.
+Tool `verify_macro_surface` (owner `agent`): via `read`; requires `contract_established`; adds `surface_verified`.
+Tool `edit_migration` (owner `agent`): via `edit`; requires `surface_verified`; adds `migration_applied`.
+Tool `run_verification` (owner `agent`): via `bash`; requires `migration_applied`; adds `verification_run`, `example_app_checked`, `config_checked`, `surface_compared`.
+Tool `ask_blocked_resolution` (owner `agent`): via `ask_user`; requires `blocked_item_found`; picks `blocked_resolution` with (`blocked_resolution` == 1 or `blocked_resolution` == 2).
+Tool `open_tracking_issue` (owner `agent`): via `bash`; needs `github_account`; requires `blocked_item_found` and `user_approved_issue`; adds `tracking_issue_opened`.
+Tool `report_upgrade_required` (owner `agent`): via `reply`; requires `upgrade_required`; adds `user_informed`.
+Tool `report_results` (owner `agent`): via `reply`; requires `migration_applied` and `verification_run`; adds `user_informed`.
+Initially true: none.
+Initially: `blocked_resolution` == 0.
+Goal: `user_informed`.
+Protocol:
+  - `agent` uses `check_expo_version`.
+  - `agent` chooses one of (observed):
+    - branch `version_too_old` (assuming `upgrade_required`):
+      - `agent` uses `report_upgrade_required`.
+    - branch `version_ok` (assuming `module_expo_ok` and `example_expo_ok`):
+      - `agent` uses `inspect_repo_and_contract`.
+      - `agent` uses `verify_macro_surface`.
+      - `agent` chooses one of (observed):
+        - branch `no_blocked_items`:
+          - `agent` uses `edit_migration`.
+        - branch `blocked_items_found` (assuming `blocked_item_found`):
+          - `agent` uses `ask_blocked_resolution`.
+          - `user` chooses one of (observed):
+            - branch `approve_issue_and_coexist` (assuming `user_approved_issue` and `blocked_resolution` == 1):
+              - `agent` uses `open_tracking_issue`.
+              - `agent` uses `edit_migration`.
+            - branch `approve_issue_and_revert` (assuming `user_approved_issue` and `blocked_resolution` == 2):
+              - `agent` uses `open_tracking_issue`.
+              - `agent` uses `edit_migration`.
+            - branch `decline_issue_and_coexist` (assuming `blocked_resolution` == 1):
+              - `agent` uses `edit_migration`.
+            - branch `decline_issue_and_revert` (assuming `blocked_resolution` == 2):
+              - `agent` uses `edit_migration`.
+      - `agent` uses `run_verification`.
+      - `agent` uses `report_results`.
+```

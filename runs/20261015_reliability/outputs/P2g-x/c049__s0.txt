@@ -1,0 +1,46 @@
+```ce
+Skill `entra-agent-id`.
+Roles: `agent`, `user`.
+
+Tool `search_docs` (owner `agent`): via `web_search`; adds `docs_verified`.           # Ref: latest Agent ID docs
+Tool `get_user_id` (owner `agent`): via `bash`; needs `shell`; picks `user_id` with `user_id` != "".         # Ref: az ad signed-in-user show
+Tool `obtain_token` (owner `agent`): via `bash`; needs `shell`; sets `token` to "acquired".                 # Ref: Python ClientSecretCredential
+Tool `create_blueprint` (owner `agent`): via `bash`; needs `graph_api`; requires `token` == "acquired"; adds `blueprint_exists`; picks `blueprint_obj_id`, `app_id` with `blueprint_obj_id` != "" and `app_id` != "".
+Tool `create_principal` (owner `agent`): via `bash`; needs `graph_api`; requires `blueprint_exists`; adds `principal_exists`.  # Ref: BlueprintPrincipal
+Tool `create_agent_identity` (owner `agent`): via `bash`; needs `graph_api`; requires `principal_exists`; adds `agent_identity_provisioned`; picks `agent_id` with `agent_id` != "".
+Tool `check_permissions` (owner `agent`): via `bash`; needs `shell`; requires `token` == "acquired".       # Ref: admin consent + propagation wait
+Tool `check_existing_resources` (owner `agent`): via `bash`; needs `graph_api`; requires `token` == "acquired"; adds `resources_checked`.
+Tool `configure_oauth2` (owner `agent`): via `bash`; needs `graph_api`; requires `agent_identity_provisioned`; adds `oauth2_configured`.
+Tool `cleanup_agent_identity` (owner `agent`): via `bash`; needs `graph_api`; requires `token` == "acquired"; removes `agent_identity_provisioned`.
+Tool `cleanup_principal` (owner `agent`): via `bash`; needs `graph_api`; requires `token` == "acquired"; removes `principal_exists`.
+Tool `cleanup_blueprint` (owner `agent`): via `bash`; needs `graph_api`; requires `token` == "acquired"; removes `blueprint_exists`.
+
+Initially true: none.
+Initially: `token` == "none".
+Goal: `agent_identity_provisioned`.
+
+Protocol:
+  - loop `doc_verification`:
+    - `agent` uses `search_docs`.
+    - `user` chooses one of (observed):
+      - branch `docs_ok`:
+        - `agent` uses `get_user_id`.
+        - `agent` uses `obtain_token`.
+        - `agent` uses `check_existing_resources`.
+        - `agent` chooses one of:
+          - branch `blueprint_needed`:
+            - `agent` uses `create_blueprint`.
+          - branch `blueprint_exists`: none.
+        - `agent` chooses one of:
+          - branch `principal_needed`:
+            - `agent` uses `create_principal`.
+          - branch `principal_exists`: none.
+        - `agent` uses `check_permissions`.
+        - `agent` uses `create_agent_identity`.
+        - `agent` chooses one of (observed):
+          - branch `configure_oauth2_requested`:
+            - `agent` uses `configure_oauth2`.
+          - branch `skip_oauth2`: none.
+      - branch `retry_search`:
+        - repeat `doc_verification`.
+```

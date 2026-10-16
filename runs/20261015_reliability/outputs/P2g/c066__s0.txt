@@ -1,0 +1,57 @@
+```ce
+Skill `deploy-iac-execution-health-verification`.
+Roles: `agent`, `user`, `preflight_subagent`.
+Tool `read_preflight_template` (owner `agent`): via `read`; adds `preflight_template_read`.
+Tool `dispatch_preflight_task` (owner `agent`): via `agent`; requires `preflight_template_read`; adds `preflight_task_dispatched`, `deploy_checklist_written`.
+Tool `view_deploy_checklist` (owner `agent`): via `read`; requires `deploy_checklist_written`; adds `deploy_checklist_read`.
+Tool `read_upstream_artifacts` (owner `agent`): via `read`; adds `prepare_plan_read`, `scaffold_manifest_read`, `validation_checked`, `deployment_variables_resolved`.
+Tool `perform_preflight_checks` (owner `agent`): via `bash`; requires `deploy_checklist_read`, `prepare_plan_read`, `scaffold_manifest_read`; adds `preflight_checks_done`, `what_if_done`, `auth_checked`, `rbac_checked`, `rg_checked`; needs `shell`, `linux`.
+Tool `ask_deploy_approval` (owner `agent`): via `ask_user`; requires `preflight_checks_done`; adds `approval_answered`; picks `approved` with (`approved` or (not `approved`)).
+Tool `read_deploy_schema` (owner `agent`): via `read`; adds `deploy_schema_read`.
+Tool `write_deploy_result_skeleton` (owner `agent`): via `write`; requires `deploy_schema_read`; adds `deploy_result_exists`, `deploy_result_in_progress`; sets `healing_attempts` to 0.
+Tool `execute_deployment_and_code_deploy` (owner `agent`): via `windows_desktop`; requires `approved`, `deploy_result_exists`, `deploy_result_in_progress`, `deploy_checklist_read`, `deployment_variables_resolved`; adds `portal_link_generated`, `deployment_attempted`, `code_deployed`; picks `deploy_succeeded` with (`deploy_succeeded` or (not `deploy_succeeded`)); needs `azure_account`.
+Tool `health_check_and_disable_scm` (owner `agent`): via `bash`; requires `deployment_attempted`, `deploy_checklist_read`; adds `health_checked`, `scm_disabled_verified`; picks `health_ok` with (`health_ok` or (not `health_ok`)); needs `shell`, `linux`.
+Tool `read_error_classification` (owner `agent`): via `read`; adds `error_classification_read`.
+Tool `healing_retry_cycle` (owner `agent`): via `windows_desktop`; requires `error_classification_read`, `deploy_checklist_read`; sets `healing_attempts` to `healing_attempts` + 1; picks `deploy_succeeded` with (`deploy_succeeded` or (not `deploy_succeeded`)); picks `health_ok` with (`health_ok` or (not `health_ok`)); needs `azure_account`.
+Tool `ask_user_after_healing_threshold` (owner `agent`): via `ask_user`; requires (`healing_attempts` == 3 or `healing_attempts` == 8); adds `user_guidance_received`.
+Tool `finalize_artifacts` (owner `agent`): via `write`; requires `deploy_schema_read`, `deploy_result_exists`, `deploy_checklist_read`; removes `deploy_result_in_progress`; adds `deploy_result_finalized`, `deployment_summary_written`, `context_updated`, `deploy_phase_completed`.
+Initially true: none.
+Initially: `healing_attempts` == 0.
+Goal: all of (`deploy_result_finalized`, `deployment_summary_written`, `context_updated`, `deploy_phase_completed`, not `deploy_result_in_progress`).
+Protocol:
+  - `agent` uses `read_preflight_template`.
+  - `agent` uses `dispatch_preflight_task`.
+  - `agent` uses `view_deploy_checklist`.
+  - `agent` uses `read_upstream_artifacts`.
+  - `agent` uses `perform_preflight_checks`.
+  - `agent` uses `ask_deploy_approval`.
+  - `agent` chooses one of (observed):
+    - branch `approved`:
+      - `agent` uses `read_deploy_schema`.
+      - `agent` uses `write_deploy_result_skeleton`.
+      - `agent` uses `execute_deployment_and_code_deploy`.
+      - `agent` uses `view_deploy_checklist`.
+      - `agent` uses `health_check_and_disable_scm`.
+      - `agent` chooses one of (observed):
+        - branch `clean_success`:
+          - `agent` uses `read_deploy_schema`.
+          - `agent` uses `view_deploy_checklist`.
+          - `agent` uses `finalize_artifacts`.
+        - branch `needs_healing`:
+          - `agent` uses `read_error_classification`.
+          - loop `healing_loop`:
+            - `agent` uses `healing_retry_cycle`.
+            - `agent` uses `view_deploy_checklist`.
+            - `agent` chooses one of (observed):
+              - branch `threshold_prompt`:
+                - `agent` uses `ask_user_after_healing_threshold`.
+              - branch `no_prompt`: none.
+            - `agent` chooses one of (observed):
+              - branch `recovered`:
+                - `agent` uses `read_deploy_schema`.
+                - `agent` uses `view_deploy_checklist`.
+                - `agent` uses `finalize_artifacts`.
+              - branch `retry`:
+                - repeat `healing_loop`.
+    - branch `not_approved`: none.
+```

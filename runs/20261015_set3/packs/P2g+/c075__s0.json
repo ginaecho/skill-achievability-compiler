@@ -1,0 +1,820 @@
+{
+  "pack": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build harness from traces": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace inspected",
+            "traces exist"
+          ]
+        },
+        "add": [
+          "eval harness built",
+          "goldens written",
+          "graders written",
+          "drift suite frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build synthetic harness": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace inspected",
+            "no traces exist"
+          ]
+        },
+        "add": [
+          "eval harness built",
+          "goldens written",
+          "graders written",
+          "drift suite frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run phase0 baseline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "eval harness built",
+            "goldens written",
+            "graders written",
+            "drift suite frozen"
+          ]
+        },
+        "add": [
+          "baseline written",
+          "phase0 results written",
+          "results schema complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check phase5 inputs": {
+        "owner": "agent",
+        "pre": "workspace inspected",
+        "add": [
+          "checkpoint present",
+          "training data present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run data quality gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkpoint present",
+            "training data present",
+            "goldens written"
+          ]
+        },
+        "add": [
+          "data quality checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run checkpoint eval and drift gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "data quality checked",
+            "baseline written",
+            "drift suite frozen"
+          ]
+        },
+        "add": [
+          "phase5 results written",
+          "results schema complete",
+          "drift evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run paired arena gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "drift evaluated",
+            "baseline written"
+          ]
+        },
+        "add": [
+          "paired arena evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run canary gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "paired arena evaluated",
+            "has production canary target"
+          ]
+        },
+        "add": [
+          "canary evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write promotion report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "phase0 results written",
+            "results schema complete",
+            {
+              "or": [
+                "baseline only request",
+                {
+                  "and": [
+                    "data quality checked",
+                    "drift evaluated",
+                    "paired arena evaluated",
+                    {
+                      "or": [
+                        "canary evaluated",
+                        "no production canary target"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "promotion report written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply with verdict": {
+        "owner": "agent",
+        "pre": "promotion report written",
+        "add": [
+          "deliverable complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase0 only": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "with traces": [
+                      {
+                        "act": {
+                          "cap": "build harness from traces",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "without traces": [
+                      {
+                        "act": {
+                          "cap": "build synthetic harness",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "with traces": [
+                      "traces exist"
+                    ],
+                    "without traces": [
+                      "no traces exist"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run phase0 baseline",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write promotion report",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply with verdict",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase5 gate": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "with traces": [
+                      {
+                        "act": {
+                          "cap": "build harness from traces",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "without traces": [
+                      {
+                        "act": {
+                          "cap": "build synthetic harness",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "with traces": [
+                      "traces exist"
+                    ],
+                    "without traces": [
+                      "no traces exist"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run phase0 baseline",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check phase5 inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run data quality gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run checkpoint eval and drift gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run paired arena gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "canary applicable": [
+                      {
+                        "act": {
+                          "cap": "run canary gate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no canary": []
+                  },
+                  "assumes": {
+                    "canary applicable": [
+                      "has production canary target"
+                    ],
+                    "no canary": [
+                      "no production canary target"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write promotion report",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply with verdict",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "phase0 only": [
+              "baseline only request"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deliverable complete",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build harness from traces": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace inspected",
+            "traces exist"
+          ]
+        },
+        "add": [
+          "eval harness built",
+          "goldens written",
+          "graders written",
+          "drift suite frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build synthetic harness": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace inspected",
+            "no traces exist"
+          ]
+        },
+        "add": [
+          "eval harness built",
+          "goldens written",
+          "graders written",
+          "drift suite frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run phase0 baseline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "eval harness built",
+            "goldens written",
+            "graders written",
+            "drift suite frozen"
+          ]
+        },
+        "add": [
+          "baseline written",
+          "phase0 results written",
+          "results schema complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check phase5 inputs": {
+        "owner": "agent",
+        "pre": "workspace inspected",
+        "add": [
+          "checkpoint present",
+          "training data present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run data quality gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkpoint present",
+            "training data present",
+            "goldens written"
+          ]
+        },
+        "add": [
+          "data quality checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run checkpoint eval and drift gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "data quality checked",
+            "baseline written",
+            "drift suite frozen"
+          ]
+        },
+        "add": [
+          "phase5 results written",
+          "results schema complete",
+          "drift evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run paired arena gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "drift evaluated",
+            "baseline written"
+          ]
+        },
+        "add": [
+          "paired arena evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run canary gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "paired arena evaluated",
+            "has production canary target"
+          ]
+        },
+        "add": [
+          "canary evaluated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write promotion report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "phase0 results written",
+            "results schema complete",
+            {
+              "or": [
+                "baseline only request",
+                {
+                  "and": [
+                    "data quality checked",
+                    "drift evaluated",
+                    "paired arena evaluated",
+                    {
+                      "or": [
+                        "canary evaluated",
+                        "no production canary target"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "promotion report written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply with verdict": {
+        "owner": "agent",
+        "pre": "promotion report written",
+        "add": [
+          "deliverable complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase0 only": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "with traces": [
+                      {
+                        "act": {
+                          "cap": "build harness from traces",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "without traces": [
+                      {
+                        "act": {
+                          "cap": "build synthetic harness",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "with traces": [
+                      "traces exist"
+                    ],
+                    "without traces": [
+                      "no traces exist"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run phase0 baseline",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write promotion report",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply with verdict",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase5 gate": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "with traces": [
+                      {
+                        "act": {
+                          "cap": "build harness from traces",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "without traces": [
+                      {
+                        "act": {
+                          "cap": "build synthetic harness",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "with traces": [
+                      "traces exist"
+                    ],
+                    "without traces": [
+                      "no traces exist"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run phase0 baseline",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check phase5 inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run data quality gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run checkpoint eval and drift gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run paired arena gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "canary applicable": [
+                      {
+                        "act": {
+                          "cap": "run canary gate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no canary": []
+                  },
+                  "assumes": {
+                    "canary applicable": [
+                      "has production canary target"
+                    ],
+                    "no canary": [
+                      "no production canary target"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write promotion report",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply with verdict",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "phase0 only": [
+              "baseline only request"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deliverable complete",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "build harness from traces": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "build synthetic harness": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run phase0 baseline": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "check phase5 inputs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run data quality gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run checkpoint eval and drift gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run paired arena gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run canary gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "write promotion report": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "reply with verdict": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

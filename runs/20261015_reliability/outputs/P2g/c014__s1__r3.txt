@@ -1,0 +1,45 @@
+```ce
+Skill `web-design-reviewer`.
+Roles: `agent`, `user`.
+Tool `ask_target_url` (owner `agent`): via `ask_user`; requires not `url_known`; adds `url_known`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `project_inspected`, `framework_detected`, `styling_detected`, `source_location_known`.
+Tool `review_checklist` (owner `agent`): via `read`; adds `checklist_reviewed`.
+Tool `browse_site` (owner `agent`): via `playwright_mcp`; requires `url_known`; adds `pages_inspected`, `screenshots_captured`, `dom_obtained`, `issues_detected`, `viewports_tested`.
+Tool `locate_source_files` (owner `agent`): via `read`; requires `issues_detected`; adds `fix_targets_identified`.
+Tool `apply_design_fixes` (owner `agent`): via `edit`; requires `fix_targets_identified`; adds `issues_fixed`, `source_changed`.
+Tool `start_local_server` (owner `agent`): via `bash`; needs `shell`; requires `source_changed`; adds `local_server_running`.
+Tool `reverify_design` (owner `agent`): via `playwright_mcp`; requires `url_known` and any of (`issues_fixed`, `pages_inspected`); adds `reverified`; removes `issues_detected`.
+Tool `write_review_report` (owner `agent`): via `write`; requires all of (`url_known`, `pages_inspected`, `reverified`); adds `report_written`, `summary_prepared`.
+Tool `deliver_review_report` (owner `agent`): via `send_user_file`; requires `report_written`; adds `report_delivered`.
+Initially true: none.
+Goal: all of (`url_known`, `pages_inspected`, `screenshots_captured`, `viewports_tested`, `checklist_reviewed`, `reverified`, `report_delivered`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `url_already_provided`: none.
+    - branch `need_url`:
+      - `agent` uses `ask_target_url`.
+  - `agent` chooses one of (observed):
+    - branch `fixes_requested`:
+      - `agent` uses `inspect_workspace`.
+    - branch `review_only`: none.
+  - `agent` uses `review_checklist`.
+  - loop `review_cycle`:
+    - `agent` uses `browse_site`.
+    - `agent` chooses one of (observed):
+      - branch `fix_detected_issues`:
+        - `agent` uses `locate_source_files`.
+        - `agent` uses `apply_design_fixes`.
+        - `agent` chooses one of (observed):
+          - branch `server_already_running`: none.
+          - branch `restart_or_start_server`:
+            - `agent` uses `start_local_server`.
+        - `agent` uses `reverify_design`.
+        - `agent` chooses one of (observed):
+          - branch `issues_remaining`:
+            - repeat `review_cycle`.
+          - branch `no_issues_remaining`: none.
+      - branch `report_without_fixes`:
+        - `agent` uses `reverify_design`.
+  - `agent` uses `write_review_report`.
+  - `agent` uses `deliver_review_report`.
+```

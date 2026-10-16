@@ -1,0 +1,85 @@
+```ce
+Skill `nvidia-skill-finder`.
+Roles: `agent`, `user`.
+Tool `check_installed_skills` (owner `agent`): via `skill`; adds `installed_skills_checked`.
+Tool `list_nvidia_catalog_cli` (owner `agent`): via `bash`; requires `nvidia_relevant`; adds `catalog_checked`, `catalog_available`.
+Tool `fetch_nvidia_catalog_web` (owner `agent`): via `web_fetch`; requires `nvidia_relevant`; adds `catalog_checked`, `catalog_available`.
+Tool `ask_install_approval` (owner `agent`): via `ask_user`; requires `strong_match_found`; adds `install_approval_asked`.
+Tool `install_nvidia_skill` (owner `agent`): via `bash`; requires `install_approved` and `catalog_available`; adds `skill_installed`.
+Initially true: none.
+Initially: `recommended_count` == 0.
+Goal: `nvidia_relevant` and `catalog_checked` and any of (`already_installed_match`, `recommendation_given`, `no_strong_match_reported`, `catalog_check_failed_reported`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `nvidia_relevant`:
+      - `agent` uses `check_installed_skills`.
+      - `agent` chooses one of (observed):
+        - branch `installed_match`:
+          - `agent` tells `user` `handoff_to_installed_skill`.
+        - branch `not_installed_match`:
+          - `agent` chooses one of (external):
+            - branch `cli_catalog_ok`:
+              - `agent` uses `list_nvidia_catalog_cli`.
+            - branch `cli_catalog_unavailable`:
+              - `agent` chooses one of (external):
+                - branch `web_catalog_ok`:
+                  - `agent` uses `fetch_nvidia_catalog_web`.
+                - branch `web_catalog_unavailable`:
+                  - `agent` tells `user` `catalog_check_failed`.
+          - `agent` chooses one of (observed):
+            - branch `strong_match`:
+              - `agent` tells `user` `recommend_skill`.
+              - `agent` uses `ask_install_approval`.
+              - `user` chooses one of (observed):
+                - branch `approve_install`:
+                  - `agent` uses `install_nvidia_skill`.
+                  - `agent` tells `user` `restart_or_reload_agent`.
+                - branch `decline_install`: none.
+            - branch `medium_match`:
+              - `agent` tells `user` `recommend_shortlist`.
+            - branch `no_match`:
+              - `agent` tells `user` `no_strong_match`.
+    - branch `not_nvidia_relevant`: none.
+Behaviour of `agent`:
+  - select one of:
+    - branch `nvidia_relevant`:
+      - use `check_installed_skills`.
+      - select one of:
+        - branch `installed_match`:
+          - send `handoff_to_installed_skill` to `user`.
+        - branch `not_installed_match`:
+          - select one of:
+            - branch `cli_catalog_ok`:
+              - use `list_nvidia_catalog_cli`.
+            - branch `cli_catalog_unavailable`:
+              - select one of:
+                - branch `web_catalog_ok`:
+                  - use `fetch_nvidia_catalog_web`.
+                - branch `web_catalog_unavailable`:
+                  - send `catalog_check_failed` to `user`.
+          - select one of:
+            - branch `strong_match`:
+              - send `recommend_skill` to `user`.
+              - use `ask_install_approval`.
+            - branch `medium_match`:
+              - send `recommend_shortlist` to `user`.
+            - branch `no_match`:
+              - send `no_strong_match` to `user`.
+    - branch `not_nvidia_relevant`: none.
+Behaviour of `user`:
+  - branch on `agent` one of:
+    - branch `recommend_skill`:
+      - select one of:
+        - branch `approve_install`:
+          - receive `recommend_skill` from `agent`.
+        - branch `decline_install`:
+          - receive `recommend_skill` from `agent`.
+    - branch `handoff_to_installed_skill`:
+      - receive `handoff_to_installed_skill` from `agent`.
+    - branch `recommend_shortlist`:
+      - receive `recommend_shortlist` from `agent`.
+    - branch `no_strong_match`:
+      - receive `no_strong_match` from `agent`.
+    - branch `catalog_check_failed`:
+      - receive `catalog_check_failed` from `agent`.
+```

@@ -1,0 +1,688 @@
+{
+  "pack": {
+    "name": "playwright",
+    "roles": [
+      "agent"
+    ],
+    "capabilities": {
+      "read_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "state_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_inputs": {
+        "owner": "agent",
+        "pre": "state_read",
+        "add": [
+          "agents_read",
+          "ac_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_dev_server": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_servers",
+            {
+              "and": [
+                "frontend_task",
+                "agents_read"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "dev_server_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_playwright_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:local_filesystem",
+            {
+              "and": [
+                "frontend_task",
+                "agents_read",
+                "ac_read"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "page_objects_written",
+          "tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_playwright_tests": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:package_registries",
+            "needs:local_servers",
+            {
+              "and": [
+                "frontend_task",
+                "dev_server_running",
+                "tests_written"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "test_run_finished"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "append_qa_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "test_run_finished"
+          ]
+        },
+        "add": [
+          "qa_report_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_state_skipped": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            "backend_task"
+          ]
+        },
+        "add": [
+          "state_updated",
+          "playwright_skipped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_state_completed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "test_run_finished",
+                "tests_passed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "state_updated",
+          "playwright_completed",
+          "stage_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_skipped": {
+        "owner": "agent",
+        "pre": "playwright_skipped",
+        "add": [
+          "deliverable_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_completed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "qa_report_updated",
+            "playwright_completed",
+            "stage_complete"
+          ]
+        },
+        "add": [
+          "deliverable_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_failed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "qa_report_updated",
+            "test_run_finished",
+            "tests_failed"
+          ]
+        },
+        "add": [
+          "deliverable_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "backend": [
+              {
+                "act": {
+                  "cap": "update_state_skipped",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_skipped",
+                  "by": "agent"
+                }
+              }
+            ],
+            "frontend": [
+              {
+                "act": {
+                  "cap": "read_inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_dev_server",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_playwright_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_playwright_tests",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "append_qa_report",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "pass": [
+                      {
+                        "act": {
+                          "cap": "update_state_completed",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "reply_completed",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "fail": [
+                      {
+                        "act": {
+                          "cap": "reply_failed",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "fail": [
+                      "tests_failed"
+                    ],
+                    "pass": [
+                      "tests_passed"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "backend": [
+              "backend_task"
+            ],
+            "frontend": [
+              "frontend_task"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deliverable_done",
+    "init_true": [
+      "needs:shell",
+      "needs:linux",
+      "needs:local_servers",
+      "needs:local_filesystem",
+      "needs:package_registries"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "playwright",
+    "roles": [
+      "agent"
+    ],
+    "capabilities": {
+      "read_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "state_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_inputs": {
+        "owner": "agent",
+        "pre": "state_read",
+        "add": [
+          "agents_read",
+          "ac_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_dev_server": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "frontend_task",
+            "agents_read"
+          ]
+        },
+        "add": [
+          "dev_server_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_playwright_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "frontend_task",
+            "agents_read",
+            "ac_read"
+          ]
+        },
+        "add": [
+          "page_objects_written",
+          "tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_playwright_tests": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "frontend_task",
+            "dev_server_running",
+            "tests_written"
+          ]
+        },
+        "add": [
+          "test_run_finished"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "append_qa_report": {
+        "owner": "agent",
+        "pre": "test_run_finished",
+        "add": [
+          "qa_report_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_state_skipped": {
+        "owner": "agent",
+        "pre": "backend_task",
+        "add": [
+          "state_updated",
+          "playwright_skipped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_state_completed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "test_run_finished",
+            "tests_passed"
+          ]
+        },
+        "add": [
+          "state_updated",
+          "playwright_completed",
+          "stage_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_skipped": {
+        "owner": "agent",
+        "pre": "playwright_skipped",
+        "add": [
+          "deliverable_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_completed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "qa_report_updated",
+            "playwright_completed",
+            "stage_complete"
+          ]
+        },
+        "add": [
+          "deliverable_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_failed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "qa_report_updated",
+            "test_run_finished",
+            "tests_failed"
+          ]
+        },
+        "add": [
+          "deliverable_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "backend": [
+              {
+                "act": {
+                  "cap": "update_state_skipped",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_skipped",
+                  "by": "agent"
+                }
+              }
+            ],
+            "frontend": [
+              {
+                "act": {
+                  "cap": "read_inputs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_dev_server",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_playwright_files",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_playwright_tests",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "append_qa_report",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "pass": [
+                      {
+                        "act": {
+                          "cap": "update_state_completed",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "reply_completed",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "fail": [
+                      {
+                        "act": {
+                          "cap": "reply_failed",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "fail": [
+                      "tests_failed"
+                    ],
+                    "pass": [
+                      "tests_passed"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "backend": [
+              "backend_task"
+            ],
+            "frontend": [
+              "frontend_task"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deliverable_done",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "read_state": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_inputs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "start_dev_server": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_servers"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "write_playwright_files": {
+      "via": "write",
+      "needs": [
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_playwright_tests": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "package_registries",
+        "local_servers"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "append_qa_report": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "update_state_skipped": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "update_state_completed": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "reply_skipped": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "reply_completed": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "reply_failed": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

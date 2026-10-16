@@ -1,0 +1,42 @@
+```ce
+Skill `foundationpose-pipeline`.
+Roles: `agent`, `user`.
+Tool `locate_checkout` (owner `agent`): via `read`; adds `checkout_found`.
+Tool `clone_checkout` (owner `agent`): via `bash`; needs `allowlisted_internet`; adds `checkout_found`.
+Tool `adapt_bop_dataset` (owner `agent`): via `bash`; requires `checkout_found`; adds `dataset_adapted`.
+Tool `check_engine_depth_smoke` (owner `agent`): via `bash`; requires `checkout_found`; adds `engine_validated`.
+Tool `build_gt_cache` (owner `agent`): via `bash`; requires `checkout_found`; adds `gt_cache_built`.
+Tool `run_inference_only` (owner `agent`): via `bash`; requires `checkout_found` and `dataset_adapted` and `engine_validated`; adds `inference_completed`, `provenance_verified`.
+Tool `run_pipeline_scored` (owner `agent`): via `bash`; requires `checkout_found` and `dataset_adapted` and `engine_validated` and `gt_cache_built`; adds `inference_completed`, `evaluation_completed`, `provenance_verified`.
+Tool `rescore_completed_run` (owner `agent`): via `bash`; requires `checkout_found`; adds `evaluation_completed`, `baseline_preserved`.
+Tool `run_batch_eval` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated`; adds `batch_completed`, `provenance_verified`.
+Tool `inspect_results` (owner `agent`): via `read`; adds `results_interpreted`.
+Initially true: none.
+Goal: any of (`inference_completed`, `evaluation_completed`, `batch_completed`, `results_interpreted`).
+Protocol:
+  - `agent` uses `locate_checkout`.
+  - `user` chooses one of (observed):
+    - branch `checkout_present`: none.
+    - branch `need_clone_and_setup`:
+      - `agent` uses `clone_checkout`.
+  - `user` chooses one of (observed):
+    - branch `adapt_dataset_and_run`:
+      - `agent` uses `adapt_bop_dataset`.
+      - `agent` uses `check_engine_depth_smoke`.
+      - `user` chooses one of (observed):
+        - branch `inference_only`:
+          - `agent` uses `run_inference_only`.
+          - `agent` uses `inspect_results`.
+        - branch `inference_plus_scoring`:
+          - `agent` uses `build_gt_cache`.
+          - `agent` uses `run_pipeline_scored`.
+          - `agent` uses `inspect_results`.
+    - branch `rescore_existing_run`:
+      - `agent` uses `rescore_completed_run`.
+      - `agent` uses `inspect_results`.
+    - branch `batch_run`:
+      - `agent` uses `run_batch_eval`.
+      - `agent` uses `inspect_results`.
+    - branch `compare_supplied_artifacts_only`:
+      - `agent` uses `inspect_results`.
+```

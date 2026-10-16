@@ -1,0 +1,644 @@
+{
+  "pack": {
+    "name": "automate-this",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_prerequisites": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "prerequisites_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_recording_content": {
+        "owner": "agent",
+        "pre": "prerequisites_checked",
+        "add": [
+          "frames_extracted",
+          "audio_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "frame_count": {
+            "cmp": [
+              "frame_count",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "transcribe_audio": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "frames_extracted",
+            "audio_checked",
+            "audio_present",
+            "whisper_available"
+          ]
+        },
+        "add": [
+          "transcript_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_whisper_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            "audio_present",
+            "whisper_missing"
+          ]
+        },
+        "add": [
+          "whisper_choice_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_reconstruction": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "reconstruction_presented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": "reconstruction_confirmed",
+        "add": [
+          "environment_fingerprinted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_automation_proposal": {
+        "owner": "agent",
+        "pre": "environment_fingerprinted",
+        "add": [
+          "automation_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_tier_choice": {
+        "owner": "agent",
+        "pre": "automation_proposed",
+        "add": [
+          "tier_choice_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_and_test_automation": {
+        "owner": "agent",
+        "pre": "tier_choice_received",
+        "add": [
+          "automation_built",
+          "automation_tested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_temp_files": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "temp_files_cleaned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_cleanup_notice": {
+        "owner": "agent",
+        "pre": "temp_files_cleaned",
+        "add": [
+          "cleanup_notice_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_prerequisites",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "extract_recording_content",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "audio_with_whisper": [
+              {
+                "act": {
+                  "cap": "transcribe_audio",
+                  "by": "agent"
+                }
+              }
+            ],
+            "audio_without_whisper": [
+              {
+                "act": {
+                  "cap": "ask_whisper_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "install_whisper": [],
+                    "proceed_visual_only": []
+                  }
+                }
+              }
+            ],
+            "no_audio": []
+          },
+          "assumes": {
+            "audio_with_whisper": [
+              "audio_present",
+              "whisper_available"
+            ],
+            "audio_without_whisper": [
+              "audio_present",
+              "whisper_missing"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "write_reconstruction",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "confirm_reconstruction": [
+              {
+                "act": {
+                  "cap": "check_environment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_automation_proposal",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "pick_tier": [
+                      {
+                        "act": {
+                          "cap": "ask_tier_choice",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "build_and_test_automation",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stop_after_proposal": []
+                  }
+                }
+              }
+            ],
+            "correction_needed": []
+          },
+          "assumes": {
+            "confirm_reconstruction": [
+              "reconstruction_confirmed"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "cleanup_temp_files",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "write_cleanup_notice",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "automation_proposed",
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "frame_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "automate-this",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_prerequisites": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "prerequisites_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_recording_content": {
+        "owner": "agent",
+        "pre": "prerequisites_checked",
+        "add": [
+          "frames_extracted",
+          "audio_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "frame_count": {
+            "cmp": [
+              "frame_count",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "transcribe_audio": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "frames_extracted",
+            "audio_checked",
+            "audio_present",
+            "whisper_available"
+          ]
+        },
+        "add": [
+          "transcript_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_whisper_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            "audio_present",
+            "whisper_missing"
+          ]
+        },
+        "add": [
+          "whisper_choice_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_reconstruction": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "reconstruction_presented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": "reconstruction_confirmed",
+        "add": [
+          "environment_fingerprinted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_automation_proposal": {
+        "owner": "agent",
+        "pre": "environment_fingerprinted",
+        "add": [
+          "automation_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_tier_choice": {
+        "owner": "agent",
+        "pre": "automation_proposed",
+        "add": [
+          "tier_choice_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_and_test_automation": {
+        "owner": "agent",
+        "pre": "tier_choice_received",
+        "add": [
+          "automation_built",
+          "automation_tested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_temp_files": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "temp_files_cleaned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_cleanup_notice": {
+        "owner": "agent",
+        "pre": "temp_files_cleaned",
+        "add": [
+          "cleanup_notice_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_prerequisites",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "extract_recording_content",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "audio_with_whisper": [
+              {
+                "act": {
+                  "cap": "transcribe_audio",
+                  "by": "agent"
+                }
+              }
+            ],
+            "audio_without_whisper": [
+              {
+                "act": {
+                  "cap": "ask_whisper_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "install_whisper": [],
+                    "proceed_visual_only": []
+                  }
+                }
+              }
+            ],
+            "no_audio": []
+          },
+          "assumes": {
+            "audio_with_whisper": [
+              "audio_present",
+              "whisper_available"
+            ],
+            "audio_without_whisper": [
+              "audio_present",
+              "whisper_missing"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "write_reconstruction",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "confirm_reconstruction": [
+              {
+                "act": {
+                  "cap": "check_environment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_automation_proposal",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "pick_tier": [
+                      {
+                        "act": {
+                          "cap": "ask_tier_choice",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "build_and_test_automation",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stop_after_proposal": []
+                  }
+                }
+              }
+            ],
+            "correction_needed": []
+          },
+          "assumes": {
+            "confirm_reconstruction": [
+              "reconstruction_confirmed"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "cleanup_temp_files",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "write_cleanup_notice",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "automation_proposed",
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "frame_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_prerequisites": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "extract_recording_content": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "transcribe_audio": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_whisper_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "write_reconstruction": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "check_environment": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "write_automation_proposal": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "ask_tier_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "build_and_test_automation": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "cleanup_temp_files": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "write_cleanup_notice": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

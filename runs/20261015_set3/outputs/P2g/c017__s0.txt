@@ -1,0 +1,52 @@
+```ce
+Skill `nextflow-development`.
+Roles: `agent`, `user`.
+Tool `acquire_public_data` (owner `agent`): via `bash`; requires `public_data_requested`; adds `study_info_obtained`, `data_acquired`, `samplesheet_ready`.
+Tool `check_environment` (owner `agent`): via `bash`; picks `environment_ok` with `environment_ok` == 0 or `environment_ok` == 1.
+Tool `detect_data_type` (owner `agent`): via `bash`; adds `data_type_detected`.
+Tool `run_test_profile` (owner `agent`): via `bash`; requires `environment_passed` and `pipeline_confirmed`; picks `test_ok` with `test_ok` == 0 or `test_ok` == 1.
+Tool `create_samplesheet` (owner `agent`): via `bash`; requires `pipeline_confirmed`; adds `samplesheet_ready`.
+Tool `check_genome` (owner `agent`): via `bash`; requires `pipeline_confirmed`; picks `genome_available` with `genome_available` == 0 or `genome_available` == 1.
+Tool `download_genome` (owner `agent`): via `bash`; requires `pipeline_confirmed`; adds `genome_ready`.
+Tool `run_pipeline` (owner `agent`): via `bash`; requires `environment_passed`, `pipeline_confirmed`, `test_passed`, `samplesheet_ready`, `genome_ready`; adds `pipeline_completed`, `outputs_verified`.
+Initially true: none.
+Initially: `environment_ok` == 0.
+Initially: `test_ok` == 0.
+Initially: `genome_available` == 0.
+Goal: `environment_passed` and `pipeline_confirmed` and `test_passed` and `samplesheet_ready` and `genome_ready` and `pipeline_completed` and `outputs_verified`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `public_data`:
+      - `agent` uses `acquire_public_data`.
+    - branch `local_data`: none.
+  - `agent` uses `check_environment`.
+  - `agent` chooses one of (observed):
+    - branch `env_pass`:
+      - `agent` uses `detect_data_type`.
+      - `user` chooses one of (observed):
+        - branch `confirm_pipeline`:
+          - `agent` uses `run_test_profile`.
+          - `agent` chooses one of (observed):
+            - branch `test_pass`:
+              - `agent` uses `create_samplesheet`.
+              - `agent` uses `check_genome`.
+              - `agent` chooses one of (observed):
+                - branch `genome_present`:
+                  - `user` chooses one of (observed):
+                    - branch `confirm_run_options`:
+                      - `agent` uses `run_pipeline`.
+                - branch `genome_missing`:
+                  - `agent` uses `download_genome`.
+                  - `user` chooses one of (observed):
+                    - branch `confirm_run_options`:
+                      - `agent` uses `run_pipeline`.
+            - branch `test_fail`: none.
+        - branch `decline_pipeline`: none.
+    - branch `env_fail`: none.
+Behaviour of `agent`:
+  - select one of:
+    - branch `env_pass`:
+      - use `detect_data_type`.
+    - branch `env_fail`:
+      - use `check_environment`.
+```

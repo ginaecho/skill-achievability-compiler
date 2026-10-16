@@ -1,0 +1,48 @@
+```ce
+Skill `executing-plans`.
+Roles: `agent`, `user`.
+Tool `prepare_workspace_and_ledger` (owner `agent`): via `bash`; requires `plan_available`; adds `workspace_ready`, `ledger_ready`, `worktree_safe`, `plan_read`, `spec_checked`, `tdd_loaded`, `todos_created`, `preflight_scanned`.
+Tool `start_task` (owner `agent`): via `bash`; requires `workspace_ready`; adds `task_brief_read`, `task_in_progress`, `base_known`.
+Tool `implement_task_with_tdd` (owner `agent`): via `bash`; requires `task_brief_read` and `tdd_loaded`; adds `task_steps_executed`, `tests_observed`, `expected_outputs_checked`; removes `task_in_progress`.
+Tool `record_ruling` (owner `agent`): via `write`; requires `ledger_ready`; adds `ruling_recorded`.
+Tool `commit_task_changes` (owner `agent`): via `bash`; requires `task_steps_executed`; adds `task_committed`.
+Tool `complete_task` (owner `agent`): via `bash`; requires `task_committed` and `tests_observed` and `expected_outputs_checked` and `ledger_ready`; adds `task_complete`, `completion_recorded`, `todo_complete`.
+Tool `self_review_branch` (owner `agent`): via `bash`; requires `all_tasks_complete`; adds `review_performed`, `self_review_recorded`, `findings_graded`.
+Tool `fix_review_findings` (owner `agent`): via `bash`; requires `review_performed`; adds `important_findings_addressed`, `fixes_verified`, `green_suite`.
+Tool `record_deferred_minors_and_rulings` (owner `agent`): via `write`; requires `review_performed` and `ledger_ready`; adds `final_decisions_recorded`.
+Tool `delete_plan_workspace` (owner `agent`): via `bash`; requires `review_performed`; adds `workspace_deleted`.
+Tool `finish_branch` (owner `agent`): via `bash`; requires `workspace_deleted`; adds `branch_finished`.
+Tool `ask_for_stop_decision` (owner `agent`): via `ask_user`; requires any of (`destructive_operation_pending`, `security_sensitive_action_pending`, `external_side_effect_pending`, `plan_irrecoverably_broken`); adds `user_guidance_received`.
+Initially true: `plan_available`, `no_subagent_tool`.
+Goal: `workspace_ready` and `ledger_ready` and `preflight_scanned` and `all_tasks_complete` and `review_performed` and `final_decisions_recorded` and `workspace_deleted` and `branch_finished`.
+Protocol:
+  - `agent` uses `prepare_workspace_and_ledger`.
+  - loop `task_loop`:
+    - `agent` chooses one of (external):
+      - branch `more_tasks`:
+        - `agent` uses `start_task`.
+        - `agent` chooses one of (external):
+          - branch `must_stop`:
+            - `agent` uses `ask_for_stop_decision`.
+          - branch `can_proceed`: none.
+        - `agent` uses `implement_task_with_tdd`.
+        - `agent` chooses one of (observed):
+          - branch `ruling_needed`:
+            - `agent` uses `record_ruling`.
+          - branch `no_ruling`: none.
+        - `agent` uses `commit_task_changes`.
+        - `agent` uses `complete_task`.
+        - repeat `task_loop`.
+      - branch `no_more_tasks`:
+        - `agent` uses `self_review_branch`.
+        - `agent` chooses one of (observed):
+          - branch `fix_critical_or_important`:
+            - `agent` uses `fix_review_findings`.
+            - `agent` uses `record_deferred_minors_and_rulings`.
+          - branch `only_minors_or_rulings`:
+            - `agent` uses `record_deferred_minors_and_rulings`.
+          - branch `clean_review`:
+            - `agent` uses `record_deferred_minors_and_rulings`.
+        - `agent` uses `delete_plan_workspace`.
+        - `agent` uses `finish_branch`.
+```

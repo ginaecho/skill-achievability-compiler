@@ -71,9 +71,10 @@ $ skillc cost --corpus                             # token economics of checking
 $ skillc profiles                                  # claude-ai, claude-code, none
 ```
 
-Exit codes: `0` achievable, `1` impossible, `2` error, `3` unknown (an
-abstention, including outside the decidable fragment), so `skillc check` can
-gate CI for skill repositories.
+Exit codes: `0` admissible (achievable, and the protocol is not rejected),
+`1` impossible or protocol rejected, `2` error, `3` unknown (an abstention,
+including outside the decidable fragment), so `skillc check` can gate CI for
+skill repositories.
 
 ## skillc in Microsoft Agent 365
 
@@ -276,24 +277,70 @@ initial state, and optionally per-role declared behaviours (`skills`):
    Γ ⊢ {S_p} : G ▷ ◇goal
 ```
 
-| reason | failure mode it catches |
+A verdict reports two separate results (verdict schema `skillc.verdict/2`):
+**goal reachability** (`ACHIEVABLE` / `IMPOSSIBLE` / `UNKNOWN`) and
+**protocol typing** (`protocol`: `WELL_TYPED` / `REJECTED` / `NOT_CHECKED`).
+Only goal refutations are `IMPOSSIBLE`. These are the results the refutation
+soundness theorem covers.
+
+| goal reason (`IMPOSSIBLE`) | failure mode it catches |
 |---|---|
 | `MISSING_CAPABILITY` | hallucinated planning — the protocol invokes a tool that is not granted |
 | `GOAL_UNSAT` | no establisher for a goal conjunct, or a numeric refinement (e.g. *under $500*) unsatisfiable on every run |
 | `BLOCKED_GUARD` | a mandatory action's precondition can never be satisfied (the retry-forever cause) |
+
+| protocol reason (`protocol: REJECTED`) | failure mode it catches |
+|---|---|
 | `NON_PROJECTABLE` | a role must act inside a branch it is never told about (unobserved choice → deadlock/handoff freeze) |
 | `NON_CONFORMANT` | a declared role behaviour does not refine its projected contract |
+
+A protocol rejection is not a goal refutation. T-Comm requires every branch to
+conform, so one bad branch rejects the protocol even when another branch
+reaches the goal. Such a verdict reads `ACHIEVABLE` with `protocol: REJECTED`,
+and `admissible` is false. Gates and monitors allow only admissible verdicts.
+Each verdict also carries a `coverage` tag that names the formal result behind
+it. See [`docs/VERDICT_COVERAGE.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/VERDICT_COVERAGE.md).
+
+### How a verdict is produced for a natural-language skill
+
+With `skillc check SKILL.md --llm --runtime M`, three stages run in this order. A stage that
+refutes ends the check, so later stages (and the model call) do not run.
+
+1. **Deterministic markdown front-end** (only with `--llm-when needed`). It compiles the
+   skill without a model and keeps an `IMPOSSIBLE` verdict. Covered by the checker's
+   theorems, relative to the pack the front-end extracted (`front_end: deterministic`).
+2. **Deterministic requirement reader** (`env.manifest.refute_text`) against the manifest
+   `M`. It refutes when a hard requirement is unavailable in `M`, with reason
+   `REQUIREMENT_UNAVAILABLE` and the evidence line. Not covered by Theorem 1; `coverage` is
+   `deterministic-reader:manifest` (`front_end: deterministic-reader`). `--no-rdet` skips
+   it; `--rdet-only` runs only it.
+3. **LLM compaction (P2g+) and the checker**. The model writes Controlled English, which is
+   bound to `M` and checked. A refutation is covered by Theorem 1 relative to that pack
+   (`front_end: llm`).
+
+On the blind set3 (100 documents, 18 BLOCKED, judgement labels against the manifest text;
+three samples pooled), P2g+ alone found 4 of 54 BLOCKED (recall 0.07) with 2 false
+refutations of 246. The reader alone found 8 of 18 (0.44) with 7 false refutations of 82
+(0.085). Their union found 24 of 54 (0.44) with 23 of 246 (0.093), against 0.41 and 50 of 246
+(0.20) for the earlier P2g prompt. See
+[`docs/COMPACTION_RELIABILITY.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/COMPACTION_RELIABILITY.md),
+section "set3: P2g against P2g+".
 
 ## More than tool checking: stop impossible agent coordination
 
 Suppose a main agent privately chooses a security or a performance review; a
 reviewer performs it, and an editor must publish the matching report. Every
 capability may exist, but if the editor is never told which branch was chosen,
-it cannot know what to publish. `skillc` refutes this before any agent starts:
+it cannot know what to publish. Each branch reaches the goal on its own, so
+the goal is not refuted. The coordination is still not realizable, and
+`skillc` rejects the protocol before any agent starts:
 
 ```text
-private-review-routing: IMPOSSIBLE [NON_PROJECTABLE]
-  role 'editor' must behave differently across an unobserved choice
+private-review-routing: ACHIEVABLE
+  ACHIEVABLE  goal reachable along witness path
+  PROTOCOL REJECTED (NON_PROJECTABLE): role 'editor' must act in a branch of
+    the main agent's choice but receives no message distinguishing the branches
+  coverage: none:witness-only
 ```
 
 The repair is a protocol change: tell the editor the branch label. Compaction
@@ -344,7 +391,7 @@ prevented run ÷ tokens spent checking) for a median real skill:
 |---|---|---|
 | `MISSING_CAPABILITY` | 3–8–14, one agent | 17× |
 | `GOAL_UNSAT` | 8–18–30, and the run may *believe it succeeded* | 61× |
-| `NON_PROJECTABLE` / `NON_CONFORMANT` | 6–15–30, **two** agents billed | 91× |
+| `NON_PROJECTABLE` / `NON_CONFORMANT` (protocol rejection, not a goal refutation) | 6–15–30, **two** agents billed | 91× |
 | `BLOCKED_GUARD` | 12–25–50 — retry-forever runs to the turn cap | 106× |
 
 `UNKNOWN` claims no savings. Runtime waste is a **model**, not a measurement.

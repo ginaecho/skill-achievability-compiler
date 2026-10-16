@@ -1,0 +1,75 @@
+```ce
+Skill `azure_skill_deploy`.
+Roles: `agent`, `user`.
+
+Tool `read_file` (owner `agent`): via `read`.
+Tool `write_file` (owner `agent`): via `write`.
+Tool `run_shell` (owner `agent`): via `bash`.
+Tool `spawn_task` (owner `agent`): via `tasks`.
+Tool `ask_user_choice` (owner `agent`): via `ask_user`.
+Tool `open_browser` (owner `agent`): via `bash`.
+Tool `generate_secret` (owner `agent`): via `bash`.
+Tool `http_health_check` (owner `agent`): via `web_fetch`.
+Tool `update_context` (owner `agent`): via `write`.
+
+Tool `az_deployment_create` (owner `agent`):
+  via `bash`; needs `azure_account`;
+  requires `preflight_passed` and `deployment_approved` and `skeleton_written`;
+  adds `deployment_started`.
+
+Tool `az_code_deploy` (owner `agent`):
+  via `bash`; needs `azure_account`;
+  requires `deployment_started`;
+  adds `code_deployed`.
+
+Tool `az_scm_disable` (owner `agent`):
+  via `bash`; needs `azure_account`;
+  requires `code_deployed`;
+  adds `scm_disabled`.
+
+Tool `classify_error` (owner `agent`):
+  requires `deployment_failed`;
+  adds `error_classified`.
+
+Initially true: none.
+Initially: `healing_attempts` == 0.
+Goal: `deploy_result_finalized` and `context_updated`.
+
+Protocol:
+  - `agent` uses `spawn_task`.
+  - `agent` uses `read_file`.
+  - `agent` uses `run_shell`.
+  - `user` chooses one of (observed):
+    - branch `approve_deployment`:
+      - `agent` uses `write_file`.
+      - `agent` uses `generate_secret`.
+      - `agent` uses `open_browser`.
+      - `agent` uses `az_deployment_create`.
+      - `agent` uses `az_code_deploy`.
+      - loop `health_check`:
+        - `agent` uses `http_health_check`.
+        - `agent` chooses one of (observed):
+          - branch `health_ok`:
+            - `agent` uses `az_scm_disable`.
+            - `agent` uses `write_file`.
+            - `agent` uses `update_context`.
+          - branch `health_failing`:
+            - `agent` chooses one of (observed):
+              - branch `retry`:
+                - repeat `health_check`.
+              - branch `abort_healing`: none.
+      - loop `healing`:
+        - `agent` uses `classify_error`.
+        - `agent` chooses one of (observed):
+          - branch `retry_recovery`:
+            - `agent` uses `run_shell`.
+            - repeat `healing`.
+          - branch `ask_user`:
+            - `user` chooses one of (observed):
+              - branch `continue_healing`:
+                - repeat `healing`.
+              - branch `stop_healing`:
+                - `agent` uses `write_file`.
+                - `agent` uses `update_context`.
+    - branch `decline_deployment`: none.
+```

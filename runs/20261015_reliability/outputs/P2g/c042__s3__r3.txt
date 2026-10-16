@@ -1,0 +1,48 @@
+```ce
+Skill `executing-plans`.
+Roles: `agent`, `user`.
+Tool `ensure_isolated_workspace` (owner `agent`): via `bash`; requires `plan_available`; adds `isolated_workspace_ready`; removes `on_main_branch`.
+Tool `create_or_resume_ledger` (owner `agent`): via `bash`; requires `isolated_workspace_ready`; adds `workspace_resolved`, `ledger_ready`.
+Tool `read_plan_and_spec` (owner `agent`): via `read`; requires `plan_available`; adds `plan_read`, `spec_checked`.
+Tool `load_tdd_skill` (owner `agent`): via `skill`; adds `tdd_loaded`.
+Tool `preflight_scan` (owner `agent`): via `bash`; requires `plan_read` and `ledger_ready`; adds `preflight_done`.
+Tool `task_start` (owner `agent`): via `bash`; requires `plan_read` and `workspace_resolved`; adds `task_brief_read`, `task_in_progress`, `base_known`.
+Tool `execute_task_with_tdd` (owner `agent`): via `bash`; requires `task_brief_read` and `tdd_loaded`; adds `task_steps_executed`, `expected_outputs_checked`, `tests_seen_fail`, `tests_seen_pass`; picks `stop_needed` with (`stop_needed` or not `stop_needed`).
+Tool `record_ruling` (owner `agent`): via `bash`; requires `ledger_ready`; adds `ruling_recorded`.
+Tool `task_done` (owner `agent`): via `bash`; requires `task_steps_executed` and `expected_outputs_checked` and `tests_seen_pass`; adds `task_complete`, `ledger_updated`, `all_tasks_complete`; removes `task_in_progress`, `task_brief_read`, `task_steps_executed`, `expected_outputs_checked`, `tests_seen_fail`, `tests_seen_pass`, `base_known`.
+Tool `final_self_review` (owner `agent`): via `read`; requires `all_tasks_complete`; adds `final_review_done`, `self_review_recorded`.
+Tool `fix_final_findings` (owner `agent`): via `bash`; requires `final_review_done`; adds `final_findings_resolved`, `final_suite_green`.
+Tool `delete_plan_workspace` (owner `agent`): via `bash`; requires `final_review_done` and `final_findings_resolved`; adds `workspace_deleted`.
+Initially true: `plan_available`, `subagent_tool_unavailable`.
+Initially: `task_count` > 0.
+Initially: `tasks_remaining` == `task_count`.
+Initially: `completed_tasks` == 0.
+Goal: `isolated_workspace_ready` and `ledger_ready` and `plan_read` and `preflight_done` and `all_tasks_complete` and `final_review_done` and `final_findings_resolved` and `workspace_deleted`.
+Protocol:
+  - `agent` uses `ensure_isolated_workspace`.
+  - `agent` uses `create_or_resume_ledger`.
+  - `agent` uses `read_plan_and_spec`.
+  - `agent` uses `load_tdd_skill`.
+  - `agent` uses `preflight_scan`.
+  - loop `per_task`:
+    - `agent` uses `task_start`.
+    - `agent` uses `execute_task_with_tdd`.
+    - `agent` chooses one of (observed):
+      - branch `stop_and_ask_user`:
+        - `user` chooses one of (observed):
+          - branch `answer_and_continue`: none.
+          - branch `decline_or_block`: none.
+      - branch `continue_without_stop`: none.
+    - `agent` chooses one of (observed):
+      - branch `ruling_needed`:
+        - `agent` uses `record_ruling`.
+      - branch `no_ruling_needed`: none.
+    - `agent` uses `task_done`.
+    - `agent` chooses one of (observed):
+      - branch `more_tasks`:
+        - repeat `per_task`.
+      - branch `last_task`: none.
+  - `agent` uses `final_self_review`.
+  - `agent` uses `fix_final_findings`.
+  - `agent` uses `delete_plan_workspace`.
+```

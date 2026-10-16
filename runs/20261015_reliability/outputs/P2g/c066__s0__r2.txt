@@ -1,0 +1,93 @@
+```ce
+Skill `deploy-iac-execution-health-verification`.
+Roles: `agent`, `user`.
+Tool `read_subagent_preflight` (owner `agent`): via `read`; adds `subagent_preflight_read`.
+Tool `dispatch_preflight_task` (owner `agent`): via `agent`; requires `subagent_preflight_read`; adds `preflight_task_dispatched`, `deploy_checklist_exists`.
+Tool `read_deploy_checklist` (owner `agent`): via `read`; requires `deploy_checklist_exists`; adds `deploy_checklist_read`.
+Tool `read_upstream_artifacts` (owner `agent`): via `read`; adds `prepare_plan_read`, `scaffold_manifest_read`, `validation_checked`, `deployment_variables_resolved`.
+Tool `run_preflight_checks` (owner `agent`): via `bash`; requires `deploy_checklist_read`, `prepare_plan_read`, `scaffold_manifest_read`; adds `preflight_checks_done`, `what_if_done`, `auth_checked`, `rbac_checked`, `rg_checked`.
+Tool `ask_deploy_approval` (owner `agent`): via `ask_user`; requires `preflight_checks_done`; picks `approved` with (`approved` or (not `approved`)).
+Tool `read_deploy_schema` (owner `agent`): via `read`; adds `deploy_schema_read`.
+Tool `write_deploy_result_skeleton` (owner `agent`): via `write`; requires `deploy_schema_read`; adds `deploy_result_exists`, `deploy_result_in_progress`.
+Tool `execute_deployment_and_code` (owner `agent`): via `windows_desktop`; requires `approved` and `deploy_result_exists` and `deploy_checklist_read` and `deployment_variables_resolved`; adds `portal_link_generated`, `deployment_attempted`, `code_deploy_attempted`; picks `deploy_ok` with (`deploy_ok` or (not `deploy_ok`)); needs `azure_account`.
+Tool `health_check_and_disable_scm` (owner `agent`): via `bash`; requires `deployment_attempted` and `deploy_checklist_read`; adds `health_checked`, `scm_disabled_verified`; picks `health_ok` with (`health_ok` or (not `health_ok`)).
+Tool `read_error_classification` (owner `agent`): via `read`; adds `error_classification_read`.
+Tool `heal_and_retry` (owner `agent`): via `windows_desktop`; requires `error_classification_read` and `deploy_checklist_read`; sets `healing_attempts` to `healing_attempts` + 1; picks `deploy_ok` with (`deploy_ok` or (not `deploy_ok`)); picks `health_ok` with (`health_ok` or (not `health_ok`)); needs `azure_account`.
+Tool `ask_user_on_healing_threshold` (owner `agent`): via `ask_user`; requires (`healing_attempts` == 3 or `healing_attempts` == 8); adds `user_guidance_received`.
+Tool `finalize_success_artifacts` (owner `agent`): via `write`; requires `deploy_schema_read` and `deploy_result_exists` and `deploy_checklist_read` and `deploy_ok` and `health_ok`; removes `deploy_result_in_progress`; adds `deploy_result_finalized`, `deployment_summary_written`, `context_updated`, `deploy_phase_completed`, `deploy_succeeded`.
+Tool `finalize_failure_artifacts` (owner `agent`): via `write`; requires `deploy_schema_read` and `deploy_result_exists` and `deploy_checklist_read`; removes `deploy_result_in_progress`; adds `deploy_result_finalized`, `deployment_summary_written`, `context_updated`, `deploy_phase_completed`, `deploy_failed`.
+Initially true: none.
+Initially: `healing_attempts` == 0.
+Goal: all of (`deploy_result_finalized`, `deployment_summary_written`, `context_updated`, `deploy_phase_completed`, not `deploy_result_in_progress`).
+Protocol:
+  - `agent` uses `read_subagent_preflight`.
+  - `agent` uses `dispatch_preflight_task`.
+  - `agent` uses `read_deploy_checklist`.
+  - `agent` uses `read_upstream_artifacts`.
+  - `agent` uses `run_preflight_checks`.
+  - `agent` uses `ask_deploy_approval`.
+  - `agent` chooses one of (observed):
+    - branch `approved`:
+      - `agent` uses `read_deploy_schema`.
+      - `agent` uses `write_deploy_result_skeleton`.
+      - `agent` uses `execute_deployment_and_code`.
+      - `agent` uses `read_deploy_checklist`.
+      - `agent` chooses one of (observed):
+        - branch `deploy_succeeded`:
+          - `agent` uses `health_check_and_disable_scm`.
+          - `agent` uses `read_deploy_checklist`.
+          - `agent` chooses one of (observed):
+            - branch `healthy`:
+              - `agent` uses `read_deploy_schema`.
+              - `agent` uses `read_deploy_checklist`.
+              - `agent` uses `finalize_success_artifacts`.
+            - branch `needs_healing`:
+              - `agent` uses `read_error_classification`.
+              - loop `healing_loop`:
+                - `agent` uses `heal_and_retry`.
+                - `agent` uses `read_deploy_checklist`.
+                - `agent` chooses one of (observed):
+                  - branch `prompt_user`:
+                    - `agent` uses `ask_user_on_healing_threshold`.
+                  - branch `no_prompt`: none.
+                - `agent` chooses one of (observed):
+                  - branch `recovered`:
+                    - `agent` uses `read_deploy_schema`.
+                    - `agent` uses `read_deploy_checklist`.
+                    - `agent` uses `finalize_success_artifacts`.
+                  - branch `unrecoverable`:
+                    - `agent` uses `read_deploy_schema`.
+                    - `agent` uses `read_deploy_checklist`.
+                    - `agent` uses `finalize_failure_artifacts`.
+                  - branch `retry`:
+                    - repeat `healing_loop`.
+        - branch `deploy_failed`:
+          - `agent` uses `read_error_classification`.
+          - loop `healing_loop_initial`:
+            - `agent` uses `heal_and_retry`.
+            - `agent` uses `read_deploy_checklist`.
+            - `agent` chooses one of (observed):
+              - branch `prompt_user`:
+                - `agent` uses `ask_user_on_healing_threshold`.
+              - branch `no_prompt`: none.
+            - `agent` chooses one of (observed):
+              - branch `recovered`:
+                - `agent` uses `health_check_and_disable_scm`.
+                - `agent` uses `read_deploy_checklist`.
+                - `agent` chooses one of (observed):
+                  - branch `healthy`:
+                    - `agent` uses `read_deploy_schema`.
+                    - `agent` uses `read_deploy_checklist`.
+                    - `agent` uses `finalize_success_artifacts`.
+                  - branch `still_unhealthy`:
+                    - `agent` uses `read_deploy_schema`.
+                    - `agent` uses `read_deploy_checklist`.
+                    - `agent` uses `finalize_failure_artifacts`.
+              - branch `unrecoverable`:
+                - `agent` uses `read_deploy_schema`.
+                - `agent` uses `read_deploy_checklist`.
+                - `agent` uses `finalize_failure_artifacts`.
+              - branch `retry`:
+                - repeat `healing_loop_initial`.
+    - branch `not_approved`: none.
+```

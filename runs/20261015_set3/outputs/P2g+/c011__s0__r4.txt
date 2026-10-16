@@ -1,0 +1,46 @@
+```ce
+Skill `foundry-agent-sync`.
+Roles: `agent`, `user`.
+Tool `search_manifest` (owner `agent`): via `read`; adds `manifest_found`.
+Tool `ask_for_agent_definitions` (owner `agent`): via `ask_user`; adds `agent_definitions_known`.
+Tool `create_manifest` (owner `agent`): via `write`; requires `agent_definitions_known`; adds `manifest_ready`.
+Tool `search_sync_script` (owner `agent`): via `read`; adds `sync_script_found`.
+Tool `ask_for_parameters` (owner `agent`): via `ask_user`; adds `parameters_known`.
+Tool `create_sync_script` (owner `agent`): via `write`; requires `parameters_known`; adds `sync_script_ready`.
+Tool `run_sync` (owner `agent`): via `bash`; needs `azure_account`; requires `parameters_known` and (`manifest_found` or `manifest_ready`) and (`sync_script_found` or `sync_script_ready`); adds `agents_synced`.
+Tool `verify_agents` (owner `agent`): via `bash`; needs `azure_account`; requires `agents_synced`; adds `agents_verified`.
+Tool `reply_done` (owner `agent`): via `reply`; requires `agents_verified`; adds `foundry_agents_synchronized`.
+Initially true: none.
+Goal: `foundry_agents_synchronized`.
+Protocol:
+  - `agent` uses `search_manifest`.
+  - `user` chooses one of (observed):
+    - branch `manifest_exists` (assuming `manifest_found`):
+      - `agent` uses `search_sync_script`.
+      - `agent` uses `ask_for_parameters`.
+      - `user` chooses one of (observed):
+        - branch `sync_script_exists` (assuming `sync_script_found`):
+          - `agent` uses `run_sync`.
+          - `agent` uses `verify_agents`.
+          - `agent` uses `reply_done`.
+        - branch `sync_script_missing`:
+          - `agent` uses `create_sync_script`.
+          - `agent` uses `run_sync`.
+          - `agent` uses `verify_agents`.
+          - `agent` uses `reply_done`.
+    - branch `manifest_missing`:
+      - `agent` uses `ask_for_agent_definitions`.
+      - `agent` uses `create_manifest`.
+      - `agent` uses `search_sync_script`.
+      - `agent` uses `ask_for_parameters`.
+      - `user` chooses one of (observed):
+        - branch `sync_script_exists` (assuming `sync_script_found`):
+          - `agent` uses `run_sync`.
+          - `agent` uses `verify_agents`.
+          - `agent` uses `reply_done`.
+        - branch `sync_script_missing`:
+          - `agent` uses `create_sync_script`.
+          - `agent` uses `run_sync`.
+          - `agent` uses `verify_agents`.
+          - `agent` uses `reply_done`.
+```

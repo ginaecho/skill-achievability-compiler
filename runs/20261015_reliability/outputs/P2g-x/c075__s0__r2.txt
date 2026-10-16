@@ -1,0 +1,91 @@
+```ce
+Skill `llm-finetuning-training-engineer`.
+Roles: `engineer`, `caller`, `eval_engineer`.
+
+Tool `read_brief` (owner `engineer`):
+  via `read`;
+  adds `brief_read`.
+
+Tool `build_and_validate_dataset` (owner `engineer`):
+  via `bash`;
+  requires `brief_read`;
+  adds `dataset_validated`, `packing_inspected`;
+  picks `dataset_issues` with `dataset_issues` == 0.
+
+Tool `write_dataset_card` (owner `engineer`):
+  via `write`;
+  requires `dataset_validated` and `packing_inspected`;
+  adds `dataset_card_written`.
+
+Tool `run_preflight` (owner `engineer`):
+  via `bash`;
+  requires `dataset_card_written`;
+  adds `env_reported`;
+  picks `env_verdict` with `env_verdict` != `blocked`.
+
+Tool `generate_train_scripts` (owner `engineer`):
+  via `write`;
+  requires `env_reported` and `brief_read`;
+  adds `scripts_generated`.
+
+Tool `commit_scripts` (owner `engineer`):
+  via `bash`;
+  requires `scripts_generated`;
+  adds `scripts_committed`.
+
+Tool `launch_training` (owner `engineer`):
+  via `bash`;
+  requires `scripts_committed`;
+  adds `training_launched`.
+
+Tool `poll_logs` (owner `engineer`):
+  via `bash`;
+  requires `training_launched`;
+  adds `run_complete`;
+  picks `run_outcome` with `run_outcome` == `success` or `run_outcome` == `failure`.
+
+Tool `remediate` (owner `engineer`):
+  via `bash`;
+  requires `run_outcome` == `failure`;
+  adds `run_remediated`.
+
+Tool `receive_promote_verdict` (owner `engineer`):
+  via `ask_user`;
+  adds `promote_verdict_received`;
+  picks `verdict` with `verdict` == `promote` or `verdict` == `reject`.
+
+Tool `export_and_smoke_test` (owner `engineer`):
+  via `bash`;
+  requires `verdict` == `promote`;
+  adds `export_smoke_passed`;
+  picks `smoke_diffs` with `smoke_diffs` == 0.
+
+Initially true: none.
+Initially: `dataset_issues` == 0.
+Goal: `export_smoke_passed` and `smoke_diffs` == 0.
+
+Protocol:
+  - `engineer` uses `read_brief`.
+  - `engineer` uses `build_and_validate_dataset`.
+  - `engineer` uses `write_dataset_card`.
+  - `engineer` uses `run_preflight`.
+  - `engineer` uses `generate_train_scripts`.
+  - `engineer` uses `commit_scripts`.
+  - `engineer` uses `launch_training`.
+  - `engineer` uses `poll_logs`.
+  - `engineer` chooses one of (observed):
+    - branch `run_failed`:
+      - loop `remediation_loop`:
+        - `engineer` uses `remediate`.
+        - `engineer` uses `launch_training`.
+        - `engineer` uses `poll_logs`.
+        - `engineer` chooses one of (observed):
+          - branch `still_failed`: repeat `remediation_loop`.
+          - branch `run_succeeded`: none.
+    - branch `run_succeeded`: none.
+  - `engineer` uses `receive_promote_verdict`.
+  - `engineer` chooses one of (observed):
+    - branch `promoted`:
+      - `engineer` uses `export_and_smoke_test`.
+    - branch `rejected`: none.
+```

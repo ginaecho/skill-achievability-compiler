@@ -1,0 +1,64 @@
+```ce
+Skill `doc-coauthoring`.
+Roles: `agent`, `user`, `reader_agent`.
+Tool `ask_workflow_preference` (owner `agent`): via `ask_user`; adds `workflow_offered`.
+Tool `ask_context_questions` (owner `agent`): via `ask_user`; requires `workflow_accepted`; adds `meta_context_gathered`.
+Tool `read_shared_material` (owner `agent`): via `read`; adds `reference_material_read`.
+Tool `fetch_connected_context` (owner `agent`): via `google_drive`; needs `google_drive_account`; adds `reference_material_read`.
+Tool `ask_clarifications` (owner `agent`): via `ask_user`; requires `meta_context_gathered`; adds `clarifications_gathered`.
+Tool `agree_structure` (owner `agent`): via `ask_user`; requires `clarifications_gathered`; adds `structure_agreed`, `sections_known`.
+Tool `create_doc_scaffold` (owner `agent`): via `write`; requires `structure_agreed`; adds `doc_scaffolded`, `doc_exists`.
+Tool `draft_or_edit_section` (owner `agent`): via `edit`; requires `doc_exists`; adds `current_section_drafted`.
+Tool `review_full_doc` (owner `agent`): via `read`; requires `doc_exists`; adds `full_doc_reviewed`.
+Tool `run_reader_test` (owner `reader_agent`): via `agent`; requires `doc_exists`; adds `reader_test_passed`.
+Tool `ask_final_review_preference` (owner `agent`): via `ask_user`; requires `reader_test_passed`; adds `completion_confirmed`.
+
+Initially true: none.
+Initially: not `workflow_offered` and not `workflow_accepted` and not `meta_context_gathered` and not `reference_material_read` and not `clarifications_gathered` and not `structure_agreed` and not `sections_known` and not `doc_scaffolded` and not `doc_exists` and not `current_section_drafted` and not `full_doc_reviewed` and not `reader_test_passed` and not `completion_confirmed`.
+
+Goal: any of (`completion_confirmed`, (`workflow_offered` and not `workflow_accepted`)).
+
+Protocol:
+  - `agent` uses `ask_workflow_preference`.
+  - `user` chooses one of (observed):
+    - branch `accept_workflow`:
+      - `agent` uses `ask_context_questions`.
+      - `user` chooses one of (observed):
+        - branch `share_connected_context`:
+          - `agent` uses `fetch_connected_context`.
+        - branch `share_local_material`:
+          - `agent` uses `read_shared_material`.
+        - branch `no_shared_material`: none.
+      - `agent` uses `ask_clarifications`.
+      - `user` chooses one of (observed):
+        - branch `move_to_drafting`:
+          - `agent` uses `agree_structure`.
+          - `agent` uses `create_doc_scaffold`.
+          - loop `refine_sections`:
+            - `agent` uses `draft_or_edit_section`.
+            - `user` chooses one of (observed):
+              - branch `section_needs_more_edits`:
+                - repeat `refine_sections`.
+              - branch `section_done`: none.
+          - `agent` uses `review_full_doc`.
+          - spawn `reader_agent`.
+          - `reader_agent` uses `run_reader_test`.
+          - `user` chooses one of (observed):
+            - branch `refine_after_reader_test`:
+              - loop `post_test_refinement`:
+                - `agent` uses `draft_or_edit_section`.
+                - spawn `reader_agent`.
+                - `reader_agent` uses `run_reader_test`.
+                - `user` chooses one of (observed):
+                  - branch `issues_remain`:
+                    - repeat `post_test_refinement`.
+                  - branch `reader_testing_passed`: none.
+            - branch `reader_testing_passed_directly`: none.
+          - `agent` uses `ask_final_review_preference`.
+        - branch `add_more_context`:
+          - `agent` uses `ask_clarifications`.
+    - branch `decline_workflow`: none.
+
+Behaviour of `reader_agent`:
+  - use `run_reader_test`.
+```

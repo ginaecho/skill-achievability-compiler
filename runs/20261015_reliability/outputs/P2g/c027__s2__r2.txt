@@ -1,0 +1,93 @@
+```ce
+Skill `declarative-agent-developer`.
+Roles: `agent`, `user`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_checked`.
+Tool `check_atk_cli` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `atk_cli_available`.
+Tool `set_atk_skill_env` (owner `agent`): via `bash`; requires `atk_cli_available`; adds `atk_skill_env_set`.
+Tool `scaffold_agent_project` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `atk_cli_available` and `atk_skill_env_set`; adds `manifest_exists`, `app_package_exists`, `agent_project`, `app_package_changed`.
+Tool `parse_manifest_and_detect_issues` (owner `agent`): via `read`; requires `manifest_exists`; adds `manifest_checked`.
+Tool `edit_agent_files` (owner `agent`): via `edit`; requires `manifest_exists` and `manifest_checked`; adds `app_package_changed`.
+Tool `add_api_plugin_with_atk` (owner `agent`): via `bash`; needs `shell`, `package_registries`, `allowlisted_internet`; requires `manifest_exists` and `manifest_checked` and `atk_cli_available` and `atk_skill_env_set`; adds `plugin_added`, `app_package_changed`.
+Tool `discover_mcp_tools` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `mcp_tools_discovered`.
+Tool `deploy_agent_local` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `app_package_changed` and `manifest_checked` and `atk_cli_available` and `atk_skill_env_set`; adds `deployed`, `env_local_written`.
+Tool `read_title_id` (owner `agent`): via `read`; requires `env_local_written`; adds `test_link_ready`.
+Tool `send_files_to_user` (owner `agent`): via `send_user_file`; requires `localized_files_ready`; adds `files_sent`.
+
+Initially true: none.
+Goal: any of (`deployed` and `test_link_ready`, `files_sent`, `manifest_errors_found`, `non_agent_project_detected`, `manifest_missing_rejected`, `atk_cli_missing_reported`).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `check_atk_cli`.
+  - `agent` chooses one of (observed):
+    - branch `atk_cli_missing`:
+      - `user` chooses one of (observed):
+        - branch `stop`: none.
+    - branch `atk_cli_available`:
+      - `agent` chooses one of (observed):
+        - branch `reject_non_agent_project`: none.
+        - branch `reject_missing_manifest_for_edit_or_deploy`: none.
+        - branch `scaffold_new_project`:
+          - `agent` uses `set_atk_skill_env`.
+          - `agent` uses `scaffold_agent_project`.
+          - `agent` uses `parse_manifest_and_detect_issues`.
+          - `agent` chooses one of (observed):
+            - branch `errors_found`:
+              - `user` chooses one of (observed):
+                - branch `approve_fix`:
+                  - `agent` uses `edit_agent_files`.
+                  - `agent` chooses one of (observed):
+                    - branch `deploy`:
+                      - `agent` uses `deploy_agent_local`.
+                      - `agent` uses `read_title_id`.
+                    - branch `skip_deploy`: none.
+                - branch `decline_fix`: none.
+            - branch `no_errors`:
+              - `agent` uses `edit_agent_files`.
+              - `agent` chooses one of (observed):
+                - branch `deploy`:
+                  - `agent` uses `deploy_agent_local`.
+                  - `agent` uses `read_title_id`.
+                - branch `skip_deploy`: none.
+        - branch `existing_agent_project`:
+          - `agent` uses `parse_manifest_and_detect_issues`.
+          - `agent` chooses one of (observed):
+            - branch `errors_found`:
+              - `user` chooses one of (observed):
+                - branch `approve_fix`:
+                  - `agent` uses `edit_agent_files`.
+                  - `agent` chooses one of (observed):
+                    - branch `deploy`:
+                      - `agent` uses `deploy_agent_local`.
+                      - `agent` uses `read_title_id`.
+                    - branch `skip_deploy`: none.
+                - branch `decline_fix`: none.
+            - branch `no_errors`:
+              - `agent` chooses one of (observed):
+                - branch `api_plugin`:
+                  - `agent` uses `set_atk_skill_env`.
+                  - `agent` uses `add_api_plugin_with_atk`.
+                  - `agent` uses `edit_agent_files`.
+                  - `agent` chooses one of (observed):
+                    - branch `deploy`:
+                      - `agent` uses `deploy_agent_local`.
+                      - `agent` uses `read_title_id`.
+                    - branch `skip_deploy`: none.
+                - branch `mcp_plugin`:
+                  - `agent` uses `discover_mcp_tools`.
+                  - `agent` uses `edit_agent_files`.
+                  - `agent` chooses one of (observed):
+                    - branch `deploy`:
+                      - `agent` uses `deploy_agent_local`.
+                      - `agent` uses `read_title_id`.
+                    - branch `skip_deploy`: none.
+                - branch `localization`:
+                  - `agent` uses `edit_agent_files`.
+                  - `agent` uses `send_files_to_user`.
+                - branch `review_or_edit`:
+                  - `agent` uses `edit_agent_files`.
+                  - `agent` chooses one of (observed):
+                    - branch `deploy`:
+                      - `agent` uses `deploy_agent_local`.
+                      - `agent` uses `read_title_id`.
+                    - branch `skip_deploy`: none.
+```

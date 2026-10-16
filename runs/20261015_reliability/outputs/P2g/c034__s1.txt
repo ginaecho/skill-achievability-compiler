@@ -1,0 +1,41 @@
+```ce
+Skill `expo-skill-feedback`.
+Roles: `agent`, `user`.
+Tool `submit_feedback` (owner `agent`): via `bash`; needs `allowlisted_internet`, `package_registries`; adds `feedback_submitted`.
+Tool `submit_eval_feedback` (owner `agent`): via `bash`; needs `allowlisted_internet`, `package_registries`; adds `feedback_submitted`.
+Tool `resubmit_eval_feedback_unknown` (owner `agent`): via `bash`; needs `allowlisted_internet`, `package_registries`; requires `eval_category_rejected`; adds `feedback_submitted`.
+Tool `check_telemetry_status` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; adds `telemetry_status_known`.
+Tool `enable_telemetry` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; adds `telemetry_enabled`; removes `telemetry_disabled`.
+Tool `disable_telemetry` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; adds `telemetry_disabled`; removes `telemetry_enabled`.
+Tool `ask_user_choice` (owner `agent`): via `ask_user`; needs `user_conversation`.
+Tool `ask_user_approval` (owner `agent`): via `ask_user`; needs `user_conversation`.
+Initially true: `telemetry_disabled`.
+Goal: any of (`feedback_submitted`, `telemetry_status_known`, `telemetry_enabled`, `telemetry_disabled`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `submit_feedback`:
+      - `agent` uses `ask_user_choice`.
+      - `agent` chooses one of (observed):
+        - branch `regular_feedback`:
+          - `agent` uses `submit_feedback`.
+        - branch `eval_candidate`:
+          - `agent` uses `ask_user_approval`.
+          - `user` chooses one of (observed):
+            - branch `approve_submission`:
+              - `agent` uses `submit_eval_feedback`.
+              - `agent` chooses one of (observed):
+                - branch `eval_category_rejected`:
+                  - `agent` uses `resubmit_eval_feedback_unknown`.
+                - branch `submitted_or_other_error`: none.
+            - branch `decline_submission`: none.
+    - branch `telemetry_status`:
+      - `agent` uses `check_telemetry_status`.
+    - branch `telemetry_enable`:
+      - `agent` uses `ask_user_approval`.
+      - `user` chooses one of (observed):
+        - branch `approve_enable`:
+          - `agent` uses `enable_telemetry`.
+        - branch `decline_enable`: none.
+    - branch `telemetry_disable`:
+      - `agent` uses `disable_telemetry`.
+```

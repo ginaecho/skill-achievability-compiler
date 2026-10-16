@@ -1,0 +1,823 @@
+{
+  "pack": {
+    "name": "playwright-interactive",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "enable_js_repl_config": {
+        "owner": "agent",
+        "pre": "config_file_present",
+        "add": [
+          "js_repl_enabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "initialize_workspace": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "fresh_session",
+            "js_repl_already_enabled"
+          ]
+        },
+        "add": [
+          "workspace_initialized",
+          "playwright_installed",
+          "playwright_import_ok"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_chromium": {
+        "owner": "agent",
+        "pre": "playwright_installed",
+        "add": [
+          "chromium_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_electron_dep": {
+        "owner": "agent",
+        "pre": "workspace_initialized",
+        "add": [
+          "electron_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_dev_server": {
+        "owner": "agent",
+        "pre": "workspace_initialized",
+        "add": [
+          "dev_server_running",
+          "port_responding"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "bootstrap_js_repl_session": {
+        "owner": "agent",
+        "pre": "playwright_import_ok",
+        "add": [
+          "bootstrap_done",
+          "handles_alive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_web_session": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "bootstrap_done",
+            "port_responding"
+          ]
+        },
+        "add": [
+          "web_session_active",
+          "handles_alive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_electron_session": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "bootstrap_done",
+            "electron_dependency_installed"
+          ]
+        },
+        "add": [
+          "electron_session_active",
+          "handles_alive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_qa_cycle": {
+        "owner": "agent",
+        "pre": "handles_alive",
+        "add": [
+          "functional_qa_done",
+          "visual_qa_done",
+          "viewport_fit_checked",
+          "screenshots_captured",
+          "exploratory_pass_done",
+          "qa_inventory_written",
+          "claims_listed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_playwright_session": {
+        "owner": "agent",
+        "pre": "handles_alive",
+        "add": [
+          "cleanup_done"
+        ],
+        "del": [
+          "web_session_active",
+          "electron_session_active",
+          "handles_alive"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "js_repl_already_enabled": [],
+            "enable_js_repl": [
+              {
+                "act": {
+                  "cap": "enable_js_repl_config",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "session_already_fresh": [],
+            "session_was_restarted": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "initialize_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "web_debugging": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "chromium_already_available": [],
+                    "install_chromium_now": [
+                      {
+                        "act": {
+                          "cap": "install_chromium",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "bootstrap_js_repl_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_dev_server",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_web_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_qa_cycle",
+                  "by": "agent"
+                }
+              }
+            ],
+            "electron_debugging": [
+              {
+                "act": {
+                  "cap": "install_electron_dep",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "bootstrap_js_repl_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_renderer_dev_server_needed": [],
+                    "renderer_dev_server_needed": [
+                      {
+                        "act": {
+                          "cap": "start_dev_server",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_electron_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_qa_cycle",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "keep_session_alive": [],
+            "cleanup_now": [
+              {
+                "act": {
+                  "cap": "cleanup_playwright_session",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "qa_inventory_written",
+        "claims_listed",
+        {
+          "or": [
+            "web_session_active",
+            "electron_session_active"
+          ]
+        },
+        "functional_qa_done",
+        "visual_qa_done",
+        "viewport_fit_checked",
+        "screenshots_captured",
+        "exploratory_pass_done"
+      ]
+    },
+    "init_true": [
+      "config_file_present"
+    ],
+    "init_constraints": [
+      {
+        "not": "js_repl_enabled"
+      },
+      {
+        "not": "js_repl_already_enabled"
+      },
+      {
+        "not": "fresh_session"
+      },
+      {
+        "not": "workspace_initialized"
+      },
+      {
+        "not": "playwright_installed"
+      },
+      {
+        "not": "playwright_import_ok"
+      },
+      {
+        "not": "chromium_installed"
+      },
+      {
+        "not": "electron_dependency_installed"
+      },
+      {
+        "not": "dev_server_running"
+      },
+      {
+        "not": "port_responding"
+      },
+      {
+        "not": "bootstrap_done"
+      },
+      {
+        "not": "handles_alive"
+      },
+      {
+        "not": "web_session_active"
+      },
+      {
+        "not": "electron_session_active"
+      },
+      {
+        "not": "functional_qa_done"
+      },
+      {
+        "not": "visual_qa_done"
+      },
+      {
+        "not": "viewport_fit_checked"
+      },
+      {
+        "not": "screenshots_captured"
+      },
+      {
+        "not": "exploratory_pass_done"
+      },
+      {
+        "not": "qa_inventory_written"
+      },
+      {
+        "not": "claims_listed"
+      },
+      {
+        "not": "cleanup_done"
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "playwright-interactive",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "enable_js_repl_config": {
+        "owner": "agent",
+        "pre": "config_file_present",
+        "add": [
+          "js_repl_enabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "initialize_workspace": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "fresh_session",
+            "js_repl_already_enabled"
+          ]
+        },
+        "add": [
+          "workspace_initialized",
+          "playwright_installed",
+          "playwright_import_ok"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_chromium": {
+        "owner": "agent",
+        "pre": "playwright_installed",
+        "add": [
+          "chromium_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_electron_dep": {
+        "owner": "agent",
+        "pre": "workspace_initialized",
+        "add": [
+          "electron_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_dev_server": {
+        "owner": "agent",
+        "pre": "workspace_initialized",
+        "add": [
+          "dev_server_running",
+          "port_responding"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "bootstrap_js_repl_session": {
+        "owner": "agent",
+        "pre": "playwright_import_ok",
+        "add": [
+          "bootstrap_done",
+          "handles_alive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_web_session": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "bootstrap_done",
+            "port_responding"
+          ]
+        },
+        "add": [
+          "web_session_active",
+          "handles_alive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_electron_session": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "bootstrap_done",
+            "electron_dependency_installed"
+          ]
+        },
+        "add": [
+          "electron_session_active",
+          "handles_alive"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_qa_cycle": {
+        "owner": "agent",
+        "pre": "handles_alive",
+        "add": [
+          "functional_qa_done",
+          "visual_qa_done",
+          "viewport_fit_checked",
+          "screenshots_captured",
+          "exploratory_pass_done",
+          "qa_inventory_written",
+          "claims_listed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_playwright_session": {
+        "owner": "agent",
+        "pre": "handles_alive",
+        "add": [
+          "cleanup_done"
+        ],
+        "del": [
+          "web_session_active",
+          "electron_session_active",
+          "handles_alive"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "js_repl_already_enabled": [],
+            "enable_js_repl": [
+              {
+                "act": {
+                  "cap": "enable_js_repl_config",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "session_already_fresh": [],
+            "session_was_restarted": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "initialize_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "web_debugging": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "chromium_already_available": [],
+                    "install_chromium_now": [
+                      {
+                        "act": {
+                          "cap": "install_chromium",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "bootstrap_js_repl_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_dev_server",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_web_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_qa_cycle",
+                  "by": "agent"
+                }
+              }
+            ],
+            "electron_debugging": [
+              {
+                "act": {
+                  "cap": "install_electron_dep",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "bootstrap_js_repl_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_renderer_dev_server_needed": [],
+                    "renderer_dev_server_needed": [
+                      {
+                        "act": {
+                          "cap": "start_dev_server",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_electron_session",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_qa_cycle",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "keep_session_alive": [],
+            "cleanup_now": [
+              {
+                "act": {
+                  "cap": "cleanup_playwright_session",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "qa_inventory_written",
+        "claims_listed",
+        {
+          "or": [
+            "web_session_active",
+            "electron_session_active"
+          ]
+        },
+        "functional_qa_done",
+        "visual_qa_done",
+        "viewport_fit_checked",
+        "screenshots_captured",
+        "exploratory_pass_done"
+      ]
+    },
+    "init_true": [
+      "config_file_present"
+    ],
+    "init_constraints": [
+      {
+        "not": "js_repl_enabled"
+      },
+      {
+        "not": "js_repl_already_enabled"
+      },
+      {
+        "not": "fresh_session"
+      },
+      {
+        "not": "workspace_initialized"
+      },
+      {
+        "not": "playwright_installed"
+      },
+      {
+        "not": "playwright_import_ok"
+      },
+      {
+        "not": "chromium_installed"
+      },
+      {
+        "not": "electron_dependency_installed"
+      },
+      {
+        "not": "dev_server_running"
+      },
+      {
+        "not": "port_responding"
+      },
+      {
+        "not": "bootstrap_done"
+      },
+      {
+        "not": "handles_alive"
+      },
+      {
+        "not": "web_session_active"
+      },
+      {
+        "not": "electron_session_active"
+      },
+      {
+        "not": "functional_qa_done"
+      },
+      {
+        "not": "visual_qa_done"
+      },
+      {
+        "not": "viewport_fit_checked"
+      },
+      {
+        "not": "screenshots_captured"
+      },
+      {
+        "not": "exploratory_pass_done"
+      },
+      {
+        "not": "qa_inventory_written"
+      },
+      {
+        "not": "claims_listed"
+      },
+      {
+        "not": "cleanup_done"
+      }
+    ]
+  },
+  "bindings": {
+    "enable_js_repl_config": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "initialize_workspace": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "install_chromium": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "install_electron_dep": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "start_dev_server": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "bootstrap_js_repl_session": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "start_web_session": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "start_electron_session": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_qa_cycle": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "cleanup_playwright_session": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

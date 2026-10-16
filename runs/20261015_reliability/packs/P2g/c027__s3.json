@@ -1,0 +1,980 @@
+{
+  "pack": {
+    "name": "declarative-agent-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_atk_cli": {
+        "owner": "agent",
+        "pre": "workspace_checked",
+        "add": [
+          "atk_cli_checked",
+          "atk_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "project_kind": {
+            "or": [
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  1
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  2
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  3
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  4
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  5
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  6
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "report_rejection": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                1
+              ]
+            },
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                2
+              ]
+            },
+            {
+              "not": "atk_cli_available"
+            }
+          ]
+        },
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_errors_and_ask": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                4
+              ]
+            },
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                5
+              ]
+            }
+          ]
+        },
+        "add": [
+          "user_informed",
+          "user_decision_requested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_cli_available",
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                3
+              ]
+            }
+          ]
+        },
+        "add": [
+          "project_scaffolded",
+          "apppackage_changed",
+          "manifest_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_agent_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "manifest_present",
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                6
+              ]
+            }
+          ]
+        },
+        "add": [
+          "apppackage_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_manifest_and_version": {
+        "owner": "agent",
+        "pre": "manifest_present",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "project_kind": {
+            "or": [
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  4
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  5
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  6
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "deploy_agent": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_cli_available",
+            "apppackage_changed",
+            {
+              "not": {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  4
+                ]
+              }
+            },
+            {
+              "not": {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  5
+                ]
+              }
+            },
+            {
+              "not": "user_requested_no_deploy"
+            }
+          ]
+        },
+        "add": [
+          "deployed",
+          "test_link_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_test_link": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deployed",
+            "test_link_available"
+          ]
+        },
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_atk_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "reject_or_missing_cli": [
+              {
+                "act": {
+                  "cap": "report_rejection",
+                  "by": "agent"
+                }
+              }
+            ],
+            "scaffold_new_project": [
+              {
+                "act": {
+                  "cap": "scaffold_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "validate_manifest_and_version",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "deploy": [
+                      {
+                        "act": {
+                          "cap": "deploy_agent",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "present_test_link",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_deploy": []
+                  }
+                }
+              }
+            ],
+            "inform_errors_and_wait": [
+              {
+                "act": {
+                  "cap": "report_errors_and_ask",
+                  "by": "agent"
+                }
+              }
+            ],
+            "edit_existing_project": [
+              {
+                "act": {
+                  "cap": "edit_agent_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "validate_manifest_and_version",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "errors_found_after_edit": [
+                      {
+                        "act": {
+                          "cap": "report_errors_and_ask",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "valid_after_edit": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "deploy": [
+                              {
+                                "act": {
+                                  "cap": "deploy_agent",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "present_test_link",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_deploy": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "user_informed",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    1
+                  ]
+                },
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    2
+                  ]
+                },
+                {
+                  "not": "atk_cli_available"
+                },
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    4
+                  ]
+                },
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    5
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "and": [
+            "deployed",
+            "test_link_available",
+            "user_informed"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "project_kind",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "declarative-agent-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_atk_cli": {
+        "owner": "agent",
+        "pre": "workspace_checked",
+        "add": [
+          "atk_cli_checked",
+          "atk_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "project_kind": {
+            "or": [
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  1
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  2
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  3
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  4
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  5
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  6
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "report_rejection": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                1
+              ]
+            },
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                2
+              ]
+            },
+            {
+              "not": "atk_cli_available"
+            }
+          ]
+        },
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_errors_and_ask": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                4
+              ]
+            },
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                5
+              ]
+            }
+          ]
+        },
+        "add": [
+          "user_informed",
+          "user_decision_requested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_cli_available",
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                3
+              ]
+            }
+          ]
+        },
+        "add": [
+          "project_scaffolded",
+          "apppackage_changed",
+          "manifest_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_agent_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "manifest_present",
+            {
+              "cmp": [
+                "project_kind",
+                "==",
+                6
+              ]
+            }
+          ]
+        },
+        "add": [
+          "apppackage_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_manifest_and_version": {
+        "owner": "agent",
+        "pre": "manifest_present",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "project_kind": {
+            "or": [
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  4
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  5
+                ]
+              },
+              {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  6
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "deploy_agent": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_cli_available",
+            "apppackage_changed",
+            {
+              "not": {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  4
+                ]
+              }
+            },
+            {
+              "not": {
+                "cmp": [
+                  "project_kind",
+                  "==",
+                  5
+                ]
+              }
+            },
+            {
+              "not": "user_requested_no_deploy"
+            }
+          ]
+        },
+        "add": [
+          "deployed",
+          "test_link_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_test_link": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deployed",
+            "test_link_available"
+          ]
+        },
+        "add": [
+          "user_informed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_atk_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "reject_or_missing_cli": [
+              {
+                "act": {
+                  "cap": "report_rejection",
+                  "by": "agent"
+                }
+              }
+            ],
+            "scaffold_new_project": [
+              {
+                "act": {
+                  "cap": "scaffold_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "validate_manifest_and_version",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "deploy": [
+                      {
+                        "act": {
+                          "cap": "deploy_agent",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "present_test_link",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_deploy": []
+                  }
+                }
+              }
+            ],
+            "inform_errors_and_wait": [
+              {
+                "act": {
+                  "cap": "report_errors_and_ask",
+                  "by": "agent"
+                }
+              }
+            ],
+            "edit_existing_project": [
+              {
+                "act": {
+                  "cap": "edit_agent_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "validate_manifest_and_version",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "errors_found_after_edit": [
+                      {
+                        "act": {
+                          "cap": "report_errors_and_ask",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "valid_after_edit": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "deploy": [
+                              {
+                                "act": {
+                                  "cap": "deploy_agent",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "present_test_link",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_deploy": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "user_informed",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    1
+                  ]
+                },
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    2
+                  ]
+                },
+                {
+                  "not": "atk_cli_available"
+                },
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    4
+                  ]
+                },
+                {
+                  "cmp": [
+                    "project_kind",
+                    "==",
+                    5
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "and": [
+            "deployed",
+            "test_link_available",
+            "user_informed"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "project_kind",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_atk_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "report_rejection": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "report_errors_and_ask": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "scaffold_project": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "edit_agent_project": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "validate_manifest_and_version": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "deploy_agent": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "present_test_link": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

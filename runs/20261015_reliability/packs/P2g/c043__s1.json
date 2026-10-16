@@ -1,0 +1,592 @@
+{
+  "pack": {
+    "name": "vercel-deploy",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_vercel_cli": {
+        "owner": "agent",
+        "pre": "shell",
+        "add": [
+          "cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_preview_cli": {
+        "owner": "agent",
+        "pre": "cli_checked",
+        "add": [
+          "deployment_ready",
+          "preview_deploy"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_url": {
+            "cmp": [
+              "deployment_url",
+              ">",
+              0
+            ]
+          }
+        }
+      },
+      "deploy_production_cli": {
+        "owner": "agent",
+        "pre": "cli_checked",
+        "add": [
+          "deployment_ready",
+          "production_deploy"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_url": {
+            "cmp": [
+              "deployment_url",
+              ">",
+              0
+            ]
+          }
+        }
+      },
+      "deploy_fallback_script": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deployment_ready",
+          "preview_deploy",
+          "claim_url_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_url": {
+            "cmp": [
+              "deployment_url",
+              ">",
+              0
+            ]
+          },
+          "claim_url": {
+            "cmp": [
+              "claim_url",
+              ">",
+              0
+            ]
+          }
+        }
+      },
+      "ask_escalation_permission": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "escalation_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_vercel_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "preview_request": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_deploy_succeeds": [
+                      {
+                        "act": {
+                          "cap": "deploy_preview_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "cli_missing_or_no_credentials": [
+                      {
+                        "act": {
+                          "cap": "deploy_fallback_script",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "network_blocked": [
+                      {
+                        "act": {
+                          "cap": "ask_escalation_permission",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "approve_escalation": [
+                              {
+                                "act": {
+                                  "cap": "deploy_preview_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "decline_escalation": [
+                              {
+                                "act": {
+                                  "cap": "deploy_fallback_script",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "production_request": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_deploy_succeeds": [
+                      {
+                        "act": {
+                          "cap": "deploy_production_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "network_blocked": [
+                      {
+                        "act": {
+                          "cap": "ask_escalation_permission",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "approve_escalation": [
+                              {
+                                "act": {
+                                  "cap": "deploy_production_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "decline_escalation": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deployment_ready",
+        {
+          "cmp": [
+            "deployment_url",
+            ">",
+            0
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "preview_deploy",
+                {
+                  "not": "claim_url_available"
+                }
+              ]
+            },
+            {
+              "and": [
+                "preview_deploy",
+                "claim_url_available",
+                {
+                  "cmp": [
+                    "claim_url",
+                    ">",
+                    0
+                  ]
+                }
+              ]
+            },
+            {
+              "and": [
+                "production_deploy",
+                {
+                  "not": "claim_url_available"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "shell",
+      "user_conversation"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "deployment_url",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "claim_url",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "vercel-deploy",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_vercel_cli": {
+        "owner": "agent",
+        "pre": "shell",
+        "add": [
+          "cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_preview_cli": {
+        "owner": "agent",
+        "pre": "cli_checked",
+        "add": [
+          "deployment_ready",
+          "preview_deploy"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_url": {
+            "cmp": [
+              "deployment_url",
+              ">",
+              0
+            ]
+          }
+        }
+      },
+      "deploy_production_cli": {
+        "owner": "agent",
+        "pre": "cli_checked",
+        "add": [
+          "deployment_ready",
+          "production_deploy"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_url": {
+            "cmp": [
+              "deployment_url",
+              ">",
+              0
+            ]
+          }
+        }
+      },
+      "deploy_fallback_script": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deployment_ready",
+          "preview_deploy",
+          "claim_url_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "deployment_url": {
+            "cmp": [
+              "deployment_url",
+              ">",
+              0
+            ]
+          },
+          "claim_url": {
+            "cmp": [
+              "claim_url",
+              ">",
+              0
+            ]
+          }
+        }
+      },
+      "ask_escalation_permission": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "escalation_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_vercel_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "preview_request": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_deploy_succeeds": [
+                      {
+                        "act": {
+                          "cap": "deploy_preview_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "cli_missing_or_no_credentials": [
+                      {
+                        "act": {
+                          "cap": "deploy_fallback_script",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "network_blocked": [
+                      {
+                        "act": {
+                          "cap": "ask_escalation_permission",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "approve_escalation": [
+                              {
+                                "act": {
+                                  "cap": "deploy_preview_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "decline_escalation": [
+                              {
+                                "act": {
+                                  "cap": "deploy_fallback_script",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "production_request": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_deploy_succeeds": [
+                      {
+                        "act": {
+                          "cap": "deploy_production_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "network_blocked": [
+                      {
+                        "act": {
+                          "cap": "ask_escalation_permission",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "approve_escalation": [
+                              {
+                                "act": {
+                                  "cap": "deploy_production_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "decline_escalation": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deployment_ready",
+        {
+          "cmp": [
+            "deployment_url",
+            ">",
+            0
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "preview_deploy",
+                {
+                  "not": "claim_url_available"
+                }
+              ]
+            },
+            {
+              "and": [
+                "preview_deploy",
+                "claim_url_available",
+                {
+                  "cmp": [
+                    "claim_url",
+                    ">",
+                    0
+                  ]
+                }
+              ]
+            },
+            {
+              "and": [
+                "production_deploy",
+                {
+                  "not": "claim_url_available"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "shell",
+      "user_conversation"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "deployment_url",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "claim_url",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_vercel_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "deploy_preview_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "deploy_production_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "deploy_fallback_script": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "ask_escalation_permission": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    }
+  },
+  "live_goal": null
+}

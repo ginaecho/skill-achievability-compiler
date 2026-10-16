@@ -1,0 +1,118 @@
+```ce
+Skill `declarative-agent-developer`.
+Roles: `agent`, `user`.
+
+Tool `check_workspace` (owner `agent`):
+  via `bash`;
+  requires `shell`;
+  picks `gate` with `gate` in {`reject_non_agent`, `reject_no_manifest`, `scaffold`, `fix_errors`, `review`, `edit`};
+  adds `workspace_fingerprinted`.
+
+Tool `scaffold_project` (owner `agent`):
+  via `bash`;
+  requires `gate` == `scaffold` and `shell`;
+  adds `project_scaffolded`.
+
+Tool `parse_manifest` (owner `agent`):
+  via `read`;
+  requires `shell`;
+  picks `manifest_errors` with `manifest_errors` != none;
+  picks `manifest_version` with `manifest_version` != none.
+
+Tool `check_version_gate` (owner `agent`):
+  requires `manifest_version` != none;
+  picks `version_ok` with `version_ok` == true.
+
+Tool `fix_json` (owner `agent`):
+  via `edit`;
+  requires `manifest_errors` != none and `user_approved_fix` == true;
+  removes `manifest_errors`.
+
+Tool `add_api_plugin` (owner `agent`):
+  via `bash`;
+  requires `shell` and `gate` == `edit`;
+  adds `api_plugin_added`.
+
+Tool `add_mcp_plugin` (owner `agent`):
+  via `bash`;
+  requires `shell` and `gate` == `edit`;
+  adds `mcp_plugin_added`.
+
+Tool `update_instructions` (owner `agent`):
+  via `edit`;
+  requires `shell`;
+  adds `instructions_updated`.
+
+Tool `deploy_agent` (owner `agent`):
+  via `bash`;
+  requires `manifest_errors` == none and `shell`;
+  adds `deployed`;
+  picks `title_id` with `title_id` != none.
+
+Tool `show_test_link` (owner `agent`):
+  via `ask_user`;
+  requires `deployed` and `title_id` != none;
+  adds `test_link_shown`.
+
+Tool `localize_agent` (owner `agent`):
+  via `bash`;
+  requires `shell` and `gate` == `edit`;
+  adds `localized`.
+
+Initially true: none.
+Initially: `manifest_errors` == none and `gate` == none and `title_id` == none.
+
+Goal: `deployed` and `test_link_shown` and `instructions_updated`.
+
+Protocol:
+  - loop `session`:
+    - `agent` uses `check_workspace`.
+    - `agent` chooses one of (observed):
+      - branch `reject_non_agent`:
+        - checkpoint: `gate` == `reject_non_agent`.
+        - repeat `session`.
+      - branch `reject_no_manifest`:
+        - checkpoint: `gate` == `reject_no_manifest`.
+        - repeat `session`.
+      - branch `scaffold`:
+        - checkpoint: `gate` == `scaffold`.
+        - `agent` uses `scaffold_project`.
+        - `agent` uses `parse_manifest`.
+        - `agent` uses `check_version_gate`.
+        - `agent` uses `update_instructions`.
+        - `agent` uses `deploy_agent`.
+        - `agent` uses `show_test_link`.
+        - repeat `session`.
+      - branch `fix_errors`:
+        - checkpoint: `gate` == `fix_errors`.
+        - `agent` uses `parse_manifest`.
+        - `user` chooses one of (observed):
+          - branch `user_approved_fix`:
+            - `agent` uses `fix_json`.
+            - `agent` uses `check_version_gate`.
+            - `agent` uses `update_instructions`.
+            - `agent` uses `deploy_agent`.
+            - `agent` uses `show_test_link`.
+          - branch `user_declined_fix`: none.
+        - repeat `session`.
+      - branch `review`:
+        - checkpoint: `gate` == `review`.
+        - `agent` uses `update_instructions`.
+        - `agent` uses `deploy_agent`.
+        - `agent` uses `show_test_link`.
+        - repeat `session`.
+      - branch `edit`:
+        - checkpoint: `gate` == `edit`.
+        - `user` chooses one of (observed):
+          - branch `add_api_plugin`:
+            - `agent` uses `add_api_plugin`.
+          - branch `add_mcp_plugin`:
+            - `agent` uses `add_mcp_plugin`.
+          - branch `localize`:
+            - `agent` uses `localize_agent`.
+          - branch `edit_instructions_only`: none.
+        - `agent` uses `update_instructions`.
+        - `agent` uses `deploy_agent`.
+        - `agent` uses `show_test_link`.
+        - repeat `session`.
+```

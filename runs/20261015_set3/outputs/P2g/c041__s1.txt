@@ -1,0 +1,57 @@
+```ce
+Skill `automate-this`.
+Roles: `agent`, `user`.
+Tool `check_prerequisites` (owner `agent`): via `bash`; requires `video_path_known`; adds `prerequisites_checked`.
+Tool `extract_recording_content` (owner `agent`): via `bash`; requires `video_path_known` and `prerequisites_checked`; adds `work_dir_created`, `frames_extracted`, `audio_checked`; picks `frame_interval_seconds` with any of (`frame_interval_seconds` == 2, `frame_interval_seconds` == 4); picks `frame_count` with `frame_count` >= 0; picks `has_audio` with any of (`has_audio`, not `has_audio`); adds `cleanup_needed`.
+Tool `transcribe_audio` (owner `agent`): via `bash`; requires `audio_checked` and `has_audio`; adds `transcript_available`.
+Tool `ask_whisper_choice` (owner `agent`): via `ask_user`; requires `audio_checked` and `has_audio` and not `transcript_available`; adds `whisper_choice_recorded`; picks `user_wants_whisper_install` with any of (`user_wants_whisper_install`, not `user_wants_whisper_install`).
+Tool `analyze_recording` (owner `agent`): via `read`; requires `frames_extracted`; adds `process_reconstructed`.
+Tool `present_reconstruction` (owner `agent`): via `ask_user`; requires `process_reconstructed`; adds `reconstruction_feedback_received`; picks `reconstruction_confirmed` with any of (`reconstruction_confirmed`, not `reconstruction_confirmed`).
+Tool `check_environment` (owner `agent`): via `bash`; requires `reconstruction_confirmed`; adds `environment_fingerprinted`.
+Tool `present_proposals` (owner `agent`): via `ask_user`; requires `environment_fingerprinted`; adds `proposals_presented`, `tier_decision_recorded`; picks `tier_selected` with any of (`tier_selected` == 0, `tier_selected` == 1, `tier_selected` == 2, `tier_selected` == 3).
+Tool `build_automation` (owner `agent`): via `write`; requires `tier_decision_recorded` and `tier_selected` > 0; adds `automation_written`.
+Tool `test_and_fix_automation` (owner `agent`): via `bash`; requires `automation_written`; adds `automation_tested`; picks `automation_working` with any of (`automation_working`, not `automation_working`).
+Tool `revise_automation` (owner `agent`): via `edit`; requires `automation_written` and `automation_tested` and not `automation_working`; adds `automation_revised`.
+Tool `cleanup_temp_files` (owner `agent`): via `bash`; requires `cleanup_needed`; removes `work_dir_created`; removes `frames_extracted`; removes `transcript_available`; removes `cleanup_needed`; adds `temp_files_cleaned`.
+
+Initially true: none.
+Initially: `frame_interval_seconds` == 0.
+Initially: `frame_count` == 0.
+Initially: `tier_selected` == 0.
+Initially: not `video_path_known`.
+Goal: `process_reconstructed` and `reconstruction_confirmed` and `environment_fingerprinted` and `proposals_presented` and any of ((`tier_selected` == 0), (`automation_written` and `automation_tested` and `automation_working`)) and `temp_files_cleaned`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `provide_video_path`:
+      - `agent` uses `check_prerequisites`.
+      - `agent` uses `extract_recording_content`.
+      - `agent` chooses one of (observed):
+        - branch `audio_without_transcript`:
+          - `agent` uses `ask_whisper_choice`.
+        - branch `transcript_ready`:
+          - `agent` uses `transcribe_audio`.
+        - branch `no_audio`: none.
+      - loop `reconstruct_until_confirmed`:
+        - `agent` uses `analyze_recording`.
+        - `agent` uses `present_reconstruction`.
+        - `agent` chooses one of (observed):
+          - branch `confirmed`: none.
+          - branch `needs_correction`:
+            - repeat `reconstruct_until_confirmed`.
+      - `agent` uses `check_environment`.
+      - `agent` uses `present_proposals`.
+      - `agent` chooses one of (observed):
+        - branch `no_build`:
+          - `agent` uses `cleanup_temp_files`.
+        - branch `build_tier`:
+          - `agent` uses `build_automation`.
+          - loop `test_until_working`:
+            - `agent` uses `test_and_fix_automation`.
+            - `agent` chooses one of (observed):
+              - branch `working`: none.
+              - branch `fix_and_retry`:
+                - `agent` uses `revise_automation`.
+                - repeat `test_until_working`.
+          - `agent` uses `cleanup_temp_files`.
+    - branch `no_video_path`: none.
+```

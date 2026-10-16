@@ -1,0 +1,46 @@
+```ce
+Skill `build-agent`.
+Roles: `agent`, `user`.
+Tool `read_capture_reference` (owner `agent`): via `read`; adds `capture_guidance_read`.
+Tool `read_authoring_reference` (owner `agent`): via `read`; adds `authoring_guidance_read`.
+Tool `read_gotchas_reference` (owner `agent`): via `read`; adds `gotchas_guidance_read`.
+Tool `write_skill_files` (owner `agent`): via `write`; requires `task_spec_available` and `authoring_guidance_read`; adds `skill_written`, `approval_gates_included`, `fallback_included`, `missing_data_rule_included`, `owner_terms_used`.
+Tool `revise_skill_files` (owner `agent`): via `write`; requires `skill_written`; adds `skill_revised`.
+Tool `register_with_router` (owner `agent`): via `write`; requires `skill_written`; adds `router_registered`, `trigger_phrases_recorded`.
+Tool `share_with_team` (owner `agent`): via `write`; requires `skill_written`; adds `shared_with_team`, `sharing_risks_explained`.
+Tool `schedule_skill` (owner `agent`): via `tasks`; requires `skill_written`; adds `scheduled`.
+Initially true: none.
+Initially: `approval_gates_included` == false.
+Goal: `task_spec_available` and `skill_written` and `approval_gates_included` and `fallback_included` and `missing_data_rule_included` and `owner_terms_used` and `test_passed` and `router_registered` and `trigger_phrases_recorded`.
+Protocol:
+  - `agent` uses `read_capture_reference`.
+  - `agent` uses `read_authoring_reference`.
+  - `agent` uses `read_gotchas_reference`.
+  - `user` chooses one of (observed):
+    - branch `task_already_walked_through`:
+      - `agent` chooses one of (observed):
+        - branch `extract_from_transcript`:
+          - `agent` uses `write_skill_files`.
+        - branch `defer_write_until_spec_marked`: none.
+    - branch `task_described_now`:
+      - `agent` chooses one of (observed):
+        - branch `spec_complete`:
+          - `agent` uses `write_skill_files`.
+        - branch `spec_incomplete`: none.
+  - loop `fix_until_test_passes`:
+    - `user` chooses one of (observed):
+      - branch `test_matches_known_good`:
+        - checkpoint: `task_spec_available` and `skill_written` and `approval_gates_included` and `fallback_included` and `missing_data_rule_included` and `owner_terms_used` and `test_passed` and `router_registered` and `trigger_phrases_recorded`.
+      - branch `test_does_not_match`:
+        - `agent` uses `revise_skill_files`.
+        - repeat `fix_until_test_passes`.
+  - `agent` uses `register_with_router`.
+  - `user` chooses one of (observed):
+    - branch `schedule_it`:
+      - `agent` uses `schedule_skill`.
+    - branch `do_not_schedule`: none.
+  - `user` chooses one of (observed):
+    - branch `share_with_team_now`:
+      - `agent` uses `share_with_team`.
+    - branch `do_not_share`: none.
+```

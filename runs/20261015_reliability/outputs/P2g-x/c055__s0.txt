@@ -1,0 +1,134 @@
+```ce
+Skill `hiring-screener`.
+Roles: `agent`, `owner`.
+
+Tool `get_rubric_from_job_post_builder` (owner `agent`):
+  via `read`;
+  adds `rubric_loaded`.
+
+Tool `load_rubric_from_file` (owner `agent`):
+  via `read`;
+  picks `rubric_source` with `rubric_source` != "";
+  adds `rubric_loaded`.
+
+Tool `build_rubric_with_owner` (owner `agent`):
+  via `ask_user`;
+  adds `rubric_loaded`.
+
+Tool `read_applications` (owner `agent`):
+  via `read`;
+  requires `rubric_loaded`;
+  adds `candidates_read`.
+
+Tool `score_candidates` (owner `agent`):
+  requires `candidates_read`;
+  picks `ranked_shortlist` with true;
+  adds `scored`.
+
+Tool `band_candidates` (owner `agent`):
+  requires `scored`;
+  adds `banded`.
+
+Tool `draft_replies` (owner `agent`):
+  requires `banded`;
+  adds `replies_drafted`.
+
+Tool `present_drafts` (owner `agent`):
+  via `ask_user`;
+  requires `replies_drafted`;
+  adds `drafts_approved`.
+
+Tool `send_replies` (owner `agent`):
+  via `bash`;
+  needs `gmail_connected`;
+  requires `drafts_approved`;
+  adds `replies_sent`.
+
+Tool `schedule_interviews` (owner `agent`):
+  via `bash`;
+  needs `google_calendar_connected`;
+  requires `banded`;
+  adds `interviews_scheduled`.
+
+Tool `create_onboarding_checklist` (owner `agent`):
+  via `write`;
+  requires `hire_selected`;
+  adds `onboarding_checklist_created`.
+
+Tool `handoff_to_payroll` (owner `agent`):
+  via `bash`;
+  needs `gusto_connected`;
+  requires `hire_selected` and `payroll_details_confirmed`;
+  adds `payroll_handoff_done`.
+
+Tool `publish_artifact` (owner `agent`):
+  via `artifact`;
+  requires `scored`;
+  adds `artifact_published`.
+
+Initially true: none.
+Initially: `hire_selected` == false.
+
+Goal:
+  `artifact_published` and
+  `replies_sent` and
+  (any of (`interviews_scheduled`, not `google_calendar_connected`)) and
+  (any of (`replies_sent`, not `gmail_connected`)).
+
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `rubric_from_job_post_builder`:
+      - `agent` uses `get_rubric_from_job_post_builder`.
+    - branch `rubric_from_file`:
+      - `agent` uses `load_rubric_from_file`.
+    - branch `build_rubric_now`:
+      - `agent` uses `build_rubric_with_owner`.
+  - `agent` uses `read_applications`.
+  - `agent` uses `score_candidates`.
+  - `agent` uses `band_candidates`.
+  - `agent` uses `draft_replies`.
+  - `agent` uses `present_drafts`.
+  - `agent` uses `send_replies`.
+  - `owner` chooses one of (observed):
+    - branch `calendar_connected`:
+      - `agent` uses `schedule_interviews`.
+    - branch `no_calendar`:
+      none.
+  - `agent` uses `publish_artifact`.
+  - `owner` chooses one of (observed):
+    - branch `hire_selected`:
+      - `agent` uses `create_onboarding_checklist`.
+      - `agent` uses `handoff_to_payroll`.
+    - branch `no_hire_yet`:
+      none.
+
+Behaviour of `agent`:
+  - select one of:
+    - use `get_rubric_from_job_post_builder`.
+    - use `load_rubric_from_file`.
+    - use `build_rubric_with_owner`.
+  - use `read_applications`.
+  - use `score_candidates`.
+  - use `band_candidates`.
+  - use `draft_replies`.
+  - use `present_drafts`.
+  - use `send_replies`.
+  - select one of:
+    - use `schedule_interviews`.
+    - receive `no_calendar` from `owner`.
+  - use `publish_artifact`.
+  - select one of:
+    - use `create_onboarding_checklist`.
+    - use `handoff_to_payroll`.
+    - receive `no_hire_yet` from `owner`.
+
+Behaviour of `owner`:
+  - receive `build_rubric_now` from `agent`.
+  - receive `present_drafts` from `agent`.
+  - select one of:
+    - send `calendar_connected` to `agent`.
+    - send `no_calendar` to `agent`.
+  - select one of:
+    - send `hire_selected` to `agent`.
+    - send `no_hire_yet` to `agent`.
+```

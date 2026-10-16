@@ -1,0 +1,52 @@
+```ce
+Skill `neon-postgres-egress-optimizer`.
+Roles: `agent`, `user`.
+Tool `install_parent_neon_skill` (owner `agent`): via `bash`; requires not `parent_neon_skill_available`; adds `parent_neon_skill_available`.
+Tool `inspect_codebase_for_queries` (owner `agent`): via `read`; adds `code_queries_analyzed`.
+Tool `check_pg_stat_statements` (owner `agent`): via `bash`; needs `postgres_access`; picks `pg_stats_available` with true.
+Tool `create_pg_stat_statements_extension` (owner `agent`): via `bash`; needs `postgres_access`; adds `pg_stats_available`.
+Tool `run_pg_diagnostics` (owner `agent`): via `bash`; needs `postgres_access`; requires `pg_stats_available`; adds `top_egress_queries_identified`.
+Tool `reset_pg_stats` (owner `agent`): via `bash`; needs `postgres_access`; requires `pg_stats_available`; adds `clean_measurement_window`.
+Tool `edit_query_patterns` (owner `agent`): via `edit`; requires any of (`top_egress_queries_identified`, `code_queries_analyzed`); adds `egress_fixes_applied`.
+Tool `run_tests` (owner `agent`): via `bash`; requires `egress_fixes_applied`; adds `tests_pass`.
+Tool `verify_response_shapes` (owner `agent`): via `bash`; requires `egress_fixes_applied`; adds `responses_verified`.
+Tool `recheck_pg_diagnostics` (owner `agent`): via `bash`; needs `postgres_access`; requires all of (`pg_stats_available`, `egress_fixes_applied`); adds `egress_drop_measured`.
+Initially true: none.
+Initially: true.
+Goal: `egress_fixes_applied` and `tests_pass` and `responses_verified` and any of (`egress_drop_measured`, `code_queries_analyzed`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `parent_skill_already_available`: none.
+    - branch `install_parent_skill`:
+      - `agent` uses `install_parent_neon_skill`.
+  - `agent` chooses one of (observed):
+    - branch `postgres_stats_path`:
+      - `agent` chooses one of (observed):
+        - branch `pg_stat_statements_available`:
+          - `agent` uses `check_pg_stat_statements`.
+        - branch `create_extension_then_check`:
+          - `agent` uses `create_pg_stat_statements_extension`.
+      - `agent` chooses one of (observed):
+        - branch `stats_ready`:
+          - `agent` uses `run_pg_diagnostics`.
+        - branch `stats_empty_or_recent_restart`:
+          - `agent` uses `reset_pg_stats`.
+          - `user` chooses one of (observed):
+            - branch `return_after_representative_traffic`:
+              - `agent` uses `run_pg_diagnostics`.
+            - branch `no_wait_proceed_to_code_analysis`:
+              - `agent` uses `inspect_codebase_for_queries`.
+    - branch `no_production_stats_access`:
+      - `agent` uses `inspect_codebase_for_queries`.
+  - `agent` uses `edit_query_patterns`.
+  - `agent` uses `run_tests`.
+  - `agent` uses `verify_response_shapes`.
+  - `agent` chooses one of (observed):
+    - branch `measure_improvement_with_pg_stats`:
+      - `agent` uses `reset_pg_stats`.
+      - `user` chooses one of (observed):
+        - branch `return_after_traffic_for_remeasurement`:
+          - `agent` uses `recheck_pg_diagnostics`.
+        - branch `skip_remeasurement`: none.
+    - branch `skip_measurement`: none.
+```

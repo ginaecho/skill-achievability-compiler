@@ -1,0 +1,44 @@
+```ce
+Skill `entra-agent-id`.
+Roles: `agent`, `user`.
+Tool `search_latest_docs` (owner `agent`): via `web_search`; adds `latest_docs_checked`.
+Tool `fetch_reference_page` (owner `agent`): via `web_fetch`; requires `latest_docs_checked`; adds `preview_api_verified`, `unsupported_defaultazurecredential_verified`, `blueprintprincipal_required_verified`, `sponsors_must_be_users_verified`.
+Tool `ask_auth_mode` (owner `agent`): via `ask_user`; adds `auth_mode_chosen`.
+Tool `ask_credentials_and_role` (owner `agent`): via `ask_user`; requires `auth_mode_chosen`; adds `prereqs_confirmed`.
+Tool `provision_with_graph` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `prereqs_confirmed`; adds `blueprint_created`, `blueprintprincipal_created`, `agent_identity_created`, `odata_header_used`, `user_sponsor_used`.
+Tool `grant_admin_consent` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `prereqs_confirmed`; adds `admin_consent_granted`.
+Tool `retry_after_propagation` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `prereqs_confirmed`; adds `permission_propagation_waited`.
+Tool `set_identifier_uri` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `blueprint_created`; adds `identifier_uri_set`.
+Tool `configure_wif` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `blueprint_created`; adds `wif_configured`.
+Tool `delete_agent_identity_resources` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `agent_identity_created`; removes `agent_identity_created`, `blueprintprincipal_created`, `blueprint_created`.
+Initially true: none.
+Goal: all of (`latest_docs_checked`, `preview_api_verified`, `unsupported_defaultazurecredential_verified`, `blueprintprincipal_required_verified`, `sponsors_must_be_users_verified`, `auth_mode_chosen`, `prereqs_confirmed`).
+Protocol:
+  - `agent` uses `search_latest_docs`.
+  - `agent` uses `fetch_reference_page`.
+  - `agent` uses `ask_auth_mode`.
+  - `agent` uses `ask_credentials_and_role`.
+  - `user` chooses one of (observed):
+    - branch `provision_now`:
+      - `agent` uses `grant_admin_consent`.
+      - loop `consent_retry`:
+        - `agent` chooses one of (external):
+          - branch `replicated`: none.
+          - branch `not_replicated`:
+            - `agent` uses `retry_after_propagation`.
+            - repeat `consent_retry`.
+      - `agent` uses `provision_with_graph`.
+      - `user` chooses one of (observed):
+        - branch `set_identifier_uri`:
+          - `agent` uses `set_identifier_uri`.
+        - branch `skip_identifier_uri`: none.
+      - `user` chooses one of (observed):
+        - branch `configure_wif`:
+          - `agent` uses `configure_wif`.
+        - branch `skip_wif`: none.
+      - `user` chooses one of (observed):
+        - branch `cleanup`:
+          - `agent` uses `delete_agent_identity_resources`.
+        - branch `keep_resources`: none.
+    - branch `guidance_only`: none.
+```

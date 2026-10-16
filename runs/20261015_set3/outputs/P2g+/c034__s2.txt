@@ -1,0 +1,82 @@
+```ce
+Skill `imagegen`.
+Roles: `agent`, `user`.
+Tool `ask_requirements` (owner `agent`): via `ask_user`; adds `inputs_complete`.
+Tool `read_shared_refs` (owner `agent`): via `read`; adds `shared_refs_read`.
+Tool `view_local_image` (owner `agent`): via `read`; requires `built_in_mode` and `edit_intent` and `local_edit_target`; adds `edit_target_visible`.
+Tool `generate_builtin_image` (owner `agent`): via `reply`; requires `built_in_mode` and `shared_refs_read` and `inputs_complete`; adds `image_generated`, `inline_preview_ready`, `built_in_used`.
+Tool `edit_builtin_image` (owner `agent`): via `reply`; requires `built_in_mode` and `shared_refs_read` and `inputs_complete` and (`edit_target_visible` or `conversation_edit_target`); adds `image_generated`, `inline_preview_ready`, `built_in_used`.
+Tool `copy_image_to_workspace` (owner `agent`): via `write`; requires `image_generated` and `project_bound`; adds `workspace_asset_saved`, `final_path_reported`.
+Tool `write_non_destructive_version` (owner `agent`): via `write`; requires `image_generated` and `project_bound` and `replacement_not_requested`; adds `workspace_asset_saved`, `non_destructive_save`, `final_path_reported`.
+Tool `read_cli_refs` (owner `agent`): via `read`; requires `cli_mode`; adds `cli_refs_read`.
+Tool `run_cli_generate` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `cli_mode` and `generate_intent` and `inputs_complete` and `cli_refs_read` and `openai_api_key_set`; adds `image_generated`, `cli_used`.
+Tool `run_cli_edit` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `cli_mode` and `edit_intent` and `inputs_complete` and `cli_refs_read` and `openai_api_key_set`; adds `image_generated`, `cli_used`.
+Tool `run_cli_generate_batch` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `cli_mode` and `many_assets` and `inputs_complete` and `cli_refs_read` and `openai_api_key_set`; adds `image_generated`, `cli_used`.
+Tool `report_result` (owner `agent`): via `reply`; requires `image_generated` and ((`preview_only` and `inline_preview_ready`) or (`project_bound` and `workspace_asset_saved`)); adds `result_reported`.
+Initially true: none.
+Goal: `result_reported`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `builtin_mode` (assuming `built_in_mode`):
+      - `agent` uses `read_shared_refs`.
+      - `user` chooses one of (observed):
+        - branch `generate` (assuming `generate_intent`):
+          - `user` chooses one of (observed):
+            - branch `enough_inputs` (assuming `inputs_complete`): none.
+            - branch `need_more_inputs`:
+              - `agent` uses `ask_requirements`.
+          - `agent` uses `generate_builtin_image`.
+        - branch `edit_conversation_image` (assuming `edit_intent`, `conversation_edit_target`):
+          - `user` chooses one of (observed):
+            - branch `enough_inputs` (assuming `inputs_complete`): none.
+            - branch `need_more_inputs`:
+              - `agent` uses `ask_requirements`.
+          - `agent` uses `edit_builtin_image`.
+        - branch `edit_local_image` (assuming `edit_intent`, `local_edit_target`):
+          - `agent` uses `view_local_image`.
+          - `user` chooses one of (observed):
+            - branch `enough_inputs` (assuming `inputs_complete`): none.
+            - branch `need_more_inputs`:
+              - `agent` uses `ask_requirements`.
+          - `agent` uses `edit_builtin_image`.
+      - `user` chooses one of (observed):
+        - branch `preview_only` (assuming `preview_only`):
+          - `agent` uses `report_result`.
+        - branch `project_bound_replace` (assuming `project_bound`, `replacement_requested`):
+          - `agent` uses `copy_image_to_workspace`.
+          - `agent` uses `report_result`.
+        - branch `project_bound_new_version` (assuming `project_bound`, `replacement_not_requested`):
+          - `agent` uses `write_non_destructive_version`.
+          - `agent` uses `report_result`.
+    - branch `cli_mode` (assuming `cli_mode`):
+      - `agent` uses `read_shared_refs`.
+      - `agent` uses `read_cli_refs`.
+      - `user` chooses one of (observed):
+        - branch `generate_single` (assuming `generate_intent`):
+          - `user` chooses one of (observed):
+            - branch `enough_inputs` (assuming `inputs_complete`): none.
+            - branch `need_more_inputs`:
+              - `agent` uses `ask_requirements`.
+          - `agent` uses `run_cli_generate`.
+        - branch `edit_single` (assuming `edit_intent`):
+          - `user` chooses one of (observed):
+            - branch `enough_inputs` (assuming `inputs_complete`): none.
+            - branch `need_more_inputs`:
+              - `agent` uses `ask_requirements`.
+          - `agent` uses `run_cli_edit`.
+        - branch `generate_batch` (assuming `many_assets`):
+          - `user` chooses one of (observed):
+            - branch `enough_inputs` (assuming `inputs_complete`): none.
+            - branch `need_more_inputs`:
+              - `agent` uses `ask_requirements`.
+          - `agent` uses `run_cli_generate_batch`.
+      - `user` chooses one of (observed):
+        - branch `preview_only` (assuming `preview_only`):
+          - `agent` uses `report_result`.
+        - branch `project_bound_replace` (assuming `project_bound`, `replacement_requested`):
+          - `agent` uses `copy_image_to_workspace`.
+          - `agent` uses `report_result`.
+        - branch `project_bound_new_version` (assuming `project_bound`, `replacement_not_requested`):
+          - `agent` uses `write_non_destructive_version`.
+          - `agent` uses `report_result`.
+```

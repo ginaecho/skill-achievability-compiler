@@ -1,0 +1,923 @@
+{
+  "pack": {
+    "name": "imagegen",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_shared_prompting_docs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "shared_docs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_local_image_for_builtin_edit": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "local_edit_target_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_image_builtin": {
+        "owner": "agent",
+        "pre": "shared_docs_read",
+        "add": [
+          "image_generated",
+          "builtin_mode_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_image_builtin": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "shared_docs_read",
+            {
+              "or": [
+                "edit_target_in_conversation",
+                "local_edit_target_inspected"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "builtin_mode_used",
+          "edited"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "place_workspace_asset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "project_bound"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "place_user_named_destination": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "destination_named"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_cli_docs_and_script": {
+        "owner": "agent",
+        "pre": "cli_mode_requested",
+        "add": [
+          "cli_docs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_cli_dependency": {
+        "owner": "agent",
+        "pre": "cli_mode_requested",
+        "add": [
+          "cli_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "cli_mode_requested",
+                "cli_docs_read",
+                "openai_api_key_available"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_mode_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_edit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "cli_mode_requested",
+                "cli_docs_read",
+                "openai_api_key_available"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_mode_used",
+          "edited"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate_batch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "cli_mode_requested",
+                "cli_docs_read",
+                "openai_api_key_available",
+                "many_assets_requested"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_mode_used",
+          "batch_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_shared_prompting_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "builtin_mode": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate": [
+                      {
+                        "act": {
+                          "cap": "generate_image_builtin",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "edit_target_in_conversation": [
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_target_local_file": [
+                              {
+                                "act": {
+                                  "cap": "inspect_local_image_for_builtin_edit",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "destination_named": [
+                      {
+                        "act": {
+                          "cap": "place_user_named_destination",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound": [
+                      {
+                        "act": {
+                          "cap": "place_workspace_asset",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "preview_only": []
+                  }
+                }
+              }
+            ],
+            "cli_mode_explicit": [
+              {
+                "act": {
+                  "cap": "read_cli_docs_and_script",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "openai_api_key_ready": [
+                      {
+                        "act": {
+                          "cap": "install_cli_dependency",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "generate_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_edit",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "generate_batch": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate_batch",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "destination_named": [
+                              {
+                                "act": {
+                                  "cap": "place_user_named_destination",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "project_bound": [
+                              {
+                                "act": {
+                                  "cap": "place_workspace_asset",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "preview_only": []
+                          }
+                        }
+                      }
+                    ],
+                    "openai_api_key_missing": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "image_generated",
+        "final_path_reported",
+        {
+          "or": [
+            "builtin_mode_used",
+            "cli_mode_used"
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "project_bound",
+                "workspace_asset_saved"
+              ]
+            },
+            {
+              "not": "project_bound"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": [
+      {
+        "and": [
+          {
+            "not": "shared_docs_read"
+          },
+          {
+            "not": "local_edit_target_inspected"
+          },
+          {
+            "not": "image_generated"
+          },
+          {
+            "not": "builtin_mode_used"
+          },
+          {
+            "not": "edited"
+          },
+          {
+            "not": "workspace_asset_saved"
+          },
+          {
+            "not": "final_path_reported"
+          },
+          {
+            "not": "cli_mode_requested"
+          },
+          {
+            "not": "cli_docs_read"
+          },
+          {
+            "not": "cli_dependency_installed"
+          },
+          {
+            "not": "cli_mode_used"
+          },
+          {
+            "not": "batch_used"
+          }
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "imagegen",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_shared_prompting_docs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "shared_docs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_local_image_for_builtin_edit": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "local_edit_target_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_image_builtin": {
+        "owner": "agent",
+        "pre": "shared_docs_read",
+        "add": [
+          "image_generated",
+          "builtin_mode_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_image_builtin": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "shared_docs_read",
+            {
+              "or": [
+                "edit_target_in_conversation",
+                "local_edit_target_inspected"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_generated",
+          "builtin_mode_used",
+          "edited"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "place_workspace_asset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "project_bound"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "place_user_named_destination": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "image_generated",
+            "destination_named"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved",
+          "final_path_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_cli_docs_and_script": {
+        "owner": "agent",
+        "pre": "cli_mode_requested",
+        "add": [
+          "cli_docs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_cli_dependency": {
+        "owner": "agent",
+        "pre": "cli_mode_requested",
+        "add": [
+          "cli_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_mode_requested",
+            "cli_docs_read",
+            "openai_api_key_available"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_mode_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_edit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_mode_requested",
+            "cli_docs_read",
+            "openai_api_key_available"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_mode_used",
+          "edited"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate_batch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_mode_requested",
+            "cli_docs_read",
+            "openai_api_key_available",
+            "many_assets_requested"
+          ]
+        },
+        "add": [
+          "image_generated",
+          "cli_mode_used",
+          "batch_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_shared_prompting_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "builtin_mode": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate": [
+                      {
+                        "act": {
+                          "cap": "generate_image_builtin",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "edit": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "edit_target_in_conversation": [
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_target_local_file": [
+                              {
+                                "act": {
+                                  "cap": "inspect_local_image_for_builtin_edit",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "destination_named": [
+                      {
+                        "act": {
+                          "cap": "place_user_named_destination",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_bound": [
+                      {
+                        "act": {
+                          "cap": "place_workspace_asset",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "preview_only": []
+                  }
+                }
+              }
+            ],
+            "cli_mode_explicit": [
+              {
+                "act": {
+                  "cap": "read_cli_docs_and_script",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "openai_api_key_ready": [
+                      {
+                        "act": {
+                          "cap": "install_cli_dependency",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "generate_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_edit",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "generate_batch": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate_batch",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "destination_named": [
+                              {
+                                "act": {
+                                  "cap": "place_user_named_destination",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "project_bound": [
+                              {
+                                "act": {
+                                  "cap": "place_workspace_asset",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "preview_only": []
+                          }
+                        }
+                      }
+                    ],
+                    "openai_api_key_missing": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "image_generated",
+        "final_path_reported",
+        {
+          "or": [
+            "builtin_mode_used",
+            "cli_mode_used"
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "project_bound",
+                "workspace_asset_saved"
+              ]
+            },
+            {
+              "not": "project_bound"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "and": [
+          {
+            "not": "shared_docs_read"
+          },
+          {
+            "not": "local_edit_target_inspected"
+          },
+          {
+            "not": "image_generated"
+          },
+          {
+            "not": "builtin_mode_used"
+          },
+          {
+            "not": "edited"
+          },
+          {
+            "not": "workspace_asset_saved"
+          },
+          {
+            "not": "final_path_reported"
+          },
+          {
+            "not": "cli_mode_requested"
+          },
+          {
+            "not": "cli_docs_read"
+          },
+          {
+            "not": "cli_dependency_installed"
+          },
+          {
+            "not": "cli_mode_used"
+          },
+          {
+            "not": "batch_used"
+          }
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "read_shared_prompting_docs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_local_image_for_builtin_edit": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "generate_image_builtin": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "edit_image_builtin": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "place_workspace_asset": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "place_user_named_destination": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "read_cli_docs_and_script": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "install_cli_dependency": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_cli_generate": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_cli_edit": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "run_cli_generate_batch": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,685 @@
+{
+  "pack": {
+    "name": "aflpp",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_project_mode": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "mode_chosen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_aflpp_host": {
+        "owner": "agent",
+        "pre": "mode_chosen",
+        "add": [
+          "aflpp_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_wrapper_script": {
+        "owner": "agent",
+        "pre": "mode_chosen",
+        "add": [
+          "wrapper_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_target": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_inspected",
+            {
+              "or": [
+                "aflpp_available",
+                "wrapper_ready"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "target_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_seed_corpus": {
+        "owner": "agent",
+        "pre": "target_built",
+        "add": [
+          "seed_corpus_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_observed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_stopped"
+        ],
+        "del": [
+          "campaign_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_crashes": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "crashes_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "aflpp_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_project",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "guidance_only": [
+              {
+                "act": {
+                  "cap": "write_guidance",
+                  "by": "agent"
+                }
+              }
+            ],
+            "run_campaign": [
+              {
+                "act": {
+                  "cap": "ask_project_mode",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "host_mode": [
+                      {
+                        "act": {
+                          "cap": "install_aflpp_host",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "docker_mode": [
+                      {
+                        "act": {
+                          "cap": "write_wrapper_script",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "build_target",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_seed_corpus",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "monitor_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "stop_now": [
+                      {
+                        "act": {
+                          "cap": "stop_campaign",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "continue_then_stop": [
+                      {
+                        "act": {
+                          "cap": "monitor_campaign",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "stop_campaign",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "minimize_and_triage": [
+                      {
+                        "act": {
+                          "cap": "minimize_corpus",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "triage_crashes",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "triage_only": [
+                      {
+                        "act": {
+                          "cap": "triage_crashes",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_postprocessing": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_guidance",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "aflpp_guidance_delivered",
+    "init_true": [],
+    "init_constraints": [
+      true
+    ]
+  },
+  "pre_binding": {
+    "name": "aflpp",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_project_mode": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "mode_chosen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_aflpp_host": {
+        "owner": "agent",
+        "pre": "mode_chosen",
+        "add": [
+          "aflpp_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_wrapper_script": {
+        "owner": "agent",
+        "pre": "mode_chosen",
+        "add": [
+          "wrapper_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_target": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_inspected",
+            {
+              "or": [
+                "aflpp_available",
+                "wrapper_ready"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "target_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_seed_corpus": {
+        "owner": "agent",
+        "pre": "target_built",
+        "add": [
+          "seed_corpus_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_observed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_stopped"
+        ],
+        "del": [
+          "campaign_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_crashes": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "crashes_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "aflpp_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_project",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "guidance_only": [
+              {
+                "act": {
+                  "cap": "write_guidance",
+                  "by": "agent"
+                }
+              }
+            ],
+            "run_campaign": [
+              {
+                "act": {
+                  "cap": "ask_project_mode",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "host_mode": [
+                      {
+                        "act": {
+                          "cap": "install_aflpp_host",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "docker_mode": [
+                      {
+                        "act": {
+                          "cap": "write_wrapper_script",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "build_target",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "create_seed_corpus",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "start_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "monitor_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "stop_now": [
+                      {
+                        "act": {
+                          "cap": "stop_campaign",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "continue_then_stop": [
+                      {
+                        "act": {
+                          "cap": "monitor_campaign",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "stop_campaign",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "minimize_and_triage": [
+                      {
+                        "act": {
+                          "cap": "minimize_corpus",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "triage_crashes",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "triage_only": [
+                      {
+                        "act": {
+                          "cap": "triage_crashes",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_postprocessing": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_guidance",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "aflpp_guidance_delivered",
+    "init_true": [],
+    "init_constraints": [
+      true
+    ]
+  },
+  "bindings": {
+    "inspect_project": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "ask_project_mode": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "install_aflpp_host": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "write_wrapper_script": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "build_target": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "create_seed_corpus": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "start_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "monitor_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "stop_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "minimize_corpus": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "triage_crashes": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "write_guidance": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

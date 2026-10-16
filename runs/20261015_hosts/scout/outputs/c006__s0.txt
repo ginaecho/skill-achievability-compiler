@@ -1,0 +1,47 @@
+```ce
+Skill `neon-postgres-egress-optimizer`.
+Roles: `agent`, `user`.
+Tool `check_pg_stat_statements` (owner `agent`): via `bash`; requires `db_access`; adds `pg_stats_checked`.
+Tool `enable_pg_stat_statements` (owner `agent`): via `bash`; requires `db_access`; adds `pg_stats_available`.
+Tool `reset_pg_stats` (owner `agent`): via `bash`; requires `db_access` and `pg_stats_available`; adds `measurement_window_reset`.
+Tool `run_pg_diagnostics` (owner `agent`): via `bash`; requires `db_access` and `pg_stats_available`; adds `diagnostic_results_available`.
+Tool `inspect_codebase` (owner `agent`): via `read`; requires `codebase_available`; adds `code_patterns_analyzed`.
+Tool `edit_code_for_egress` (owner `agent`): via `edit`; requires `code_patterns_analyzed`; adds `fixes_applied`.
+Tool `run_tests` (owner `agent`): via `bash`; requires `fixes_applied`; adds `tests_pass`.
+Tool `check_responses` (owner `agent`): via `bash`; requires `fixes_applied`; adds `response_shape_checked`.
+Tool `measure_after_changes` (owner `agent`): via `bash`; requires `db_access` and `pg_stats_available` and `fixes_applied`; adds `egress_remeasured`.
+Tool `edit_neon_ts` (owner `agent`): via `edit`; requires `codebase_available`; adds `neon_ts_optimized`.
+Initially true: none.
+Initially: `db_access` or not `db_access`.
+Initially: `codebase_available` or not `codebase_available`.
+Initially: `pg_stats_available` or not `pg_stats_available`.
+Goal: all of (`code_patterns_analyzed`, `fixes_applied`, `tests_pass`, `response_shape_checked`, any of (`egress_remeasured`, not `db_access`)).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `db_stats_path`:
+      - `agent` uses `check_pg_stat_statements`.
+      - `agent` chooses one of (observed):
+        - branch `stats_ready`:
+          - `agent` uses `run_pg_diagnostics`.
+        - branch `create_extension`:
+          - `agent` uses `enable_pg_stat_statements`.
+          - `agent` chooses one of (observed):
+            - branch `diagnose_now`:
+              - `agent` uses `run_pg_diagnostics`.
+            - branch `reset_and_wait_for_traffic`:
+              - `agent` uses `reset_pg_stats`.
+      - `agent` uses `inspect_codebase`.
+    - branch `code_only_path`:
+      - `agent` uses `inspect_codebase`.
+  - `agent` uses `edit_code_for_egress`.
+  - `agent` uses `run_tests`.
+  - `agent` uses `check_responses`.
+  - `agent` chooses one of (observed):
+    - branch `remeasure`:
+      - `agent` uses `measure_after_changes`.
+    - branch `skip_remeasure`: none.
+  - `agent` chooses one of (observed):
+    - branch `optimize_neon_ts`:
+      - `agent` uses `edit_neon_ts`.
+    - branch `skip_neon_ts`: none.
+```

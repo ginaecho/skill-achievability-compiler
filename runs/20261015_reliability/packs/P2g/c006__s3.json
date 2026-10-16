@@ -1,0 +1,711 @@
+{
+  "pack": {
+    "name": "neon-postgres-egress-optimizer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_parent_neon_skill": {
+        "owner": "agent",
+        "pre": {
+          "not": "parent_neon_skill_available"
+        },
+        "add": [
+          "parent_neon_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_codebase_for_queries": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "code_queries_analyzed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_pg_stat_statements": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:postgres_access"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "pg_stats_available": true
+        }
+      },
+      "create_pg_stat_statements_extension": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:postgres_access"
+          ]
+        },
+        "add": [
+          "pg_stats_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pg_diagnostics": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:postgres_access",
+            "pg_stats_available"
+          ]
+        },
+        "add": [
+          "top_egress_queries_identified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reset_pg_stats": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:postgres_access",
+            "pg_stats_available"
+          ]
+        },
+        "add": [
+          "clean_measurement_window"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_query_patterns": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "top_egress_queries_identified",
+            "code_queries_analyzed"
+          ]
+        },
+        "add": [
+          "egress_fixes_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_tests": {
+        "owner": "agent",
+        "pre": "egress_fixes_applied",
+        "add": [
+          "tests_pass"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_response_shapes": {
+        "owner": "agent",
+        "pre": "egress_fixes_applied",
+        "add": [
+          "responses_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recheck_pg_diagnostics": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:postgres_access",
+            {
+              "and": [
+                "pg_stats_available",
+                "egress_fixes_applied"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "egress_drop_measured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "parent_skill_already_available": [],
+            "install_parent_skill": [
+              {
+                "act": {
+                  "cap": "install_parent_neon_skill",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "postgres_stats_path": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "pg_stat_statements_available": [
+                      {
+                        "act": {
+                          "cap": "check_pg_stat_statements",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "create_extension_then_check": [
+                      {
+                        "act": {
+                          "cap": "create_pg_stat_statements_extension",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "stats_ready": [
+                      {
+                        "act": {
+                          "cap": "run_pg_diagnostics",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stats_empty_or_recent_restart": [
+                      {
+                        "act": {
+                          "cap": "reset_pg_stats",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "return_after_representative_traffic": [
+                              {
+                                "act": {
+                                  "cap": "run_pg_diagnostics",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_wait_proceed_to_code_analysis": [
+                              {
+                                "act": {
+                                  "cap": "inspect_codebase_for_queries",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "no_production_stats_access": [
+              {
+                "act": {
+                  "cap": "inspect_codebase_for_queries",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "edit_query_patterns",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_tests",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_response_shapes",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "measure_improvement_with_pg_stats": [
+              {
+                "act": {
+                  "cap": "reset_pg_stats",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "return_after_traffic_for_remeasurement": [
+                      {
+                        "act": {
+                          "cap": "recheck_pg_diagnostics",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_remeasurement": []
+                  }
+                }
+              }
+            ],
+            "skip_measurement": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "egress_fixes_applied",
+        "tests_pass",
+        "responses_verified",
+        {
+          "or": [
+            "egress_drop_measured",
+            "code_queries_analyzed"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      true
+    ]
+  },
+  "pre_binding": {
+    "name": "neon-postgres-egress-optimizer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_parent_neon_skill": {
+        "owner": "agent",
+        "pre": {
+          "not": "parent_neon_skill_available"
+        },
+        "add": [
+          "parent_neon_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_codebase_for_queries": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "code_queries_analyzed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_pg_stat_statements": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "pg_stats_available": true
+        }
+      },
+      "create_pg_stat_statements_extension": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "pg_stats_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pg_diagnostics": {
+        "owner": "agent",
+        "pre": "pg_stats_available",
+        "add": [
+          "top_egress_queries_identified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reset_pg_stats": {
+        "owner": "agent",
+        "pre": "pg_stats_available",
+        "add": [
+          "clean_measurement_window"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_query_patterns": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "top_egress_queries_identified",
+            "code_queries_analyzed"
+          ]
+        },
+        "add": [
+          "egress_fixes_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_tests": {
+        "owner": "agent",
+        "pre": "egress_fixes_applied",
+        "add": [
+          "tests_pass"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_response_shapes": {
+        "owner": "agent",
+        "pre": "egress_fixes_applied",
+        "add": [
+          "responses_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recheck_pg_diagnostics": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "pg_stats_available",
+            "egress_fixes_applied"
+          ]
+        },
+        "add": [
+          "egress_drop_measured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "parent_skill_already_available": [],
+            "install_parent_skill": [
+              {
+                "act": {
+                  "cap": "install_parent_neon_skill",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "postgres_stats_path": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "pg_stat_statements_available": [
+                      {
+                        "act": {
+                          "cap": "check_pg_stat_statements",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "create_extension_then_check": [
+                      {
+                        "act": {
+                          "cap": "create_pg_stat_statements_extension",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "stats_ready": [
+                      {
+                        "act": {
+                          "cap": "run_pg_diagnostics",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stats_empty_or_recent_restart": [
+                      {
+                        "act": {
+                          "cap": "reset_pg_stats",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "return_after_representative_traffic": [
+                              {
+                                "act": {
+                                  "cap": "run_pg_diagnostics",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_wait_proceed_to_code_analysis": [
+                              {
+                                "act": {
+                                  "cap": "inspect_codebase_for_queries",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "no_production_stats_access": [
+              {
+                "act": {
+                  "cap": "inspect_codebase_for_queries",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "edit_query_patterns",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_tests",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_response_shapes",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "measure_improvement_with_pg_stats": [
+              {
+                "act": {
+                  "cap": "reset_pg_stats",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "return_after_traffic_for_remeasurement": [
+                      {
+                        "act": {
+                          "cap": "recheck_pg_diagnostics",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_remeasurement": []
+                  }
+                }
+              }
+            ],
+            "skip_measurement": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "egress_fixes_applied",
+        "tests_pass",
+        "responses_verified",
+        {
+          "or": [
+            "egress_drop_measured",
+            "code_queries_analyzed"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      true
+    ]
+  },
+  "bindings": {
+    "install_parent_neon_skill": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_codebase_for_queries": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "check_pg_stat_statements": {
+      "via": "bash",
+      "needs": [
+        "postgres_access"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "create_pg_stat_statements_extension": {
+      "via": "bash",
+      "needs": [
+        "postgres_access"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_pg_diagnostics": {
+      "via": "bash",
+      "needs": [
+        "postgres_access"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "reset_pg_stats": {
+      "via": "bash",
+      "needs": [
+        "postgres_access"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "edit_query_patterns": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_tests": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "verify_response_shapes": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "recheck_pg_diagnostics": {
+      "via": "bash",
+      "needs": [
+        "postgres_access"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

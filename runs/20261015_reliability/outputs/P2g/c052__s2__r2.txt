@@ -1,0 +1,32 @@
+```ce
+Skill `gh-fix-ci`.
+Roles: `agent`, `user`.
+Tool `check_gh_auth` (owner `agent`): via `bash`; needs `github_account`; adds `gh_auth_checked`.
+Tool `resolve_pr` (owner `agent`): via `bash`; needs `github_account`; requires `gh_auth_checked`; adds `pr_resolved`.
+Tool `inspect_pr_checks` (owner `agent`): via `bash`; needs `github_account`; requires `pr_resolved`; adds `failure_context_summarized`, `external_check_urls_reported`.
+Tool `draft_fix_plan_with_skill` (owner `agent`): via `skill`; requires `failure_context_summarized`; adds `fix_plan_drafted`.
+Tool `draft_fix_plan_inline` (owner `agent`): requires `failure_context_summarized`; adds `fix_plan_drafted`.
+Tool `implement_fix` (owner `agent`): via `bash`; requires `fix_plan_drafted` and `user_approved_plan`; adds `fix_implemented`.
+Tool `summarize_diffs_and_tests` (owner `agent`): via `bash`; requires `fix_implemented`; adds `diffs_and_tests_summarized`.
+Initially true: none.
+Goal: any of ((`gh_auth_checked` and `pr_resolved` and `failure_context_summarized` and `external_check_urls_reported` and `fix_plan_drafted` and not `user_approved_plan` and not `fix_implemented`), (`gh_auth_checked` and `pr_resolved` and `failure_context_summarized` and `external_check_urls_reported` and `fix_plan_drafted` and `user_approved_plan` and `fix_implemented` and `diffs_and_tests_summarized`), (`user_prompted_to_login` and not `pr_resolved` and not `failure_context_summarized` and not `fix_plan_drafted` and not `fix_implemented`)).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `authenticated`:
+      - `agent` uses `check_gh_auth`.
+      - `agent` uses `resolve_pr`.
+      - `agent` uses `inspect_pr_checks`.
+      - `agent` chooses one of (observed):
+        - branch `create_plan_skill_available`:
+          - `agent` uses `draft_fix_plan_with_skill`.
+        - branch `create_plan_skill_unavailable`:
+          - `agent` uses `draft_fix_plan_inline`.
+      - `user` chooses one of (observed):
+        - branch `approve_plan`:
+          - `agent` uses `implement_fix`.
+          - `agent` uses `summarize_diffs_and_tests`.
+        - branch `do_not_approve_plan`: none.
+    - branch `unauthenticated`:
+      - `agent` uses `ask_user_to_login`.
+Tool `ask_user_to_login` (owner `agent`): via `ask_user`; adds `user_prompted_to_login`.
+```

@@ -1,0 +1,957 @@
+{
+  "pack": {
+    "name": "autoresearch",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_goal": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "goal_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_metric": {
+        "owner": "agent",
+        "pre": "goal_defined",
+        "add": [
+          "metric_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_scope": {
+        "owner": "agent",
+        "pre": "metric_defined",
+        "add": [
+          "scope_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_constraints": {
+        "owner": "agent",
+        "pre": "scope_defined",
+        "add": [
+          "constraints_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_budget": {
+        "owner": "agent",
+        "pre": "constraints_defined",
+        "add": [
+          "budget_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_simplicity": {
+        "owner": "agent",
+        "pre": "budget_defined",
+        "add": [
+          "simplicity_defined",
+          "all_setup_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "confirm_setup": {
+        "owner": "agent",
+        "pre": "all_setup_collected",
+        "add": [
+          "setup_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_branch_and_log": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "setup_confirmed",
+            "git_repo"
+          ]
+        },
+        "add": [
+          "branch_created",
+          "results_initialized",
+          "logs_excluded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_in_scope_files": {
+        "owner": "agent",
+        "pre": "setup_confirmed",
+        "add": [
+          "context_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_baseline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "branch_created",
+            "results_initialized",
+            "metric_defined"
+          ]
+        },
+        "add": [
+          "baseline_measured",
+          "baseline_logged",
+          "best_metric_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_experiment_cycle": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "branch_created",
+            "results_initialized",
+            "baseline_measured",
+            "context_read"
+          ]
+        },
+        "add": [
+          "experiment_logged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "best_metric": true
+        }
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "baseline_logged",
+            "experiment_loop_finished"
+          ]
+        },
+        "add": [
+          "results_reported",
+          "summary_reported",
+          "git_log_reported",
+          "next_steps_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_goal",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_metric",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_scope",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_constraints",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_budget",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_simplicity",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "setup_collected": [
+              {
+                "act": {
+                  "cap": "confirm_setup",
+                  "by": "agent"
+                }
+              }
+            ],
+            "collecting_implies_ready": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_branch_and_log",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_in_scope_files",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_baseline",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "user_interrupts_immediately": [
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "start_loop": [
+              {
+                "rec": {
+                  "name": "experimentation",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "run_experiment_cycle",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "continue": [
+                            {
+                              "continue": "experimentation"
+                            }
+                          ],
+                          "stop": [
+                            {
+                              "act": {
+                                "cap": "report_results",
+                                "by": "agent"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "setup_confirmed",
+        "branch_created",
+        "results_initialized",
+        "logs_excluded",
+        "baseline_measured",
+        "baseline_logged",
+        "experiment_loop_finished",
+        "results_reported",
+        "summary_reported",
+        "git_log_reported",
+        "next_steps_reported"
+      ]
+    },
+    "init_true": [
+      "git_repo"
+    ],
+    "init_constraints": [
+      {
+        "not": "goal_defined"
+      },
+      {
+        "not": "metric_defined"
+      },
+      {
+        "not": "scope_defined"
+      },
+      {
+        "not": "constraints_defined"
+      },
+      {
+        "not": "budget_defined"
+      },
+      {
+        "not": "simplicity_defined"
+      },
+      {
+        "not": "all_setup_collected"
+      },
+      {
+        "not": "setup_confirmed"
+      },
+      {
+        "not": "branch_created"
+      },
+      {
+        "not": "results_initialized"
+      },
+      {
+        "not": "logs_excluded"
+      },
+      {
+        "not": "context_read"
+      },
+      {
+        "not": "baseline_measured"
+      },
+      {
+        "not": "baseline_logged"
+      },
+      {
+        "not": "best_metric_known"
+      },
+      {
+        "not": "experiment_logged"
+      },
+      {
+        "not": "experiment_loop_finished"
+      },
+      {
+        "not": "results_reported"
+      },
+      {
+        "not": "summary_reported"
+      },
+      {
+        "not": "git_log_reported"
+      },
+      {
+        "not": "next_steps_reported"
+      }
+    ],
+    "skills": {
+      "agent": [
+        {
+          "act": {
+            "cap": "ask_goal"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_metric"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_scope"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_constraints"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_budget"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_simplicity"
+          }
+        },
+        {
+          "act": {
+            "cap": "confirm_setup"
+          }
+        },
+        {
+          "act": {
+            "cap": "prepare_branch_and_log"
+          }
+        },
+        {
+          "act": {
+            "cap": "read_in_scope_files"
+          }
+        },
+        {
+          "act": {
+            "cap": "run_baseline"
+          }
+        },
+        {
+          "act": {
+            "cap": "run_experiment_cycle"
+          }
+        },
+        {
+          "act": {
+            "cap": "report_results"
+          }
+        }
+      ]
+    }
+  },
+  "pre_binding": {
+    "name": "autoresearch",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_goal": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "goal_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_metric": {
+        "owner": "agent",
+        "pre": "goal_defined",
+        "add": [
+          "metric_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_scope": {
+        "owner": "agent",
+        "pre": "metric_defined",
+        "add": [
+          "scope_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_constraints": {
+        "owner": "agent",
+        "pre": "scope_defined",
+        "add": [
+          "constraints_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_budget": {
+        "owner": "agent",
+        "pre": "constraints_defined",
+        "add": [
+          "budget_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_simplicity": {
+        "owner": "agent",
+        "pre": "budget_defined",
+        "add": [
+          "simplicity_defined",
+          "all_setup_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "confirm_setup": {
+        "owner": "agent",
+        "pre": "all_setup_collected",
+        "add": [
+          "setup_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_branch_and_log": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "setup_confirmed",
+            "git_repo"
+          ]
+        },
+        "add": [
+          "branch_created",
+          "results_initialized",
+          "logs_excluded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_in_scope_files": {
+        "owner": "agent",
+        "pre": "setup_confirmed",
+        "add": [
+          "context_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_baseline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "branch_created",
+            "results_initialized",
+            "metric_defined"
+          ]
+        },
+        "add": [
+          "baseline_measured",
+          "baseline_logged",
+          "best_metric_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_experiment_cycle": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "branch_created",
+            "results_initialized",
+            "baseline_measured",
+            "context_read"
+          ]
+        },
+        "add": [
+          "experiment_logged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "best_metric": true
+        }
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "baseline_logged",
+            "experiment_loop_finished"
+          ]
+        },
+        "add": [
+          "results_reported",
+          "summary_reported",
+          "git_log_reported",
+          "next_steps_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_goal",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_metric",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_scope",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_constraints",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_budget",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_simplicity",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "setup_collected": [
+              {
+                "act": {
+                  "cap": "confirm_setup",
+                  "by": "agent"
+                }
+              }
+            ],
+            "collecting_implies_ready": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_branch_and_log",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "read_in_scope_files",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "run_baseline",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "user_interrupts_immediately": [
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "start_loop": [
+              {
+                "rec": {
+                  "name": "experimentation",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "run_experiment_cycle",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "continue": [
+                            {
+                              "continue": "experimentation"
+                            }
+                          ],
+                          "stop": [
+                            {
+                              "act": {
+                                "cap": "report_results",
+                                "by": "agent"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "setup_confirmed",
+        "branch_created",
+        "results_initialized",
+        "logs_excluded",
+        "baseline_measured",
+        "baseline_logged",
+        "experiment_loop_finished",
+        "results_reported",
+        "summary_reported",
+        "git_log_reported",
+        "next_steps_reported"
+      ]
+    },
+    "init_true": [
+      "git_repo"
+    ],
+    "init_constraints": [
+      {
+        "not": "goal_defined"
+      },
+      {
+        "not": "metric_defined"
+      },
+      {
+        "not": "scope_defined"
+      },
+      {
+        "not": "constraints_defined"
+      },
+      {
+        "not": "budget_defined"
+      },
+      {
+        "not": "simplicity_defined"
+      },
+      {
+        "not": "all_setup_collected"
+      },
+      {
+        "not": "setup_confirmed"
+      },
+      {
+        "not": "branch_created"
+      },
+      {
+        "not": "results_initialized"
+      },
+      {
+        "not": "logs_excluded"
+      },
+      {
+        "not": "context_read"
+      },
+      {
+        "not": "baseline_measured"
+      },
+      {
+        "not": "baseline_logged"
+      },
+      {
+        "not": "best_metric_known"
+      },
+      {
+        "not": "experiment_logged"
+      },
+      {
+        "not": "experiment_loop_finished"
+      },
+      {
+        "not": "results_reported"
+      },
+      {
+        "not": "summary_reported"
+      },
+      {
+        "not": "git_log_reported"
+      },
+      {
+        "not": "next_steps_reported"
+      }
+    ],
+    "skills": {
+      "agent": [
+        {
+          "act": {
+            "cap": "ask_goal"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_metric"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_scope"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_constraints"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_budget"
+          }
+        },
+        {
+          "act": {
+            "cap": "ask_simplicity"
+          }
+        },
+        {
+          "act": {
+            "cap": "confirm_setup"
+          }
+        },
+        {
+          "act": {
+            "cap": "prepare_branch_and_log"
+          }
+        },
+        {
+          "act": {
+            "cap": "read_in_scope_files"
+          }
+        },
+        {
+          "act": {
+            "cap": "run_baseline"
+          }
+        },
+        {
+          "act": {
+            "cap": "run_experiment_cycle"
+          }
+        },
+        {
+          "act": {
+            "cap": "report_results"
+          }
+        }
+      ]
+    }
+  },
+  "bindings": {
+    "ask_goal": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "ask_metric": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "ask_scope": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_constraints": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "ask_budget": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "ask_simplicity": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "confirm_setup": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "prepare_branch_and_log": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "read_in_scope_files": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_baseline": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "run_experiment_cycle": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "report_results": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

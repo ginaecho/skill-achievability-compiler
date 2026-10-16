@@ -1,0 +1,40 @@
+```ce
+Skill `implement`.
+Roles: `agent`.
+Tool `read_inputs` (owner `agent`): via `read`; adds `agents_rules_read`, `architect_plan_read`, `orchestrator_output_read`, `scope_understood`.
+Tool `verify_plan_feasibility` (owner `agent`): via `read`; requires `architect_plan_read`; adds `plan_checked`; picks `plan_issue_count` with `plan_issue_count` >= 0.
+Tool `write_plan_deviation_notice` (owner `agent`): via `write`; requires `plan_checked` and `plan_issue_count` > 0; adds `plan_deviation_flagged`.
+Tool `inspect_codebase` (owner `agent`): via `read`; requires `architect_plan_read` and `agents_rules_read`; adds `relevant_files_inspected`.
+Tool `implement_plan_changes` (owner `agent`): via `edit`; requires `scope_understood` and `plan_checked` and `relevant_files_inspected`; adds `implementation_done`; removes `has_todos`, `has_commented_out_code`, `has_debug_logs`, `has_unused_imports`, `has_inline_style_violations`, `has_hardcoded_secrets`.
+Tool `write_tests` (owner `agent`): via `edit`; requires `implementation_done` and `agents_rules_read` and `orchestrator_output_read`; adds `tests_written`.
+Tool `run_test_suite` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`, `package_registries`; requires `tests_written`; adds `tests_passing`.
+Tool `check_coverage_threshold` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `tests_written`; adds `coverage_checked`; picks `coverage_ok` with any of (`coverage_ok`, not `coverage_ok`).
+Tool `review_security_sensitive_scope` (owner `agent`): via `read`; requires `architect_plan_read` and `relevant_files_inspected`; picks `security_sensitive_scope_found` with any of (`security_sensitive_scope_found`, not `security_sensitive_scope_found`).
+Tool `update_pipeline_state` (owner `agent`): via `write`; requires `implementation_done` and `tests_passing`; adds `state_updated`, `implement_completed`, `stage_review`.
+Tool `print_completion_message` (owner `agent`): via `bash`; needs `shell`, `linux`; requires `state_updated`; adds `completion_announced`.
+
+Initially true: none.
+Initially: `plan_issue_count` == 0.
+Initially: false.
+
+Goal: all of (`agents_rules_read`, `architect_plan_read`, `orchestrator_output_read`, `plan_checked`, `implementation_done`, `tests_written`, `tests_passing`, `coverage_checked`, `state_updated`, `implement_completed`, `stage_review`, `completion_announced`, not `security_sensitive_scope_found`, not `has_todos`, not `has_commented_out_code`, not `has_debug_logs`, not `has_unused_imports`, not `has_hardcoded_secrets`).
+
+Protocol:
+  - `agent` uses `read_inputs`.
+  - `agent` uses `verify_plan_feasibility`.
+  - `agent` chooses one of (observed):
+    - branch `plan_deviation_required`:
+      - `agent` uses `write_plan_deviation_notice`.
+    - branch `no_plan_deviation`: none.
+  - `agent` uses `inspect_codebase`.
+  - `agent` uses `review_security_sensitive_scope`.
+  - `agent` chooses one of (observed):
+    - branch `security_sensitive_scope_found`: none.
+    - branch `no_security_sensitive_scope`:
+      - `agent` uses `implement_plan_changes`.
+      - `agent` uses `write_tests`.
+      - `agent` uses `run_test_suite`.
+      - `agent` uses `check_coverage_threshold`.
+      - `agent` uses `update_pipeline_state`.
+      - `agent` uses `print_completion_message`.
+```

@@ -1,0 +1,55 @@
+```ce
+Skill `doc-coauthoring`.
+Roles: `agent`, `user`, `reader_agent`.
+Tool `offer_workflow` (owner `agent`): via `reply`; adds `workflow_offered`.
+Tool `ask_context_questions` (owner `agent`): via `reply`; requires `workflow_accepted`; adds `context_questions_asked`.
+Tool `read_shared_context` (owner `agent`): via `google_drive`; needs `google_drive_account`; adds `shared_context_read`.
+Tool `ask_clarifying_questions` (owner `agent`): via `reply`; requires `context_questions_asked`; adds `clarifying_questions_asked`.
+Tool `propose_structure` (owner `agent`): via `reply`; requires `workflow_accepted`; adds `structure_proposed`.
+Tool `create_doc_scaffold` (owner `agent`): via `write`; requires `structure_agreed`; adds `doc_scaffold_created`, `doc_exists`.
+Tool `draft_or_edit_section` (owner `agent`): via `edit`; requires `doc_exists`; adds `section_updated`.
+Tool `review_full_document` (owner `agent`): via `read`; requires `doc_exists`; adds `document_reviewed`.
+Tool `predict_reader_questions` (owner `agent`): via `reply`; requires `doc_exists`; adds `reader_questions_predicted`.
+Tool `reader_test_document` (owner `reader_agent`): via `agent`; requires `doc_exists` and `reader_questions_predicted`; adds `reader_test_run`.
+Tool `final_review_reply` (owner `agent`): via `reply`; requires `reader_testing_passed`; adds `doc_completed`.
+Initially true: none.
+Goal: `doc_completed`.
+Protocol:
+  - `agent` uses `offer_workflow`.
+  - `user` chooses one of (observed):
+    - branch `accept` (assuming `workflow_accepted`):
+      - `agent` uses `ask_context_questions`.
+      - `user` chooses one of (observed):
+        - branch `shared_doc_context`:
+          - `agent` uses `read_shared_context`.
+        - branch `no_shared_doc_context`: none.
+      - `agent` uses `ask_clarifying_questions`.
+      - `agent` uses `propose_structure`.
+      - `user` chooses one of (observed):
+        - branch `agree_structure` (assuming `structure_agreed`):
+          - `agent` uses `create_doc_scaffold`.
+          - loop `refine_sections`:
+            - `agent` uses `draft_or_edit_section`.
+            - `user` chooses one of (observed):
+              - branch `more_section_edits`:
+                - repeat `refine_sections`.
+              - branch `section_done`: none.
+          - `agent` uses `review_full_document`.
+          - `agent` uses `predict_reader_questions`.
+          - spawn `reader_agent`.
+          - `reader_agent` uses `reader_test_document`.
+          - `user` chooses one of (observed):
+            - branch `issues_found`:
+              - `agent` uses `draft_or_edit_section`.
+              - `agent` uses `review_full_document`.
+              - `agent` uses `predict_reader_questions`.
+              - spawn `reader_agent`.
+              - `reader_agent` uses `reader_test_document`.
+            - branch `passes` (assuming `reader_testing_passed`): none.
+          - `agent` uses `final_review_reply`.
+        - branch `adjust_structure`:
+          - `agent` uses `propose_structure`.
+    - branch `decline`: none.
+Behaviour of `reader_agent`:
+  - use `reader_test_document`.
+```

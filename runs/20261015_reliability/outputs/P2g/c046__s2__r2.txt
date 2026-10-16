@@ -1,0 +1,47 @@
+```ce
+Skill `nextjs-on-cloudflare`.
+Roles: `agent`, `user`.
+Tool `inspect_project_files` (owner `agent`): via `read`; picks `existing_nextjs_project` with (`existing_nextjs_project` or not `existing_nextjs_project`); picks `existing_opennext_setup` with (`existing_opennext_setup` or not `existing_opennext_setup`).
+Tool `ask_project_intent` (owner `agent`): via `ask_user`; picks `user_wants_new_project` with (`user_wants_new_project` or not `user_wants_new_project`); picks `user_wants_migration` with (`user_wants_migration` or not `user_wants_migration`); picks `user_wants_deployment_work` with (`user_wants_deployment_work` or not `user_wants_deployment_work`); picks `user_explicitly_chooses_opennext` with (`user_explicitly_chooses_opennext` or not `user_explicitly_chooses_opennext`); picks `skills_installation_available` with (`skills_installation_available` or not `skills_installation_available`).
+Tool `check_vinext_skill_installed` (owner `agent`): via `skill`; picks `vinext_skill_available` with (`vinext_skill_available` or not `vinext_skill_available`).
+Tool `install_vinext_skills` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires not `vinext_skill_available`; adds `vinext_skill_available`.
+Tool `read_local_skill_docs` (owner `agent`): via `skill`; requires `vinext_skill_available`; adds `upstream_docs_read`.
+Tool `read_upstream_skill_docs` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `upstream_docs_read`.
+Tool `create_vinext_project_for_cloudflare` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `user_wants_new_project` and not `existing_nextjs_project` and not `user_explicitly_chooses_opennext`; adds `vinext_project_ready`, `cloudflare_target_selected`.
+Tool `check_vinext_compatibility` (owner `agent`): via `bash`; needs `shell`; requires `existing_nextjs_project`; adds `compatibility_checked`.
+Tool `migrate_project_to_vinext_for_cloudflare` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `existing_nextjs_project` and `user_wants_migration` and `compatibility_checked` and not `user_explicitly_chooses_opennext`; adds `vinext_project_ready`, `cloudflare_target_selected`.
+Tool `configure_workers_development_and_deployment` (owner `agent`): via `bash`; needs `shell`, `package_registries`; requires `vinext_project_ready`; adds `workers_workflow_configured`.
+Initially true: none.
+Goal: any of (`user_explicitly_chooses_opennext`, `vinext_project_ready`) and `upstream_docs_read` and (not `user_explicitly_chooses_opennext` or `existing_opennext_setup`) and (not `user_wants_new_project` or (not `existing_nextjs_project` and `cloudflare_target_selected`)) and (not `user_wants_migration` or (`compatibility_checked` and `cloudflare_target_selected`)) and (not `user_wants_deployment_work` or (`vinext_project_ready` and `workers_workflow_configured`)).
+Protocol:
+  - `agent` uses `inspect_project_files`.
+  - `agent` uses `ask_project_intent`.
+  - `agent` uses `check_vinext_skill_installed`.
+  - `agent` chooses one of (observed):
+    - branch `skills_already_available`:
+      - `agent` uses `read_local_skill_docs`.
+    - branch `skills_missing`:
+      - `agent` chooses one of (observed):
+        - branch `install_skills`:
+          - `agent` uses `install_vinext_skills`.
+          - `agent` uses `read_local_skill_docs`.
+        - branch `read_directly`:
+          - `agent` uses `read_upstream_skill_docs`.
+  - `agent` chooses one of (observed):
+    - branch `respect_opennext`:
+    - branch `new_project`:
+      - `agent` uses `create_vinext_project_for_cloudflare`.
+      - `agent` chooses one of (observed):
+        - branch `configure_workers`:
+          - `agent` uses `configure_workers_development_and_deployment`.
+        - branch `skip_workers_config`:
+    - branch `migrate_existing_project`:
+      - `agent` uses `check_vinext_compatibility`.
+      - `agent` uses `migrate_project_to_vinext_for_cloudflare`.
+      - `agent` chooses one of (observed):
+        - branch `configure_workers`:
+          - `agent` uses `configure_workers_development_and_deployment`.
+        - branch `skip_workers_config`:
+    - branch `deployment_only_existing_vinext`:
+      - `agent` uses `configure_workers_development_and_deployment`.
+```

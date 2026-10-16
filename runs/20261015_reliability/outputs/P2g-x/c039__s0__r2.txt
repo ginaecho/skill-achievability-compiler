@@ -1,0 +1,52 @@
+```ce
+Skill `address-sanitizer`.
+Roles: `agent`.
+Tool `compile_with_asan` (owner `agent`):
+  via `bash`;
+  requires `source_code_present`;
+  adds `binary_built`;
+  sets `binary_path` to `binary_path`.
+Tool `run_asan_binary` (owner `agent`):
+  via `bash`;
+  requires `binary_built`;
+  adds `executed`;
+  picks `exit_code` with true;
+  picks `asan_output` with true.
+Tool `parse_asan_report` (owner `agent`):
+  via `bash`;
+  requires `executed` and `exit_code` != 0;
+  adds `report_understood`.
+Tool `compile_fuzzer_asan` (owner `agent`):
+  via `bash`;
+  requires `source_code_present`;
+  adds `fuzzer_binary_built`.
+Tool `run_fuzzer_asan` (owner `agent`):
+  via `bash`;
+  requires `fuzzer_binary_built`;
+  adds `fuzzing_complete`;
+  picks `crashes_found` with true.
+Tool `analyze_crashes` (owner `agent`):
+  via `bash`;
+  requires `crashes_found` > 0;
+  adds `root_cause_identified`.
+Initially true: none.
+Initially: `exit_code` == 0.
+Initially: `crashes_found` == 0.
+Goal: `report_understood` or `root_cause_identified`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `unit_test_or_standalone`:
+      - `agent` uses `compile_with_asan`.
+      - `agent` uses `run_asan_binary`.
+      - `agent` chooses one of (observed):
+        - branch `crash_detected`:
+          - `agent` uses `parse_asan_report`.
+        - branch `no_error`: none.
+    - branch `fuzzing_campaign`:
+      - `agent` uses `compile_fuzzer_asan`.
+      - `agent` uses `run_fuzzer_asan`.
+      - `agent` chooses one of (observed):
+        - branch `crashes_found`:
+          - `agent` uses `analyze_crashes`.
+        - branch `clean_run`: none.
+```

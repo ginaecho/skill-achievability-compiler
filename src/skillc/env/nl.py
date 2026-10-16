@@ -20,6 +20,19 @@ can install it here (`data/env/claude_routes.json`); the installer's own
 needs are checked like any other.  A requirement whose evidence sits in an
 optional passage ("optional", "alternatively", "if you have ...") is kept in
 `optional` and does not decide the overall verdict.
+
+Two readers share this module.  `rdet` (the default, frozen for set3) makes a
+requirement hard from any non-optional evidence line.  `rdet2`
+(`requirements(text, strict_mentions=True)`, `intent_from_text(..., reader=
+"rdet2")`) reads mentions more strictly:
+
+    a requirement inferred only from a prose mention (a library match outside
+    a fenced block, with no command, credential variable, import, frontmatter
+    entry or install route for it) is hard only when the mention's sentence
+    carries a requirement cue (must, required, requires, need(s), only,
+    cannot ... without);
+    an account is hard only with operational evidence: a non-optional command
+    of that service's CLI, its credential variable, or its SDK import.
 """
 from __future__ import annotations
 
@@ -98,6 +111,15 @@ PIP_NAMES = {"cv2": "opencv-python", "PIL": "pillow", "sklearn": "scikit-learn",
              "pptx": "python-pptx", "fitz": "pymupdf", "dotenv": "python-dotenv",
              "dateutil": "python-dateutil", "jwt": "pyjwt", "Crypto": "pycryptodome"}
 _MODULE_OF = {v: k for k, v in PIP_NAMES.items()}
+# Rdet2: words that make a prose mention a requirement
+CUE_RE = re.compile(r"\b(must|required|requires?|needs?|only)\b|\bcan(not|'t)\b.*\bwithout\b",
+                    re.I)
+SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+# Rdet2: a code line that loads a library (an SDK import)
+SDK_IMPORT_RE = re.compile(r"^\s*(from\s+\S+\s+import\b|import\b|using\s+[\w.]+\s*;|"
+                           r"(const|let|var)\s+.*\brequire\s*\(|require\s*\()")
+ENV_VAR_RE = re.compile(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)+")
+READERS = ("rdet", "rdet2")
 
 
 @dataclass
@@ -241,19 +263,27 @@ class _Collector:
         self.optional = optional
         self.routes = routes()
         self.doc_routes: list[_DocRoute] = []
+        # Rdet2: the kinds of non-optional evidence each requirement has
+        # ("op" = anything the document does, "lib" = a tool-policy library
+        # match, "cred" = a folded credential variable)
+        self.sources: dict[str, set[str]] = {}
 
-    def add(self, req: Requirement, line: int, text: str, optional: bool = False) -> None:
+    def add(self, req: Requirement, line: int, text: str, optional: bool = False,
+            source: str = "op") -> None:
         have = self.reqs.setdefault(req.cond, req)
         have.evidence.append(f"line {line}: {text.strip()[:160]}")
-        have.core = have.core or not (optional or line in self.optional)
+        hard = not (optional or line in self.optional)
+        have.core = have.core or hard
+        if hard:
+            self.sources.setdefault(req.cond, set()).add(source)
 
-    def program(self, name: str, line: int, text: str) -> None:
+    def program(self, name: str, line: int, text: str, source: str = "op") -> None:
         if name in COMMON:
             return
         route = self.routes["programs"].get(name)
         installs = [self.route(name, *route)] if route else []
         self.add(Requirement(f"program:{name}", f"the program {name}", [{"program": name}],
-                             f"install {name}", installs), line, text)
+                             f"install {name}", installs), line, text, source=source)
 
     def route(self, name: str, installer: str, package: str) -> dict:
         """Installing `name` with a known installer (pip, npm, apt)."""
@@ -272,11 +302,11 @@ class _Collector:
         self.add(Requirement(f"egress:{host}", f"network access to {host}", [{"egress": host}],
                              f"ask for {host} to be allowed by the network policy"), line, text)
 
-    def mcp(self, server: str, line: int, text: str) -> None:
+    def mcp(self, server: str, line: int, text: str, source: str = "op") -> None:
         server = server.replace("_", "-")
         self.add(Requirement(f"mcp:{server}", f"the MCP server {server}",
                              [{"mcp_server": server}], f"connect the {server} MCP server"),
-                 line, text)
+                 line, text, source=source)
 
     def module(self, name: str, line: int, text: str) -> None:
         if name in LOCAL_MODULES:
@@ -293,7 +323,9 @@ class _Collector:
                  line, text)
 
 
-def requirements(text: str) -> list[Requirement]:
+def requirements(text: str, strict_mentions: bool = False) -> list[Requirement]:
+    """The document's requirements.  `strict_mentions=True` is the Rdet2
+    reader (see the module docstring); False is Rdet, unchanged."""
     meta, body = parse_frontmatter(text)
     offset = text.count("\n", 0, len(text) - len(body))
     lines = text.splitlines()
@@ -324,6 +356,10 @@ def requirements(text: str) -> list[Requirement]:
     _frontmatter_tools(col, meta, lines)
     _attach_routes(col)
     _fold_credentials(col)
+    if strict_mentions:
+        code = {start + offset + i: lang for lang, start, block in _blocks(body)
+                for i in range(len(block.splitlines()))}
+        _strict_mentions(col, text, code)
     return list(col.reqs.values())
 
 
@@ -356,6 +392,8 @@ def _fold_credentials(col: _Collector) -> None:
             if folded:
                 col.reqs[cond].evidence += folded.evidence
                 col.reqs[cond].core = col.reqs[cond].core or folded.core
+                if folded.core:
+                    col.sources.setdefault(cond, set()).add("cred")
 
 
 def _install_command(tokens: list[str], piped_to: str | None) -> list[str] | None:
@@ -522,15 +560,129 @@ def _library(col: _Collector, text: str) -> None:
                                 [{"any": alternatives}],
                                 f"provide credentials for {label} "
                                 f"({' or '.join('+'.join(g) for g in accounts[o.value])})"),
-                    o.line, o.text)
+                    o.line, o.text, source="lib")
         elif o.kind == "runtime_tool" and o.value in platforms:
             col.add(Requirement(f"platform:{platforms[o.value]}", f"a {platforms[o.value]} machine",
                                 [{"platform": platforms[o.value]}],
-                                f"run on a {platforms[o.value]} machine"), o.line, o.text)
+                                f"run on a {platforms[o.value]} machine"), o.line, o.text,
+                    source="lib")
         elif o.kind == "runtime_tool" and o.value.endswith("_mcp"):
-            col.mcp(o.value[:-4], o.line, o.text)
+            col.mcp(o.value[:-4], o.line, o.text, source="lib")
         elif o.kind == "program":
-            col.program(o.value, o.line, o.text)
+            col.program(o.value, o.line, o.text, source="lib")
+
+
+# --------------------------------------------------------------------------
+# Rdet2: strict mentions
+# --------------------------------------------------------------------------
+
+def _library_cond(kind: str, value: str, col: _Collector) -> str | None:
+    """The requirement `_library` makes of a library match, or None."""
+    if kind == "resource" and value in col.routes["accounts"]:
+        return f"account:{value}"
+    if kind == "runtime_tool" and value in col.routes["platforms"]:
+        return f"platform:{col.routes['platforms'][value]}"
+    if kind == "runtime_tool" and value.endswith("_mcp"):
+        return f"mcp:{value[:-4].replace('_', '-')}"
+    if kind == "program" and value not in COMMON:
+        return f"program:{value}"
+    return None
+
+
+def _library_hits(text: str, col: _Collector) -> dict[str, list[tuple[int, int, str]]]:
+    """Every library match of the text (`match` keeps only the first):
+    requirement -> [(line, column, matched text)]."""
+    library = load_library()
+    lines = text.splitlines()
+    out: dict[str, list[tuple[int, int, str]]] = {}
+    for e in library.entries:
+        (kind, template), = e["requires"].items()
+        ignore = set(e.get("ignore_captures", []))
+        for pat in e["evidence"]:
+            rx = re.compile(pat, re.IGNORECASE)
+            for no, line in enumerate(lines, 1):
+                for m in rx.finditer(line):
+                    if e.get("parametric"):
+                        cap = m.group(1) if m.groups() else ""
+                        if not cap or cap.lower() in ignore:
+                            continue
+                        value = template.replace(
+                            "{1}", re.sub(r"[^a-z0-9]+", "_", cap.lower()).strip("_"))
+                    else:
+                        value = template
+                    if kind == "runtime_tool" and m.group(0).strip().lower() in INSTALLER_NAMES:
+                        continue      # as in `_library`: one way to install something
+                    cond = _library_cond(kind, value, col)
+                    if cond in col.reqs:
+                        out.setdefault(cond, []).append((no, m.start(), m.group(0)))
+    return out
+
+
+def _cue(line: str, col: int) -> bool:
+    """Whether the sentence of `line` around column `col` carries a requirement cue."""
+    start = 0
+    for m in [*SENTENCE_END.finditer(line), None]:
+        end = m.start() if m else len(line)
+        if col <= end:
+            return bool(CUE_RE.search(line[start:end]))
+        start = m.end()
+    return False
+
+
+def _cli_command(line: str, col: int, hit: str, lang: str | None) -> bool:
+    """Whether the match `hit` at `col` is a command of a CLI: in a shell block
+    or an inline code span, a simple command whose program is the match's
+    first word (`aws s3 cp`, `wrangler deploy`, `az login`)."""
+    words = hit.split()
+    word = words[0].lower() if words else ""
+    if not re.fullmatch(r"[a-z][a-z0-9._-]*", word):
+        return False
+    if lang is not None:
+        if lang not in SHELL_LANGS:
+            return False
+        command = line.strip()
+        command = command[2:] if command.startswith(("$ ", "> ")) else command
+        return any(seg and seg[0].lower() == word for seg in _segments(command))
+    for m in INLINE_RE.finditer(line):
+        if m.start(1) <= col < m.end(1):
+            return any(seg and seg[0].lower() == word for seg in _segments(m.group(1)))
+    return False
+
+
+def _in_inline_code(line: str, col: int) -> bool:
+    return any(m.start(1) <= col < m.end(1) for m in INLINE_RE.finditer(line))
+
+
+def _credential_use(line: str, hit: str, names: set[str]) -> bool:
+    """Whether the match is a credential or environment variable of the
+    service (`RENDER_API_KEY`, `AZURE_SUBSCRIPTION_ID`) that the line sets or
+    reads."""
+    name = hit.strip()
+    return (name in names or bool(ENV_VAR_RE.fullmatch(name))) \
+        and not PLACEHOLDER.match(name) \
+        and ("`" in line or "$" in line or "=" in line
+             or bool(re.search(r"\b(set|export|env)", line, re.I)))
+
+
+def _strict_mentions(col: _Collector, text: str, code: dict[int, str]) -> None:
+    """Rdet2: re-decide which library-inferred requirements are hard."""
+    lines = text.splitlines()
+    for cond, found in _library_hits(text, col).items():
+        req = col.reqs[cond]
+        sources = col.sources.get(cond, set())
+        live = [(no, c, h) for no, c, h in found if no not in col.optional]
+        if cond.startswith("account:"):
+            names = {n for g in col.routes["accounts"][cond.split(":", 1)[1]] for n in g}
+            req.core = "cred" in sources or any(
+                _cli_command(lines[no - 1], c, h, code.get(no))
+                or (no in code and SDK_IMPORT_RE.match(lines[no - 1]))
+                or _credential_use(lines[no - 1], h, names)
+                for no, c, h in live)
+            continue
+        if sources - {"lib"} or any(i["id"].startswith("doc_install_") for i in req.installs):
+            continue                      # the document does something with it
+        req.core = any(no in code or _in_inline_code(lines[no - 1], c)
+                       or _cue(lines[no - 1], c) for no, c, h in live)
 
 
 def _frontmatter_tools(col: _Collector, meta: dict, lines: list[str]) -> None:
@@ -555,9 +707,13 @@ def _frontmatter_tools(col: _Collector, meta: dict, lines: list[str]) -> None:
 # The intent
 # --------------------------------------------------------------------------
 
-def intent_from_text(text: str, name: str | None = None, source: str = "") -> dict:
+def intent_from_text(text: str, name: str | None = None, source: str = "",
+                     reader: str = "rdet") -> dict:
+    """`reader` is "rdet" (default, unchanged) or "rdet2" (strict mentions)."""
+    if reader not in READERS:
+        raise ValueError(f"unknown reader {reader!r}; expected one of {READERS}")
     meta, _ = parse_frontmatter(text)
-    reqs = requirements(text)
+    reqs = requirements(text, strict_mentions=reader == "rdet2")
     core = [r.cond for r in reqs if r.core]
     caps = [{"pred": r.cond, "title": r.title, "needs": r.needs, "fix": r.fix} for r in reqs]
     ops = [{**op, "adds": [r.cond]} for r in reqs for op in r.installs]

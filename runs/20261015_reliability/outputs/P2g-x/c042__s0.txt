@@ -1,0 +1,105 @@
+```ce
+Skill `executing-plans`.
+Roles: `agent`, `reviewer`.
+
+Tool `sdd_workspace` (owner `agent`):
+  via `bash`;
+  requires `plan_file`;
+  adds `workspace_ready`;
+  sets `workspace_path` to `PLAN_BASENAME`.
+
+Tool `read_plan` (owner `agent`):
+  via `read`;
+  requires `workspace_ready`;
+  adds `plan_read`, `spec_read`, `conflicts_scanned`.
+
+Tool `task_start` (owner `agent`):
+  via `bash`;
+  requires `plan_read`;
+  adds `brief_read`;
+  sets `task_n` to `TASK_N`;
+  sets `base` to `BASE_COMMIT`.
+
+Tool `tdd_cycle` (owner `agent`):
+  via `bash`;
+  requires `brief_read`;
+  adds `test_written`, `test_failed`, `code_written`, `step_output_matches`;
+  loop `debug`:
+    - removes `step_output_matches`;
+    - adds `code_debugged`.
+
+Tool `commit` (owner `agent`):
+  via `bash`;
+  requires `step_output_matches`;
+  adds `committed`.
+
+Tool `task_done` (owner `agent`):
+  via `bash`;
+  requires `committed`;
+  adds `task_complete`;
+  sets `task_result` to `TEST_RESULT`.
+
+Tool `review_package` (owner `agent`):
+  via `bash`;
+  requires `all_tasks_complete`;
+  adds `review_package_ready`;
+  sets `review_package_path` to `PACKAGE_PATH`.
+
+Tool `perform_review` (owner `reviewer`):
+  via `agent`;
+  needs `sub_agents`;
+  requires `review_package_ready`;
+  adds `review_complete`;
+  picks `findings` with true.
+
+Tool `fix_finding` (owner `agent`):
+  via `bash`;
+  requires `review_complete`;
+  adds `finding_fixed`.
+
+Tool `delete_workspace` (owner `agent`):
+  via `bash`;
+  requires `all_fixes_done`;
+  adds `workspace_deleted`.
+
+Tool `finish_branch` (owner `agent`):
+  via `skill`;
+  requires `workspace_deleted`;
+  adds `branch_finished`.
+
+Initially true: none.
+Initially: `task_n` == 0.
+Goal: `branch_finished`.
+
+Protocol:
+  - `agent` uses `sdd_workspace`.
+  - `agent` uses `read_plan`.
+  - loop `task_loop`:
+    - `agent` uses `task_start`.
+    - loop `step_cycle`:
+      - `agent` uses `tdd_cycle`.
+      - `agent` chooses one of (observed):
+        - branch `step_matches`:
+          - `agent` uses `commit`.
+        - branch `step_needs_debug`:
+          - `agent` uses `tdd_cycle` for debug.
+          - repeat `step_cycle`.
+    - `agent` uses `task_done`.
+    - `agent` chooses one of (observed):
+      - branch `more_tasks`:
+        - repeat `task_loop`.
+      - branch `no_more_tasks`: none.
+  - `agent` uses `review_package`.
+  - `agent` tells `reviewer` `review_request`.
+  - `reviewer` uses `perform_review`.
+  - `reviewer` tells `agent` `review_results`.
+  - loop `fix_pass`:
+    - `agent` chooses one of (observed):
+      - branch `critical_important_finding`:
+        - `agent` uses `fix_finding`.
+        - repeat `fix_pass`.
+      - branch `no_more_fixes`:
+        - adds `all_fixes_done`.
+  - `agent` uses `delete_workspace`.
+  - `agent` uses `finish_branch`.
+```

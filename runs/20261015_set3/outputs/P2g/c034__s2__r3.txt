@@ -1,0 +1,38 @@
+```ce
+Skill `imagegen`.
+Roles: `agent`, `user`.
+Tool `read_shared_prompt_docs` (owner `agent`): via `read`; adds `shared_prompt_docs_read`.
+Tool `inspect_local_edit_target` (owner `agent`): via `read`; requires `built_in_mode` and `edit_intent` and `local_edit_target_only`; adds `edit_target_visible`.
+Tool `generate_image_built_in` (owner `agent`): via `ask_user`; requires `built_in_mode` and `generate_intent` and `shared_prompt_docs_read`; adds `image_generated`.
+Tool `edit_image_built_in` (owner `agent`): via `ask_user`; requires `built_in_mode` and `edit_intent` and `shared_prompt_docs_read` and `edit_target_visible`; adds `image_generated`.
+Tool `move_image_into_workspace` (owner `agent`): via `bash`; requires `image_generated` and `project_bound`; adds `workspace_asset_saved`, `final_path_reported`.
+Tool `render_preview_inline` (owner `agent`): via `ask_user`; requires `image_generated` and `preview_only`; adds `preview_rendered`.
+Tool `read_cli_docs_and_script` (owner `agent`): via `read`; requires `cli_mode`; adds `cli_docs_read`.
+Tool `install_cli_dependency` (owner `agent`): via `bash`; requires `cli_mode`; adds `cli_dependency_installed`.
+Tool `run_cli_generate` (owner `agent`): via `bash`; needs `openai_api_key`; requires `cli_mode` and `generate_intent` and `single_asset` and `cli_docs_read` and `cli_dependency_installed`; adds `image_generated`.
+Tool `run_cli_edit` (owner `agent`): via `bash`; needs `openai_api_key`; requires `cli_mode` and `edit_intent` and `single_asset` and `cli_docs_read` and `cli_dependency_installed`; adds `image_generated`.
+Tool `run_cli_generate_batch` (owner `agent`): via `bash`; needs `openai_api_key`; requires `cli_mode` and `generate_intent` and `many_assets` and `cli_docs_read` and `cli_dependency_installed`; adds `image_generated`.
+Tool `report_cli_fallback_requirement` (owner `agent`): via `ask_user`; requires `built_in_failed`; adds `user_informed_cli_requires_key`.
+Initially true: none.
+Initially: not `shared_prompt_docs_read` and not `edit_target_visible` and not `image_generated` and not `workspace_asset_saved` and not `final_path_reported` and not `preview_rendered` and not `cli_docs_read` and not `cli_dependency_installed` and not `user_informed_cli_requires_key`.
+Goal: `image_generated` and ((`project_bound` and `workspace_asset_saved` and `final_path_reported`) or (`preview_only` and `preview_rendered`)).
+Protocol:
+  - `agent` uses `read_shared_prompt_docs`.
+  - `user` chooses one of (observed):
+    - branch `built_in_mode`:
+      - `user` chooses one of (observed):
+        - branch `generate_intent`:
+          - `agent` uses `generate_image_built_in`.
+        - branch `edit_intent`:
+          - `user` chooses one of (observed):
+            - branch `local_edit_target_only`:
+              - `agent` uses `inspect_local_edit_target`.
+            - branch `already_visible_edit_target`: none.
+          - `agent` uses `edit_image_built_in`.
+      - `user` chooses one of (observed):
+        - branch `project_bound`:
+          - `agent` uses `move_image_into_workspace`.
+        - branch `preview_only`:
+          - `agent` uses `render_preview_inline`.
+    - branch `cli_mode`: none.
+```

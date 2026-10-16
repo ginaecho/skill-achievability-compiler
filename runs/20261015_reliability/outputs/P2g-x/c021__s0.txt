@@ -1,0 +1,30 @@
+```ce
+Skill `windows-builder`.
+Roles: `agent`, `user`.
+Tool `write_packer_template` (owner `agent`): via `write`; requires `target_confirmed`; adds `template_written`.
+Tool `write_winrm_script` (owner `agent`): via `write`; requires `target_confirmed`; adds `winrm_script_written`.
+Tool `run_packer_build` (owner `agent`): via `bash`; needs `cloud_account`; requires `template_written` and `winrm_script_written`; sets `build_result` to 0; adds `build_complete`.
+Tool `verify_resources_cleanup` (owner `agent`): via `bash`; needs `cloud_account`; requires `build_complete`; adds `cleanup_verified`.
+Tool `confirm_target` (owner `user`): via `ask_user`; picks `platform` with `platform` == "aws" or `platform` == "azure" or `platform` == "vmware"; adds `target_confirmed`.
+Initially true: `build_result` == -1.
+Initially: `platform` == "".
+Goal: `build_complete` and `cleanup_verified`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `proceed`:
+      - `user` uses `confirm_target`.
+      - `agent` uses `write_packer_template`.
+      - `agent` uses `write_winrm_script`.
+      - loop `retry_build`:
+        - `agent` uses `run_packer_build`.
+        - `agent` chooses one of (external):
+          - branch `success`:
+            - `agent` uses `verify_resources_cleanup`.
+          - branch `retry`:
+            - `agent` tells `user` `build_failed_retry`.
+            - repeat `retry_build`.
+          - branch `abandon`:
+            - `agent` tells `user` `build_abandoned`.
+      - checkpoint: `build_complete` and `cleanup_verified`.
+    - branch `cancel`: none.
+```

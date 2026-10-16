@@ -1,0 +1,790 @@
+{
+  "pack": {
+    "name": "aspire-project-v2-migration",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "apphost_identified",
+          "workspace_inspected",
+          "local_changes_preserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "lookup_aspire_docs": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "docs_checked",
+          "api_shapes_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "assess_versions_and_capabilities": {
+        "owner": "agent",
+        "pre": "apphost_identified",
+        "add": [
+          "eligibility_assessed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "eligible": {
+            "or": [
+              {
+                "cmp": [
+                  "eligible",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "eligible",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "migration_needed": {
+            "or": [
+              {
+                "cmp": [
+                  "migration_needed",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "migration_needed",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "gateway_decision_required": {
+            "or": [
+              {
+                "cmp": [
+                  "gateway_decision_required",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "gateway_decision_required",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "request_user_approval": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace_inspected",
+            "eligibility_assessed"
+          ]
+        },
+        "add": [
+          "assessment_presented",
+          "exact_plan_listed",
+          "approval_requested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_approved_edits": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "assessment_presented",
+            "user_approved"
+          ]
+        },
+        "add": [
+          "files_edited",
+          "approved_subset_applied",
+          "narrow_suppressions_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "regenerate_sdk_artifacts": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "sdk_regenerated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "restore_and_build": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "restored",
+          "built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_apphost": {
+        "owner": "agent",
+        "pre": "built",
+        "add": [
+          "apphost_started"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "wait_and_inspect_resources": {
+        "owner": "agent",
+        "pre": "apphost_started",
+        "add": [
+          "runtime_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reassess_idempotence": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "idempotence_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "assessment_presented",
+            "idempotence_checked"
+          ]
+        },
+        "add": [
+          "reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "assess_versions_and_capabilities",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "lookup_aspire_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "request_user_approval",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "approve_exact_plan": [
+              {
+                "act": {
+                  "cap": "apply_approved_edits",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "sdk_regeneration_needed": [
+                      {
+                        "act": {
+                          "cap": "regenerate_sdk_artifacts",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_sdk_regeneration_needed": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "restore_and_build",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "runtime_validation_authorized": [
+                      {
+                        "act": {
+                          "cap": "start_apphost",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "wait_and_inspect_resources",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "runtime_validation_not_authorized": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reassess_idempotence",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "decline_or_request_changes": [
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "reported",
+        {
+          "or": [
+            {
+              "and": [
+                "assessment_presented",
+                {
+                  "not": "user_approved"
+                }
+              ]
+            },
+            {
+              "and": [
+                "assessment_presented",
+                "user_approved",
+                "approved_subset_applied",
+                "idempotence_checked"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "eligible",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "migration_needed",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "gateway_decision_required",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "aspire-project-v2-migration",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "apphost_identified",
+          "workspace_inspected",
+          "local_changes_preserved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "lookup_aspire_docs": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "docs_checked",
+          "api_shapes_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "assess_versions_and_capabilities": {
+        "owner": "agent",
+        "pre": "apphost_identified",
+        "add": [
+          "eligibility_assessed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "eligible": {
+            "or": [
+              {
+                "cmp": [
+                  "eligible",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "eligible",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "migration_needed": {
+            "or": [
+              {
+                "cmp": [
+                  "migration_needed",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "migration_needed",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "gateway_decision_required": {
+            "or": [
+              {
+                "cmp": [
+                  "gateway_decision_required",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "gateway_decision_required",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "request_user_approval": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "workspace_inspected",
+            "eligibility_assessed"
+          ]
+        },
+        "add": [
+          "assessment_presented",
+          "exact_plan_listed",
+          "approval_requested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_approved_edits": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "assessment_presented",
+            "user_approved"
+          ]
+        },
+        "add": [
+          "files_edited",
+          "approved_subset_applied",
+          "narrow_suppressions_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "regenerate_sdk_artifacts": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "sdk_regenerated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "restore_and_build": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "restored",
+          "built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_apphost": {
+        "owner": "agent",
+        "pre": "built",
+        "add": [
+          "apphost_started"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "wait_and_inspect_resources": {
+        "owner": "agent",
+        "pre": "apphost_started",
+        "add": [
+          "runtime_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reassess_idempotence": {
+        "owner": "agent",
+        "pre": "files_edited",
+        "add": [
+          "idempotence_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_results": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "assessment_presented",
+            "idempotence_checked"
+          ]
+        },
+        "add": [
+          "reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "assess_versions_and_capabilities",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "lookup_aspire_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "request_user_approval",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "approve_exact_plan": [
+              {
+                "act": {
+                  "cap": "apply_approved_edits",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "sdk_regeneration_needed": [
+                      {
+                        "act": {
+                          "cap": "regenerate_sdk_artifacts",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_sdk_regeneration_needed": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "restore_and_build",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "runtime_validation_authorized": [
+                      {
+                        "act": {
+                          "cap": "start_apphost",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "wait_and_inspect_resources",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "runtime_validation_not_authorized": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reassess_idempotence",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ],
+            "decline_or_request_changes": [
+              {
+                "act": {
+                  "cap": "report_results",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "reported",
+        {
+          "or": [
+            {
+              "and": [
+                "assessment_presented",
+                {
+                  "not": "user_approved"
+                }
+              ]
+            },
+            {
+              "and": [
+                "assessment_presented",
+                "user_approved",
+                "approved_subset_applied",
+                "idempotence_checked"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "eligible",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "migration_needed",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "gateway_decision_required",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "lookup_aspire_docs": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "assess_versions_and_capabilities": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "request_user_approval": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "apply_approved_edits": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "regenerate_sdk_artifacts": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "restore_and_build": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "start_apphost": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "wait_and_inspect_resources": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "reassess_idempotence": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "report_results": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,96 @@
+```ce
+Skill `context-engine`.
+Roles: `agent`, `user`.
+
+Tool `check_context_file` (owner `agent`):
+  via `read`;
+  adds `file_exists`.
+
+Tool `prompt_setup` (owner `agent`):
+  via `ask_user`;
+  adds `setup_prompted`.
+
+Tool `read_context_file` (owner `agent`):
+  via `read`;
+  requires `file_exists`;
+  adds `context_loaded`;
+  sets `stale_age` to `days_since_update`.
+
+Tool `offer_stale_choice` (owner `agent`):
+  via `ask_user`;
+  requires `stale_age` >= 90;
+  picks `stale_decision` with any of (`stale_decision` == `refresh`, `stale_decision` == `continue`).
+
+Tool `note_update_observation` (owner `agent`):
+  via `read`;
+  adds `update_observed`.
+
+Tool `offer_write_update` (owner `agent`):
+  via `ask_user`;
+  adds `write_offered`.
+
+Tool `write_context_update` (owner `agent`):
+  via `write`;
+  requires `user_decision` == `yes`;
+  adds `context_written`.
+
+Tool `apply_anonymization` (owner `agent`):
+  via `read`;
+  requires `context_loaded`;
+  adds `anonymized`.
+
+Tool `external_call` (owner `agent`):
+  via `web_search`;
+  requires `anonymized`.
+
+Tool `infer_missing_fields` (owner `agent`):
+  via `read`;
+  requires `context_loaded`;
+  adds `gaps_handled`.
+
+Initially true: none.
+Initially: `stale_age` == 0.
+Goal: `context_loaded` and `anonymized`.
+
+Protocol:
+  - `agent` uses `check_context_file`.
+  - `agent` chooses one of (observed):
+    - branch `file_missing`:
+      - requires not `file_exists`.
+      - `agent` uses `prompt_setup`.
+    - branch `file_found`:
+      - requires `file_exists`.
+      - `agent` uses `read_context_file`.
+      - `agent` chooses one of (observed):
+        - branch `context_stale`:
+          - requires `stale_age` >= 90.
+          - `agent` uses `offer_stale_choice`.
+          - `agent` chooses one of (observed):
+            - branch `user_chooses_refresh`:
+              - requires `stale_decision` == `refresh`.
+              - none.
+            - branch `user_chooses_continue`:
+              - requires `stale_decision` == `continue`.
+              - none.
+        - branch `context_fresh`:
+          - requires `stale_age` < 90.
+      - `agent` uses `apply_anonymization`.
+      - `agent` chooses one of (observed):
+        - branch `make_external_call`:
+          - `agent` uses `external_call`.
+        - branch `skip_external`: none.
+      - `agent` chooses one of (observed):
+        - branch `enrichment_triggered`:
+          - `agent` uses `note_update_observation`.
+          - `agent` uses `offer_write_update`.
+          - `agent` chooses one of (observed):
+            - branch `user_approves_write`:
+              - requires `user_decision` == `yes`.
+              - `agent` uses `write_context_update`.
+            - branch `user_declines_write`: none.
+        - branch `no_enrichment`: none.
+      - `agent` chooses one of (observed):
+        - branch `missing_fields`:
+          - `agent` uses `infer_missing_fields`.
+        - branch `fields_complete`: none.
+```

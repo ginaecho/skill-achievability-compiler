@@ -1,0 +1,145 @@
+```ce
+Skill `imagegen`.
+Roles: `agent`, `user`.
+Tool `ask_for_missing_details` (owner `agent`): via `ask_user`; adds `details_ready`.
+Tool `load_local_edit_target` (owner `agent`): via `read`; requires `built_in_mode`; requires `edit_request`; requires `local_edit_target`; adds `edit_target_visible`.
+Tool `run_cli_generate` (owner `agent`): via `bash`; needs `shell`; requires `cli_mode`; requires `generate_request`; requires `details_ready`; requires `openai_api_key_set`; adds `image_generated`.
+Tool `run_cli_edit` (owner `agent`): via `bash`; needs `shell`; requires `cli_mode`; requires `edit_request`; requires `details_ready`; requires `openai_api_key_set`; adds `image_generated`.
+Tool `run_cli_generate_batch` (owner `agent`): via `bash`; needs `shell`; requires `cli_mode`; requires `many_outputs`; requires `details_ready`; requires `openai_api_key_set`; adds `image_generated`.
+Tool `move_image_into_workspace` (owner `agent`): via `bash`; needs `shell`; requires `image_generated`; requires `project_bound`; adds `workspace_asset_saved`.
+Tool `save_versioned_workspace_image` (owner `agent`): via `bash`; needs `shell`; requires `image_generated`; requires `project_bound`; requires `preserve_existing_asset`; adds `workspace_asset_saved`.
+Tool `reply_cli_fallback_available` (owner `agent`): via `reply`; requires `built_in_unavailable`; adds `cli_fallback_explained`.
+Tool `reply_final_result` (owner `agent`): via `reply`; requires (`image_generated` and (`preview_only` or `workspace_asset_saved`)) or (`cli_fallback_explained` and not `cli_mode`); adds `final_report_sent`.
+Initially true: none.
+Initially: not `details_ready`.
+Initially: not `built_in_mode`.
+Initially: not `cli_mode`.
+Initially: not `generate_request`.
+Initially: not `edit_request`.
+Initially: not `many_outputs`.
+Initially: not `project_bound`.
+Initially: not `preview_only`.
+Initially: not `local_edit_target`.
+Initially: not `edit_target_visible`.
+Initially: not `openai_api_key_set`.
+Initially: not `image_generated`.
+Initially: not `workspace_asset_saved`.
+Initially: not `preserve_existing_asset`.
+Initially: not `built_in_unavailable`.
+Initially: not `cli_fallback_explained`.
+Initially: not `final_report_sent`.
+Goal: `final_report_sent`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `built_in_generate_preview` (assuming `built_in_mode`, `generate_request`, `preview_only`):
+      - `agent` uses `ask_for_missing_details`.
+      - `agent` uses `reply_final_result`.
+    - branch `built_in_generate_project_replace` (assuming `built_in_mode`, `generate_request`, `project_bound`):
+      - `agent` uses `ask_for_missing_details`.
+      - `agent` uses `move_image_into_workspace`.
+      - `agent` uses `reply_final_result`.
+    - branch `built_in_generate_project_preserve` (assuming `built_in_mode`, `generate_request`, `project_bound`, `preserve_existing_asset`):
+      - `agent` uses `ask_for_missing_details`.
+      - `agent` uses `save_versioned_workspace_image`.
+      - `agent` uses `reply_final_result`.
+    - branch `built_in_edit_preview` (assuming `built_in_mode`, `edit_request`, `preview_only`):
+      - `agent` uses `ask_for_missing_details`.
+      - `user` chooses one of (observed):
+        - branch `local_target` (assuming `local_edit_target`):
+          - `agent` uses `load_local_edit_target`.
+        - branch `visible_target`: none.
+      - `agent` uses `reply_final_result`.
+    - branch `built_in_edit_project_replace` (assuming `built_in_mode`, `edit_request`, `project_bound`):
+      - `agent` uses `ask_for_missing_details`.
+      - `user` chooses one of (observed):
+        - branch `local_target` (assuming `local_edit_target`):
+          - `agent` uses `load_local_edit_target`.
+        - branch `visible_target`: none.
+      - `agent` uses `move_image_into_workspace`.
+      - `agent` uses `reply_final_result`.
+    - branch `built_in_edit_project_preserve` (assuming `built_in_mode`, `edit_request`, `project_bound`, `preserve_existing_asset`):
+      - `agent` uses `ask_for_missing_details`.
+      - `user` chooses one of (observed):
+        - branch `local_target` (assuming `local_edit_target`):
+          - `agent` uses `load_local_edit_target`.
+        - branch `visible_target`: none.
+      - `agent` uses `save_versioned_workspace_image`.
+      - `agent` uses `reply_final_result`.
+    - branch `built_in_unavailable_case` (assuming `built_in_unavailable`):
+      - `agent` uses `reply_cli_fallback_available`.
+      - `user` chooses one of (observed):
+        - branch `stay_without_cli`:
+          - `agent` uses `reply_final_result`.
+        - branch `explicit_cli_generate_single` (assuming `cli_mode`, `generate_request`, `openai_api_key_set`):
+          - `agent` uses `ask_for_missing_details`.
+          - `agent` uses `run_cli_generate`.
+          - `user` chooses one of (observed):
+            - branch `preview` (assuming `preview_only`):
+              - `agent` uses `reply_final_result`.
+            - branch `project_replace` (assuming `project_bound`):
+              - `agent` uses `move_image_into_workspace`.
+              - `agent` uses `reply_final_result`.
+            - branch `project_preserve` (assuming `project_bound`, `preserve_existing_asset`):
+              - `agent` uses `save_versioned_workspace_image`.
+              - `agent` uses `reply_final_result`.
+        - branch `explicit_cli_edit_single` (assuming `cli_mode`, `edit_request`, `openai_api_key_set`):
+          - `agent` uses `ask_for_missing_details`.
+          - `agent` uses `run_cli_edit`.
+          - `user` chooses one of (observed):
+            - branch `preview` (assuming `preview_only`):
+              - `agent` uses `reply_final_result`.
+            - branch `project_replace` (assuming `project_bound`):
+              - `agent` uses `move_image_into_workspace`.
+              - `agent` uses `reply_final_result`.
+            - branch `project_preserve` (assuming `project_bound`, `preserve_existing_asset`):
+              - `agent` uses `save_versioned_workspace_image`.
+              - `agent` uses `reply_final_result`.
+        - branch `explicit_cli_generate_batch` (assuming `cli_mode`, `many_outputs`, `openai_api_key_set`):
+          - `agent` uses `ask_for_missing_details`.
+          - `agent` uses `run_cli_generate_batch`.
+          - `user` chooses one of (observed):
+            - branch `preview` (assuming `preview_only`):
+              - `agent` uses `reply_final_result`.
+            - branch `project_replace` (assuming `project_bound`):
+              - `agent` uses `move_image_into_workspace`.
+              - `agent` uses `reply_final_result`.
+            - branch `project_preserve` (assuming `project_bound`, `preserve_existing_asset`):
+              - `agent` uses `save_versioned_workspace_image`.
+              - `agent` uses `reply_final_result`.
+    - branch `explicit_cli_from_start_generate_single` (assuming `cli_mode`, `generate_request`, `openai_api_key_set`):
+      - `agent` uses `ask_for_missing_details`.
+      - `agent` uses `run_cli_generate`.
+      - `user` chooses one of (observed):
+        - branch `preview` (assuming `preview_only`):
+          - `agent` uses `reply_final_result`.
+        - branch `project_replace` (assuming `project_bound`):
+          - `agent` uses `move_image_into_workspace`.
+          - `agent` uses `reply_final_result`.
+        - branch `project_preserve` (assuming `project_bound`, `preserve_existing_asset`):
+          - `agent` uses `save_versioned_workspace_image`.
+          - `agent` uses `reply_final_result`.
+    - branch `explicit_cli_from_start_edit_single` (assuming `cli_mode`, `edit_request`, `openai_api_key_set`):
+      - `agent` uses `ask_for_missing_details`.
+      - `agent` uses `run_cli_edit`.
+      - `user` chooses one of (observed):
+        - branch `preview` (assuming `preview_only`):
+          - `agent` uses `reply_final_result`.
+        - branch `project_replace` (assuming `project_bound`):
+          - `agent` uses `move_image_into_workspace`.
+          - `agent` uses `reply_final_result`.
+        - branch `project_preserve` (assuming `project_bound`, `preserve_existing_asset`):
+          - `agent` uses `save_versioned_workspace_image`.
+          - `agent` uses `reply_final_result`.
+    - branch `explicit_cli_from_start_generate_batch` (assuming `cli_mode`, `many_outputs`, `openai_api_key_set`):
+      - `agent` uses `ask_for_missing_details`.
+      - `agent` uses `run_cli_generate_batch`.
+      - `user` chooses one of (observed):
+        - branch `preview` (assuming `preview_only`):
+          - `agent` uses `reply_final_result`.
+        - branch `project_replace` (assuming `project_bound`):
+          - `agent` uses `move_image_into_workspace`.
+          - `agent` uses `reply_final_result`.
+        - branch `project_preserve` (assuming `project_bound`, `preserve_existing_asset`):
+          - `agent` uses `save_versioned_workspace_image`.
+          - `agent` uses `reply_final_result`.
+```

@@ -1,0 +1,54 @@
+```ce
+Skill `make-repo-contribution`.
+Roles: `agent`, `user`.
+Tool `search_repo_guidance` (owner `agent`): via `read`; adds `guidance_checked`, `repo_searched_for_guidance`.
+Tool `search_existing_issues` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked`; adds `issues_checked`.
+Tool `ask_user_to_choose_issue` (owner `agent`): via `ask_user`; requires `issues_checked`; adds `issue_selection_resolved`.
+Tool `ask_user_to_confirm_prereqs` (owner `agent`): via `ask_user`; requires `guidance_checked`; adds `prereqs_confirmed`.
+Tool `create_issue` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked`; adds `issue_created`, `issue_selected`.
+Tool `create_branch` (owner `agent`): via `bash`; requires `guidance_checked`; adds `branch_created`, `non_default_branch`.
+Tool `create_commits` (owner `agent`): via `bash`; requires `branch_created`; adds `commits_created`.
+Tool `push_branch` (owner `agent`): via `bash`; needs `github_account`; requires `branch_created` and `commits_created`; adds `branch_pushed`.
+Tool `create_pull_request` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked` and `branch_pushed`; adds `pr_created`, `issue_referenced_in_pr`.
+Tool `flag_conflict_to_user` (owner `agent`): via `ask_user`; adds `conflict_flagged`.
+Initially true: none.
+Goal: any of (`guidance_checked`, `conflict_flagged`).
+Protocol:
+  - `agent` uses `search_repo_guidance`.
+  - `agent` chooses one of (observed):
+    - branch `conflicting_instructions_found`:
+      - `agent` uses `flag_conflict_to_user`.
+    - branch `no_conflict_found`:
+      - `agent` chooses one of (observed):
+        - branch `issue_or_pr_related_request`:
+          - `agent` uses `search_existing_issues`.
+          - `agent` chooses one of (observed):
+            - branch `related_issue_found`:
+              - `agent` uses `ask_user_to_choose_issue`.
+            - branch `no_related_issue_found`:
+              - `agent` chooses one of (observed):
+                - branch `issue_required_and_user_wants_issue`:
+                  - `agent` uses `create_issue`.
+                - branch `issue_not_required_or_skip_issue`: none.
+        - branch `not_issue_or_pr_related_request`: none.
+      - `agent` chooses one of (observed):
+        - branch `prerequisites_exist`:
+          - `agent` uses `ask_user_to_confirm_prereqs`.
+        - branch `no_prerequisites`: none.
+      - `agent` chooses one of (observed):
+        - branch `user_asked_for_branch`:
+          - `agent` uses `create_branch`.
+        - branch `no_branch_request`: none.
+      - `agent` chooses one of (observed):
+        - branch `user_asked_for_commits`:
+          - `agent` uses `create_commits`.
+        - branch `no_commit_request`: none.
+      - `agent` chooses one of (observed):
+        - branch `user_asked_to_push`:
+          - `agent` uses `push_branch`.
+        - branch `no_push_request`: none.
+      - `agent` chooses one of (observed):
+        - branch `user_asked_for_pr`:
+          - `agent` uses `create_pull_request`.
+        - branch `no_pr_request`: none.
+```

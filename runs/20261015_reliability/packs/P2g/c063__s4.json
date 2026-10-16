@@ -1,0 +1,754 @@
+{
+  "pack": {
+    "name": "view-pdf",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "list_pdfs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "pdfs_listed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "display_pdf": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "local_pdf_available",
+            "pdf_url_available"
+          ]
+        },
+        "add": [
+          "pdf_displayed",
+          "viewer_open"
+        ],
+        "del": [],
+        "assigns": {
+          "current_page": 1
+        },
+        "nondet": {}
+      },
+      "display_pdf_with_form_elicitation": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "local_pdf_available",
+            "pdf_url_available"
+          ]
+        },
+        "add": [
+          "pdf_displayed",
+          "viewer_open",
+          "form_input_prompted"
+        ],
+        "del": [],
+        "assigns": {
+          "current_page": 1
+        },
+        "nondet": {}
+      },
+      "get_text": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "relevant_text_obtained"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "get_screenshot": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "screenshot_obtained"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_annotations": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "annotations_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_annotations": {
+        "owner": "agent",
+        "pre": "annotations_added",
+        "add": [
+          "annotations_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "remove_annotations": {
+        "owner": "agent",
+        "pre": "annotations_added",
+        "add": [
+          "annotations_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fill_form": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "form_filled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "place_signature_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "pdf_displayed",
+            "signature_image_available"
+          ]
+        },
+        "add": [
+          "signature_placed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "navigate_viewer": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "list_local_pdfs": [
+              {
+                "act": {
+                  "cap": "list_pdfs",
+                  "by": "agent"
+                }
+              }
+            ],
+            "open_known_source": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "open_pdf": [
+              {
+                "act": {
+                  "cap": "display_pdf",
+                  "by": "agent"
+                }
+              }
+            ],
+            "open_pdf_and_elicit_form_inputs": [
+              {
+                "act": {
+                  "cap": "display_pdf_with_form_elicitation",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "review_or_prepare_annotations": [
+              {
+                "act": {
+                  "cap": "get_text",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_annotations": [
+                      {
+                        "act": {
+                          "cap": "add_annotations",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "get_screenshot",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "annotation_iteration",
+                          "body": [
+                            {
+                              "choice": {
+                                "by": "user",
+                                "observed": true,
+                                "branches": {
+                                  "edit_annotations": [
+                                    {
+                                      "choice": {
+                                        "by": "agent",
+                                        "observed": true,
+                                        "branches": {
+                                          "update": [
+                                            {
+                                              "act": {
+                                                "cap": "update_annotations",
+                                                "by": "agent"
+                                              }
+                                            }
+                                          ],
+                                          "remove": [
+                                            {
+                                              "act": {
+                                                "cap": "remove_annotations",
+                                                "by": "agent"
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "act": {
+                                        "cap": "get_screenshot",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "continue": "annotation_iteration"
+                                    }
+                                  ],
+                                  "done": []
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "decline_annotations": [
+                      {
+                        "act": {
+                          "cap": "get_screenshot",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "fill_form_workflow": [
+              {
+                "act": {
+                  "cap": "fill_form",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_screenshot",
+                  "by": "agent"
+                }
+              }
+            ],
+            "sign_workflow": [
+              {
+                "act": {
+                  "cap": "place_signature_image",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_screenshot",
+                  "by": "agent"
+                }
+              }
+            ],
+            "navigate_only": [
+              {
+                "act": {
+                  "cap": "navigate_viewer",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_screenshot",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "viewer_open",
+        {
+          "or": [
+            "annotations_added",
+            "form_filled",
+            "signature_placed",
+            "screenshot_obtained"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "view-pdf",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "list_pdfs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "pdfs_listed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "display_pdf": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "local_pdf_available",
+            "pdf_url_available"
+          ]
+        },
+        "add": [
+          "pdf_displayed",
+          "viewer_open"
+        ],
+        "del": [],
+        "assigns": {
+          "current_page": 1
+        },
+        "nondet": {}
+      },
+      "display_pdf_with_form_elicitation": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "local_pdf_available",
+            "pdf_url_available"
+          ]
+        },
+        "add": [
+          "pdf_displayed",
+          "viewer_open",
+          "form_input_prompted"
+        ],
+        "del": [],
+        "assigns": {
+          "current_page": 1
+        },
+        "nondet": {}
+      },
+      "get_text": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "relevant_text_obtained"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "get_screenshot": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "screenshot_obtained"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_annotations": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "annotations_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_annotations": {
+        "owner": "agent",
+        "pre": "annotations_added",
+        "add": [
+          "annotations_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "remove_annotations": {
+        "owner": "agent",
+        "pre": "annotations_added",
+        "add": [
+          "annotations_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fill_form": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [
+          "form_filled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "place_signature_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "pdf_displayed",
+            "signature_image_available"
+          ]
+        },
+        "add": [
+          "signature_placed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "navigate_viewer": {
+        "owner": "agent",
+        "pre": "pdf_displayed",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "list_local_pdfs": [
+              {
+                "act": {
+                  "cap": "list_pdfs",
+                  "by": "agent"
+                }
+              }
+            ],
+            "open_known_source": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "open_pdf": [
+              {
+                "act": {
+                  "cap": "display_pdf",
+                  "by": "agent"
+                }
+              }
+            ],
+            "open_pdf_and_elicit_form_inputs": [
+              {
+                "act": {
+                  "cap": "display_pdf_with_form_elicitation",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "review_or_prepare_annotations": [
+              {
+                "act": {
+                  "cap": "get_text",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "approve_annotations": [
+                      {
+                        "act": {
+                          "cap": "add_annotations",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "get_screenshot",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "annotation_iteration",
+                          "body": [
+                            {
+                              "choice": {
+                                "by": "user",
+                                "observed": true,
+                                "branches": {
+                                  "edit_annotations": [
+                                    {
+                                      "choice": {
+                                        "by": "agent",
+                                        "observed": true,
+                                        "branches": {
+                                          "update": [
+                                            {
+                                              "act": {
+                                                "cap": "update_annotations",
+                                                "by": "agent"
+                                              }
+                                            }
+                                          ],
+                                          "remove": [
+                                            {
+                                              "act": {
+                                                "cap": "remove_annotations",
+                                                "by": "agent"
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "act": {
+                                        "cap": "get_screenshot",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "continue": "annotation_iteration"
+                                    }
+                                  ],
+                                  "done": []
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ],
+                    "decline_annotations": [
+                      {
+                        "act": {
+                          "cap": "get_screenshot",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "fill_form_workflow": [
+              {
+                "act": {
+                  "cap": "fill_form",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_screenshot",
+                  "by": "agent"
+                }
+              }
+            ],
+            "sign_workflow": [
+              {
+                "act": {
+                  "cap": "place_signature_image",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_screenshot",
+                  "by": "agent"
+                }
+              }
+            ],
+            "navigate_only": [
+              {
+                "act": {
+                  "cap": "navigate_viewer",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_screenshot",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "viewer_open",
+        {
+          "or": [
+            "annotations_added",
+            "form_filled",
+            "signature_placed",
+            "screenshot_obtained"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "list_pdfs": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "display_pdf": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "display_pdf_with_form_elicitation": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "get_text": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "get_screenshot": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "add_annotations": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "update_annotations": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "remove_annotations": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "fill_form": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "place_signature_image": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "navigate_viewer": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

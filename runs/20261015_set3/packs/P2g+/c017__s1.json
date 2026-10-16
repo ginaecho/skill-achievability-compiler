@@ -1,0 +1,803 @@
+{
+  "pack": {
+    "name": "nextflow-development",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "fetch_study_info": {
+        "owner": "agent",
+        "pre": "public_dataset_case",
+        "add": [
+          "study_info_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "download_public_data": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "public_dataset_case",
+            "study_info_available"
+          ]
+        },
+        "add": [
+          "input_data_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "environment_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "detect_data_type": {
+        "owner": "agent",
+        "pre": "input_data_available",
+        "add": [
+          "data_type_detected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_test_profile": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "pipeline_selected",
+            "environment_passed"
+          ]
+        },
+        "add": [
+          "test_profile_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_samplesheet": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "input_data_available",
+            "pipeline_selected"
+          ]
+        },
+        "add": [
+          "samplesheet_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_samplesheet": {
+        "owner": "agent",
+        "pre": "pipeline_selected",
+        "add": [
+          "samplesheet_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_genome": {
+        "owner": "agent",
+        "pre": "genome_confirmed",
+        "add": [
+          "genome_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "download_genome": {
+        "owner": "agent",
+        "pre": "genome_confirmed",
+        "add": [
+          "genome_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "pipeline_selected",
+            "samplesheet_ready",
+            "test_profile_passed",
+            "genome_confirmed",
+            "environment_passed",
+            "genome_ready"
+          ]
+        },
+        "add": [
+          "results_generated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_outputs": {
+        "owner": "agent",
+        "pre": "results_generated",
+        "add": [
+          "outputs_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_completion": {
+        "owner": "agent",
+        "pre": "outputs_verified",
+        "add": [
+          "analysis_run_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "public_dataset": [
+              {
+                "act": {
+                  "cap": "fetch_study_info",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "download_selected_subset": [
+                      {
+                        "act": {
+                          "cap": "download_public_data",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "local_fastq": []
+          },
+          "assumes": {
+            "local_fastq": [
+              "input_data_available"
+            ],
+            "public_dataset": [
+              "public_dataset_case"
+            ]
+          }
+        }
+      },
+      {
+        "rec": {
+          "name": "environment_retry",
+          "body": [
+            {
+              "act": {
+                "cap": "check_environment",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "user",
+                "observed": true,
+                "branches": {
+                  "environment_passed": [],
+                  "fix_environment": [
+                    {
+                      "continue": "environment_retry"
+                    }
+                  ]
+                },
+                "assumes": {
+                  "environment_passed": [
+                    "environment_passed"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "act": {
+          "cap": "detect_data_type",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "select_rnaseq": [],
+            "select_sarek": [],
+            "select_atacseq": []
+          },
+          "assumes": {
+            "select_atacseq": [
+              "pipeline_selected"
+            ],
+            "select_rnaseq": [
+              "pipeline_selected"
+            ],
+            "select_sarek": [
+              "pipeline_selected"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_test_profile",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "generate_samplesheet": [
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              }
+            ],
+            "validate_existing_samplesheet": [
+              {
+                "act": {
+                  "cap": "validate_samplesheet",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "confirm_genome": [
+              {
+                "act": {
+                  "cap": "check_genome",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "genome_available_now": [
+                      {
+                        "act": {
+                          "cap": "run_pipeline",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "download_genome_first": [
+                      {
+                        "act": {
+                          "cap": "download_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_pipeline",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "genome_available_now": [
+                      "genome_ready"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "confirm_genome": [
+              "genome_confirmed"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_outputs",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "deliver_completion",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "analysis_run_completed",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "nextflow-development",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "fetch_study_info": {
+        "owner": "agent",
+        "pre": "public_dataset_case",
+        "add": [
+          "study_info_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "download_public_data": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "public_dataset_case",
+            "study_info_available"
+          ]
+        },
+        "add": [
+          "input_data_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "environment_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "detect_data_type": {
+        "owner": "agent",
+        "pre": "input_data_available",
+        "add": [
+          "data_type_detected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_test_profile": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "pipeline_selected",
+            "environment_passed"
+          ]
+        },
+        "add": [
+          "test_profile_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_samplesheet": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "input_data_available",
+            "pipeline_selected"
+          ]
+        },
+        "add": [
+          "samplesheet_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_samplesheet": {
+        "owner": "agent",
+        "pre": "pipeline_selected",
+        "add": [
+          "samplesheet_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_genome": {
+        "owner": "agent",
+        "pre": "genome_confirmed",
+        "add": [
+          "genome_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "download_genome": {
+        "owner": "agent",
+        "pre": "genome_confirmed",
+        "add": [
+          "genome_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_pipeline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "pipeline_selected",
+            "samplesheet_ready",
+            "test_profile_passed",
+            "genome_confirmed",
+            "environment_passed",
+            "genome_ready"
+          ]
+        },
+        "add": [
+          "results_generated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_outputs": {
+        "owner": "agent",
+        "pre": "results_generated",
+        "add": [
+          "outputs_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_completion": {
+        "owner": "agent",
+        "pre": "outputs_verified",
+        "add": [
+          "analysis_run_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "public_dataset": [
+              {
+                "act": {
+                  "cap": "fetch_study_info",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "download_selected_subset": [
+                      {
+                        "act": {
+                          "cap": "download_public_data",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "local_fastq": []
+          },
+          "assumes": {
+            "local_fastq": [
+              "input_data_available"
+            ],
+            "public_dataset": [
+              "public_dataset_case"
+            ]
+          }
+        }
+      },
+      {
+        "rec": {
+          "name": "environment_retry",
+          "body": [
+            {
+              "act": {
+                "cap": "check_environment",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "user",
+                "observed": true,
+                "branches": {
+                  "environment_passed": [],
+                  "fix_environment": [
+                    {
+                      "continue": "environment_retry"
+                    }
+                  ]
+                },
+                "assumes": {
+                  "environment_passed": [
+                    "environment_passed"
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "act": {
+          "cap": "detect_data_type",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "select_rnaseq": [],
+            "select_sarek": [],
+            "select_atacseq": []
+          },
+          "assumes": {
+            "select_atacseq": [
+              "pipeline_selected"
+            ],
+            "select_rnaseq": [
+              "pipeline_selected"
+            ],
+            "select_sarek": [
+              "pipeline_selected"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_test_profile",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "generate_samplesheet": [
+              {
+                "act": {
+                  "cap": "create_samplesheet",
+                  "by": "agent"
+                }
+              }
+            ],
+            "validate_existing_samplesheet": [
+              {
+                "act": {
+                  "cap": "validate_samplesheet",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "confirm_genome": [
+              {
+                "act": {
+                  "cap": "check_genome",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "genome_available_now": [
+                      {
+                        "act": {
+                          "cap": "run_pipeline",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "download_genome_first": [
+                      {
+                        "act": {
+                          "cap": "download_genome",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_pipeline",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "genome_available_now": [
+                      "genome_ready"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "confirm_genome": [
+              "genome_confirmed"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "verify_outputs",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "deliver_completion",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "analysis_run_completed",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "fetch_study_info": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "download_public_data": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "check_environment": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "detect_data_type": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_test_profile": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "create_samplesheet": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "validate_samplesheet": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "check_genome": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "download_genome": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_pipeline": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "verify_outputs": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "deliver_completion": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,36 @@
+```ce
+Skill `push-to-registry`.
+Roles: `agent`, `user`.
+Tool `inspect_packer_template` (owner `agent`): via `read`; adds `template_inspected`.
+Tool `update_packer_template` (owner `agent`): via `write`; requires `template_inspected`; adds `registry_configured`.
+Tool `update_existing_packer_template` (owner `agent`): via `edit`; requires `template_inspected`; adds `registry_configured`.
+Tool `create_github_actions_workflow` (owner `agent`): via `write`; adds `ci_configured`.
+Tool `update_github_actions_workflow` (owner `agent`): via `edit`; adds `ci_configured`.
+Tool `run_packer_build` (owner `agent`): via `bash`; needs `hcp_account`; requires `registry_configured` and `hcp_credentials_available`; adds `metadata_pushed`.
+Tool `send_hcp_auth_instructions` (owner `agent`): via `ask_user`; adds `auth_instructions_sent`.
+Initially true: none.
+Goal: `registry_configured`.
+Protocol:
+  - `agent` uses `inspect_packer_template`.
+  - `agent` chooses one of (observed):
+    - branch `create_template_config`:
+      - `agent` uses `update_packer_template`.
+    - branch `edit_template_config`:
+      - `agent` uses `update_existing_packer_template`.
+  - `agent` chooses one of (observed):
+    - branch `also_configure_ci`:
+      - `agent` chooses one of (observed):
+        - branch `create_workflow`:
+          - `agent` uses `create_github_actions_workflow`.
+        - branch `edit_workflow`:
+          - `agent` uses `update_github_actions_workflow`.
+    - branch `skip_ci`: none.
+  - `agent` chooses one of (observed):
+    - branch `provide_auth_guidance`:
+      - `agent` uses `send_hcp_auth_instructions`.
+    - branch `skip_auth_guidance`: none.
+  - `agent` chooses one of (observed):
+    - branch `test_with_build`:
+      - `agent` uses `run_packer_build`.
+    - branch `skip_build`: none.
+```

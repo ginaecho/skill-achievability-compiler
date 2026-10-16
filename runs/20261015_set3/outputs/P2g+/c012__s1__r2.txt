@@ -1,0 +1,38 @@
+```ce
+Skill `transcribe`.
+Roles: `agent`, `user`.
+Tool `check_api_key` (owner `agent`): via `bash`; needs `shell`; adds `api_key_present`.
+Tool `install_openai_with_uv` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `openai_installed`.
+Tool `install_openai_with_pip` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `openai_installed`.
+Tool `run_transcribe_text` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`, `local_filesystem`; requires `api_key_present`; adds `transcription_saved`.
+Tool `run_transcribe_diarized` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`, `local_filesystem`; requires `api_key_present`; adds `transcription_saved`, `diarized_output_saved`.
+Tool `validate_and_adjust_text` (owner `agent`): via `bash`; requires `transcription_saved`; adds `validated_output`.
+Tool `validate_and_adjust_diarized` (owner `agent`): via `bash`; requires `diarized_output_saved`; adds `validated_output`.
+Tool `advise_set_api_key` (owner `agent`): via `reply`; adds `api_key_setup_instructions_sent`.
+Initially true: none.
+Initially: true.
+Goal: `validated_output` or `api_key_setup_instructions_sent`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `api_key_available`:
+      - `agent` uses `check_api_key`.
+      - `user` chooses one of (observed):
+        - branch `fast_text` (assuming `wants_fast_text`):
+          - `agent` chooses one of (observed):
+            - branch `uv_available` (assuming `uv_available`):
+              - `agent` uses `install_openai_with_uv`.
+            - branch `uv_unavailable` (assuming `uv_unavailable`):
+              - `agent` uses `install_openai_with_pip`.
+          - `agent` uses `run_transcribe_text`.
+          - `agent` uses `validate_and_adjust_text`.
+        - branch `diarized` (assuming `wants_diarization`):
+          - `agent` chooses one of (observed):
+            - branch `uv_available` (assuming `uv_available`):
+              - `agent` uses `install_openai_with_uv`.
+            - branch `uv_unavailable` (assuming `uv_unavailable`):
+              - `agent` uses `install_openai_with_pip`.
+          - `agent` uses `run_transcribe_diarized`.
+          - `agent` uses `validate_and_adjust_diarized`.
+    - branch `api_key_missing`:
+      - `agent` uses `advise_set_api_key`.
+```

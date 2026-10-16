@@ -1,0 +1,712 @@
+{
+  "pack": {
+    "name": "neon-auth",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_neon_skill": {
+        "owner": "agent",
+        "pre": "neon_skill_missing",
+        "add": [
+          "neon_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_neon_skill_doc": {
+        "owner": "agent",
+        "pre": "neon_skill_missing",
+        "add": [
+          "neon_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_identity_and_features": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "identity_and_features_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_repo_for_auth_and_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "repo_inspected",
+          "existing_identity_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_managed_docs_and_constraints": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "managed_constraints_checked",
+          "plugin_support_checked",
+          "choose_managed_auth"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_neon_config_for_managed_auth": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "choose_managed_auth",
+            "repo_inspected"
+          ]
+        },
+        "add": [
+          "managed_auth_declared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_neon_auth": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "managed_auth_declared"
+          ]
+        },
+        "add": [
+          "managed_auth_enabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_neon_auth_status": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "managed_auth_enabled"
+          ]
+        },
+        "add": [
+          "auth_status_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_managed_login": {
+        "owner": "agent",
+        "pre": "managed_auth_enabled",
+        "add": [
+          "login_implemented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "configure_trusted_domains": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "managed_auth_enabled"
+          ]
+        },
+        "add": [
+          "trusted_domains_configured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_auth_flows": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "login_implemented"
+          ]
+        },
+        "add": [
+          "verification_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "unverified_flow_count": {
+            "cmp": [
+              "unverified_flow_count",
+              ">=",
+              0
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_repo_for_auth_and_config",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "parent_skill_available": [],
+            "parent_skill_missing": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "install_parent_skill": [
+                      {
+                        "act": {
+                          "cap": "install_neon_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "fetch_parent_skill_doc": [
+                      {
+                        "act": {
+                          "cap": "fetch_neon_skill_doc",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_identity_and_features",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_managed_docs_and_constraints",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "no_existing_auth_or_migrate_from_supabase_and_managed_supported": [
+              {
+                "act": {
+                  "cap": "edit_neon_config_for_managed_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "deploy_neon_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_neon_auth_status",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "implement_managed_login",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "configure_domains": [
+                      {
+                        "act": {
+                          "cap": "configure_trusted_domains",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_domains": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "verify_auth_flows",
+                  "by": "agent"
+                }
+              }
+            ],
+            "keep_existing_provider": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "accept_keep_existing": [],
+                    "request_migration_anyway": []
+                  }
+                }
+              }
+            ],
+            "required_feature_not_supported_by_managed": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "accept_self_managed_or_stop_cutover": [],
+                    "keep_current_identity": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        {
+          "or": [
+            "managed_auth_recommended",
+            "managed_auth_enabled"
+          ]
+        },
+        {
+          "or": [
+            "login_implemented",
+            "migration_plan_prepared",
+            "keep_existing_identity"
+          ]
+        },
+        "existing_identity_known",
+        "plugin_support_checked"
+      ]
+    },
+    "init_true": [
+      "needs:shell"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "unverified_flow_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "neon-auth",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_neon_skill": {
+        "owner": "agent",
+        "pre": "neon_skill_missing",
+        "add": [
+          "neon_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_neon_skill_doc": {
+        "owner": "agent",
+        "pre": "neon_skill_missing",
+        "add": [
+          "neon_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_identity_and_features": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "identity_and_features_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_repo_for_auth_and_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "repo_inspected",
+          "existing_identity_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_managed_docs_and_constraints": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "managed_constraints_checked",
+          "plugin_support_checked",
+          "choose_managed_auth"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_neon_config_for_managed_auth": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "choose_managed_auth",
+            "repo_inspected"
+          ]
+        },
+        "add": [
+          "managed_auth_declared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_neon_auth": {
+        "owner": "agent",
+        "pre": "managed_auth_declared",
+        "add": [
+          "managed_auth_enabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_neon_auth_status": {
+        "owner": "agent",
+        "pre": "managed_auth_enabled",
+        "add": [
+          "auth_status_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_managed_login": {
+        "owner": "agent",
+        "pre": "managed_auth_enabled",
+        "add": [
+          "login_implemented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "configure_trusted_domains": {
+        "owner": "agent",
+        "pre": "managed_auth_enabled",
+        "add": [
+          "trusted_domains_configured"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_auth_flows": {
+        "owner": "agent",
+        "pre": "login_implemented",
+        "add": [
+          "verification_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "unverified_flow_count": {
+            "cmp": [
+              "unverified_flow_count",
+              ">=",
+              0
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_repo_for_auth_and_config",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "parent_skill_available": [],
+            "parent_skill_missing": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "install_parent_skill": [
+                      {
+                        "act": {
+                          "cap": "install_neon_skill",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "fetch_parent_skill_doc": [
+                      {
+                        "act": {
+                          "cap": "fetch_neon_skill_doc",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_identity_and_features",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_managed_docs_and_constraints",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "no_existing_auth_or_migrate_from_supabase_and_managed_supported": [
+              {
+                "act": {
+                  "cap": "edit_neon_config_for_managed_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "deploy_neon_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_neon_auth_status",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "implement_managed_login",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "configure_domains": [
+                      {
+                        "act": {
+                          "cap": "configure_trusted_domains",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_domains": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "verify_auth_flows",
+                  "by": "agent"
+                }
+              }
+            ],
+            "keep_existing_provider": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "accept_keep_existing": [],
+                    "request_migration_anyway": []
+                  }
+                }
+              }
+            ],
+            "required_feature_not_supported_by_managed": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "accept_self_managed_or_stop_cutover": [],
+                    "keep_current_identity": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        {
+          "or": [
+            "managed_auth_recommended",
+            "managed_auth_enabled"
+          ]
+        },
+        {
+          "or": [
+            "login_implemented",
+            "migration_plan_prepared",
+            "keep_existing_identity"
+          ]
+        },
+        "existing_identity_known",
+        "plugin_support_checked"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "unverified_flow_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "install_neon_skill": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "fetch_neon_skill_doc": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "ask_identity_and_features": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "inspect_repo_for_auth_and_config": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "check_managed_docs_and_constraints": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "edit_neon_config_for_managed_auth": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "deploy_neon_auth": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "check_neon_auth_status": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "implement_managed_login": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "configure_trusted_domains": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "verify_auth_flows": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

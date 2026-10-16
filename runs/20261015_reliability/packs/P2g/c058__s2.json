@@ -1,0 +1,609 @@
+{
+  "pack": {
+    "name": "property-based-testing",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_codebase": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "codebase_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_existing_pbt": {
+        "owner": "agent",
+        "pre": "codebase_inspected",
+        "add": [
+          "existing_pbt_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_references": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "guidance_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_property_tests": {
+        "owner": "agent",
+        "pre": "codebase_inspected",
+        "add": [
+          "tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "revise_property_tests": {
+        "owner": "agent",
+        "pre": "tests_written",
+        "add": [
+          "tests_revised"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_pbt_dependency": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:package_registries"
+          ]
+        },
+        "add": [
+          "pbt_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_property_tests": {
+        "owner": "agent",
+        "pre": "tests_written",
+        "add": [
+          "tests_executed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "debug_failure": {
+        "owner": "agent",
+        "pre": "tests_executed",
+        "add": [
+          "failure_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_codebase",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "write_new_tests": [
+              {
+                "act": {
+                  "cap": "inspect_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "dependency_already_present": [
+                      {
+                        "act": {
+                          "cap": "write_property_tests",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "run_tests": [
+                              {
+                                "act": {
+                                  "cap": "run_property_tests",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "failure_found": [
+                                      {
+                                        "act": {
+                                          "cap": "debug_failure",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_failure": []
+                                  }
+                                }
+                              }
+                            ],
+                            "skip_run": []
+                          }
+                        }
+                      }
+                    ],
+                    "dependency_missing_accept_install": [
+                      {
+                        "act": {
+                          "cap": "install_pbt_dependency",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "write_property_tests",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "run_tests": [
+                              {
+                                "act": {
+                                  "cap": "run_property_tests",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "failure_found": [
+                                      {
+                                        "act": {
+                                          "cap": "debug_failure",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_failure": []
+                                  }
+                                }
+                              }
+                            ],
+                            "skip_run": []
+                          }
+                        }
+                      }
+                    ],
+                    "dependency_missing_decline_install": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "poor_candidate": [
+                              {
+                                "act": {
+                                  "cap": "inspect_references",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "report_specific_property_only": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "review_existing_tests": [
+              {
+                "act": {
+                  "cap": "review_existing_pbt",
+                  "by": "agent"
+                }
+              }
+            ],
+            "debug_existing_failure": [
+              {
+                "act": {
+                  "cap": "inspect_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "debug_failure",
+                  "by": "agent"
+                }
+              }
+            ],
+            "not_a_good_pbt_candidate": [
+              {
+                "act": {
+                  "cap": "inspect_references",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "tests_written",
+        "existing_pbt_reviewed",
+        "failure_interpreted",
+        "poor_pbt_candidate_reported"
+      ]
+    },
+    "init_true": [
+      "needs:package_registries"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "property-based-testing",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_codebase": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "codebase_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_existing_pbt": {
+        "owner": "agent",
+        "pre": "codebase_inspected",
+        "add": [
+          "existing_pbt_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_references": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "guidance_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_property_tests": {
+        "owner": "agent",
+        "pre": "codebase_inspected",
+        "add": [
+          "tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "revise_property_tests": {
+        "owner": "agent",
+        "pre": "tests_written",
+        "add": [
+          "tests_revised"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_pbt_dependency": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "pbt_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_property_tests": {
+        "owner": "agent",
+        "pre": "tests_written",
+        "add": [
+          "tests_executed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "debug_failure": {
+        "owner": "agent",
+        "pre": "tests_executed",
+        "add": [
+          "failure_interpreted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_codebase",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "write_new_tests": [
+              {
+                "act": {
+                  "cap": "inspect_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "dependency_already_present": [
+                      {
+                        "act": {
+                          "cap": "write_property_tests",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "run_tests": [
+                              {
+                                "act": {
+                                  "cap": "run_property_tests",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "failure_found": [
+                                      {
+                                        "act": {
+                                          "cap": "debug_failure",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_failure": []
+                                  }
+                                }
+                              }
+                            ],
+                            "skip_run": []
+                          }
+                        }
+                      }
+                    ],
+                    "dependency_missing_accept_install": [
+                      {
+                        "act": {
+                          "cap": "install_pbt_dependency",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "write_property_tests",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "run_tests": [
+                              {
+                                "act": {
+                                  "cap": "run_property_tests",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "failure_found": [
+                                      {
+                                        "act": {
+                                          "cap": "debug_failure",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_failure": []
+                                  }
+                                }
+                              }
+                            ],
+                            "skip_run": []
+                          }
+                        }
+                      }
+                    ],
+                    "dependency_missing_decline_install": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "poor_candidate": [
+                              {
+                                "act": {
+                                  "cap": "inspect_references",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "report_specific_property_only": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "review_existing_tests": [
+              {
+                "act": {
+                  "cap": "review_existing_pbt",
+                  "by": "agent"
+                }
+              }
+            ],
+            "debug_existing_failure": [
+              {
+                "act": {
+                  "cap": "inspect_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "debug_failure",
+                  "by": "agent"
+                }
+              }
+            ],
+            "not_a_good_pbt_candidate": [
+              {
+                "act": {
+                  "cap": "inspect_references",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "tests_written",
+        "existing_pbt_reviewed",
+        "failure_interpreted",
+        "poor_pbt_candidate_reported"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect_codebase": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "review_existing_pbt": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "inspect_references": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "write_property_tests": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "revise_property_tests": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "install_pbt_dependency": {
+      "via": "bash",
+      "needs": [
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_property_tests": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "debug_failure": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,134 @@
+```ce
+Skill `huggingface-spaces`.
+Roles: `agent`, `user`.
+
+Tool `check_hf_installed` (owner `agent`):
+  via `bash`;
+  adds `hf_cli_installed`.
+
+Tool `install_hf` (owner `agent`):
+  via `bash`;
+  requires not `hf_cli_installed`;
+  adds `hf_cli_installed`.
+
+Tool `check_hf_auth` (owner `agent`):
+  via `bash`;
+  requires `hf_cli_installed`;
+  picks `logged_in` with `logged_in` == true;
+  picks `can_pay` with `can_pay` == true;
+  picks `is_pro` with `is_pro` == true.
+
+Tool `login_hf` (owner `agent`):
+  via `bash`;
+  requires `hf_cli_installed`;
+  requires not `logged_in`;
+  adds `logged_in`.
+
+Tool `search_spaces` (owner `agent`):
+  via `bash`;
+  requires `logged_in`;
+  picks `space_found` with `space_found` == true.
+
+Tool `create_space` (owner `agent`):
+  via `bash`;
+  needs `github_account`;
+  requires `logged_in`;
+  adds `space_created`.
+
+Tool `write_app_files` (owner `agent`):
+  via `write`;
+  requires `space_created`;
+  adds `app_written`.
+
+Tool `write_readme` (owner `agent`):
+  via `write`;
+  requires `space_created`;
+  adds `readme_written`.
+
+Tool `write_requirements` (owner `agent`):
+  via `write`;
+  requires `space_created`;
+  adds `requirements_written`.
+
+Tool `push_space` (owner `agent`):
+  via `bash`;
+  requires `app_written`;
+  requires `readme_written`;
+  requires `requirements_written`;
+  adds `files_pushed`.
+
+Tool `check_space_status` (owner `agent`):
+  via `bash`;
+  requires `files_pushed`;
+  adds `space_running`.
+
+Tool `check_space_logs` (owner `agent`):
+  via `bash`;
+  requires `space_running`;
+  picks `logs_clean` with `logs_clean` == true.
+
+Tool `smoke_test_api` (owner `agent`):
+  via `bash`;
+  requires `logs_clean`;
+  adds `api_responding`;
+  adds `output_correct`.
+
+Tool `debug_error` (owner `agent`):
+  via `bash`;
+  requires `space_running`;
+  requires not `logs_clean`;
+  picks `error_fixed` with `error_fixed` == true.
+
+Tool `mount_bucket` (owner `agent`):
+  via `bash`;
+  needs `github_account`;
+  requires `space_running`;
+  adds `bucket_mounted`.
+
+Initially true: none.
+Initially:
+  `can_pay` == false.
+  `is_pro` == false.
+  `logged_in` == false.
+Goal: `files_pushed` and `space_running` and `logs_clean` and `api_responding` and `output_correct`.
+
+Protocol:
+  - `agent` uses `check_hf_installed`.
+  - `agent` chooses one of (observed):
+    - branch `not_installed`:
+      - `agent` uses `install_hf`.
+    - branch `installed`: none.
+  - `agent` uses `check_hf_auth`.
+  - `agent` chooses one of (observed):
+    - branch `not_logged_in`:
+      - `agent` uses `login_hf`.
+    - branch `logged_in`: none.
+  - `agent` chooses one of (observed):
+    - branch `search_before_build`:
+      - `agent` uses `search_spaces`.
+    - branch `skip_search`: none.
+  - `user` chooses one of (observed):
+    - branch `chosen_sdk_hardware`:
+      - `agent` uses `create_space`.
+      - `agent` uses `write_app_files`.
+      - `agent` uses `write_readme`.
+      - `agent` uses `write_requirements`.
+      - `agent` uses `push_space`.
+      - loop `verify`:
+        - `agent` uses `check_space_status`.
+        - `agent` uses `check_space_logs`.
+        - `agent` chooses one of (observed):
+          - branch `logs_not_clean`:
+            - `agent` uses `debug_error`.
+            - `agent` chooses one of (observed):
+              - branch `error_fixed`:
+                - repeat `verify`.
+              - branch `error_not_fixed`: none.
+          - branch `logs_clean`:
+            - `agent` uses `smoke_test_api`.
+      - `user` chooses one of (observed):
+        - branch `needs_bucket`:
+          - `agent` uses `mount_bucket`.
+        - branch `no_bucket`: none.
+    - branch `dont_continue`: none.
+```

@@ -1,0 +1,49 @@
+```ce
+Skill `llm-finetuning-eval-engineer`.
+Roles: `agent`, `user`.
+Tool `inspect_existing_materials` (owner `agent`): via `read`; adds `materials_inspected`.
+Tool `ask_context` (owner `agent`): via `ask_user`; adds `context_received`.
+Tool `write_eval_harness` (owner `agent`): via `write`; requires `materials_inspected`; adds `goldens_written`, `graders_written`, `drift_suite_written`.
+Tool `run_phase0_baseline` (owner `agent`): via `bash`; requires `goldens_written` and `graders_written` and `drift_suite_written`; adds `baseline_written`, `results_written`, `results_schema_complete`.
+Tool `inspect_phase5_inputs` (owner `agent`): via `read`; adds `phase5_inputs_inspected`.
+Tool `run_data_quality_gate` (owner `agent`): via `bash`; requires `phase5_inputs_inspected`; adds `data_quality_checked`.
+Tool `run_checkpoint_eval_and_drift` (owner `agent`): via `bash`; requires `data_quality_checked` and `baseline_written`; adds `checkpoint_results_written`, `drift_checked`, `results_schema_complete`.
+Tool `run_paired_arena` (owner `agent`): via `bash`; requires `checkpoint_results_written` and `drift_checked`; adds `arena_checked`.
+Tool `run_canary_gate` (owner `agent`): via `bash`; requires `arena_checked` and `canary_applicable`; adds `canary_checked`.
+Tool `write_promotion_report` (owner `agent`): via `write`; requires `data_quality_checked`; adds `promotion_report_written`.
+Initially true: none.
+Goal: any of (all of (`goldens_written`, `graders_written`, `drift_suite_written`, `baseline_written`, `results_written`, `results_schema_complete`), all of (`promotion_report_written`, `data_quality_checked`, any of (not `data_quality_passes`, all of (`checkpoint_results_written`, `drift_checked`, any of (not `drift_passes`, all of (`arena_checked`, any of (not `arena_passes`, all of (not `canary_applicable`), all of (`canary_applicable`, `canary_checked`)))))))).
+Protocol:
+  - `agent` uses `inspect_existing_materials`.
+  - `agent` chooses one of (observed):
+    - branch `need_context`:
+      - `agent` uses `ask_context`.
+    - branch `context_sufficient`: none.
+  - `agent` chooses one of (observed):
+    - branch `phase0`:
+      - `agent` uses `write_eval_harness`.
+      - `agent` uses `run_phase0_baseline`.
+    - branch `phase5`:
+      - `agent` uses `inspect_phase5_inputs`.
+      - `agent` uses `run_data_quality_gate`.
+      - `agent` chooses one of (observed):
+        - branch `data_quality_failed`:
+          - `agent` uses `write_promotion_report`.
+        - branch `data_quality_passed`:
+          - `agent` uses `run_checkpoint_eval_and_drift`.
+          - `agent` chooses one of (observed):
+            - branch `drift_failed`:
+              - `agent` uses `write_promotion_report`.
+            - branch `drift_passed`:
+              - `agent` uses `run_paired_arena`.
+              - `agent` chooses one of (observed):
+                - branch `arena_failed`:
+                  - `agent` uses `write_promotion_report`.
+                - branch `arena_passed`:
+                  - `agent` chooses one of (observed):
+                    - branch `canary_not_applicable`:
+                      - `agent` uses `write_promotion_report`.
+                    - branch `canary_applicable`:
+                      - `agent` uses `run_canary_gate`.
+                      - `agent` uses `write_promotion_report`.
+```

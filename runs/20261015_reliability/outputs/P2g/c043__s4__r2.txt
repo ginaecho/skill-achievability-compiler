@@ -1,0 +1,43 @@
+```ce
+Skill `vercel-deploy`.
+Roles: `agent`, `user`.
+Tool `check_vercel_cli` (owner `agent`): via `bash`; requires `project_available`; adds `cli_checked`.
+Tool `deploy_preview_cli` (owner `agent`): via `bash`; needs `vercel_account`; requires all of (`project_available`, `cli_checked`); adds `deployment_ready`, `preview_mode`, `url_shown`.
+Tool `deploy_preview_cli_escalated` (owner `agent`): via `bash`; needs `vercel_account`; requires all of (`project_available`, `cli_checked`, `user_approved_escalation`); adds `deployment_ready`, `preview_mode`, `url_shown`.
+Tool `deploy_preview_fallback` (owner `agent`): via `bash`; requires `project_available`; adds `deployment_ready`, `preview_mode`, `url_shown`, `claim_url_shown`.
+Tool `deploy_prod_cli` (owner `agent`): via `bash`; needs `vercel_account`; requires all of (`project_available`, `cli_checked`, `production_requested`); adds `deployment_ready`, `production_mode`, `url_shown`.
+Tool `deploy_prod_cli_escalated` (owner `agent`): via `bash`; needs `vercel_account`; requires all of (`project_available`, `cli_checked`, `production_requested`, `user_approved_escalation`); adds `deployment_ready`, `production_mode`, `url_shown`.
+Tool `deploy_prod_fallback` (owner `agent`): via `bash`; requires all of (`project_available`, `production_requested`); adds `deployment_ready`, `production_mode`, `url_shown`, `claim_url_shown`.
+Initially true: `project_available`.
+Initially: false.
+Goal: `deployment_ready` and `url_shown` and any of ((`preview_mode` and not `production_mode`), (`production_mode` and not `preview_mode`)).
+Protocol:
+  - `agent` uses `check_vercel_cli`.
+  - `user` chooses one of (observed):
+    - branch `preview`:
+      - `agent` chooses one of (observed):
+        - branch `cli_deploy`:
+          - `agent` uses `deploy_preview_cli`.
+        - branch `cli_needs_escalation`:
+          - `agent` tells `user` `ask_escalation`.
+          - `user` chooses one of (observed):
+            - branch `approve_escalation`:
+              - `agent` uses `deploy_preview_cli_escalated`.
+            - branch `decline_escalation`:
+              - `agent` uses `deploy_preview_fallback`.
+        - branch `fallback_no_auth`:
+          - `agent` uses `deploy_preview_fallback`.
+    - branch `production`:
+      - `agent` chooses one of (observed):
+        - branch `cli_deploy`:
+          - `agent` uses `deploy_prod_cli`.
+        - branch `cli_needs_escalation`:
+          - `agent` tells `user` `ask_escalation`.
+          - `user` chooses one of (observed):
+            - branch `approve_escalation`:
+              - `agent` uses `deploy_prod_cli_escalated`.
+            - branch `decline_escalation`:
+              - `agent` uses `deploy_prod_fallback`.
+        - branch `fallback_no_auth`:
+          - `agent` uses `deploy_prod_fallback`.
+```

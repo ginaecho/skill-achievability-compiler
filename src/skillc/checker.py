@@ -27,15 +27,37 @@ set, so refutation stays sound (Coq T2).  Dynamic participant spawning is
 outside the decidable fragment (Brand-Zafiropulo): the procedure degrades to
 a semi-decision and answers UNKNOWN unless it can refute structurally first.
 
-Verdicts:  ACHIEVABLE (+witness path)  |  IMPOSSIBLE (+reason, +frontier)
-           |  UNKNOWN (outside the decidable fragment)
-Reasons :  MISSING_CAPABILITY | BLOCKED_GUARD | GOAL_UNSAT | NON_PROJECTABLE
-           | NON_CONFORMANT | DYNAMIC_TOPOLOGY
+A verdict has two orthogonal dimensions (verdict schema skillc.verdict/2):
+
+  Goal (label)   ACHIEVABLE (+witness path)  |  IMPOSSIBLE (+reason, +frontier)
+                 |  UNKNOWN (abstention)
+    IMPOSSIBLE reasons: MISSING_CAPABILITY | BLOCKED_GUARD | GOAL_UNSAT
+    UNKNOWN reasons   : DYNAMIC_TOPOLOGY | PROTOCOL_ONLY (goal scope)
+                        | INCOMPLETE_COMPACTION (front-end)
+  Protocol       WELL_TYPED | REJECTED (+protocol_reason) | NOT_CHECKED
+    protocol reasons  : NON_PROJECTABLE | NON_CONFORMANT
+
+Only the goal dimension is covered by the refutation soundness result
+(Theorem 1 + Lemma 3, proof/SkillAchievability.v).  A protocol rejection is
+a typing failure: T-Comm requires EVERY branch to conform, so one bad branch
+rejects the protocol even when another branch reaches the goal.  A protocol
+rejection therefore never establishes that the goal is unreachable, and it is
+never folded into IMPOSSIBLE.  Deployment gates and runtime monitors must
+allow only Verdict.admissible (ACHIEVABLE and not REJECTED).
 
 UNKNOWN is an ABSTENTION, not a refutation: it claims nothing in either
 direction.  Use Verdict.refuted (not `not achievable`) whenever the question
 is "did the checker refute this?" -- the T1 soundness claim is about refuted
-verdicts only.
+verdicts only.  Verdict.coverage names the formal result behind each goal
+verdict; see docs/VERDICT_COVERAGE.md.
+
+Branch assumptions (a choice's `assumes`): entering branch L of a choice adds
+the predicates `assumes[L]` to the world before the branch body, exactly like
+an `add` effect, under both semantics and in the whole-session typing
+judgment; the establisher closure includes them.  The assumed facts are
+declared by the pack itself, so Theorem 1's soundness relative to the declared
+pack is unchanged: the pack's world now has one more kind of declared
+establisher, and a refutation still ranges over exactly what the pack declares.
 """
 from __future__ import annotations
 
@@ -48,14 +70,21 @@ from collections.abc import Callable
 import z3
 
 from .formula import CMP, atoms, compile_expr, compile_formula
-from .pack import Capability, Pack, iter_steps, normalize, pack_digest
+from .pack import Capability, Pack, assumed_atoms, iter_steps, normalize, pack_digest
 from .session import ProjectionError, conformance_report, participants, project
 
+# NON_PROJECTABLE / NON_CONFORMANT stay listed so that consumers of schema
+# v1 still parse them; since v2 they appear only as protocol_reason values.
 REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
            "NON_PROJECTABLE", "NON_CONFORMANT", "DYNAMIC_TOPOLOGY",
-           "PROTOCOL_ONLY", "INCOMPLETE_COMPACTION")
+           "PROTOCOL_ONLY", "INCOMPLETE_COMPACTION", "REQUIREMENT_UNAVAILABLE")
+PROTOCOL_STATUSES = ("WELL_TYPED", "REJECTED", "NOT_CHECKED")
+PROTOCOL_REASONS = ("", "NON_PROJECTABLE", "NON_CONFORMANT")
+# reasons whose IMPOSSIBLE verdict is a may-reachability refutation (thm1)
+_REACHABILITY_REASONS = ("MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT")
+PROTOCOL_COVERAGE = "t-comm:side-conditions;sr+sf:single-label-mechanized"
 
-VERDICT_SCHEMA = "skillc.verdict/1"
+VERDICT_SCHEMA = "skillc.verdict/2"
 DEFERRED_OBLIGATIONS = ("intent_fidelity", "payload_faithfulness")
 
 # Every solver query gets a finite budget.  The pack language is QF-LIA
@@ -232,11 +261,68 @@ class Verdict:
     assumed_conformant: tuple = ()   # prt(G) roles with no declared behaviour
     context_refuted: bool = False    # goal impossible over every protocol in Gamma
     decision_scope: str = "protocol"
+    # The protocol-typing dimension, orthogonal to the goal label above.
+    protocol: str = "WELL_TYPED"     # WELL_TYPED | REJECTED | NOT_CHECKED
+    protocol_reason: str = ""        # "" | NON_PROJECTABLE | NON_CONFORMANT
+    protocol_detail: str = ""
+
+    @property
+    def admissible(self) -> bool:
+        """What a deployment gate or runtime monitor must use to ALLOW:
+        the goal is reachable along a witness AND the protocol is not
+        rejected.  ACHIEVABLE alone is not enough."""
+        return self.achievable and not self.unknown and self.protocol != "REJECTED"
+
+    @property
+    def coverage(self) -> str:
+        """Which formal result covers the GOAL verdict (machine-readable).
+
+        thm1+lem3            Theorem 1 (refutation_sound_rel) + Lemma 3
+                             (SymbolicInstance.symbolic_refutation_sound),
+                             both mechanized; the QF-LIA denotation and the
+                             SMT solver are trusted.
+        +establisher         the refutation also holds over every protocol
+                             in Gamma (establisher-closure lemma, paper-only).
+        paper-only:adversarial  refutation under adversarial semantics.
+        thm-undec:abstention    abstention at the undecidable boundary.
+        abstention           any other abstention.
+        none:witness-only    ACHIEVABLE: a witness exists; not a guarantee
+                             (incompleteness proposition).
+        deterministic-reader:manifest  REQUIREMENT_UNAVAILABLE: the
+                             requirement reader (`env.manifest`) found a hard
+                             requirement the runtime manifest marks
+                             unavailable; not covered by Theorem 1.
+        """
+        if self.unknown:
+            return ("thm-undec:abstention" if self.reason == "DYNAMIC_TOPOLOGY"
+                    else "abstention")
+        if self.achievable:
+            return "none:witness-only"
+        if self.reason == "REQUIREMENT_UNAVAILABLE":
+            return "deterministic-reader:manifest"
+        if self.semantics == "adversarial":
+            return "paper-only:adversarial"
+        if self.reason in _REACHABILITY_REASONS:
+            return "thm1+lem3+establisher" if self.context_refuted else "thm1+lem3"
+        return "none"
+
+    @property
+    def protocol_coverage(self) -> str:
+        """Which formal result covers the protocol-typing result.
+
+        Protocol typing results never establish goal impossibility: a
+        REJECTED protocol may still reach the goal along some branch, and a
+        WELL_TYPED protocol says nothing about the goal by itself."""
+        if self.protocol in ("REJECTED", "WELL_TYPED"):
+            return PROTOCOL_COVERAGE
+        return "not-checked"
 
     @property
     def refutation_scope(self) -> str:
         if not self.refuted:
             return "none"
+        if self.reason == "REQUIREMENT_UNAVAILABLE":
+            return "runtime_manifest"
         return "capability_context" if self.context_refuted else "declared_protocol"
 
     @property
@@ -275,6 +361,12 @@ class Verdict:
             "semantics": self.semantics,
             "decision_scope": self.decision_scope,
             "refutation_scope": self.refutation_scope,
+            "protocol": self.protocol,
+            "protocol_reason": self.protocol_reason,
+            "protocol_detail": self.protocol_detail,
+            "admissible": self.admissible,
+            "coverage": self.coverage,
+            "protocol_coverage": self.protocol_coverage,
             "deferred_obligations": list(self.obligations),
             "assumed_conformant": list(self.assumed_conformant),
             "skillc_version": _skillc_version(),
@@ -284,11 +376,13 @@ class Verdict:
 
 def establishable_atoms(p: Pack) -> frozenset:
     """The establisher closure: predicates that can EVER be true -- initially
-    true, or added by some capability in Gamma.  Every reachable world of
-    every protocol over Gamma stays inside this set (paper: Lemma
-    'establisher closure'), because only capability effects change the world
-    and Del only shrinks it."""
-    out = set(p.init_true)
+    true, added by some capability in Gamma, or assumed by some choice branch
+    of the protocol.  Every reachable world of every protocol over Gamma stays
+    inside this set (paper: Lemma 'establisher closure'), because only
+    capability effects and declared branch assumptions change the world and
+    Del only shrinks it.  (Assumed facts are declared by the pack, so the
+    closure is still relative to the pack.)"""
+    out = set(p.init_true) | assumed_atoms(p.protocol)
     for c in p.capabilities.values():
         out |= set(c.add)
     return frozenset(out)
@@ -315,6 +409,18 @@ class Checker:
         # prt(G) roles the pack declares no behaviour for: the residue of the
         # participant-agreement side condition (see session.ConformanceReport)
         self.assumed_conformant: tuple = ()
+        # protocol-typing dimension, recorded by _decide and stamped by run()
+        self.protocol_status = "NOT_CHECKED"
+        self.protocol_reason = ""
+        self.protocol_detail = ""
+
+    def _reject_protocol(self, reason: str, detail: str) -> None:
+        """Record the FIRST protocol-typing failure; later ones are ignored."""
+        if self.protocol_status == "REJECTED":
+            return
+        self.protocol_status = "REJECTED"
+        self.protocol_reason = reason
+        self.protocol_detail = detail
 
     def _note_solver_unknown(self) -> None:
         self.solver_unknown = True
@@ -327,6 +433,9 @@ class Checker:
         v = self._decide()
         v.semantics = self.semantics
         v.assumed_conformant = self.assumed_conformant
+        v.protocol = self.protocol_status
+        v.protocol_reason = self.protocol_reason
+        v.protocol_detail = self.protocol_detail
         if self.solver_unknown:
             note = (f"solver returned unknown on at least one query "
                     f"(budget {SOLVER_TIMEOUT_MS} ms); resolved toward "
@@ -344,7 +453,9 @@ class Checker:
         who still act through Gamma -- can satisfy the goal.  This is the
         FlightInstance argument made general and checked by z3.
         """
-        can = set(self.p.init_true) if guard_closure else establishable_atoms(self.p)
+        # branch assumptions are declared establishers too (see establishable_atoms)
+        can = (set(self.p.init_true) | assumed_atoms(self.p.protocol)
+               if guard_closure else establishable_atoms(self.p))
         fresh = iter(range(10 ** 9))
 
         def enc(f: Any) -> z3.BoolRef:
@@ -429,6 +540,13 @@ class Checker:
                            "achievability is undecidable outside the "
                            "static-topology fragment (Brand-Zafiropulo)",
                            unknown=True)
+        # From here on the protocol-typing dimension is decided alongside,
+        # and independently of, goal reachability.  A typing failure is
+        # recorded, never returned: T-Comm requires every branch to conform,
+        # so one bad branch rejects the protocol even when another branch
+        # reaches the goal -- it is not a goal refutation (Theorem 1 covers
+        # reachability refutations only).
+        self.protocol_status = "WELL_TYPED"
         # 3. realizability: projection G|p defined for every role (Proj-Sel /
         #    Proj-Brn / Proj-Mrg).  Undefined = deadlocking handoff.
         projections = {}
@@ -437,41 +555,36 @@ class Checker:
                 projections[role] = _jsonable(project(self.p.protocol, role))
             except ProjectionError as e:
                 trace_artifact("interaction", {
-                    "status": "refuted",
+                    "status": "rejected",
                     "check": "projection",
                     "role": role,
                     "failure": str(e),
                     "projections": projections,
                 })
-                self._skip_traces(
-                    "protocol projection failed",
-                    reachability=True,
-                )
-                return Verdict(False, "NON_PROJECTABLE", str(e))
+                self._reject_protocol("NON_PROJECTABLE", str(e))
+                break
         # 4. conformance: every declared skill refines its projected contract
-        #    (S_p <= G|p, Gay-Hole subtyping).  Refutes the *judgment*: the
-        #    verdict on G cannot be transported to a non-conforming skill.
-        rep = conformance_report(self.p.skills, self.p.protocol)
-        if not rep.ok:
-            trace_artifact("interaction", {
-                "status": "refuted",
-                "check": "conformance",
-                "projections": projections,
-                "failure": rep.failure,
-                "assumed_conformant": list(rep.assumed),
-            })
-            self._skip_traces(
-                "declared role behavior is non-conformant",
-                reachability=True,
-            )
-            return Verdict(False, "NON_CONFORMANT", rep.failure)
-        self.assumed_conformant = rep.assumed
-        trace_artifact("interaction", {
-            "status": "passed",
-            "projections": projections,
-            "conformance": "passed",
-            "assumed_conformant": list(rep.assumed),
-        })
+        #    (S_p <= G|p, Gay-Hole subtyping).  It needs the projections, so
+        #    it is skipped when projection already failed.
+        if self.protocol_status != "REJECTED":
+            rep = conformance_report(self.p.skills, self.p.protocol)
+            if not rep.ok:
+                trace_artifact("interaction", {
+                    "status": "rejected",
+                    "check": "conformance",
+                    "projections": projections,
+                    "failure": rep.failure,
+                    "assumed_conformant": list(rep.assumed),
+                })
+                self._reject_protocol("NON_CONFORMANT", rep.failure)
+            else:
+                self.assumed_conformant = rep.assumed
+                trace_artifact("interaction", {
+                    "status": "passed",
+                    "projections": projections,
+                    "conformance": "passed",
+                    "assumed_conformant": list(rep.assumed),
+                })
         # T-Comm quantifies over every protocol branch at the same pre-world;
         # T-Act and T-Goal then check guards/markers in lockstep.  Projection
         # alone only checks process shape, so decide these world premises too.
@@ -479,35 +592,45 @@ class Checker:
         # 5. tolerant may-reachability of the goal
         ok, end_state = self._reach(self.p.protocol, initial_state(self.p), {})
         if ok:
-            # Search again with the shared-world premise at each goal.
-            # Rejecting only the first witness would miss compatible later
-            # branches; omitting the goal would admit incompatible worlds.
-            self.typing_condition = typing_condition
-            self.loop_seen.clear()
-            self.blocked.clear()
-            self.defeated.clear()
-            ok, end_state = self._reach(
-                self.p.protocol, initial_state(self.p), {})
-            if not ok:
-                trace_artifact("reachability", {
-                    "status": "refuted",
-                    "reason": "whole-session typing rejected every witness",
-                    "blocked": list(self.blocked),
-                    "defeated": list(self.defeated),
-                })
-                return Verdict(
-                    False, "NON_CONFORMANT",
-                    "a may-reachability witness exists, but the whole-session "
-                    "T-Comm/T-Act/T-Goal judgment has no derivation from the "
-                    "same initial world: the protocol-wide guards and goal "
-                    "markers are inconsistent with the witness")
+            witness = end_state.path
+            if self.protocol_status == "WELL_TYPED":
+                # Search again with the shared-world premise at each goal.
+                # Rejecting only the first witness would miss compatible
+                # later branches; omitting the goal would admit incompatible
+                # worlds.  This is a typing check: its failure rejects the
+                # protocol, while the goal stays reachable along the witness
+                # of the first search.
+                self.typing_condition = typing_condition
+                self.loop_seen.clear()
+                self.blocked.clear()
+                self.defeated.clear()
+                typed, typed_state = self._reach(
+                    self.p.protocol, initial_state(self.p), {})
+                self.typing_condition = None
+                if typed:
+                    # prefer the witness that is also typing-consistent
+                    witness, end_state = typed_state.path, typed_state
+                else:
+                    trace_artifact("interaction", {
+                        "status": "rejected",
+                        "check": "whole-session typing",
+                        "failure": "whole-session typing rejected every witness",
+                        "blocked": list(self.blocked),
+                        "defeated": list(self.defeated),
+                    })
+                    self._reject_protocol(
+                        "NON_CONFORMANT",
+                        "a may-reachability witness exists, but the whole-session "
+                        "T-Comm/T-Act/T-Goal judgment has no derivation from the "
+                        "same initial world: the protocol-wide guards and goal "
+                        "markers are inconsistent with the witness")
             trace_artifact("reachability", {
                 "status": "passed",
-                "witness": _jsonable(end_state.path),
+                "witness": _jsonable(witness),
                 "terminal_predicates": sorted(end_state.true_preds),
             })
             return Verdict(True, "OK", "goal reachable along witness path",
-                           witness=end_state.path)
+                           witness=witness)
         if self.defeated:
             uniq = tuple(dict.fromkeys(self.defeated))
             trace_artifact("reachability", {
@@ -590,10 +713,14 @@ class Checker:
                 *effect_constraints,
                 self._typing_condition(rest, post, recenv, seen))
         if "choice" in step:
+            assumes = step["choice"].get("assumes") or {}
             return z3.And([
-                self._typing_condition(list(branch) + rest, st, recenv,
-                                       frozenset(seen))
-                for branch in step["choice"]["branches"].values()
+                self._typing_condition(
+                    list(branch) + rest,
+                    _mk_typing_state(st.true_preds | set(assumes.get(label, ())),
+                                     st.env()) if assumes.get(label) else st,
+                    recenv, frozenset(seen))
+                for label, branch in step["choice"]["branches"].items()
             ])
         if "rec" in step:
             name = step["rec"]["name"]
@@ -697,8 +824,12 @@ class Checker:
                 demonic = (self.semantics == "adversarial"
                            and body.get("external", False))
                 last_end = cur
+                assumes = body.get("assumes") or {}
                 for label, br in body["branches"].items():
-                    branch_state = _mk_state(cur.true_preds, cur.arith,
+                    # a branch assumption is a declared fact the branch
+                    # establishes on entry, like an `add` effect
+                    branch_state = _mk_state(cur.true_preds | set(assumes.get(label, ())),
+                                             cur.arith,
                                              cur.versions(),
                                              cur.path + (("choose", label),))
                     ok, end = self._reach(list(br) + rest, branch_state, recenv)
@@ -743,9 +874,14 @@ def check(pack: dict | Pack, semantics: str = "may",
     scope="protocol"        the default judgment about the declared protocol.
     scope="goal"            may-only selective judgment: refute only with a
                              capability-context certificate; otherwise abstain
-                             on protocol rejection. The guard closure ignores
-                             deletes and treats numeric comparisons as free
-                             Booleans, over-approximating possible producers.
+                             (UNKNOWN / PROTOCOL_ONLY) when the refutation is
+                             relative to the declared protocol only. The guard
+                             closure ignores deletes and treats numeric
+                             comparisons as free Booleans, over-approximating
+                             possible producers.
+
+    In both scopes the protocol-typing result (Verdict.protocol) is reported
+    separately from the goal label and never turns into IMPOSSIBLE.
     """
     if scope not in {"protocol", "goal"}:
         raise ValueError(f"unknown decision scope: {scope!r}")
@@ -759,15 +895,19 @@ def check(pack: dict | Pack, semantics: str = "may",
     })
     checker = Checker(p, semantics=semantics)
     certificate = checker._gamma_refutation(guard_closure=True) if scope == "goal" else None
-    v = certificate if certificate is not None else checker.run()
+    if certificate is not None:
+        v = certificate
+        v.protocol = "NOT_CHECKED"
+    else:
+        v = checker.run()
     v.decision_scope = scope
     if scope == "goal" and v.refuted and not v.context_refuted:
-        protocol_reason = v.reason
+        goal_reason = v.reason
         v.unknown = True
         v.reason = "PROTOCOL_ONLY"
         v.detail = (
-            f"declared protocol rejected ({protocol_reason}), but no "
-            f"protocol-independent goal refutation was established; "
+            f"refuted relative to the declared protocol only ({goal_reason}); "
+            f"no protocol-independent goal refutation was established; "
             f"alternative plans are not ruled out. {v.detail}")
     v.pack_digest = pack_digest(p)
     return v

@@ -1,0 +1,45 @@
+```ce
+Skill `view-pdf`.
+Roles: `agent`, `user`.
+Tool `list_pdfs` (owner `agent`): via `bash`; adds `pdfs_listed`.
+Tool `display_pdf` (owner `agent`): via `bash`; requires any of (`pdf_source_known` or `pdfs_listed`); adds `viewer_open`, `view_uuid_known`.
+Tool `get_pdf_text` (owner `agent`): via `bash`; requires `viewer_open`; adds `pdf_text_obtained`.
+Tool `get_pdf_screenshot` (owner `agent`): via `bash`; requires `viewer_open`; adds `screenshot_obtained`.
+Tool `add_pdf_annotations` (owner `agent`): via `bash`; requires `viewer_open` and `user_approved_changes`; adds `pdf_annotated`.
+Tool `update_pdf_annotations` (owner `agent`): via `bash`; requires `viewer_open` and `user_requested_edits`; adds `pdf_annotated`.
+Tool `fill_pdf_form` (owner `agent`): via `bash`; requires `viewer_open` and `form_values_known`; adds `pdf_form_filled`.
+Tool `place_signature_image` (owner `agent`): via `bash`; requires `viewer_open` and `signature_image_known`; adds `signature_placed`.
+Tool `ask_user` (owner `agent`): via `ask_user`; adds `user_answered`.
+Initially true: none.
+Goal: `viewer_open` and any of (`screenshot_obtained` or `pdf_annotated` or `pdf_form_filled` or `signature_placed`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `known_source`: none.
+    - branch `list_local_pdfs`:
+      - `agent` uses `list_pdfs`.
+  - `agent` uses `display_pdf`.
+  - `agent` chooses one of (observed):
+    - branch `view_only`:
+      - `agent` uses `get_pdf_screenshot`.
+    - branch `collaborative_annotation`:
+      - `agent` uses `get_pdf_text`.
+      - `agent` uses `ask_user`.
+      - `user` chooses one of (observed):
+        - branch `approve_annotations`:
+          - `agent` uses `add_pdf_annotations`.
+          - `agent` uses `get_pdf_screenshot`.
+          - `user` chooses one of (observed):
+            - branch `accept_result`: none.
+            - branch `request_edits`:
+              - `agent` uses `update_pdf_annotations`.
+              - `agent` uses `get_pdf_screenshot`.
+        - branch `decline_annotations`: none.
+    - branch `form_filling`:
+      - `agent` uses `ask_user`.
+      - `agent` uses `fill_pdf_form`.
+      - `agent` uses `get_pdf_screenshot`.
+    - branch `signing`:
+      - `agent` uses `ask_user`.
+      - `agent` uses `place_signature_image`.
+      - `agent` uses `get_pdf_screenshot`.
+```

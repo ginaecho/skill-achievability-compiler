@@ -1,0 +1,44 @@
+```ce
+Skill `doc-coauthoring`.
+Roles: `agent`, `user`, `reader_agent`.
+Tool `ask_workflow_preference` (owner `agent`): via `ask_user`; adds `workflow_choice_known`.
+Tool `ask_context_questions` (owner `agent`): via `ask_user`; adds `meta_context_received`.
+Tool `read_shared_context` (owner `agent`): via `google_drive`; needs `google_drive_account`; adds `external_context_read`.
+Tool `read_local_context` (owner `agent`): via `read`; requires `local_context_available`; adds `external_context_read`.
+Tool `ask_clarifications` (owner `agent`): via `ask_user`; requires any of (`meta_context_received`, `external_context_read`, `context_dump_received`); adds `clarifications_received`, `context_sufficient`.
+Tool `ask_stage_transition` (owner `agent`): via `ask_user`; adds `stage_transition_known`.
+Tool `create_doc_file` (owner `agent`): via `write`; adds `doc_scaffold_created`, `doc_exists`.
+Tool `update_doc_section` (owner `agent`): via `edit`; requires `doc_exists`; adds `section_drafted`, `all_sections_completed`.
+Tool `review_full_doc` (owner `agent`): via `read`; requires `doc_exists`; adds `full_doc_reviewed`.
+Tool `test_doc_with_subagent` (owner `agent`): via `agent`; requires `doc_exists`; adds `reader_test_run`, `reader_questions_predicted`, `reader_testing_passed`.
+Tool `ask_final_review_choice` (owner `agent`): via `ask_user`; requires `reader_testing_passed`; adds `final_review_choice_known`, `final_guidance_given`.
+Initially true: `user_conversation`, `sub_agents`.
+Initially: `sections_completed` == 0.
+Initially: `sections_total` == 1.
+Goal: any of (`freeform_mode`, all of (`workflow_used`, `context_sufficient`, `doc_exists`, `all_sections_completed`, `reader_testing_passed`, `final_guidance_given`)).
+Protocol:
+  - `agent` uses `ask_workflow_preference`.
+  - `user` chooses one of (observed):
+    - branch `decline_workflow`:
+      - `agent` uses `ask_context_questions`.
+      - `agent` uses `ask_clarifications`.
+    - branch `accept_workflow`:
+      - `agent` uses `ask_context_questions`.
+      - `user` chooses one of (observed):
+        - branch `share_connected_doc`:
+          - `agent` uses `read_shared_context`.
+        - branch `share_local_file`:
+          - `agent` uses `read_local_context`.
+        - branch `context_in_chat`: none.
+      - `agent` uses `ask_clarifications`.
+      - `agent` uses `ask_stage_transition`.
+      - `agent` uses `create_doc_file`.
+      - `agent` uses `update_doc_section`.
+      - `agent` uses `review_full_doc`.
+      - `agent` uses `test_doc_with_subagent`.
+      - `agent` uses `ask_final_review_choice`.
+      - `user` chooses one of (observed):
+        - branch `want_final_review`:
+          - `agent` uses `review_full_doc`.
+        - branch `done`: none.
+```

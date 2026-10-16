@@ -1,0 +1,83 @@
+```ce
+Skill `isaac-mission-control-showcase`.
+Roles: `agent`, `user`.
+Tool `prepare_dependencies` (owner `agent`): via `bash`; requires `skill_dir_known`; adds `dependencies_prepared`.
+Tool `inspect_runtime_state` (owner `agent`): via `bash`; requires `skill_dir_known`; adds `runtime_inspected`, `runtime_detected`.
+Tool `read_dependency_manifest` (owner `agent`): via `read`; requires `dependencies_prepared`; adds `manifest_read`.
+Tool `handoff_installation_skill` (owner `agent`): via `bash`; requires `manifest_read`; adds `installation_handoff_done`, `installed_path_reported`.
+Tool `run_preflight` (owner `agent`): via `bash`; requires `skill_dir_known` and `dependencies_prepared` and `runtime_selected`; adds `preflight_done`.
+Tool `start_showcase_idle` (owner `agent`): via `bash`; requires `skill_dir_known` and `dependencies_prepared` and `preflight_done` and `container_clearance_confirmed`; adds `showcase_started`, `isaac_window_visible`, `robot_idle`, `readiness_satisfied`, `work_dir_recorded`.
+Tool `start_showcase_demo` (owner `agent`): via `bash`; requires `skill_dir_known` and `dependencies_prepared` and `preflight_done` and `container_clearance_confirmed`; adds `showcase_started`, `isaac_window_visible`, `readiness_satisfied`, `mission_completed`, `robot_idle`, `motion_confirmed`, `work_dir_recorded`, `acceptance_artifact_present`.
+Tool `stop_showcase` (owner `agent`): via `bash`; requires `showcase_started`; adds `showcase_stopped`.
+Tool `query_run_status` (owner `agent`): via `bash`; requires `work_dir_recorded`; adds `run_status_reported`.
+Tool `ask_runtime_choice` (owner `agent`): via `ask_user`; requires `runtime_inspected` and `selection_prompt_required`; adds `user_runtime_choice_received`.
+Tool `ask_container_clearance` (owner `agent`): via `ask_user`; requires `preflight_done` and `container_conflict_reported`; adds `container_clearance_confirmed`.
+Initially true: `skill_dir_known`.
+Initially: not `dependencies_prepared`.
+Initially: not `runtime_inspected`.
+Initially: not `runtime_detected`.
+Initially: not `manifest_read`.
+Initially: not `runtime_selected`.
+Initially: not `selection_prompt_required`.
+Initially: not `installation_handoff_done`.
+Initially: not `installed_path_reported`.
+Initially: not `preflight_done`.
+Initially: not `container_conflict_reported`.
+Initially: not `container_clearance_confirmed`.
+Initially: not `showcase_started`.
+Initially: not `readiness_satisfied`.
+Initially: not `isaac_window_visible`.
+Initially: not `mission_completed`.
+Initially: not `motion_confirmed`.
+Initially: not `robot_idle`.
+Initially: not `acceptance_artifact_present`.
+Initially: not `work_dir_recorded`.
+Initially: not `run_status_reported`.
+Initially: not `showcase_stopped`.
+Initially: not `user_runtime_choice_received`.
+Initially: not `user_requested_installation_change`.
+Initially: not `user_requested_stop`.
+Initially: not `demo_mode`.
+Initially: not `idle_mode`.
+Goal: (`mission_completed` and `robot_idle` and `motion_confirmed` and `isaac_window_visible` and `readiness_satisfied` and `acceptance_artifact_present`) or `showcase_stopped`.
+Protocol:
+  - `agent` uses `prepare_dependencies`.
+  - `agent` uses `inspect_runtime_state`.
+  - `agent` chooses one of (observed):
+    - branch `auto_select_detected_runtime`:
+      - `agent` uses `run_preflight`.
+    - branch `prompt_for_runtime_choice`:
+      - `agent` uses `ask_runtime_choice`.
+      - `user` chooses one of (observed):
+        - branch `use_detected_runtime`:
+          - `agent` uses `run_preflight`.
+        - branch `install_or_change_version`:
+          - `agent` uses `read_dependency_manifest`.
+          - `agent` uses `handoff_installation_skill`.
+    - branch `nothing_installed`:
+      - `agent` uses `read_dependency_manifest`.
+      - `agent` uses `handoff_installation_skill`.
+  - `agent` chooses one of (observed):
+    - branch `continue_after_preflight`:
+      - `agent` chooses one of (observed):
+        - branch `no_container_conflicts`:
+          - `agent` chooses one of (observed):
+            - branch `run_demo`:
+              - `agent` uses `start_showcase_demo`.
+              - `agent` uses `query_run_status`.
+            - branch `run_idle_only`:
+              - `agent` uses `start_showcase_idle`.
+            - branch `stop_recorded_resources`:
+              - `agent` uses `stop_showcase`.
+        - branch `container_conflicts_reported`:
+          - `agent` uses `ask_container_clearance`.
+          - `agent` chooses one of (observed):
+            - branch `run_demo`:
+              - `agent` uses `start_showcase_demo`.
+              - `agent` uses `query_run_status`.
+            - branch `run_idle_only`:
+              - `agent` uses `start_showcase_idle`.
+            - branch `stop_recorded_resources`:
+              - `agent` uses `stop_showcase`.
+    - branch `stop_after_installation_handoff`: none.
+```

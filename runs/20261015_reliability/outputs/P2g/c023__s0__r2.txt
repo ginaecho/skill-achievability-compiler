@@ -1,0 +1,53 @@
+```ce
+Skill `dossier`.
+Roles: `agent`, `user`.
+Tool `ask_subject_identity` (owner `agent`): via `ask_user`; adds `q1_answered`.
+Tool `ask_subject_type` (owner `agent`): via `ask_user`; requires `q1_answered`; adds `q2_answered`.
+Tool `ask_purpose` (owner `agent`): via `ask_user`; requires `q2_answered`; adds `q3_answered`.
+Tool `ask_hypothesis` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_stated`.
+Tool `ask_hypothesis_pushback` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_stated`; adds `hypothesis_refused_twice`.
+Tool `ask_depth` (owner `agent`): via `ask_user`; requires `hypothesis_stated`; adds `q5_answered`.
+Tool `ask_sensitivities` (owner `agent`): via `ask_user`; requires `q5_answered`; adds `q6_answered`; adds `sensitivities_known`.
+Tool `research_entity` (owner `agent`): via `bash`; needs `shell`; needs `local_filesystem`; needs `allowlisted_internet`; needs `package_registries`; requires `subject_disambiguated` and `q2_answered` and `q3_answered` and `q5_answered`; adds `research_complete`; adds `audit_log_complete`; adds `verdict_ready`; adds `required_sections_ready`; adds `disconfirming_budget_ok`; adds `tier_breakdown_ready`; adds `chat_summary_ready`; picks `consecutive_failures` with `consecutive_failures` <= 2.
+Tool `generate_docx` (owner `agent`): via `bash`; needs `shell`; needs `local_filesystem`; needs `package_registries`; requires `research_complete`; adds `docx_created`.
+Tool `validate_docx` (owner `agent`): via `bash`; needs `shell`; needs `local_filesystem`; requires `docx_created` and `required_sections_ready`; adds `docx_validated`.
+Tool `save_json_fallback` (owner `agent`): via `bash`; needs `shell`; needs `local_filesystem`; requires `research_complete`; adds `json_fallback_created`.
+Initially true: none.
+Initially: `consecutive_failures` == 0.
+Initially: not `q1_answered` and not `q2_answered` and not `q3_answered` and not `q5_answered`.
+Initially: not `hypothesis_stated` and not `hypothesis_refused_twice`.
+Initially: not `subject_disambiguated` and not `sensitivities_known` and not `q6_answered`.
+Initially: not `research_complete` and not `audit_log_complete` and not `verdict_ready`.
+Initially: not `required_sections_ready` and not `disconfirming_budget_ok` and not `tier_breakdown_ready`.
+Initially: not `docx_created` and not `docx_validated` and not `json_fallback_created` and not `chat_summary_ready`.
+Goal: (`docx_validated` or `json_fallback_created`) and `verdict_ready` and `audit_log_complete` and `tier_breakdown_ready` and `chat_summary_ready`.
+Protocol:
+  - loop `identify_subject`:
+    - `agent` uses `ask_subject_identity`.
+    - `user` chooses one of (observed):
+      - branch `ambiguous`:
+        - repeat `identify_subject`.
+      - branch `specific`:
+        - `agent` uses `ask_subject_type`.
+  - `agent` uses `ask_purpose`.
+  - `user` chooses one of (observed):
+    - branch `hypothesis_provided`:
+      - `agent` uses `ask_hypothesis`.
+    - branch `hypothesis_missing`:
+      - `agent` uses `ask_hypothesis_pushback`.
+  - `agent` uses `ask_depth`.
+  - `user` chooses one of (observed):
+    - branch `sensitivity_needed`:
+      - `agent` uses `ask_sensitivities`.
+    - branch `sensitivity_not_needed`: none.
+  - `user` chooses one of (observed):
+    - branch `disambiguated`:
+      - `agent` uses `research_entity`.
+      - `agent` chooses one of (observed):
+        - branch `docx_ok`:
+          - `agent` uses `generate_docx`.
+          - `agent` uses `validate_docx`.
+        - branch `docx_failed`:
+          - `agent` uses `save_json_fallback`.
+    - branch `still_ambiguous`: none.
+```

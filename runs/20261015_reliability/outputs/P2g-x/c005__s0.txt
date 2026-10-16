@@ -1,0 +1,107 @@
+```ce
+Skill `context-engine`.
+Roles: `agent`, `user`.
+
+Tool `check_context_file` (owner `agent`):
+  via `read`;
+  picks `file_exists` with true.
+
+Tool `read_context` (owner `agent`):
+  via `read`;
+  requires `file_exists`;
+  adds `context_loaded`;
+  sets `last_update_days` to `stale_age`.
+
+Tool `prompt_setup` (owner `agent`):
+  via `ask_user`;
+  adds `setup_prompted`.
+
+Tool `offer_stale_choice` (owner `agent`):
+  via `ask_user`;
+  requires `stale_age` >= 90;
+  picks `user_decision` with any of (`user_decision` == `refresh`, `user_decision` == `continue`).
+
+Tool `load_stale_context` (owner `agent`):
+  via `read`;
+  requires `user_decision` == `continue`;
+  adds `context_loaded`.
+
+Tool `note_context_update` (owner `agent`):
+  via `read`;
+  adds `update_noted`.
+
+Tool `offer_context_update` (owner `agent`):
+  via `ask_user`;
+  adds `update_offered`.
+
+Tool `write_context_update` (owner `agent`):
+  via `write`;
+  requires `user_decision` == `yes_update`;
+  adds `context_written`.
+
+Tool `apply_anonymization` (owner `agent`):
+  via `read`;
+  requires `context_loaded`;
+  adds `anonymized`.
+
+Tool `external_call` (owner `agent`):
+  via `web_search`;
+  requires `anonymized`.
+
+Tool `infer_gaps` (owner `agent`):
+  via `read`;
+  requires `context_loaded`;
+  adds `gaps_inferred`.
+
+Initially true: none.
+Initially: `stale_age` == 0.
+Goal: `context_loaded` and `anonymized`.
+
+Protocol:
+  - `agent` uses `check_context_file`.
+  - `agent` chooses one of (observed):
+    - branch `file_missing`:
+      - requires `file_exists` == false.
+      - `agent` uses `prompt_setup`.
+    - branch `file_found`:
+      - requires `file_exists` == true.
+      - `agent` uses `read_context`.
+      - `agent` chooses one of (observed):
+        - branch `context_stale`:
+          - requires `stale_age` >= 90.
+          - `agent` uses `offer_stale_choice`.
+          - `agent` chooses one of (observed):
+            - branch `user_refresh`:
+              - requires `user_decision` == `refresh`.
+              - none.
+            - branch `user_continue`:
+              - requires `user_decision` == `continue`.
+              - `agent` uses `load_stale_context`.
+        - branch `context_fresh`:
+          - requires `stale_age` < 90.
+          - checkpoint: `context_loaded`.
+  - `agent` chooses one of (observed):
+    - branch `context_available`:
+      - requires `context_loaded`.
+      - `agent` uses `apply_anonymization`.
+      - `agent` chooses one of (observed):
+        - branch `external_action`:
+          - `agent` uses `external_call`.
+        - branch `no_external`: none.
+      - `agent` chooses one of (observed):
+        - branch `learned_something`:
+          - `agent` uses `note_context_update`.
+          - `agent` uses `offer_context_update`.
+          - `agent` chooses one of (observed):
+            - branch `yes_update_file`:
+              - requires `user_decision` == `yes_update`.
+              - `agent` uses `write_context_update`.
+            - branch `no_update`: none.
+        - branch `nothing_new`: none.
+    - branch `no_context`: none.
+  - `agent` chooses one of (observed):
+    - branch `gaps_exist`:
+      - requires `context_loaded`.
+      - `agent` uses `infer_gaps`.
+    - branch `complete`: none.
+```

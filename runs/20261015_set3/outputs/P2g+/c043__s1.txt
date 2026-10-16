@@ -1,0 +1,69 @@
+```ce
+Skill `audit-augmentation`.
+Roles: `agent`, `user`.
+Tool `check_trailmark_available` (owner `agent`): via `bash`; requires `target_directory_known`; adds `trailmark_checked`.
+Tool `install_trailmark` (owner `agent`): via `bash`; needs `package_registries`; requires `target_directory_known`; adds `trailmark_installed`.
+Tool `locate_inputs` (owner `agent`): via `read`; requires `target_directory_known`; picks `sarif_available` with (`sarif_available` or not `sarif_available`); picks `weaudit_available` with (`weaudit_available` or not `weaudit_available`); picks `binary_input_available` with (`binary_input_available` or not `binary_input_available`).
+Tool `run_preanalysis` (owner `agent`): via `bash`; requires `target_directory_known`; adds `preanalysis_done`; picks `language_autodetect_ok` with (`language_autodetect_ok` or not `language_autodetect_ok`).
+Tool `rerun_preanalysis_explicit_language` (owner `agent`): via `bash`; requires `target_directory_known` and `explicit_language_known`; adds `preanalysis_done`; adds `language_selected`.
+Tool `check_binary_support` (owner `agent`): via `bash`; requires `binary_input_available`; picks `binary_supported` with (`binary_supported` or not `binary_supported`).
+Tool `augment_sarif` (owner `agent`): via `bash`; requires `preanalysis_done` and `sarif_available`; adds `sarif_augmented`; adds `findings_augmented`; picks `sarif_unmatched_reported` with true.
+Tool `augment_weaudit` (owner `agent`): via `bash`; requires `preanalysis_done` and `weaudit_available`; adds `weaudit_augmented`; adds `findings_augmented`; picks `weaudit_unmatched_reported` with true.
+Tool `augment_binary` (owner `agent`): via `bash`; requires `preanalysis_done` and `binary_input_available` and `binary_supported`; adds `binary_augmented`; adds `findings_augmented`.
+Tool `inspect_subgraphs_and_cross_reference` (owner `agent`): via `bash`; requires `preanalysis_done` and `findings_augmented`; adds `severity_subgraphs_inspected`; adds `preanalysis_cross_referenced`.
+Tool `deliver_report` (owner `agent`): via `reply`; requires `preanalysis_done` and `findings_augmented` and `severity_subgraphs_inspected` and `preanalysis_cross_referenced`; adds `augmentation_report_delivered`.
+Initially true: none.
+Initially: `target_directory_known` or not `target_directory_known`.
+Initially: `explicit_language_known` or not `explicit_language_known`.
+Goal: `augmentation_report_delivered`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `target_provided` (assuming `target_directory_known`):
+      - `agent` uses `check_trailmark_available`.
+      - `agent` chooses one of (observed):
+        - branch `already_available`:
+          - `agent` uses `locate_inputs`.
+        - branch `install_needed`:
+          - `agent` uses `install_trailmark`.
+          - `agent` uses `locate_inputs`.
+      - `agent` uses `run_preanalysis`.
+      - `agent` chooses one of (observed):
+        - branch `autodetect_ok` (assuming `language_autodetect_ok`):
+          - `agent` chooses one of (observed):
+            - branch `sarif_present` (assuming `sarif_available`):
+              - `agent` uses `augment_sarif`.
+            - branch `no_sarif`: none.
+          - `agent` chooses one of (observed):
+            - branch `weaudit_present` (assuming `weaudit_available`):
+              - `agent` uses `augment_weaudit`.
+            - branch `no_weaudit`: none.
+          - `agent` chooses one of (observed):
+            - branch `binary_present` (assuming `binary_input_available`):
+              - `agent` uses `check_binary_support`.
+              - `agent` chooses one of (observed):
+                - branch `binary_supported_branch` (assuming `binary_supported`):
+                  - `agent` uses `augment_binary`.
+                - branch `binary_not_supported`: none.
+            - branch `no_binary`: none.
+        - branch `autodetect_wrong` (assuming not `language_autodetect_ok` and `explicit_language_known`):
+          - `agent` uses `rerun_preanalysis_explicit_language`.
+          - `agent` chooses one of (observed):
+            - branch `sarif_present_after_rerun` (assuming `sarif_available`):
+              - `agent` uses `augment_sarif`.
+            - branch `no_sarif_after_rerun`: none.
+          - `agent` chooses one of (observed):
+            - branch `weaudit_present_after_rerun` (assuming `weaudit_available`):
+              - `agent` uses `augment_weaudit`.
+            - branch `no_weaudit_after_rerun`: none.
+          - `agent` chooses one of (observed):
+            - branch `binary_present_after_rerun` (assuming `binary_input_available`):
+              - `agent` uses `check_binary_support`.
+              - `agent` chooses one of (observed):
+                - branch `binary_supported_after_rerun` (assuming `binary_supported`):
+                  - `agent` uses `augment_binary`.
+                - branch `binary_not_supported_after_rerun`: none.
+            - branch `no_binary_after_rerun`: none.
+      - `agent` uses `inspect_subgraphs_and_cross_reference`.
+      - `agent` uses `deliver_report`.
+    - branch `target_missing`: none.
+```

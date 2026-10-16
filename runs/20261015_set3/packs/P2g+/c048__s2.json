@@ -1,0 +1,559 @@
+{
+  "pack": {
+    "name": "research-summarizer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_source_mode": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_compare_more_sources": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation",
+            {
+              "and": [
+                "comparison_requested",
+                "one_source_only"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "enough_sources_for_comparison"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_summary_scaffold": {
+        "owner": "agent",
+        "pre": "summary_requested",
+        "add": [
+          "scaffold_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_citations_json": {
+        "owner": "agent",
+        "pre": "citations_requested",
+        "add": [
+          "citations_extracted",
+          "extractor_succeeded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_single_source_brief": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "single_source_requested",
+            "scaffold_ready"
+          ]
+        },
+        "add": [
+          "brief_delivered",
+          "anchored_findings",
+          "quality_rated",
+          "missing_metadata_not_invented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_comparison_brief": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "comparison_requested",
+            "scaffold_ready",
+            "enough_sources_for_comparison"
+          ]
+        },
+        "add": [
+          "brief_delivered",
+          "comparison_matrix_complete",
+          "quality_rated",
+          "contradictions_highlighted",
+          "missing_metadata_not_invented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_citation_bibliography": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "citations_requested",
+            "citations_extracted",
+            "extractor_succeeded"
+          ]
+        },
+        "add": [
+          "brief_delivered",
+          "bibliography_sorted",
+          "citations_classified",
+          "missing_metadata_not_invented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_source_mode",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "single_source_summary": [
+              {
+                "act": {
+                  "cap": "generate_summary_scaffold",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_single_source_brief",
+                  "by": "agent"
+                }
+              }
+            ],
+            "multi_source_comparison": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "already_has_multiple_sources": [
+                      {
+                        "act": {
+                          "cap": "generate_summary_scaffold",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "write_comparison_brief",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "only_one_source": [
+                      {
+                        "act": {
+                          "cap": "ask_compare_more_sources",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "generate_summary_scaffold",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "write_comparison_brief",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "already_has_multiple_sources": [
+                      "enough_sources_for_comparison"
+                    ],
+                    "only_one_source": [
+                      "one_source_only"
+                    ]
+                  }
+                }
+              }
+            ],
+            "citation_extraction": [
+              {
+                "act": {
+                  "cap": "extract_citations_json",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_citation_bibliography",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "citation_extraction": [
+              "citations_requested"
+            ],
+            "multi_source_comparison": [
+              "comparison_requested",
+              "summary_requested"
+            ],
+            "single_source_summary": [
+              "single_source_requested",
+              "summary_requested"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "brief_delivered",
+        "missing_metadata_not_invented",
+        {
+          "or": [
+            "anchored_findings",
+            "comparison_matrix_complete",
+            {
+              "and": [
+                "bibliography_sorted",
+                "citations_classified"
+              ]
+            }
+          ]
+        },
+        {
+          "or": [
+            "quality_rated",
+            "citations_classified"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "needs:user_conversation"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "research-summarizer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_source_mode": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_compare_more_sources": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "comparison_requested",
+            "one_source_only"
+          ]
+        },
+        "add": [
+          "enough_sources_for_comparison"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_summary_scaffold": {
+        "owner": "agent",
+        "pre": "summary_requested",
+        "add": [
+          "scaffold_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_citations_json": {
+        "owner": "agent",
+        "pre": "citations_requested",
+        "add": [
+          "citations_extracted",
+          "extractor_succeeded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_single_source_brief": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "single_source_requested",
+            "scaffold_ready"
+          ]
+        },
+        "add": [
+          "brief_delivered",
+          "anchored_findings",
+          "quality_rated",
+          "missing_metadata_not_invented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_comparison_brief": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "comparison_requested",
+            "scaffold_ready",
+            "enough_sources_for_comparison"
+          ]
+        },
+        "add": [
+          "brief_delivered",
+          "comparison_matrix_complete",
+          "quality_rated",
+          "contradictions_highlighted",
+          "missing_metadata_not_invented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_citation_bibliography": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "citations_requested",
+            "citations_extracted",
+            "extractor_succeeded"
+          ]
+        },
+        "add": [
+          "brief_delivered",
+          "bibliography_sorted",
+          "citations_classified",
+          "missing_metadata_not_invented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_source_mode",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "single_source_summary": [
+              {
+                "act": {
+                  "cap": "generate_summary_scaffold",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_single_source_brief",
+                  "by": "agent"
+                }
+              }
+            ],
+            "multi_source_comparison": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "already_has_multiple_sources": [
+                      {
+                        "act": {
+                          "cap": "generate_summary_scaffold",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "write_comparison_brief",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "only_one_source": [
+                      {
+                        "act": {
+                          "cap": "ask_compare_more_sources",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "generate_summary_scaffold",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "write_comparison_brief",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "already_has_multiple_sources": [
+                      "enough_sources_for_comparison"
+                    ],
+                    "only_one_source": [
+                      "one_source_only"
+                    ]
+                  }
+                }
+              }
+            ],
+            "citation_extraction": [
+              {
+                "act": {
+                  "cap": "extract_citations_json",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_citation_bibliography",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "citation_extraction": [
+              "citations_requested"
+            ],
+            "multi_source_comparison": [
+              "comparison_requested",
+              "summary_requested"
+            ],
+            "single_source_summary": [
+              "single_source_requested",
+              "summary_requested"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "brief_delivered",
+        "missing_metadata_not_invented",
+        {
+          "or": [
+            "anchored_findings",
+            "comparison_matrix_complete",
+            {
+              "and": [
+                "bibliography_sorted",
+                "citations_classified"
+              ]
+            }
+          ]
+        },
+        {
+          "or": [
+            "quality_rated",
+            "citations_classified"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_source_mode": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "ask_compare_more_sources": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "generate_summary_scaffold": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "extract_citations_json": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "write_single_source_brief": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "write_comparison_brief": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "write_citation_bibliography": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    }
+  },
+  "live_goal": null
+}

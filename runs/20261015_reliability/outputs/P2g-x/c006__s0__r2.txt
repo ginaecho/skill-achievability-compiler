@@ -1,0 +1,54 @@
+```ce
+Skill `neon-postgres-egress-optimizer`.
+Roles: `agent`, `user`.
+
+Tool `check_ext_available` (owner `agent`): via `bash`; adds `pg_stat_statements_available`.
+Tool `create_extension` (owner `agent`): via `bash`; adds `pg_stat_statements_available`.
+Tool `reset_stats` (owner `agent`): via `bash`; adds `stats_clean`.
+Tool `run_diagnostic_queries` (owner `agent`): via `bash`; requires `pg_stat_statements_available`; adds `diagnostics_complete`.
+Tool `analyze_codebase` (owner `agent`): via `bash`; adds `codebase_analyzed`.
+Tool `fix_anti_patterns` (owner `agent`): via `bash`; adds `fixes_applied`.
+Tool `run_tests` (owner `agent`): via `bash`; adds `tests_pass`.
+Tool `verify_responses` (owner `agent`): via `bash`; adds `responses_verified`.
+Tool `measure_improvement` (owner `agent`): via `bash`; adds `improvement_measured`.
+
+Initially true: none.
+Initially: true.
+Goal: `codebase_analyzed` and `fixes_applied` and `tests_pass` and `responses_verified` and
+      any of (`improvement_measured`, not `pg_stat_statements_available`).
+
+Protocol:
+  - `agent` uses `check_ext_available`.
+  - `agent` chooses one of (observed):
+    - branch `extension_missing`:
+      - `agent` uses `create_extension`.
+      - `agent` uses `reset_stats`.
+      - `agent` tells `user` `wait_for_traffic`.
+      - `user` chooses one of (observed):
+        - branch `traffic_ready`:
+          - `agent` uses `run_diagnostic_queries`.
+        - branch `skip_stats`: none.
+    - branch `extension_available`:
+      - `agent` chooses one of (observed):
+        - branch `stats_empty`:
+          - `agent` uses `reset_stats`.
+          - `agent` tells `user` `wait_for_traffic`.
+          - `user` chooses one of (observed):
+            - branch `traffic_ready`:
+              - `agent` uses `run_diagnostic_queries`.
+            - branch `skip_stats`: none.
+        - branch `stats_present`:
+          - `agent` uses `run_diagnostic_queries`.
+  - `agent` uses `analyze_codebase`.
+  - `agent` uses `fix_anti_patterns`.
+  - `agent` uses `run_tests`.
+  - `agent` chooses one of (observed):
+    - branch `tests_pass_ok`:
+      - `agent` uses `verify_responses`.
+      - `agent` chooses one of (observed):
+        - branch `measure_if_possible`:
+          - `agent` uses `measure_improvement`.
+        - branch `skip_measurement`: none.
+    - branch `tests_fail`:
+      - checkpoint: false.
+```

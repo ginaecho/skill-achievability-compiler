@@ -77,6 +77,7 @@ local policy, not a claim about the organization's deployment.
 | Altered payload or forged/replayed approval | Denied; zero transport calls |
 
 - `unbounded_subagent_stress_variant`: Local stress variant only: introduce dynamic participant creation. Expected `{'verdict': 'UNKNOWN', 'reason': 'DYNAMIC_TOPOLOGY'}`.
+- `approval_separation_of_duty`: Separation of duty: the source requires approval before the document action, so the approving role differs from the role that creates the document. Expected `{'separated': True}`.
 
 ## What does not work / remains unverified
 

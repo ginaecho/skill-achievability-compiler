@@ -1,0 +1,744 @@
+{
+  "pack": {
+    "name": "doc-coauthoring",
+    "roles": [
+      "agent",
+      "user",
+      "reader_agent"
+    ],
+    "capabilities": {
+      "offer_workflow": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workflow_offered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_context_questions": {
+        "owner": "agent",
+        "pre": "workflow_accepted",
+        "add": [
+          "context_questions_asked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_shared_context": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:google_drive_account"
+          ]
+        },
+        "add": [
+          "shared_context_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_clarifying_questions": {
+        "owner": "agent",
+        "pre": "context_questions_asked",
+        "add": [
+          "clarifying_questions_asked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "propose_structure": {
+        "owner": "agent",
+        "pre": "workflow_accepted",
+        "add": [
+          "structure_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_doc_scaffold": {
+        "owner": "agent",
+        "pre": "structure_agreed",
+        "add": [
+          "doc_scaffold_created",
+          "doc_exists"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "draft_or_edit_section": {
+        "owner": "agent",
+        "pre": "doc_exists",
+        "add": [
+          "section_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_full_document": {
+        "owner": "agent",
+        "pre": "doc_exists",
+        "add": [
+          "document_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "predict_reader_questions": {
+        "owner": "agent",
+        "pre": "doc_exists",
+        "add": [
+          "reader_questions_predicted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reader_test_document": {
+        "owner": "reader_agent",
+        "pre": {
+          "and": [
+            "doc_exists",
+            "reader_questions_predicted"
+          ]
+        },
+        "add": [
+          "reader_test_run"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "final_review_reply": {
+        "owner": "agent",
+        "pre": "reader_testing_passed",
+        "add": [
+          "doc_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "offer_workflow",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "accept": [
+              {
+                "act": {
+                  "cap": "ask_context_questions",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "shared_doc_context": [
+                      {
+                        "act": {
+                          "cap": "read_shared_context",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_shared_doc_context": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_clarifying_questions",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "propose_structure",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "agree_structure": [
+                      {
+                        "act": {
+                          "cap": "create_doc_scaffold",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "refine_sections",
+                          "body": [
+                            {
+                              "act": {
+                                "cap": "draft_or_edit_section",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "choice": {
+                                "by": "user",
+                                "observed": true,
+                                "branches": {
+                                  "more_section_edits": [
+                                    {
+                                      "continue": "refine_sections"
+                                    }
+                                  ],
+                                  "section_done": []
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "review_full_document",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "predict_reader_questions",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "spawn": {
+                          "role": "reader_agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "reader_test_document",
+                          "by": "reader_agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "issues_found": [
+                              {
+                                "act": {
+                                  "cap": "draft_or_edit_section",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "review_full_document",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "predict_reader_questions",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "spawn": {
+                                  "role": "reader_agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "reader_test_document",
+                                  "by": "reader_agent"
+                                }
+                              }
+                            ],
+                            "passes": []
+                          },
+                          "assumes": {
+                            "passes": [
+                              "reader_testing_passed"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "final_review_reply",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "adjust_structure": [
+                      {
+                        "act": {
+                          "cap": "propose_structure",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "agree_structure": [
+                      "structure_agreed"
+                    ]
+                  }
+                }
+              }
+            ],
+            "decline": []
+          },
+          "assumes": {
+            "accept": [
+              "workflow_accepted"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "doc_completed",
+    "init_true": [
+      "needs:google_drive_account"
+    ],
+    "init_constraints": [],
+    "skills": {
+      "reader_agent": [
+        {
+          "act": {
+            "cap": "reader_test_document"
+          }
+        }
+      ]
+    }
+  },
+  "pre_binding": {
+    "name": "doc-coauthoring",
+    "roles": [
+      "agent",
+      "user",
+      "reader_agent"
+    ],
+    "capabilities": {
+      "offer_workflow": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workflow_offered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_context_questions": {
+        "owner": "agent",
+        "pre": "workflow_accepted",
+        "add": [
+          "context_questions_asked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_shared_context": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "shared_context_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_clarifying_questions": {
+        "owner": "agent",
+        "pre": "context_questions_asked",
+        "add": [
+          "clarifying_questions_asked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "propose_structure": {
+        "owner": "agent",
+        "pre": "workflow_accepted",
+        "add": [
+          "structure_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_doc_scaffold": {
+        "owner": "agent",
+        "pre": "structure_agreed",
+        "add": [
+          "doc_scaffold_created",
+          "doc_exists"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "draft_or_edit_section": {
+        "owner": "agent",
+        "pre": "doc_exists",
+        "add": [
+          "section_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_full_document": {
+        "owner": "agent",
+        "pre": "doc_exists",
+        "add": [
+          "document_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "predict_reader_questions": {
+        "owner": "agent",
+        "pre": "doc_exists",
+        "add": [
+          "reader_questions_predicted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reader_test_document": {
+        "owner": "reader_agent",
+        "pre": {
+          "and": [
+            "doc_exists",
+            "reader_questions_predicted"
+          ]
+        },
+        "add": [
+          "reader_test_run"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "final_review_reply": {
+        "owner": "agent",
+        "pre": "reader_testing_passed",
+        "add": [
+          "doc_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "offer_workflow",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "accept": [
+              {
+                "act": {
+                  "cap": "ask_context_questions",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "shared_doc_context": [
+                      {
+                        "act": {
+                          "cap": "read_shared_context",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_shared_doc_context": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_clarifying_questions",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "propose_structure",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "agree_structure": [
+                      {
+                        "act": {
+                          "cap": "create_doc_scaffold",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "refine_sections",
+                          "body": [
+                            {
+                              "act": {
+                                "cap": "draft_or_edit_section",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "choice": {
+                                "by": "user",
+                                "observed": true,
+                                "branches": {
+                                  "more_section_edits": [
+                                    {
+                                      "continue": "refine_sections"
+                                    }
+                                  ],
+                                  "section_done": []
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "review_full_document",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "predict_reader_questions",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "spawn": {
+                          "role": "reader_agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "reader_test_document",
+                          "by": "reader_agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "issues_found": [
+                              {
+                                "act": {
+                                  "cap": "draft_or_edit_section",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "review_full_document",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "predict_reader_questions",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "spawn": {
+                                  "role": "reader_agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "reader_test_document",
+                                  "by": "reader_agent"
+                                }
+                              }
+                            ],
+                            "passes": []
+                          },
+                          "assumes": {
+                            "passes": [
+                              "reader_testing_passed"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "final_review_reply",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "adjust_structure": [
+                      {
+                        "act": {
+                          "cap": "propose_structure",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "agree_structure": [
+                      "structure_agreed"
+                    ]
+                  }
+                }
+              }
+            ],
+            "decline": []
+          },
+          "assumes": {
+            "accept": [
+              "workflow_accepted"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "doc_completed",
+    "init_true": [],
+    "init_constraints": [],
+    "skills": {
+      "reader_agent": [
+        {
+          "act": {
+            "cap": "reader_test_document"
+          }
+        }
+      ]
+    }
+  },
+  "bindings": {
+    "offer_workflow": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "ask_context_questions": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "read_shared_context": {
+      "via": "google_drive",
+      "needs": [
+        "google_drive_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_clarifying_questions": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "propose_structure": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "create_doc_scaffold": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "draft_or_edit_section": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "review_full_document": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "predict_reader_questions": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "reader_test_document": {
+      "via": "agent",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "final_review_reply": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

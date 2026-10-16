@@ -1,0 +1,43 @@
+```ce
+Skill `llm-finetuning-eval-engineer`.
+Roles: `agent`, `user`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_inspected`.
+Tool `build_harness_from_traces` (owner `agent`): via `bash`; requires `workspace_inspected`; adds `failure_buckets_defined`, `goldens_ready`, `graders_ready`, `drift_suite_frozen`, `eval_directory_ready`.
+Tool `build_synthetic_harness` (owner `agent`): via `bash`; requires `workspace_inspected`; adds `goldens_ready`, `graders_ready`, `drift_suite_frozen`, `eval_directory_ready`.
+Tool `calibrate_judges` (owner `agent`): via `bash`; requires `graders_ready`; adds `judge_calibration_done`, `judge_status_recorded`.
+Tool `run_base_baseline` (owner `agent`): via `bash`; requires `eval_directory_ready`; adds `baseline_written`, `phase0_results_written`, `results_schema_complete`.
+Tool `check_phase0_exit` (owner `agent`): via `bash`; requires `eval_directory_ready` and `drift_suite_frozen` and `baseline_written` and `phase0_results_written` and `results_schema_complete`; adds `phase0_complete`.
+Tool `run_data_quality_gate` (owner `agent`): via `bash`; requires `checkpoint_handed_off`; adds `stage1_done`.
+Tool `run_checkpoint_eval` (owner `agent`): via `bash`; requires `checkpoint_handed_off` and `phase0_complete` and `stage1_done`; adds `stage2_done`, `checkpoint_results_written`, `results_schema_complete`.
+Tool `run_paired_arena` (owner `agent`): via `bash`; requires `stage2_done`; adds `stage3_done`.
+Tool `run_canary_gate` (owner `agent`): via `bash`; requires `stage3_done` and `has_production_canary_target`; adds `stage4_done`.
+Tool `write_promotion_report` (owner `agent`): via `write`; requires `stage1_done` and `stage2_done` and `stage3_done` and ((`has_production_canary_target` and `stage4_done`) or not `has_production_canary_target`); adds `promotion_report_written`, `verdict_issued`.
+
+Initially true: none.
+Goal: `phase0_complete` and `promotion_report_written` and `verdict_issued`.
+
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `user` chooses one of (observed):
+    - branch `traces_exist`:
+      - `agent` uses `build_harness_from_traces`.
+    - branch `no_traces_yet`:
+      - `agent` uses `build_synthetic_harness`.
+  - `user` chooses one of (observed):
+    - branch `judge_used`:
+      - `agent` uses `calibrate_judges`.
+    - branch `all_deterministic`: none.
+  - `agent` uses `run_base_baseline`.
+  - `agent` uses `check_phase0_exit`.
+  - `user` chooses one of (observed):
+    - branch `checkpoint_handed_off` (assuming `checkpoint_handed_off`):
+      - `agent` uses `run_data_quality_gate`.
+      - `agent` uses `run_checkpoint_eval`.
+      - `agent` uses `run_paired_arena`.
+      - `user` chooses one of (observed):
+        - branch `canary_applicable` (assuming `has_production_canary_target`):
+          - `agent` uses `run_canary_gate`.
+        - branch `local_only`: none.
+      - `agent` uses `write_promotion_report`.
+    - branch `no_checkpoint_yet`: none.
+```

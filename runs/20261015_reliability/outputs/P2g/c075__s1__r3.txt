@@ -1,0 +1,54 @@
+```ce
+Skill `llm-finetuning-training-engineer`.
+Roles: `agent`, `eval_engineer`.
+Tool `read_brief_and_run_state` (owner `agent`): via `read`; adds `brief_read`.
+Tool `prepare_dataset_and_reports` (owner `agent`): via `write`; requires `brief_read`; adds `dataset_prepared`, `dataset_card_committed`, `validation_report_written`, `phase2_complete`.
+Tool `confirm_environment_generic` (owner `agent`): via `bash`; requires `phase2_complete`; adds `env_report_present`, `environment_ready`; sets `platform_generic` to 1.
+Tool `confirm_environment_dgx` (owner `agent`): via `bash`; requires `phase2_complete`; adds `env_report_present`, `environment_ready`, `dgx_platform`.
+Tool `generate_training_files` (owner `agent`): via `write`; requires `brief_read` and `phase2_complete` and `env_report_present` and `environment_ready`; adds `train_files_generated`.
+Tool `commit_training_files` (owner `agent`): via `bash`; requires `train_files_generated`; adds `train_files_committed`.
+Tool `launch_training_background` (owner `agent`): via `bash`; requires `train_files_committed`; adds `training_running`.
+Tool `poll_training_logs` (owner `agent`): via `bash`; requires `training_running`; adds `progress_emitted`.
+Tool `stop_training` (owner `agent`): via `bash`; requires `training_running`; removes `training_running`; adds `training_halted`.
+Tool `export_artifact_with_smoke_test` (owner `agent`): via `bash`; requires `promoted`; adds `artifact_exported`, `smoke_test_passed`.
+Tool `report_result` (owner `agent`): via `write`; adds `result_reported`.
+Tool `send_checkpoint_for_eval` (owner `agent`): via `agent`; requires `training_completed`; adds `checkpoint_handed_to_eval`.
+Initially true: none.
+Initially: `platform_generic` == 0.
+Goal: any of (`checkpoint_handed_to_eval`, (`artifact_exported` and `smoke_test_passed`), `result_reported`).
+Protocol:
+  - `agent` uses `read_brief_and_run_state`.
+  - `agent` uses `prepare_dataset_and_reports`.
+  - `agent` chooses one of (observed):
+    - branch `dgx`:
+      - `agent` uses `confirm_environment_dgx`.
+    - branch `generic-nvidia`:
+      - `agent` uses `confirm_environment_generic`.
+  - `agent` chooses one of (observed):
+    - branch `blocked`:
+      - `agent` uses `report_result`.
+    - branch `ready`:
+      - `agent` uses `generate_training_files`.
+      - `agent` uses `commit_training_files`.
+      - `agent` uses `launch_training_background`.
+      - loop `monitor_run`:
+        - `agent` uses `poll_training_logs`.
+        - `agent` chooses one of (observed):
+          - branch `still-running`:
+            - repeat `monitor_run`.
+          - branch `completed`:
+            - `agent` uses `send_checkpoint_for_eval`.
+          - branch `environment-failure`:
+            - `agent` uses `report_result`.
+          - branch `divergence`:
+            - `agent` uses `stop_training`.
+            - `agent` uses `report_result`.
+          - branch `uma-oom`:
+            - `agent` uses `stop_training`.
+            - `agent` uses `report_result`.
+  - `eval_engineer` chooses one of (observed):
+    - branch `PROMOTE`:
+      - `agent` uses `export_artifact_with_smoke_test`.
+    - branch `REJECT`:
+      - `agent` uses `report_result`.
+```

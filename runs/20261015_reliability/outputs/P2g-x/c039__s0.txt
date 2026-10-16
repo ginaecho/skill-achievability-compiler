@@ -1,0 +1,65 @@
+```ce
+Skill `address-sanitizer`.
+Roles: `agent`, `user`.
+Tool `compile_with_asan` (owner `agent`):
+  via `bash`;
+  requires `source_code_present`;
+  adds `asan_binary_built`;
+  sets `binary_path` to `binary_path`.
+Tool `set_asan_env` (owner `agent`):
+  via `bash`;
+  requires `asan_binary_built`;
+  adds `asan_env_set`.
+Tool `run_instrumented` (owner `agent`):
+  via `bash`;
+  requires `asan_env_set`;
+  adds `execution_complete`;
+  picks `exit_code` with true;
+  picks `asan_report` with true.
+Tool `parse_asan_report` (owner `agent`):
+  via `bash`;
+  requires `execution_complete` and `exit_code` != 0;
+  adds `report_understood`;
+  sets `error_type` to `error_type`.
+Tool `disable_fuzzer_memory_limit` (owner `agent`):
+  via `bash`;
+  requires `asan_env_set`;
+  adds `memory_limit_disabled`.
+Tool `view_fuzzer_build` (owner `agent`):
+  via `bash`;
+  requires `source_code_present`;
+  adds `fuzzer_binary_built`.
+Tool `run_fuzzer_no_limit` (owner `agent`):
+  via `bash`;
+  requires `memory_limit_disabled` and `fuzzer_binary_built`;
+  adds `fuzzing_complete`;
+  picks `crashes_found` with true.
+Tool `analyze_crashes` (owner `agent`):
+  via `bash`;
+  requires `crashes_found` > 0;
+  adds `root_cause_identified`.
+Initially true: none.
+Initially: `exit_code` == 0.
+Initially: `crashes_found` == 0.
+Goal: `report_understood` or `root_cause_identified`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `unit_test_or_standalone`:
+      - `agent` uses `compile_with_asan`.
+      - `agent` uses `set_asan_env`.
+      - `agent` uses `run_instrumented`.
+      - `agent` chooses one of (observed):
+        - branch `crash_detected`:
+          - `agent` uses `parse_asan_report`.
+        - branch `no_error`: none.
+    - branch `fuzzing_campaign`:
+      - `agent` uses `compile_with_asan`.
+      - `agent` uses `view_fuzzer_build`.
+      - `agent` uses `set_asan_env`.
+      - `agent` uses `disable_fuzzer_memory_limit`.
+      - `agent` uses `run_fuzzer_no_limit`.
+      - `agent` chooses one of (observed):
+        - branch `crashes_found`:
+          - `agent` uses `analyze_crashes`.
+        - branch `clean_run`: none.
+```

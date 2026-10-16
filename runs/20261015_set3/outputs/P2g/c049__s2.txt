@@ -1,0 +1,32 @@
+```ce
+Skill `requesting-code-review`.
+Roles: `agent`, `reviewer`.
+Tool `get_git_shas` (owner `agent`): via `bash`; requires `git_repo_present`; adds `base_sha_known`, `head_sha_known`.
+Tool `read_review_template` (owner `agent`): via `read`; requires `template_present`; adds `review_template_known`.
+Tool `request_review` (owner `agent`): via `agent`; requires `base_sha_known` and `head_sha_known` and `review_template_known` and `description_known` and `requirements_known`; adds `review_requested`.
+Tool `receive_review_feedback` (owner `reviewer`): via `agent`; requires `review_requested`; adds `review_feedback_received`.
+Tool `fix_review_issues` (owner `agent`): via `bash`; requires `review_feedback_received` and `critical_or_important_issue_present`; removes `critical_or_important_issue_present`; adds `issues_addressed`.
+Tool `record_minor_issues_for_later` (owner `agent`): via `write`; requires `review_feedback_received` and `minor_issue_present`; adds `minor_issues_recorded`.
+Tool `push_back_with_reasoning` (owner `agent`): via `agent`; requires `review_feedback_received` and `reviewer_wrong`; adds `pushback_sent`.
+Initially true: `git_repo_present`, `template_present`, `description_known`, `requirements_known`.
+Goal: `review_feedback_received` and not `critical_or_important_issue_present`.
+Protocol:
+  - `agent` uses `get_git_shas`.
+  - `agent` uses `read_review_template`.
+  - `agent` uses `request_review`.
+  - `reviewer` uses `receive_review_feedback`.
+  - `agent` chooses one of (observed):
+    - branch `reviewer_wrong`:
+      - `agent` uses `push_back_with_reasoning`.
+    - branch `reviewer_correct`: none.
+  - loop `address_blocking_feedback`:
+    - `agent` chooses one of (observed):
+      - branch `fix_blocking_issues`:
+        - `agent` uses `fix_review_issues`.
+      - branch `no_blocking_issues`: none.
+    - repeat `address_blocking_feedback`.
+  - `agent` chooses one of (observed):
+    - branch `record_minor_issues`:
+      - `agent` uses `record_minor_issues_for_later`.
+    - branch `no_minor_issues`: none.
+```

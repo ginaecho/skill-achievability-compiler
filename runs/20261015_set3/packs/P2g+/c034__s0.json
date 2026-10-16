@@ -1,0 +1,900 @@
+{
+  "pack": {
+    "name": "imagegen",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_for_missing_details": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "details_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "make_local_image_visible_for_builtin_edit": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "edit_target_visible"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_image_builtin": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_image_builtin": {
+        "owner": "agent",
+        "pre": "edit_target_visible",
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_cli_dependency": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            {
+              "and": [
+                "cli_mode_requested",
+                "openai_api_key_available"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "cli_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "cli_dependency_installed"
+          ]
+        },
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_edit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "cli_dependency_installed"
+          ]
+        },
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate_batch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            {
+              "and": [
+                "cli_dependency_installed",
+                "needs_many_outputs"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "save_image_to_workspace": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:local_filesystem",
+            "image_ready"
+          ]
+        },
+        "add": [
+          "workspace_asset_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_preview_result": {
+        "owner": "agent",
+        "pre": "image_ready",
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_workspace_result": {
+        "owner": "agent",
+        "pre": "workspace_asset_saved",
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_cli_fallback_requires_key": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "cli_fallback_explained"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "builtin_mode": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate_intent": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "enough_details": [
+                              {
+                                "act": {
+                                  "cap": "generate_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "need_details": [
+                              {
+                                "act": {
+                                  "cap": "ask_for_missing_details",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "generate_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_details": [
+                              "details_collected"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "edit_intent": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "edit_target_already_visible": [
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_target_is_local_file": [
+                              {
+                                "act": {
+                                  "cap": "make_local_image_visible_for_builtin_edit",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "edit_target_already_visible": [
+                              "edit_target_visible"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "edit_intent": [
+                      "is_edit_request"
+                    ],
+                    "generate_intent": [
+                      "is_generate_request"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preview_only": [
+                      {
+                        "act": {
+                          "cap": "report_preview_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "workspace_bound": [
+                      {
+                        "act": {
+                          "cap": "save_image_to_workspace",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_workspace_result",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "cli_mode": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "openai_key_available": [
+                      {
+                        "act": {
+                          "cap": "install_cli_dependency",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "generate_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_edit",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "generate_many": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate_batch",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "edit_single": [
+                              "is_edit_request"
+                            ],
+                            "generate_many": [
+                              "is_generate_request",
+                              "needs_many_outputs"
+                            ],
+                            "generate_single": [
+                              "is_generate_request"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "preview_only": [
+                              {
+                                "act": {
+                                  "cap": "report_preview_result",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "workspace_bound": [
+                              {
+                                "act": {
+                                  "cap": "save_image_to_workspace",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "report_workspace_result",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "openai_key_missing": [
+                      {
+                        "act": {
+                          "cap": "report_cli_fallback_requires_key",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "openai_key_available": [
+                      "openai_api_key_available"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "cli_mode": [
+              "cli_mode_requested"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "result_reported",
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries",
+      "needs:local_filesystem"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "imagegen",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_for_missing_details": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "details_collected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "make_local_image_visible_for_builtin_edit": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "edit_target_visible"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_image_builtin": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_image_builtin": {
+        "owner": "agent",
+        "pre": "edit_target_visible",
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_cli_dependency": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_mode_requested",
+            "openai_api_key_available"
+          ]
+        },
+        "add": [
+          "cli_dependency_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate": {
+        "owner": "agent",
+        "pre": "cli_dependency_installed",
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_edit": {
+        "owner": "agent",
+        "pre": "cli_dependency_installed",
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_cli_generate_batch": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "cli_dependency_installed",
+            "needs_many_outputs"
+          ]
+        },
+        "add": [
+          "image_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "save_image_to_workspace": {
+        "owner": "agent",
+        "pre": "image_ready",
+        "add": [
+          "workspace_asset_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_preview_result": {
+        "owner": "agent",
+        "pre": "image_ready",
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_workspace_result": {
+        "owner": "agent",
+        "pre": "workspace_asset_saved",
+        "add": [
+          "result_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_cli_fallback_requires_key": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "cli_fallback_explained"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "builtin_mode": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "generate_intent": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "enough_details": [
+                              {
+                                "act": {
+                                  "cap": "generate_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "need_details": [
+                              {
+                                "act": {
+                                  "cap": "ask_for_missing_details",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "generate_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "enough_details": [
+                              "details_collected"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "edit_intent": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "edit_target_already_visible": [
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_target_is_local_file": [
+                              {
+                                "act": {
+                                  "cap": "make_local_image_visible_for_builtin_edit",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "edit_image_builtin",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "edit_target_already_visible": [
+                              "edit_target_visible"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "edit_intent": [
+                      "is_edit_request"
+                    ],
+                    "generate_intent": [
+                      "is_generate_request"
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preview_only": [
+                      {
+                        "act": {
+                          "cap": "report_preview_result",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "workspace_bound": [
+                      {
+                        "act": {
+                          "cap": "save_image_to_workspace",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "report_workspace_result",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "cli_mode": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "openai_key_available": [
+                      {
+                        "act": {
+                          "cap": "install_cli_dependency",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "generate_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "edit_single": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_edit",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "generate_many": [
+                              {
+                                "act": {
+                                  "cap": "run_cli_generate_batch",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "edit_single": [
+                              "is_edit_request"
+                            ],
+                            "generate_many": [
+                              "is_generate_request",
+                              "needs_many_outputs"
+                            ],
+                            "generate_single": [
+                              "is_generate_request"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "preview_only": [
+                              {
+                                "act": {
+                                  "cap": "report_preview_result",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "workspace_bound": [
+                              {
+                                "act": {
+                                  "cap": "save_image_to_workspace",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "report_workspace_result",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "openai_key_missing": [
+                      {
+                        "act": {
+                          "cap": "report_cli_fallback_requires_key",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "openai_key_available": [
+                      "openai_api_key_available"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "cli_mode": [
+              "cli_mode_requested"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "result_reported",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_for_missing_details": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "make_local_image_visible_for_builtin_edit": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "generate_image_builtin": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "edit_image_builtin": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "install_cli_dependency": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_cli_generate": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_cli_edit": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_cli_generate_batch": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "save_image_to_workspace": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "report_preview_result": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "report_workspace_result": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "report_cli_fallback_requires_key": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

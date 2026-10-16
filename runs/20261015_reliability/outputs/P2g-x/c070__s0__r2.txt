@@ -1,0 +1,52 @@
+```ce
+Skill `comprehensive-research-agent`.
+Roles: `agent`, `user`.
+
+Tool `web_search` (owner `agent`):
+  via `web_search`;
+  requires `goal_formulated`;
+  adds `search_results_found`;
+  picks `results` with `results` > 0.
+
+Tool `fetch_and_read` (owner `agent`):
+  via `web_fetch`;
+  requires `search_results_found`;
+  adds `source_read`;
+  sets `fetched_ok` to 1.
+
+Tool `validate_content` (owner `agent`):
+  requires `source_read`;
+  adds `content_validated`;
+  sets `sources_fetched_count` to `sources_fetched_count` + 1;
+  sets `cross_validated_count` to `cross_validated_count` + 1.
+
+Tool `write_report` (owner `agent`):
+  via `write`;
+  requires `all_covered` and `fetched_ok` == 1 and `sources_fetched_count` >= 2;
+  adds `report_written`.
+
+Tool `verify_report` (owner `agent`):
+  via `read`;
+  requires `report_written`;
+  adds `report_verified`;
+  sets `gaps_documented` to 1.
+
+Initially true: `goal_formulated`.
+Initially: `fetched_ok` == 0, `sources_fetched_count` == 0, `cross_validated_count` == 0, `gaps_documented` == 0.
+Goal: `report_verified` and `all_covered` and `gaps_documented` == 1 and `sources_fetched_count` >= 2 and `cross_validated_count` >= 2.
+
+Protocol:
+  - `agent` uses `web_search`.
+  - loop `research_loop`:
+    - `agent` chooses one of (observed):
+      - branch `read_next`:
+        - `agent` uses `fetch_and_read`.
+        - `agent` uses `validate_content`.
+      - branch `enough_sources`: none.
+    - repeat `research_loop`.
+  - `agent` chooses one of (observed):
+    - branch `coverage_complete`:
+      - `agent` uses `write_report`.
+      - `agent` uses `verify_report`.
+    - branch `gaps_remain`: none.
+```

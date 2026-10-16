@@ -1,0 +1,40 @@
+```ce
+Skill `context-manager`.
+Roles: `agent`, `user`.
+Tool `ask_scope` (owner `agent`): via `ask_user`; requires not `scope_known`; adds `scope_known`.
+Tool `survey_context_files` (owner `agent`): via `read`; requires `scope_known`; adds `context_surveyed`; sets `context_file_count` to 0.
+Tool `audit_existing_context` (owner `agent`): via `read`; requires `context_surveyed`; adds `existing_context_audited`, `duplication_checked`, `stale_entries_checked`, `conflicts_checked`, `unclear_purpose_checked`.
+Tool `design_context_layout` (owner `agent`): via `write`; requires `scope_known`; adds `layout_designed`, `naming_conventions_set`, `schema_defined`, `access_rules_defined`.
+Tool `write_context_readme` (owner `agent`): via `write`; requires `layout_designed`; adds `readme_written`.
+Tool `reorganize_context_files` (owner `agent`): via `edit`; requires `existing_context_audited` and `layout_designed`; adds `context_reorganized`, `stale_entries_pruned`; removes `conflict_unflagged`.
+Tool `write_context_files` (owner `agent`): via `write`; requires `layout_designed`; adds `context_files_written`.
+Tool `update_existing_entries` (owner `agent`): via `edit`; requires `existing_context_audited` and `layout_designed`; adds `entries_updated`, `ordering_consistent`.
+Tool `flag_conflicts` (owner `agent`): via `edit`; requires `conflicts_checked`; adds `conflicts_flagged`; removes `conflict_unflagged`.
+Initially true: none.
+Initially: `context_file_count` == 0.
+Goal: `scope_known` and `layout_designed` and `naming_conventions_set` and `schema_defined` and `access_rules_defined` and `readme_written` and any of (`context_files_written`, `context_reorganized`, `entries_updated`) and (not `conflict_unflagged`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `scope_provided`: none.
+    - branch `scope_missing`:
+      - `agent` uses `ask_scope`.
+  - `agent` uses `survey_context_files`.
+  - `agent` chooses one of (observed):
+    - branch `existing_context_present`:
+      - `agent` uses `audit_existing_context`.
+    - branch `no_existing_context`: none.
+  - `agent` uses `design_context_layout`.
+  - `agent` uses `write_context_readme`.
+  - `agent` chooses one of (observed):
+    - branch `reorganize_existing_context`:
+      - `agent` chooses one of (observed):
+        - branch `conflicts_found`:
+          - `agent` uses `flag_conflicts`.
+          - `agent` uses `reorganize_context_files`.
+          - `agent` uses `update_existing_entries`.
+        - branch `no_conflicts_found`:
+          - `agent` uses `reorganize_context_files`.
+          - `agent` uses `update_existing_entries`.
+    - branch `create_fresh_context`:
+      - `agent` uses `write_context_files`.
+```

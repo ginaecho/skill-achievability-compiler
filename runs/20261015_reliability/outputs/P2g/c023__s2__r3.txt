@@ -1,0 +1,69 @@
+```ce
+Skill `dossier`.
+Roles: `agent`, `user`.
+Tool `ask_subject_identity` (owner `agent`): via `ask_user`; adds `q1_answered`, `subject_disambiguated`.
+Tool `ask_subject_type` (owner `agent`): via `ask_user`; requires `q1_answered`; adds `q2_answered`.
+Tool `ask_purpose` (owner `agent`): via `ask_user`; requires `q2_answered`; adds `q3_answered`.
+Tool `ask_hypothesis` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_stated`.
+Tool `ask_hypothesis_pushback` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_prompted_again`.
+Tool `set_implicit_hypothesis` (owner `agent`): via `write`; requires `hypothesis_prompted_again`; adds `implicit_hypothesis_used`, `hypothesis_stated`, `audit_needs_fallback_flag`.
+Tool `ask_depth` (owner `agent`): via `ask_user`; requires `hypothesis_stated`; adds `q5_answered`.
+Tool `ask_sensitivities` (owner `agent`): via `ask_user`; requires `q5_answered` and `high_sensitivity_context`; adds `q6_answered`.
+Tool `research_and_generate_docx` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`, `package_registries`, `allowlisted_internet`; requires `subject_disambiguated` and `hypothesis_stated` and `q5_answered` and ( `high_sensitivity_context` == 0 or `q6_answered` ); adds `research_done`, `docx_created`, `timeline_created`, `network_signals_created`, `reputation_signals_created`, `red_flags_created`, `conversation_hooks_created`, `audit_log_created`, `hypothesis_verdict_created`, `required_sections_present`, `disconfirming_balance_met`, `sensitive_exclusions_honored`; picks `source_count` with `source_count` >= 0; picks `disconfirming_percent` with `disconfirming_percent` >= 30.
+Tool `validate_docx` (owner `agent`): via `bash`; requires `docx_created`; adds `docx_validated`.
+Tool `deliver_docx` (owner `agent`): via `send_user_file`; requires `docx_created` and `docx_validated`; adds `docx_delivered`.
+Initially true: none.
+Initially: `high_sensitivity_context` == 0.
+Initially: `source_count` == 0.
+Initially: `disconfirming_percent` == 0.
+Goal: `docx_delivered` and `docx_created` and `docx_validated` and `research_done` and `hypothesis_verdict_created` and `timeline_created` and `network_signals_created` and `reputation_signals_created` and `red_flags_created` and `conversation_hooks_created` and `audit_log_created` and `required_sections_present` and `disconfirming_balance_met` and `subject_disambiguated` and `hypothesis_stated` and `sensitive_exclusions_honored`.
+Protocol:
+  - loop `identity_intake`:
+    - `agent` uses `ask_subject_identity`.
+    - `user` chooses one of (observed):
+      - branch `ambiguous_identity`:
+        - `agent` uses `ask_subject_identity`.
+        - repeat `identity_intake`.
+      - branch `specific_identity`:
+        - `agent` uses `ask_subject_type`.
+  - `user` chooses one of (observed):
+    - branch `person`: none.
+    - branch `company`: none.
+    - branch `nonprofit`: none.
+    - branch `government_org`: none.
+    - branch `other`: none.
+  - `agent` uses `ask_purpose`.
+  - `user` chooses one of (observed):
+    - branch `journalism`:
+      - `agent` uses `ask_hypothesis`.
+    - branch `personal_vetting`:
+      - `agent` uses `ask_hypothesis`.
+    - branch `other_purpose`:
+      - `agent` uses `ask_hypothesis`.
+  - `user` chooses one of (observed):
+    - branch `states_hypothesis`: none.
+    - branch `refuses_hypothesis_once`:
+      - `agent` uses `ask_hypothesis_pushback`.
+      - `user` chooses one of (observed):
+        - branch `states_hypothesis_after_pushback`: none.
+        - branch `refuses_hypothesis_again`:
+          - `agent` uses `set_implicit_hypothesis`.
+  - `agent` uses `ask_depth`.
+  - `user` chooses one of (observed):
+    - branch `high_sensitivity`:
+      - `agent` uses `ask_sensitivities`.
+    - branch `low_sensitivity`: none.
+  - `user` chooses one of (observed):
+    - branch `subject_disambiguated`:
+      - `agent` uses `research_and_generate_docx`.
+    - branch `still_ambiguous`:
+      - loop `disambiguation_retry`:
+        - `agent` uses `ask_subject_identity`.
+        - `user` chooses one of (observed):
+          - branch `resolved`:
+            - `agent` uses `research_and_generate_docx`.
+          - branch `unresolved`:
+            - repeat `disambiguation_retry`.
+  - `agent` uses `validate_docx`.
+  - `agent` uses `deliver_docx`.
+```

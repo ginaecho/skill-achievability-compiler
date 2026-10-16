@@ -1,0 +1,41 @@
+```ce
+Skill `sandbox-next`.
+Roles: `agent`, `user`.
+Tool `inspect_app_line` (owner `agent`): via `read`; adds `app_inspected`.
+Tool `ask_porting_intent` (owner `agent`): via `ask_user`; requires `app_inspected`; adds `porting_intent_known`.
+Tool `load_sandbox_stable` (owner `agent`): via `skill`; requires `app_inspected`; adds `stable_skill_loaded`.
+Tool `load_sandbox_migrate_to_next` (owner `agent`): via `skill`; requires `porting_intent_known`; adds `migrate_skill_loaded`.
+Tool `fetch_preview_docs` (owner `agent`): via `web_fetch`; requires `app_inspected`; adds `preview_docs_opened`.
+Tool `inspect_installed_next_types` (owner `agent`): via `read`; requires `app_inspected`; adds `next_types_checked`.
+Tool `edit_next_app_code` (owner `agent`): via `edit`; requires `app_inspected` and `preview_docs_opened`; adds `code_updated`.
+Tool `write_next_app_files` (owner `agent`): via `write`; requires `app_inspected` and `preview_docs_opened`; adds `files_written`.
+Tool `typecheck_next_app` (owner `agent`): via `bash`; requires `code_updated`; needs `shell`, `linux`, `local_filesystem`, `package_registries`; adds `typechecked`.
+Tool `verify_line_lockstep` (owner `agent`): via `read`; requires `app_inspected`; adds `line_lockstep_checked`.
+Initially true: none.
+Goal: any of (`stable_skill_loaded`, `migrate_skill_loaded`, all of (`app_inspected`, `preview_docs_opened`, `next_types_checked`, `line_lockstep_checked`, `typechecked`)).
+Protocol:
+  - `agent` uses `inspect_app_line`.
+  - `user` chooses one of (observed):
+    - branch `port_stable_to_next_requested`:
+      - `agent` uses `ask_porting_intent`.
+      - `agent` uses `load_sandbox_migrate_to_next`.
+    - branch `not_porting_request`: none.
+  - `agent` chooses one of (observed):
+    - branch `app_on_stable_line`:
+      - `agent` uses `load_sandbox_stable`.
+    - branch `app_on_next_line`:
+      - `agent` uses `fetch_preview_docs`.
+      - `agent` uses `inspect_installed_next_types`.
+      - `agent` chooses one of (observed):
+        - branch `edit_existing_files`:
+          - `agent` uses `edit_next_app_code`.
+        - branch `write_new_files`:
+          - `agent` uses `write_next_app_files`.
+        - branch `no_code_change_needed`: none.
+      - `agent` chooses one of (observed):
+        - branch `edited_existing_files`:
+          - `agent` uses `typecheck_next_app`.
+        - branch `wrote_new_files_only`: none.
+        - branch `no_code_change`: none.
+      - `agent` uses `verify_line_lockstep`.
+```

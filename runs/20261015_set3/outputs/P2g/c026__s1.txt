@@ -1,0 +1,30 @@
+```ce
+Skill `senior-pm`.
+Roles: `agent`, `user`.
+Tool `run_health_dashboard` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; adds `health_assessed`, `health_output_available`, `health_data_valid`.
+Tool `run_risk_analysis` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `health_assessed` and `health_data_valid`; adds `risk_assessed`, `risk_output_available`.
+Tool `run_capacity_analysis` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `risk_assessed`; adds `capacity_assessed`, `capacity_output_available`.
+Tool `prepare_executive_report` (owner `agent`): via `write`; requires `health_output_available` and `risk_output_available` and `capacity_output_available`; adds `executive_report_prepared`.
+Tool `ask_for_data_fix` (owner `agent`): via `ask_user`; removes `health_data_valid`.
+Tool `ask_for_risk_escalation` (owner `agent`): via `ask_user`; adds `risk_escalated`.
+Tool `flag_reallocation_discussion` (owner `agent`): via `ask_user`; adds `reallocation_flagged`.
+Initially true: none.
+Goal: any of (`executive_report_prepared`, `risk_escalated`, `reallocation_flagged`, not `health_data_valid`).
+Protocol:
+  - `agent` uses `run_health_dashboard`.
+  - `agent` chooses one of (observed):
+    - branch `health_ok`:
+      - `agent` uses `run_risk_analysis`.
+      - `agent` chooses one of (observed):
+        - branch `risk_acceptable`:
+          - `agent` uses `run_capacity_analysis`.
+          - `agent` chooses one of (observed):
+            - branch `utilization_normal`:
+              - `agent` uses `prepare_executive_report`.
+            - branch `utilization_out_of_range`:
+              - `agent` uses `flag_reallocation_discussion`.
+        - branch `risk_above_avoid_threshold`:
+          - `agent` uses `ask_for_risk_escalation`.
+    - branch `health_invalid_or_critical`:
+      - `agent` uses `ask_for_data_fix`.
+```

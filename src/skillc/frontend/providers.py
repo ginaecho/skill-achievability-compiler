@@ -16,10 +16,27 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from urllib.parse import quote, urlencode, urlparse
 
+from .urlguard import guarded_body, restore
+
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 PROVIDERS = ("anthropic", "azure-openai")
+
+
+class ModelCallsDisabled(RuntimeError):
+    """A real model call was attempted without SKILLC_ALLOW_MODEL_CALLS=1."""
+
+
+def require_model_opt_in() -> None:
+    """Refuse any real model request unless the run opted in explicitly.
+
+    Model calls cost money and send text to an outside service, so they never
+    happen by default: a benchmark run sets SKILLC_ALLOW_MODEL_CALLS=1 on purpose.
+    Request bodies are also scrubbed of URLs (see `urlguard`)."""
+    if os.environ.get("SKILLC_ALLOW_MODEL_CALLS") != "1":
+        raise ModelCallsDisabled(
+            "model calls are off; set SKILLC_ALLOW_MODEL_CALLS=1 for a deliberate run")
 
 
 # Usage blocks of the provider calls made inside `metered()` (None: not metering).
@@ -79,16 +96,17 @@ def complete(provider: str, system: str, user: str, model: str | None,
 
 def anthropic_complete(system: str, user: str, model: str,
                        timeout: int) -> str:
+    require_model_opt_in()
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set; the LLM front-end is "
                            "opt-in")
-    body = json.dumps({
+    body, table = guarded_body({
         "model": model,
         "max_tokens": 16000,
         "system": system,
         "messages": [{"role": "user", "content": user}],
-    }).encode()
+    })
     req = urllib.request.Request(
         ANTHROPIC_API_URL, data=body,
         headers={"content-type": "application/json", "x-api-key": key,
@@ -96,12 +114,13 @@ def anthropic_complete(system: str, user: str, model: str,
     with urllib.request.urlopen(req, timeout=timeout) as r:
         out = json.load(r)
     _record_usage(out.get("usage"))
-    return "".join(b.get("text", "") for b in out.get("content", [])
-                   if b.get("type") == "text").strip()
+    return restore("".join(b.get("text", "") for b in out.get("content", [])
+                           if b.get("type") == "text").strip(), table)
 
 
 def azure_openai_complete(system: str, user: str, model: str | None,
                           timeout: int, json_mode: bool = True) -> str:
+    require_model_opt_in()
     key = os.environ.get("AZURE_OPENAI_API_KEY")
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
     deployment = model or os.environ.get("AZURE_OPENAI_DEPLOYMENT")
@@ -158,11 +177,8 @@ def azure_openai_complete(system: str, user: str, model: str | None,
         headers["api-key"] = key
     else:
         headers["authorization"] = "Bearer " + azure_cli_token()
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode(),
-        headers=headers,
-    )
+    body, table = guarded_body(payload)
+    req = urllib.request.Request(url, data=body, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             out = json.load(r)
@@ -175,13 +191,69 @@ def azure_openai_complete(system: str, user: str, model: str | None,
         raise ValueError("Azure OpenAI response contained no choices")
     content = choices[0].get("message", {}).get("content", "")
     if isinstance(content, str):
-        return content.strip()
+        return restore(content.strip(), table)
     if isinstance(content, list):
-        return "".join(
+        return restore("".join(
             item.get("text", "") for item in content
             if isinstance(item, dict) and item.get("type") == "text"
-        ).strip()
+        ).strip(), table)
     raise ValueError("Azure OpenAI response message content was not text")
+
+
+DECISION_ENDPOINT = "https://foundary-tzuc06.services.ai.azure.com"
+DECISION_PATH = "/providers/microsoft/v1/systemone"
+
+
+class DecisionError(RuntimeError):
+    """A Decision-model request that the service refused (`status` is the HTTP code)."""
+
+    def __init__(self, status: int, message: str):
+        super().__init__(f"Decision request failed: HTTP {status}: {message}")
+        self.status = status
+        self.message = message
+
+
+def decision(state, questions: dict, model: str = "Decision-1",
+             endpoint: str | None = None, timeout: int = 60) -> dict:
+    """One request to a Foundry decision model (e.g. `Microsoft-Decision-1`).
+
+    `state` is text or a JSON object; `questions` maps a question id to
+    ``{"type": "noul" | "choice" | "score", "instructions": ..., "criteria": ...}``.
+    The model answers with numbers only (a probability per yes/no question, a
+    choice with per-option probabilities, or a score); it writes no text.
+    Returns the parsed reply (``answers`` and ``usage``). Authentication is the
+    ``api-key`` header when AZURE_DECISION_API_KEY is set, else an Azure CLI token.
+    """
+    require_model_opt_in()
+    base = (endpoint or os.environ.get("AZURE_DECISION_ENDPOINT")
+            or DECISION_ENDPOINT).rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise RuntimeError("the decision endpoint must be an https URL")
+    url = base if base.endswith(DECISION_PATH) else base + DECISION_PATH
+    headers = {"content-type": "application/json"}
+    key = os.environ.get("AZURE_DECISION_API_KEY")
+    if key:
+        headers["api-key"] = key
+    else:
+        headers["authorization"] = "Bearer " + azure_cli_token()
+    body = {"model": model, "state": state, "questions": questions}
+    data, _ = guarded_body(body)
+    req = urllib.request.Request(url, data=data, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            out = json.load(r)
+    except urllib.error.HTTPError as error:
+        try:
+            text = error.read().decode("utf-8", errors="replace")
+        except Exception:  # noqa: BLE001
+            text = str(error.reason)
+        raise DecisionError(error.code, text[:2000]) from error
+    usage = out.get("usage") or {}
+    _record_usage({"input_tokens": int(usage.get("input_tokens", 0)),
+                   "output_tokens": int(usage.get("output_tokens", 0)),
+                   "cache_read_input_tokens": 0} if usage else None)
+    return out
 
 
 def _azure_error(error) -> str:

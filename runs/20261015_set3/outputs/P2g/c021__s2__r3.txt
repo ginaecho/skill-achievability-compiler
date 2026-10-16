@@ -1,0 +1,34 @@
+```ce
+Skill `preset`.
+Roles: `agent`, `user`.
+Tool `check_azure_auth` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; adds `azure_authenticated`.
+Tool `get_project` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; requires `azure_authenticated`; adds `project_verified`, `project_region_known`.
+Tool `list_models` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; requires `project_verified`; adds `models_listed`.
+Tool `check_current_region_capacity` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; requires `project_verified` and `model_selected`; picks `current_region_has_capacity` with true.
+Tool `check_all_regions_capacity` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; requires `project_verified` and `model_selected`; adds `alternatives_shown`, `available_region_found`.
+Tool `filter_or_create_project_in_region` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; requires `available_region_found`; adds `target_project_ready`.
+Tool `deploy_model` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; requires `model_selected` and any of (`project_verified`, `target_project_ready`); adds `deployment_created`, `deployment_in_progress`.
+Tool `monitor_deployment` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; requires `deployment_created`; adds `deployment_succeeded`; removes `deployment_in_progress`.
+Initially true: none.
+Goal: `deployment_succeeded`.
+Protocol:
+  - `agent` uses `check_azure_auth`.
+  - `agent` uses `get_project`.
+  - `agent` uses `list_models`.
+  - `user` chooses one of (observed):
+    - branch `select_model`:
+      - `agent` uses `check_current_region_capacity`.
+      - `agent` chooses one of (external):
+        - branch `current_region_available`:
+          - `agent` uses `deploy_model`.
+          - `agent` uses `monitor_deployment`.
+        - branch `current_region_unavailable`:
+          - `agent` uses `check_all_regions_capacity`.
+          - `user` chooses one of (observed):
+            - branch `select_alternative_region`:
+              - `agent` uses `filter_or_create_project_in_region`.
+              - `agent` uses `deploy_model`.
+              - `agent` uses `monitor_deployment`.
+            - branch `stop`: none.
+    - branch `stop`: none.
+```

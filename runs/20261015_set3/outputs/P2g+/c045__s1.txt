@@ -1,0 +1,59 @@
+```ce
+Skill `review-contract`.
+Roles: `agent`, `user`.
+Tool `ask_for_contract` (owner `agent`): via `ask_user`; adds `contract_requested`.
+Tool `ask_context` (owner `agent`): via `ask_user`; requires `contract_available`; adds `context_requested`.
+Tool `find_playbook` (owner `agent`): via `read`; adds `playbook_checked`.
+Tool `offer_playbook_options` (owner `agent`): via `ask_user`; requires `playbook_checked` and not `playbook_found`; adds `playbook_option_chosen`.
+Tool `read_local_contract` (owner `agent`): via `read`; requires `contract_is_local_file`; adds `contract_read`.
+Tool `fetch_contract_url` (owner `agent`): via `web_fetch`; requires `contract_is_url`; adds `contract_read`.
+Tool `deliver_review` (owner `agent`): via `reply`; requires `contract_read` and `context_requested` and `playbook_checked`; adds `review_delivered`.
+Initially true: none.
+Goal: `review_delivered`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `contract_provided` (assuming `contract_available`):
+      - `user` chooses one of (observed):
+        - branch `local_file` (assuming `contract_is_local_file`):
+          - `agent` uses `ask_context`.
+          - `agent` uses `find_playbook`.
+          - `agent` chooses one of (observed):
+            - branch `playbook_present` (assuming `playbook_found`):
+              - `agent` uses `read_local_contract`.
+              - `agent` uses `deliver_review`.
+            - branch `no_playbook`:
+              - `agent` uses `offer_playbook_options`.
+              - `agent` chooses one of (observed):
+                - branch `generic_review`:
+                  - `agent` uses `read_local_contract`.
+                  - `agent` uses `deliver_review`.
+                - branch `set_up_playbook_first`: none.
+        - branch `url` (assuming `contract_is_url`):
+          - `agent` uses `ask_context`.
+          - `agent` uses `find_playbook`.
+          - `agent` chooses one of (observed):
+            - branch `playbook_present` (assuming `playbook_found`):
+              - `agent` uses `fetch_contract_url`.
+              - `agent` uses `deliver_review`.
+            - branch `no_playbook`:
+              - `agent` uses `offer_playbook_options`.
+              - `agent` chooses one of (observed):
+                - branch `generic_review`:
+                  - `agent` uses `fetch_contract_url`.
+                  - `agent` uses `deliver_review`.
+                - branch `set_up_playbook_first`: none.
+        - branch `pasted_text` (assuming `contract_read`):
+          - `agent` uses `ask_context`.
+          - `agent` uses `find_playbook`.
+          - `agent` chooses one of (observed):
+            - branch `playbook_present` (assuming `playbook_found`):
+              - `agent` uses `deliver_review`.
+            - branch `no_playbook`:
+              - `agent` uses `offer_playbook_options`.
+              - `agent` chooses one of (observed):
+                - branch `generic_review`:
+                  - `agent` uses `deliver_review`.
+                - branch `set_up_playbook_first`: none.
+    - branch `no_contract`:
+      - `agent` uses `ask_for_contract`.
+```

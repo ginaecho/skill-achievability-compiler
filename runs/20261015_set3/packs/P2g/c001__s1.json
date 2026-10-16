@@ -1,0 +1,703 @@
+{
+  "pack": {
+    "name": "render-deploy",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_git_remote": {
+        "owner": "agent",
+        "pre": "git_repo_present",
+        "add": [
+          "git_remote_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "has_git_remote": true
+        }
+      },
+      "check_git_remote_missing": {
+        "owner": "agent",
+        "pre": "git_repo_present",
+        "add": [
+          "git_remote_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_codebase": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "codebase_analyzed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_render_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "render_cli_checked",
+          "render_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_render_cli": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "render_cli_checked"
+          ]
+        },
+        "add": [
+          "render_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_render_blueprint": {
+        "owner": "agent",
+        "pre": "codebase_analyzed",
+        "add": [
+          "render_yaml_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_render_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_created",
+            "render_cli_available"
+          ]
+        },
+        "add": [
+          "render_yaml_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_and_push_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_created",
+            "has_git_remote"
+          ]
+        },
+        "add": [
+          "render_yaml_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "derive_blueprint_deeplink": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "has_git_remote",
+            "render_yaml_pushed"
+          ]
+        },
+        "add": [
+          "blueprint_deeplink_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "guide_dashboard_blueprint_deploy": {
+        "owner": "agent",
+        "pre": "blueprint_deeplink_ready",
+        "add": [
+          "user_guided_to_deploy"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "guide_docker_dashboard_deploy": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "docker_dashboard_guidance_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "guide_create_git_remote": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "git_remote_checked",
+            {
+              "not": "has_git_remote"
+            }
+          ]
+        },
+        "add": [
+          "git_remote_guidance_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "git_repo_path": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "remote_exists": [
+                      {
+                        "act": {
+                          "cap": "check_git_remote",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_codebase",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "single_service_direct_creation": [],
+                            "blueprint_method": [
+                              {
+                                "act": {
+                                  "cap": "check_render_cli",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "cli_already_available": [],
+                                    "install_cli": [
+                                      {
+                                        "act": {
+                                          "cap": "install_render_cli",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "write_render_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "validate_now": [
+                                      {
+                                        "act": {
+                                          "cap": "validate_render_blueprint",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "skip_validation": []
+                                  }
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "commit_and_push_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "derive_blueprint_deeplink",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "guide_dashboard_blueprint_deploy",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "remote_missing": [
+                      {
+                        "act": {
+                          "cap": "check_git_remote_missing",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "guide_create_git_remote",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "docker_image_path": [
+              {
+                "act": {
+                  "cap": "guide_docker_dashboard_deploy",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "docker_dashboard_guidance_given",
+        {
+          "and": [
+            "render_yaml_created",
+            "blueprint_deeplink_ready",
+            "user_guided_to_deploy"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "git_repo_present",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": [
+      true
+    ]
+  },
+  "pre_binding": {
+    "name": "render-deploy",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_git_remote": {
+        "owner": "agent",
+        "pre": "git_repo_present",
+        "add": [
+          "git_remote_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "has_git_remote": true
+        }
+      },
+      "check_git_remote_missing": {
+        "owner": "agent",
+        "pre": "git_repo_present",
+        "add": [
+          "git_remote_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_codebase": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "codebase_analyzed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_render_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "render_cli_checked",
+          "render_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_render_cli": {
+        "owner": "agent",
+        "pre": "render_cli_checked",
+        "add": [
+          "render_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_render_blueprint": {
+        "owner": "agent",
+        "pre": "codebase_analyzed",
+        "add": [
+          "render_yaml_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_render_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_created",
+            "render_cli_available"
+          ]
+        },
+        "add": [
+          "render_yaml_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_and_push_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_created",
+            "has_git_remote"
+          ]
+        },
+        "add": [
+          "render_yaml_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "derive_blueprint_deeplink": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "has_git_remote",
+            "render_yaml_pushed"
+          ]
+        },
+        "add": [
+          "blueprint_deeplink_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "guide_dashboard_blueprint_deploy": {
+        "owner": "agent",
+        "pre": "blueprint_deeplink_ready",
+        "add": [
+          "user_guided_to_deploy"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "guide_docker_dashboard_deploy": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "docker_dashboard_guidance_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "guide_create_git_remote": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "git_remote_checked",
+            {
+              "not": "has_git_remote"
+            }
+          ]
+        },
+        "add": [
+          "git_remote_guidance_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "git_repo_path": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "remote_exists": [
+                      {
+                        "act": {
+                          "cap": "check_git_remote",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "inspect_codebase",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "single_service_direct_creation": [],
+                            "blueprint_method": [
+                              {
+                                "act": {
+                                  "cap": "check_render_cli",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "cli_already_available": [],
+                                    "install_cli": [
+                                      {
+                                        "act": {
+                                          "cap": "install_render_cli",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "write_render_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "validate_now": [
+                                      {
+                                        "act": {
+                                          "cap": "validate_render_blueprint",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "skip_validation": []
+                                  }
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "commit_and_push_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "derive_blueprint_deeplink",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "guide_dashboard_blueprint_deploy",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "remote_missing": [
+                      {
+                        "act": {
+                          "cap": "check_git_remote_missing",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "guide_create_git_remote",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "docker_image_path": [
+              {
+                "act": {
+                  "cap": "guide_docker_dashboard_deploy",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "docker_dashboard_guidance_given",
+        {
+          "and": [
+            "render_yaml_created",
+            "blueprint_deeplink_ready",
+            "user_guided_to_deploy"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "git_repo_present"
+    ],
+    "init_constraints": [
+      true
+    ]
+  },
+  "bindings": {
+    "check_git_remote": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "check_git_remote_missing": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "inspect_codebase": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "check_render_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "install_render_cli": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "write_render_blueprint": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "validate_render_blueprint": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "commit_and_push_blueprint": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "derive_blueprint_deeplink": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "guide_dashboard_blueprint_deploy": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "guide_docker_dashboard_deploy": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "guide_create_git_remote": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

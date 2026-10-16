@@ -1,0 +1,45 @@
+```ce
+Skill `aflpp`.
+Roles: `agent`, `user`.
+Tool `install_aflpp` (owner `agent`): via `bash`; requires `linux_host_mode`; adds `aflpp_installed`.
+Tool `write_wrapper_script` (owner `agent`): via `write`; adds `wrapper_ready`.
+Tool `build_fuzz_target` (owner `agent`): via `bash`; requires `source_available` and any of (`aflpp_installed`, `wrapper_ready`); adds `fuzz_target_built`.
+Tool `create_seed_corpus` (owner `agent`): via `bash`; adds `seed_corpus_ready`.
+Tool `run_system_config` (owner `agent`): via `bash`; requires `linux_host_mode`; adds `system_tuned`.
+Tool `start_primary_campaign` (owner `agent`): via `bash`; requires `fuzz_target_built` and `seed_corpus_ready`; adds `campaign_running` and `primary_running`.
+Tool `start_secondary_campaigns` (owner `agent`): via `bash`; requires `primary_running`; adds `secondary_running`.
+Tool `monitor_campaign` (owner `agent`): via `bash`; requires `campaign_running`; adds `campaign_observed`.
+Tool `stop_campaign` (owner `agent`): via `bash`; requires `campaign_running`; removes `campaign_running`, `primary_running`, `secondary_running`; adds `campaign_stopped`.
+Tool `minimize_corpus` (owner `agent`): via `bash`; requires `campaign_stopped`; adds `corpus_minimized`.
+Tool `triage_crashes` (owner `agent`): via `bash`; requires `campaign_stopped`; adds `crashes_triaged`.
+
+Initially true: `linux_host_mode`.
+Initially: `cores` >= 1.
+Initially: `secondary_count` == `cores` - 1.
+Goal: `fuzz_target_built` and `seed_corpus_ready` and `campaign_stopped` and `campaign_observed` and `corpus_minimized` and `crashes_triaged`.
+
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `install_host_aflpp`:
+      - `agent` uses `install_aflpp`.
+    - branch `use_wrapper`:
+      - `agent` uses `write_wrapper_script`.
+  - `agent` chooses one of (observed):
+    - branch `tune_host`:
+      - `agent` uses `run_system_config`.
+    - branch `skip_tuning`: none.
+  - `agent` uses `build_fuzz_target`.
+  - `agent` uses `create_seed_corpus`.
+  - `agent` uses `start_primary_campaign`.
+  - `agent` chooses one of (observed):
+    - branch `single_core`: none.
+    - branch `multi_core`:
+      - `agent` uses `start_secondary_campaigns`.
+  - `agent` uses `monitor_campaign`.
+  - `user` chooses one of (observed):
+    - branch `stop_and_collect`:
+      - `agent` uses `stop_campaign`.
+      - `agent` uses `minimize_corpus`.
+      - `agent` uses `triage_crashes`.
+    - branch `keep_running`: none.
+```

@@ -1,0 +1,44 @@
+```ce
+Skill `property-based-testing`.
+Roles: `agent`, `user`.
+Tool `inspect_project` (owner `agent`): via `read`; adds `project_inspected`, `task_context_found`.
+Tool `review_code_and_tests` (owner `agent`): via `read`; requires `project_inspected`; adds `candidate_property_identified`, `existing_pbt_reviewed`, `failure_context_reviewed`.
+Tool `check_references` (owner `agent`): via `read`; requires `project_inspected`; adds `reference_guidance_read`.
+Tool `ask_dependency_decision` (owner `agent`): via `ask_user`; requires `candidate_property_identified`; adds `dependency_decision_known`.
+Tool `add_property_tests` (owner `agent`): via `edit`; requires `candidate_property_identified`; adds `property_tests_written`.
+Tool `add_pbt_dependency` (owner `agent`): via `edit`; requires `dependency_decision_known`; adds `pbt_dependency_added`.
+Tool `run_test_suite` (owner `agent`): via `bash`; needs `shell`, `linux`, `package_registries`; requires `property_tests_written`; adds `tests_executed`; picks `tests_pass` with (`tests_pass` or not `tests_pass`).
+Tool `revise_tests_or_report` (owner `agent`): via `edit`; requires `tests_executed`; adds `deliverable_prepared`.
+Initially true: none.
+Goal: `deliverable_prepared`.
+Protocol:
+  - `agent` uses `inspect_project`.
+  - `agent` uses `review_code_and_tests`.
+  - `agent` chooses one of (observed):
+    - branch `write_new_or_extend_tests`:
+      - `agent` uses `check_references`.
+      - `agent` chooses one of (observed):
+        - branch `project_already_has_pbt_library`:
+          - `agent` uses `add_property_tests`.
+          - `agent` uses `run_test_suite`.
+          - `agent` uses `revise_tests_or_report`.
+        - branch `project_lacks_pbt_library`:
+          - `agent` uses `ask_dependency_decision`.
+          - `user` chooses one of (observed):
+            - branch `approve_dependency`:
+              - `agent` uses `add_pbt_dependency`.
+              - `agent` uses `add_property_tests`.
+              - `agent` uses `run_test_suite`.
+              - `agent` uses `revise_tests_or_report`.
+            - branch `decline_dependency`:
+              - `agent` uses `revise_tests_or_report`.
+    - branch `review_existing_property_tests`:
+      - `agent` uses `check_references`.
+      - `agent` uses `revise_tests_or_report`.
+    - branch `interpret_failed_property_test`:
+      - `agent` uses `check_references`.
+      - `agent` uses `revise_tests_or_report`.
+    - branch `poor_pbt_candidate`:
+      - `agent` uses `check_references`.
+      - `agent` uses `revise_tests_or_report`.
+```

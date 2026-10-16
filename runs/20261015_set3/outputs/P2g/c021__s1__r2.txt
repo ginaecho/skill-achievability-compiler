@@ -1,0 +1,37 @@
+```ce
+Skill `preset`.
+Roles: `agent`, `user`.
+Tool `check_azure_auth` (owner `agent`): via `bash`; requires `azure_cli_available`; adds `authenticated`.
+Tool `get_project` (owner `agent`): via `bash`; requires `authenticated` and `project_id_available`; adds `project_verified`, `current_region_known`.
+Tool `list_models` (owner `agent`): via `bash`; requires `project_verified`; adds `models_listed`.
+Tool `record_model_selection` (owner `agent`): via `ask_user`; requires `models_listed`; adds `model_selected`, `version_selected`.
+Tool `check_current_region_capacity` (owner `agent`): via `bash`; requires `project_verified` and `current_region_known` and `model_selected` and `version_selected`.
+Tool `query_all_regions_capacity` (owner `agent`): via `bash`; requires `project_verified` and `model_selected` and `version_selected`; adds `alternatives_shown`.
+Tool `filter_projects_by_region` (owner `agent`): via `bash`; requires `authenticated` and `region_selected`; adds `project_in_selected_region_found`.
+Tool `create_project_in_region` (owner `agent`): via `windows_desktop`; needs `azure_account`; requires `authenticated` and `region_selected`; adds `project_in_selected_region_ready`.
+Tool `deploy_model` (owner `agent`): via `bash`; requires `model_selected` and `version_selected` and any of (`current_region_has_capacity`, `project_in_selected_region_found`, `project_in_selected_region_ready`); adds `deployment_created`, `globalstandard_used`.
+Tool `monitor_deployment` (owner `agent`): via `bash`; requires `deployment_created`; adds `deployment_succeeded`.
+Initially true: `azure_cli_available`, `project_id_available`.
+Goal: `deployment_succeeded` and `globalstandard_used`.
+Protocol:
+  - `agent` uses `check_azure_auth`.
+  - `agent` uses `get_project`.
+  - `agent` uses `list_models`.
+  - `agent` uses `record_model_selection`.
+  - `agent` uses `check_current_region_capacity`.
+  - `agent` chooses one of (external):
+    - branch `current_region_has_capacity`:
+      - `agent` uses `deploy_model`.
+      - `agent` uses `monitor_deployment`.
+    - branch `no_current_region_capacity`:
+      - `agent` uses `query_all_regions_capacity`.
+      - `user` chooses one of (observed):
+        - branch `use_existing_project_in_selected_region`:
+          - `agent` uses `filter_projects_by_region`.
+          - `agent` uses `deploy_model`.
+          - `agent` uses `monitor_deployment`.
+        - branch `create_project_in_selected_region`:
+          - `agent` uses `create_project_in_region`.
+          - `agent` uses `deploy_model`.
+          - `agent` uses `monitor_deployment`.
+```

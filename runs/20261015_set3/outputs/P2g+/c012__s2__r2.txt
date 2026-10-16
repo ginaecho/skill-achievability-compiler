@@ -1,0 +1,42 @@
+```ce
+Skill `transcribe`.
+Roles: `agent`, `user`.
+Tool `install_openai_with_uv` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `openai_installed`.
+Tool `install_openai_with_pip` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `openai_installed`.
+Tool `check_api_key` (owner `agent`): via `bash`; adds `api_key_present`.
+Tool `ask_user_to_set_api_key` (owner `agent`): via `ask_user`.
+Tool `run_fast_transcription` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `api_key_present`; adds `transcription_saved`.
+Tool `run_diarized_transcription` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `api_key_present`; adds `transcription_saved`, `diarized_output_saved`.
+Tool `validate_output` (owner `agent`): via `read`; requires `transcription_saved`; adds `output_validated`.
+Tool `rerun_with_targeted_change` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `transcription_saved`; adds `output_validated`.
+Tool `deliver_result` (owner `agent`): via `reply`; requires `transcription_saved`, `output_validated`; adds `result_delivered`.
+Initially true: none.
+Goal: `result_delivered`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `dependencies_present`: none.
+    - branch `install_with_uv`:
+      - `agent` uses `install_openai_with_uv`.
+    - branch `install_with_pip`:
+      - `agent` uses `install_openai_with_pip`.
+  - `agent` chooses one of (observed):
+    - branch `api_key_already_present`:
+      - `agent` uses `check_api_key`.
+    - branch `api_key_missing`:
+      - `agent` uses `ask_user_to_set_api_key`.
+      - `user` chooses one of (observed):
+        - branch `api_key_now_set`:
+          - `agent` uses `check_api_key`.
+        - branch `api_key_not_set`: none.
+  - `user` chooses one of (observed):
+    - branch `need_diarization` (assuming `wants_diarization`):
+      - `agent` uses `run_diarized_transcription`.
+    - branch `fast_text_default`:
+      - `agent` uses `run_fast_transcription`.
+  - `agent` uses `validate_output`.
+  - `agent` chooses one of (observed):
+    - branch `validated`: none.
+    - branch `single_targeted_rerun`:
+      - `agent` uses `rerun_with_targeted_change`.
+  - `agent` uses `deliver_result`.
+```

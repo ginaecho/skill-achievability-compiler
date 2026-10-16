@@ -1,0 +1,56 @@
+```ce
+Skill `audit-augmentation`.
+Roles: `agent`, `user`.
+Tool `check_trailmark` (owner `agent`): via `bash`; needs `shell`; adds `trailmark_checked`.
+Tool `install_trailmark` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `trailmark_installed`.
+Tool `locate_inputs` (owner `agent`): via `read`; adds `inputs_located`, `sarif_available`, `weaudit_available`, `binary_available`.
+Tool `run_preanalysis` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `trailmark_checked`; adds `preanalysis_done`.
+Tool `augment_sarif` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `preanalysis_done` and `sarif_available`; adds `findings_augmented`.
+Tool `augment_weaudit` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `preanalysis_done` and `weaudit_available`; adds `findings_augmented`.
+Tool `check_binary_gate` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `preanalysis_done` and `binary_available`; adds `binary_gate_checked`, `binary_supported`.
+Tool `augment_binary` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `binary_gate_checked` and `binary_supported`; adds `findings_augmented`.
+Tool `inspect_results` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `findings_augmented`; adds `results_inspected`, `severity_subgraphs_queried`, `unmatched_reported`.
+Tool `cross_reference_preanalysis` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `results_inspected` and `preanalysis_done`; adds `preanalysis_cross_referenced`.
+Initially true: `target_available`.
+Goal: `preanalysis_done` and `findings_augmented` and `results_inspected` and `severity_subgraphs_queried` and `preanalysis_cross_referenced` and `unmatched_reported`.
+Protocol:
+  - `agent` uses `check_trailmark`.
+  - `agent` chooses one of (observed):
+    - branch `trailmark_ready`: none.
+    - branch `install_needed`:
+      - `agent` uses `install_trailmark`.
+  - `agent` uses `locate_inputs`.
+  - `agent` uses `run_preanalysis`.
+  - `agent` chooses one of (observed):
+    - branch `sarif_only`:
+      - `agent` uses `augment_sarif`.
+    - branch `weaudit_only`:
+      - `agent` uses `augment_weaudit`.
+    - branch `sarif_and_weaudit`:
+      - `agent` uses `augment_sarif`.
+      - `agent` uses `augment_weaudit`.
+    - branch `sarif_and_binary`:
+      - `agent` uses `augment_sarif`.
+      - `agent` uses `check_binary_gate`.
+      - `agent` chooses one of (observed):
+        - branch `binary_supported`:
+          - `agent` uses `augment_binary`.
+        - branch `binary_unsupported`: none.
+    - branch `weaudit_and_binary`:
+      - `agent` uses `augment_weaudit`.
+      - `agent` uses `check_binary_gate`.
+      - `agent` chooses one of (observed):
+        - branch `binary_supported`:
+          - `agent` uses `augment_binary`.
+        - branch `binary_unsupported`: none.
+    - branch `all_inputs`:
+      - `agent` uses `augment_sarif`.
+      - `agent` uses `augment_weaudit`.
+      - `agent` uses `check_binary_gate`.
+      - `agent` chooses one of (observed):
+        - branch `binary_supported`:
+          - `agent` uses `augment_binary`.
+        - branch `binary_unsupported`: none.
+  - `agent` uses `inspect_results`.
+  - `agent` uses `cross_reference_preanalysis`.
+```

@@ -1,0 +1,963 @@
+{
+  "pack": {
+    "name": "llm-finetuning-training-engineer",
+    "roles": [
+      "agent",
+      "eval_engineer"
+    ],
+    "capabilities": {
+      "prepare_dataset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "brief_present",
+            "method_chosen"
+          ]
+        },
+        "add": [
+          "dataset_built",
+          "dataset_card_committed",
+          "validation_report_written",
+          "packed_samples_attached",
+          "phase2_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_env_report": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_checked"
+        ],
+        "del": [],
+        "assigns": {
+          "platform_generic": 1
+        },
+        "nondet": {}
+      },
+      "run_spark_preflight": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_training_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "phase2_complete",
+            "env_report_present",
+            "environment_ready"
+          ]
+        },
+        "add": [
+          "train_config_written",
+          "train_script_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_training_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "train_config_written",
+            "train_script_written"
+          ]
+        },
+        "add": [
+          "training_files_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "launch_training": {
+        "owner": "agent",
+        "pre": "training_files_committed",
+        "add": [
+          "training_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_training": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "structured_progress_emitted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "run_outcome": {
+            "or": [
+              {
+                "cmp": [
+                  "run_outcome",
+                  "==",
+                  1
+                ]
+              },
+              {
+                "cmp": [
+                  "run_outcome",
+                  "==",
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "halt_training": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "run_halted"
+        ],
+        "del": [
+          "training_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rerun_preflight": {
+        "owner": "agent",
+        "pre": "environment_failure_detected",
+        "add": [
+          "environment_checked",
+          "env_report_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_divergence": {
+        "owner": "agent",
+        "pre": "divergence_detected",
+        "add": [
+          "divergence_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_oom_ladder": {
+        "owner": "agent",
+        "pre": "uma_oom_detected",
+        "add": [
+          "oom_ladder_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "export_artifact": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "promote_verdict_received",
+            "run_completed"
+          ]
+        },
+        "add": [
+          "artifact_exported",
+          "smoke_test_passed",
+          "export_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "dgx_spark": [
+              {
+                "act": {
+                  "cap": "prepare_dataset",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_spark_preflight",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "blocked": [],
+                    "ready_with_warnings": [],
+                    "ready": [
+                      {
+                        "act": {
+                          "cap": "generate_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "commit_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "launch_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "monitor_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "completed": [
+                              {
+                                "msg": {
+                                  "from": "eval_engineer",
+                                  "to": "agent",
+                                  "label": "PROMOTE"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "export_artifact",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "environment_failure": [
+                              {
+                                "act": {
+                                  "cap": "rerun_preflight",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "divergence": [
+                              {
+                                "act": {
+                                  "cap": "halt_training",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "triage_divergence",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "uma_oom": [
+                              {
+                                "act": {
+                                  "cap": "apply_oom_ladder",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "generic_nvidia": [
+              {
+                "act": {
+                  "cap": "prepare_dataset",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_env_report",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "blocked": [],
+                    "ready_with_warnings": [],
+                    "ready": [
+                      {
+                        "act": {
+                          "cap": "generate_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "commit_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "launch_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "monitor_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "completed": [
+                              {
+                                "msg": {
+                                  "from": "eval_engineer",
+                                  "to": "agent",
+                                  "label": "PROMOTE"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "export_artifact",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "environment_failure": [
+                              {
+                                "act": {
+                                  "cap": "rerun_preflight",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "divergence": [
+                              {
+                                "act": {
+                                  "cap": "halt_training",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "triage_divergence",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "uma_oom": [
+                              {
+                                "act": {
+                                  "cap": "apply_oom_ladder",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "run_completed",
+            "structured_progress_emitted"
+          ]
+        },
+        {
+          "and": [
+            "artifact_exported",
+            "smoke_test_passed",
+            "export_written"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "brief_present",
+      "method_chosen",
+      "run_directory_exists"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "platform_generic",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "run_outcome",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "llm-finetuning-training-engineer",
+    "roles": [
+      "agent",
+      "eval_engineer"
+    ],
+    "capabilities": {
+      "prepare_dataset": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "brief_present",
+            "method_chosen"
+          ]
+        },
+        "add": [
+          "dataset_built",
+          "dataset_card_committed",
+          "validation_report_written",
+          "packed_samples_attached",
+          "phase2_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_env_report": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_checked"
+        ],
+        "del": [],
+        "assigns": {
+          "platform_generic": 1
+        },
+        "nondet": {}
+      },
+      "run_spark_preflight": {
+        "owner": "agent",
+        "pre": "phase2_complete",
+        "add": [
+          "env_report_present",
+          "environment_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_training_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "phase2_complete",
+            "env_report_present",
+            "environment_ready"
+          ]
+        },
+        "add": [
+          "train_config_written",
+          "train_script_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_training_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "train_config_written",
+            "train_script_written"
+          ]
+        },
+        "add": [
+          "training_files_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "launch_training": {
+        "owner": "agent",
+        "pre": "training_files_committed",
+        "add": [
+          "training_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_training": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "structured_progress_emitted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "run_outcome": {
+            "or": [
+              {
+                "cmp": [
+                  "run_outcome",
+                  "==",
+                  1
+                ]
+              },
+              {
+                "cmp": [
+                  "run_outcome",
+                  "==",
+                  2
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "halt_training": {
+        "owner": "agent",
+        "pre": "training_running",
+        "add": [
+          "run_halted"
+        ],
+        "del": [
+          "training_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "rerun_preflight": {
+        "owner": "agent",
+        "pre": "environment_failure_detected",
+        "add": [
+          "environment_checked",
+          "env_report_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_divergence": {
+        "owner": "agent",
+        "pre": "divergence_detected",
+        "add": [
+          "divergence_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_oom_ladder": {
+        "owner": "agent",
+        "pre": "uma_oom_detected",
+        "add": [
+          "oom_ladder_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "export_artifact": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "promote_verdict_received",
+            "run_completed"
+          ]
+        },
+        "add": [
+          "artifact_exported",
+          "smoke_test_passed",
+          "export_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "dgx_spark": [
+              {
+                "act": {
+                  "cap": "prepare_dataset",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_spark_preflight",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "blocked": [],
+                    "ready_with_warnings": [],
+                    "ready": [
+                      {
+                        "act": {
+                          "cap": "generate_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "commit_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "launch_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "monitor_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "completed": [
+                              {
+                                "msg": {
+                                  "from": "eval_engineer",
+                                  "to": "agent",
+                                  "label": "PROMOTE"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "export_artifact",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "environment_failure": [
+                              {
+                                "act": {
+                                  "cap": "rerun_preflight",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "divergence": [
+                              {
+                                "act": {
+                                  "cap": "halt_training",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "triage_divergence",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "uma_oom": [
+                              {
+                                "act": {
+                                  "cap": "apply_oom_ladder",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "generic_nvidia": [
+              {
+                "act": {
+                  "cap": "prepare_dataset",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_env_report",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "blocked": [],
+                    "ready_with_warnings": [],
+                    "ready": [
+                      {
+                        "act": {
+                          "cap": "generate_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "commit_training_files",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "launch_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "monitor_training",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "completed": [
+                              {
+                                "msg": {
+                                  "from": "eval_engineer",
+                                  "to": "agent",
+                                  "label": "PROMOTE"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "export_artifact",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "environment_failure": [
+                              {
+                                "act": {
+                                  "cap": "rerun_preflight",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "divergence": [
+                              {
+                                "act": {
+                                  "cap": "halt_training",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "triage_divergence",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "uma_oom": [
+                              {
+                                "act": {
+                                  "cap": "apply_oom_ladder",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "run_completed",
+            "structured_progress_emitted"
+          ]
+        },
+        {
+          "and": [
+            "artifact_exported",
+            "smoke_test_passed",
+            "export_written"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "brief_present",
+      "method_chosen",
+      "run_directory_exists"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "platform_generic",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "run_outcome",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "prepare_dataset": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "write_env_report": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "run_spark_preflight": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "generate_training_files": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "commit_training_files": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "launch_training": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "monitor_training": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "halt_training": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "rerun_preflight": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "triage_divergence": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "apply_oom_ladder": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "export_artifact": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

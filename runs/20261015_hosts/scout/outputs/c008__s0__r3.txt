@@ -1,0 +1,54 @@
+```ce
+Skill `hf-cloud-serving-image-selection`.
+Roles: `agent`, `user`.
+Tool `ask_user_for_context` (owner `agent`): via `ask_user`; adds `region_known`, `model_kind_known`, `instance_class_known`.
+Tool `fetch_catalog_page` (owner `agent`): via `web_fetch`; adds `catalog_data_loaded`, `image_uri_found`.
+Tool `open_catalog_in_browser` (owner `agent`): via `browser`; adds `catalog_data_loaded`, `image_uri_found`.
+Tool `fetch_region_availability` (owner `agent`): via `web_fetch`; requires `region_known`; adds `region_account_resolved`.
+Tool `fetch_model_config` (owner `agent`): via `web_fetch`; adds `model_architecture_known`.
+Initially true: `public_catalog_available`, `user_conversation`.
+Initially: true.
+Goal: `region_known` and `model_kind_known` and `instance_class_known` and `catalog_data_loaded` and `image_uri_found` and any of (`selected_hf_vllm`, `selected_hf_vllm_omni`, `selected_tei_gpu`, `selected_tei_cpu`, `selected_hf_pytorch_inference_cpu`, `selected_hf_sglang`, `selected_vllm_fallback`, `selected_djl_inference`, `selected_jumpstart`, `selected_byoc`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `context_complete`:
+      - `agent` uses `fetch_catalog_page`.
+    - branch `context_missing`:
+      - `agent` uses `ask_user_for_context`.
+      - `agent` uses `fetch_catalog_page`.
+  - `agent` chooses one of (observed):
+    - branch `catalog_loaded_by_fetch`:
+      - `agent` chooses one of (observed):
+        - branch `model_config_needed`:
+          - `agent` uses `fetch_model_config`.
+        - branch `model_config_not_needed`:
+          - `agent` uses `fetch_region_availability`.
+    - branch `catalog_needs_browser`:
+      - `agent` uses `open_catalog_in_browser`.
+      - `agent` chooses one of (observed):
+        - branch `model_config_needed`:
+          - `agent` uses `fetch_model_config`.
+        - branch `model_config_not_needed`:
+          - `agent` uses `fetch_region_availability`.
+  - `agent` chooses one of (observed):
+    - branch `hf_vllm_llm`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `hf_vllm_omni_multimodal`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `tei_gpu_embedding_or_cross_encoder`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `tei_cpu_embedding_or_cross_encoder`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `hf_pytorch_inference_cpu_other_transformers`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `hf_sglang_user_requested`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `vllm_generic_fallback`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `djl_inference`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `jumpstart_nova`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `byoc_custom_inference`:
+      - `agent` uses `fetch_region_availability`.
+```

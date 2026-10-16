@@ -24,12 +24,19 @@ LLM compaction) distills from a natural-language skill:
 
     <step> ::= {"act":    {"cap": "<cap>", "by": "<role>"}}
              | {"msg":    {"from": "<role>", "to": "<role>", "label": "<l>"}}
-             | {"choice": {"by": "<role>", "branches": {"<label>": [<step>...], ...}}}
+             | {"choice": {"by": "<role>", "branches": {"<label>": [<step>...], ...},
+                           "assumes": {"<label>": ["pred", ...]}}}   // optional
              | {"goal":   <formula>}       // explicit goal marker (optional)
              | {"rec":    {"name": "X", "body": [<step>...]}}   // tail-recursive loop
              | {"continue": "X"}           // jump back to the enclosing rec X
              | {"spawn":  {"role": "<role>"}}  // dynamic participant (outside
                                                // the decidable fragment -> UNKNOWN)
+
+A choice may carry branch assumptions ("assumes"): facts the environment or
+the user decides, which hold once that branch is taken (what kind of project
+this is, whether an input was provided).  The checker adds them to the world
+on entry to the branch, like an `add` effect; they are declared by the pack,
+so refutation soundness relative to the pack is unchanged.
 
 A pack may also declare per-role behaviours ("skills": {"<role>": [<local
 step>...]}); the checker verifies the conformance premise S_p <= G|p via
@@ -111,7 +118,7 @@ class Pack:
             roles=list(d.get("roles", [])),
             capabilities={n: Capability.from_dict(n, c)
                           for n, c in d.get("capabilities", {}).items()},
-            protocol=d.get("protocol", []),
+            protocol=canon_assumes(d.get("protocol", [])),
             goal=d["goal"],
             init_true=list(d.get("init_true", [])),
             init_constraints=list(d.get("init_constraints", [])),
@@ -169,6 +176,41 @@ def pack_digest(pack: Pack | dict) -> str:
     canon = json.dumps(normalize(pack).to_dict(), sort_keys=True,
                        separators=(",", ":"), ensure_ascii=False)
     return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
+
+
+def _has_assumes(steps: list) -> bool:
+    return any("choice" in s and "assumes" in s["choice"] for s in iter_steps(steps))
+
+
+def canon_assumes(steps: list) -> list:
+    """`steps` with every choice's `assumes` in normal form: labels sorted,
+    predicates sorted and deduplicated, empty entries dropped.  A protocol with
+    no `assumes` is returned unchanged (the same object), so packs written
+    before branch assumptions existed normalize exactly as before."""
+    if not _has_assumes(steps):
+        return steps
+    out = []
+    for s in steps:
+        (kind, body), = s.items()
+        if kind == "choice":
+            b = {k: v for k, v in body.items() if k not in ("branches", "assumes")}
+            b["branches"] = {lbl: canon_assumes(br) for lbl, br in body["branches"].items()}
+            assumes = {lbl: sorted(set(preds))
+                       for lbl, preds in sorted((body.get("assumes") or {}).items()) if preds}
+            if assumes:
+                b["assumes"] = assumes
+            out.append({"choice": b})
+        elif kind == "rec":
+            out.append({"rec": {**body, "body": canon_assumes(body["body"])}})
+        else:
+            out.append(s)
+    return out
+
+
+def assumed_atoms(steps: list) -> set:
+    """Every predicate some choice branch of `steps` assumes."""
+    return {pred for s in iter_steps(steps) if "choice" in s
+            for preds in (s["choice"].get("assumes") or {}).values() for pred in preds}
 
 
 def iter_steps(steps: list[dict]) -> Iterator[dict]:
@@ -238,10 +280,13 @@ def _check_steps(steps: Any, path: str, goal: Any,
             if not (isinstance(body, dict) and "by" in body
                     and _is_name(body["by"])
                     and isinstance(body.get("branches"), dict)
-                    and set(body) <= {"by", "branches", "external", "observed"}):
+                    and set(body) <= {"by", "branches", "external", "observed",
+                                      "assumes"}):
                 raise PackError(f"{p}: choice needs by+branches")
             if not body["branches"]:
                 raise PackError(f"{p}: choice needs at least one branch")
+            if "assumes" in body:
+                _check_assumes(body["assumes"], body["branches"], p)
             for flag in ("external", "observed"):
                 if not isinstance(body.get(flag, False), bool):
                     raise PackError(f"{p}: choice {flag!r} must be a bool")
@@ -274,6 +319,19 @@ def _check_steps(steps: Any, path: str, goal: Any,
                 raise PackError(f"{p}: spawn needs role")
         else:
             raise PackError(f"{p}: unknown step kind {kind!r}")
+
+
+def _check_assumes(assumes: Any, branches: dict, p: str) -> None:
+    """`assumes` maps branch labels of this choice to predicate-name lists."""
+    if not isinstance(assumes, dict):
+        raise PackError(f"{p}: choice 'assumes' must map branch labels to predicate lists")
+    for lbl, preds in assumes.items():
+        if lbl not in branches:
+            raise PackError(f"{p}: choice 'assumes' names {lbl!r}, which is not a branch "
+                            "of this choice")
+        if not (isinstance(preds, list) and all(_is_name(x) for x in preds)):
+            raise PackError(f"{p}: choice 'assumes'[{lbl!r}] must be a list of predicate "
+                            "names")
 
 
 def _check_local_steps(steps: Any, path: str,
@@ -418,3 +476,103 @@ def validate_pack(pack: Any) -> None:
             validate_formula(f, f"init_constraints[{i}]")
     except FormulaError as e:
         raise PackError(str(e)) from e
+
+
+# --------------------------------------------------------------------------
+# P2g++ dead-reply prune (PLAN.md Addendum E-c)
+# --------------------------------------------------------------------------
+
+def _read_atoms(pack: dict, skip: set) -> set:
+    """Every predicate the pack reads, ignoring the capabilities in `skip`:
+    capability guards and nondet constraints, the goal and goal markers,
+    init constraints, and message labels."""
+    from .formula import atoms
+    read = set(atoms(pack.get("goal")))
+    for name, c in (pack.get("capabilities") or {}).items():
+        if name in skip:
+            continue
+        read |= atoms(c.get("pre", True))
+        for f in (c.get("nondet") or {}).values():
+            read |= atoms(f)
+    for f in pack.get("init_constraints") or []:
+        read |= atoms(f)
+    for s in iter_steps(pack.get("protocol") or []):
+        if "goal" in s:
+            read |= atoms(s["goal"])
+        elif "msg" in s:
+            read.add(s["msg"]["label"])
+    return read
+
+
+def _drop_acts(steps: list, caps: set) -> list | None:
+    """`steps` without the act steps of `caps`; None when that would leave a
+    loop body with no protocol step before its `continue` (an unguarded
+    recursion the schema gate rejects)."""
+    out = []
+    for s in steps:
+        (kind, body), = s.items()
+        if kind == "act" and body["cap"] in caps:
+            continue
+        if kind == "choice":
+            branches = {}
+            for lbl, br in body["branches"].items():
+                nb = _drop_acts(br, caps)
+                if nb is None:
+                    return None
+                branches[lbl] = nb
+            out.append({"choice": {**body, "branches": branches}})
+        elif kind == "rec":
+            nb = _drop_acts(body["body"], caps)
+            if nb is None or not nb or all("continue" in x for x in nb):
+                return None
+            out.append({"rec": {**body, "body": nb}})
+        else:
+            out.append(s)
+    return out
+
+
+def prune_dead_reply(pack: dict, bindings: dict, via: str = "reply") -> tuple[dict, list]:
+    """P2g++'s deterministic prune of dead `reply` Tools.
+
+    A capability bound `via reply` (in the CE `bindings`) that only adds
+    predicates -- no `del`, `assigns`, `nondet` or `needs` -- and whose added
+    predicates occur in no guard, no Goal (or goal marker), no init
+    constraint and no message label is removed, together with its act steps.
+    Removal repeats until nothing more is dead (a reply Tool read only by a
+    removed one is dead too).  A capability is kept when removing its steps
+    would leave a loop without a guarding step, and nothing is pruned in a
+    pack that declares per-role `skills`.  Returns (new pack, removed names);
+    the input is not modified."""
+    import copy
+    if pack.get("skills"):
+        return pack, []
+    caps = pack.get("capabilities") or {}
+
+    def candidate(name: str, c: dict) -> bool:
+        b = bindings.get(name) or {}
+        return (b.get("via") == via and not b.get("needs") and not c.get("del")
+                and not c.get("assigns") and not c.get("nondet"))
+
+    removed: list = []
+    protocol = pack.get("protocol") or []
+    while True:
+        read = _read_atoms(pack, set(removed))
+        dead = [n for n, c in caps.items() if n not in removed and candidate(n, c)
+                and not (set(c.get("add") or []) & read)]
+        kept_any = False
+        for n in sorted(dead):
+            nb = _drop_acts(protocol, set(removed) | {n})
+            if nb is None:
+                continue
+            removed.append(n)
+            protocol = nb
+            kept_any = True
+        if not kept_any:
+            break
+    if not removed:
+        return pack, []
+    out = copy.deepcopy(pack)
+    for n in removed:
+        del out["capabilities"][n]
+    out["protocol"] = protocol
+    return out, removed

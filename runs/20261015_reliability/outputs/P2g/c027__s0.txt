@@ -1,0 +1,53 @@
+```ce
+Skill `declarative-agent-developer`.
+Roles: `agent`, `user`.
+Tool `check_atk_cli` (owner `agent`): via `bash`; requires `workspace_checked`; adds `atk_cli_checked`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_checked`.
+Tool `set_atk_skill_env` (owner `agent`): via `bash`; requires `atk_cli_checked`; adds `atk_skill_env_set`.
+Tool `scaffold_agent_project` (owner `agent`): via `bash`; requires `atk_skill_env_set`; adds `manifest_exists`, `app_package_exists`, `agent_project`.
+Tool `validate_manifest_and_project` (owner `agent`): via `read`; requires `workspace_checked` and `manifest_exists`; adds `manifest_checked`; picks `schema_version` with `schema_version` >= 0.
+Tool `edit_agent_files` (owner `agent`): via `edit`; requires `manifest_checked`; adds `app_package_changed`.
+Tool `add_api_plugin_via_atk` (owner `agent`): via `bash`; requires `atk_skill_env_set` and `manifest_checked`; adds `app_package_changed`, `plugin_added`.
+Tool `discover_mcp_tools` (owner `agent`): via `web_fetch`; requires `mcp_server_url_provided`; adds `mcp_tools_discovered`.
+Tool `configure_mcp_plugin` (owner `agent`): via `edit`; requires `manifest_checked` and `mcp_tools_discovered`; adds `app_package_changed`, `plugin_added`.
+Tool `deploy_agent_local` (owner `agent`): via `bash`; requires `atk_skill_env_set` and `app_package_changed` and not `manifest_errors` and not `user_declined_deploy`; adds `deployed`, `test_link_available`.
+Tool `read_title_id` (owner `agent`): via `read`; requires `deployed`; adds `title_id_read`, `test_link_available`.
+Tool `send_project_files` (owner `agent`): via `send_user_file`; requires `agent_project`; adds `files_sent_to_user`.
+Initially true: none.
+Initially: `schema_version` == 0.
+Goal: any of (`rejected_with_explanation`, `asked_user_how_to_proceed`, all of (`agent_project`, `files_sent_to_user`), all of (`app_package_changed`, any of (`user_declined_deploy`, all of (`deployed`, `test_link_available`)))).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `check_atk_cli`.
+  - `agent` chooses one of (observed):
+    - branch `non_agent_project_reject`:
+      - `agent` tells `user` `rejected_with_explanation`.
+    - branch `missing_manifest_edit_or_deploy_reject`:
+      - `agent` tells `user` `rejected_with_explanation`.
+    - branch `missing_manifest_new_project`:
+      - `agent` uses `set_atk_skill_env`.
+      - `agent` uses `scaffold_agent_project`.
+      - `agent` uses `send_project_files`.
+    - branch `manifest_exists_with_errors`:
+      - `agent` uses `validate_manifest_and_project`.
+      - `agent` tells `user` `asked_user_how_to_proceed`.
+    - branch `valid_project_review_or_edit`:
+      - `agent` uses `validate_manifest_and_project`.
+      - `agent` chooses one of (observed):
+        - branch `edit_manifest_or_instructions`:
+          - `agent` uses `edit_agent_files`.
+        - branch `add_api_plugin`:
+          - `agent` uses `set_atk_skill_env`.
+          - `agent` uses `add_api_plugin_via_atk`.
+        - branch `add_mcp_plugin`:
+          - `agent` uses `discover_mcp_tools`.
+          - `agent` uses `configure_mcp_plugin`.
+        - branch `no_file_changes`: none.
+      - `agent` chooses one of (observed):
+        - branch `deploy_after_change`:
+          - `agent` uses `set_atk_skill_env`.
+          - `agent` uses `deploy_agent_local`.
+          - `agent` uses `read_title_id`.
+        - branch `skip_deploy_user_requested`:
+          - `agent` tells `user` `user_declined_deploy`.
+```

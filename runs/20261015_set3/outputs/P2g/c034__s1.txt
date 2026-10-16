@@ -1,0 +1,53 @@
+```ce
+Skill `imagegen`.
+Roles: `agent`, `user`.
+Tool `read_shared_references` (owner `agent`): via `read`; adds `shared_references_read`.
+Tool `view_local_image_for_builtin_edit` (owner `agent`): via `read`; requires `builtin_mode` and `edit_intent` and `local_edit_target`; adds `edit_target_visible`.
+Tool `generate_image_builtin` (owner `agent`): via `image_gen`; requires `builtin_mode` and `generate_intent`; adds `image_generated`.
+Tool `edit_image_builtin` (owner `agent`): via `image_gen`; requires `builtin_mode` and `edit_intent` and `edit_target_visible`; adds `image_generated`.
+Tool `read_cli_references` (owner `agent`): via `read`; requires `cli_mode`; adds `cli_references_read`.
+Tool `install_cli_dependency` (owner `agent`): via `bash`; requires `cli_mode`; adds `cli_dependency_installed`.
+Tool `run_cli_generate` (owner `agent`): via `bash`; needs `openai_api_key`; requires `cli_mode` and `generate_intent` and `cli_dependency_installed`; adds `image_generated`.
+Tool `run_cli_edit` (owner `agent`): via `bash`; needs `openai_api_key`; requires `cli_mode` and `edit_intent` and `cli_dependency_installed`; adds `image_generated`.
+Tool `run_cli_generate_batch` (owner `agent`): via `bash`; needs `openai_api_key`; requires `cli_mode` and `many_outputs` and `cli_dependency_installed`; adds `image_generated`.
+Tool `move_or_copy_image_into_workspace` (owner `agent`): via `bash`; requires `image_generated` and `project_bound`; adds `final_in_workspace`.
+Tool `save_nondestructive_version` (owner `agent`): via `bash`; requires `image_generated` and `project_bound` and `preserve_existing_asset`; adds `final_in_workspace`.
+Initially true: none.
+Goal: `image_generated` and ((`project_bound` and `final_in_workspace`) or `preview_only`).
+Protocol:
+  - `agent` uses `read_shared_references`.
+  - `user` chooses one of (observed):
+    - branch `builtin_mode`:
+      - `user` chooses one of (observed):
+        - branch `generate`:
+          - `agent` uses `generate_image_builtin`.
+        - branch `edit`:
+          - `user` chooses one of (observed):
+            - branch `local_edit_target`:
+              - `agent` uses `view_local_image_for_builtin_edit`.
+              - `agent` uses `edit_image_builtin`.
+            - branch `visible_edit_target`:
+              - `agent` uses `edit_image_builtin`.
+      - `user` chooses one of (observed):
+        - branch `project_bound_replace`:
+          - `agent` uses `move_or_copy_image_into_workspace`.
+        - branch `project_bound_nondestructive`:
+          - `agent` uses `save_nondestructive_version`.
+        - branch `preview_only`: none.
+    - branch `cli_mode`:
+      - `agent` uses `read_cli_references`.
+      - `agent` uses `install_cli_dependency`.
+      - `user` chooses one of (observed):
+        - branch `generate_single`:
+          - `agent` uses `run_cli_generate`.
+        - branch `edit_single`:
+          - `agent` uses `run_cli_edit`.
+        - branch `generate_batch`:
+          - `agent` uses `run_cli_generate_batch`.
+      - `user` chooses one of (observed):
+        - branch `project_bound_replace`:
+          - `agent` uses `move_or_copy_image_into_workspace`.
+        - branch `project_bound_nondestructive`:
+          - `agent` uses `save_nondestructive_version`.
+        - branch `preview_only`: none.
+```

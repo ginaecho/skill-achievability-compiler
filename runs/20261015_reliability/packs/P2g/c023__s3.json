@@ -1,0 +1,719 @@
+{
+  "pack": {
+    "name": "dossier",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_subject_identity": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "q1_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_subject_type": {
+        "owner": "agent",
+        "pre": "q1_answered",
+        "add": [
+          "q2_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_purpose": {
+        "owner": "agent",
+        "pre": "q2_answered",
+        "add": [
+          "q3_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_hypothesis": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "hypothesis_provided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "push_hypothesis_once": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "hypothesis_pushback_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_depth": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "q5_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_sensitivities": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "q6_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clarify_identity": {
+        "owner": "agent",
+        "pre": "q1_answered",
+        "add": [
+          "subject_disambiguated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "research_entity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "subject_disambiguated",
+            "q2_answered",
+            "q3_answered",
+            "q5_answered"
+          ]
+        },
+        "add": [
+          "research_complete",
+          "disconfirming_balance_met",
+          "audit_log_ready",
+          "sections_ready",
+          "verdict_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_docx": {
+        "owner": "agent",
+        "pre": "research_complete",
+        "add": [
+          "docx_created",
+          "required_sections_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_docx": {
+        "owner": "agent",
+        "pre": "docx_created",
+        "add": [
+          "docx_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_docx": {
+        "owner": "agent",
+        "pre": "docx_validated",
+        "add": [
+          "docx_delivered",
+          "chat_summary_sent"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_subject_identity",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "identity_ambiguous": [
+              {
+                "rec": {
+                  "name": "disambiguate_subject",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "clarify_identity",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "resolved": [],
+                          "still_ambiguous": [
+                            {
+                              "continue": "disambiguate_subject"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "identity_specific": [
+              {
+                "act": {
+                  "cap": "clarify_identity",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_subject_type",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_purpose",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hypothesis_given": [
+              {
+                "act": {
+                  "cap": "ask_hypothesis",
+                  "by": "agent"
+                }
+              }
+            ],
+            "hypothesis_refused_once": [
+              {
+                "act": {
+                  "cap": "push_hypothesis_once",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "hypothesis_given_after_pushback": [
+                      {
+                        "act": {
+                          "cap": "ask_hypothesis",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "fallback_hypothesis": [
+                      {
+                        "act": {
+                          "cap": "ask_hypothesis",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_depth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "sensitive_context": [
+              {
+                "act": {
+                  "cap": "ask_sensitivities",
+                  "by": "agent"
+                }
+              }
+            ],
+            "low_sensitivity_context": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "research_entity",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "generate_docx",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "validate_docx",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "deliver_docx",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "docx_delivered",
+        "chat_summary_sent",
+        "verdict_ready",
+        "audit_log_ready",
+        "disconfirming_balance_met",
+        "required_sections_present",
+        "docx_validated"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "dossier",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_subject_identity": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "q1_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_subject_type": {
+        "owner": "agent",
+        "pre": "q1_answered",
+        "add": [
+          "q2_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_purpose": {
+        "owner": "agent",
+        "pre": "q2_answered",
+        "add": [
+          "q3_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_hypothesis": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "hypothesis_provided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "push_hypothesis_once": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "hypothesis_pushback_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_depth": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "q5_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_sensitivities": {
+        "owner": "agent",
+        "pre": "q3_answered",
+        "add": [
+          "q6_answered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clarify_identity": {
+        "owner": "agent",
+        "pre": "q1_answered",
+        "add": [
+          "subject_disambiguated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "research_entity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "subject_disambiguated",
+            "q2_answered",
+            "q3_answered",
+            "q5_answered"
+          ]
+        },
+        "add": [
+          "research_complete",
+          "disconfirming_balance_met",
+          "audit_log_ready",
+          "sections_ready",
+          "verdict_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_docx": {
+        "owner": "agent",
+        "pre": "research_complete",
+        "add": [
+          "docx_created",
+          "required_sections_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_docx": {
+        "owner": "agent",
+        "pre": "docx_created",
+        "add": [
+          "docx_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_docx": {
+        "owner": "agent",
+        "pre": "docx_validated",
+        "add": [
+          "docx_delivered",
+          "chat_summary_sent"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_subject_identity",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "identity_ambiguous": [
+              {
+                "rec": {
+                  "name": "disambiguate_subject",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "clarify_identity",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "resolved": [],
+                          "still_ambiguous": [
+                            {
+                              "continue": "disambiguate_subject"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "identity_specific": [
+              {
+                "act": {
+                  "cap": "clarify_identity",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_subject_type",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_purpose",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hypothesis_given": [
+              {
+                "act": {
+                  "cap": "ask_hypothesis",
+                  "by": "agent"
+                }
+              }
+            ],
+            "hypothesis_refused_once": [
+              {
+                "act": {
+                  "cap": "push_hypothesis_once",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "hypothesis_given_after_pushback": [
+                      {
+                        "act": {
+                          "cap": "ask_hypothesis",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "fallback_hypothesis": [
+                      {
+                        "act": {
+                          "cap": "ask_hypothesis",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_depth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "sensitive_context": [
+              {
+                "act": {
+                  "cap": "ask_sensitivities",
+                  "by": "agent"
+                }
+              }
+            ],
+            "low_sensitivity_context": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "research_entity",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "generate_docx",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "validate_docx",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "deliver_docx",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "docx_delivered",
+        "chat_summary_sent",
+        "verdict_ready",
+        "audit_log_ready",
+        "disconfirming_balance_met",
+        "required_sections_present",
+        "docx_validated"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_subject_identity": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "ask_subject_type": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "ask_purpose": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_hypothesis": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "push_hypothesis_once": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "ask_depth": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "ask_sensitivities": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "clarify_identity": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "research_entity": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "generate_docx": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "validate_docx": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "deliver_docx": {
+      "via": "send_user_file",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

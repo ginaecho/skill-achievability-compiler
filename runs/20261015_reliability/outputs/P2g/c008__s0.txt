@@ -1,0 +1,45 @@
+```ce
+Skill `hf-cloud-serving-image-selection`.
+Roles: `agent`, `user`.
+Tool `read_catalog_page` (owner `agent`): via `web_fetch`; requires `allowlisted_catalog`; adds `catalog_read`.
+Tool `read_region_availability` (owner `agent`): via `web_fetch`; requires `region_account_uncertain`; adds `region_account_resolved`.
+Tool `read_model_config` (owner `agent`): via `web_fetch`; requires `hf_config_public`; adds `model_arch_known`.
+Tool `read_catalog_yaml` (owner `agent`): via `web_fetch`; requires `catalog_page_unusable`; adds `catalog_read`.
+Tool `query_ecr_tags` (owner `agent`): via `bash`; requires `catalog_page_unusable` and `ecr_query_possible`; adds `catalog_read`.
+Tool `mirror_image` (owner `agent`): via `bash`; needs `aws_account`; requires `mirroring_needed`; adds `image_uri_selected`.
+Tool `ask_user_for_inputs` (owner `agent`): via `ask_user`; adds `deployment_inputs_known`.
+Initially true: `allowlisted_catalog`, `hf_config_public`.
+Goal: all of (`deployment_inputs_known`, `family_selected`, `image_uri_selected`, `selection_from_current_source`, `hf_family_preferred_when_compatible`, `no_tgi_used`, `region_applied`, ((`uses_vllm_family` and `ami_requirement_resolved`) or (not `uses_vllm_family`))).
+Protocol:
+  - `agent` uses `ask_user_for_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `architecture_preflight_needed`:
+      - `agent` uses `read_model_config`.
+    - branch `architecture_already_known`: none.
+  - `agent` chooses one of (observed):
+    - branch `catalog_page_works`:
+      - `agent` uses `read_catalog_page`.
+    - branch `catalog_page_unusable`:
+      - `agent` chooses one of (observed):
+        - branch `use_catalog_yaml`:
+          - `agent` uses `read_catalog_yaml`.
+        - branch `query_ecr`:
+          - `agent` uses `query_ecr_tags`.
+  - `agent` chooses one of (observed):
+    - branch `region_account_clear`: none.
+    - branch `region_account_uncertain`:
+      - `agent` uses `read_region_availability`.
+  - `agent` chooses one of (observed):
+    - branch `catalog_family_uri_available`:
+      - `agent` chooses one of (observed):
+        - branch `select_hf_vllm`: none.
+        - branch `select_hf_vllm_omni`: none.
+        - branch `select_tei`: none.
+        - branch `select_hf_pytorch_inference_cpu`: none.
+        - branch `select_hf_sglang`: none.
+        - branch `select_vllm_fallback`: none.
+        - branch `select_djl_inference`: none.
+        - branch `select_byoc`: none.
+    - branch `mirroring_needed`:
+      - `agent` uses `mirror_image`.
+```

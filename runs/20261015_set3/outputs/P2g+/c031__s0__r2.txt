@@ -1,0 +1,36 @@
+```ce
+Skill `expo-migrate-module`.
+Roles: `agent`, `user`.
+Tool `check_expo_versions` (owner `agent`): via `read`; adds `module_expo_checked`, `example_expo_checked`, `expo_version_status_known`.
+Tool `read_references_and_inventory` (owner `agent`): via `read`; requires `expo_version_ok`; adds `references_read`, `contract_inventory_done`, `core_surface_inspected`.
+Tool `warn_experimental_incremental` (owner `agent`): via `reply`; requires `expo_version_ok`; adds `experimental_warning_given`.
+Tool `edit_swift_migration` (owner `agent`): via `edit`; requires `references_read` and `contract_inventory_done` and `core_surface_inspected`; adds `migration_applied`.
+Tool `search_stale_patterns` (owner `agent`): via `read`; requires `migration_applied`; adds `stale_search_done`.
+Tool `run_verification` (owner `agent`): via `bash`; requires `migration_applied`; adds `build_checked`, `tests_checked`, `example_checked`, `config_checked`, `surface_compared`.
+Tool `ask_blocked_group_decision` (owner `agent`): via `ask_user`; adds `blocked_decision_made`.
+Tool `open_tracking_issue` (owner `agent`): via `bash`; needs `github_account`; requires `user_approved_issue`; adds `tracking_issue_opened`.
+Tool `tell_upgrade_required` (owner `agent`): via `reply`; requires `expo_version_status_known` and not `expo_version_ok`; adds `upgrade_required_reported`.
+Tool `write_handoff` (owner `agent`): via `reply`; requires `experimental_warning_given` and `contract_inventory_done` and `core_surface_inspected` and `migration_applied` and `stale_search_done` and `build_checked` and `tests_checked` and `config_checked` and `surface_compared`; adds `handoff_reported`.
+Initially true: none.
+Goal: `handoff_reported` or `upgrade_required_reported`.
+Protocol:
+  - `agent` uses `check_expo_versions`.
+  - `agent` chooses one of (observed):
+    - branch `version_too_old` (assuming not `expo_version_ok`):
+      - `agent` uses `tell_upgrade_required`.
+    - branch `version_ok` (assuming `expo_version_ok`):
+      - `agent` uses `warn_experimental_incremental`.
+      - `agent` uses `read_references_and_inventory`.
+      - `agent` uses `edit_swift_migration`.
+      - `agent` chooses one of (observed):
+        - branch `no_blocked_group`: none.
+        - branch `blocked_group_found` (assuming `blocked_group_found`):
+          - `agent` uses `ask_blocked_group_decision`.
+          - `user` chooses one of (observed):
+            - branch `approve_issue_and_continue` (assuming `user_approved_issue`):
+              - `agent` uses `open_tracking_issue`.
+            - branch `continue_without_issue`: none.
+      - `agent` uses `search_stale_patterns`.
+      - `agent` uses `run_verification`.
+      - `agent` uses `write_handoff`.
+```

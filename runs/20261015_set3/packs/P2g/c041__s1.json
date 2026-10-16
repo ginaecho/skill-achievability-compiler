@@ -1,0 +1,981 @@
+{
+  "pack": {
+    "name": "automate-this",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_prerequisites": {
+        "owner": "agent",
+        "pre": "video_path_known",
+        "add": [
+          "prerequisites_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_recording_content": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "video_path_known",
+            "prerequisites_checked"
+          ]
+        },
+        "add": [
+          "work_dir_created",
+          "frames_extracted",
+          "audio_checked",
+          "cleanup_needed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "frame_interval_seconds": {
+            "or": [
+              {
+                "cmp": [
+                  "frame_interval_seconds",
+                  "==",
+                  2
+                ]
+              },
+              {
+                "cmp": [
+                  "frame_interval_seconds",
+                  "==",
+                  4
+                ]
+              }
+            ]
+          },
+          "frame_count": {
+            "cmp": [
+              "frame_count",
+              ">=",
+              0
+            ]
+          },
+          "has_audio": {
+            "or": [
+              "has_audio",
+              {
+                "not": "has_audio"
+              }
+            ]
+          }
+        }
+      },
+      "transcribe_audio": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            "has_audio"
+          ]
+        },
+        "add": [
+          "transcript_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_whisper_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            "has_audio",
+            {
+              "not": "transcript_available"
+            }
+          ]
+        },
+        "add": [
+          "whisper_choice_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "user_wants_whisper_install": {
+            "or": [
+              "user_wants_whisper_install",
+              {
+                "not": "user_wants_whisper_install"
+              }
+            ]
+          }
+        }
+      },
+      "analyze_recording": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "process_reconstructed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_reconstruction": {
+        "owner": "agent",
+        "pre": "process_reconstructed",
+        "add": [
+          "reconstruction_feedback_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "reconstruction_confirmed": {
+            "or": [
+              "reconstruction_confirmed",
+              {
+                "not": "reconstruction_confirmed"
+              }
+            ]
+          }
+        }
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": "reconstruction_confirmed",
+        "add": [
+          "environment_fingerprinted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_proposals": {
+        "owner": "agent",
+        "pre": "environment_fingerprinted",
+        "add": [
+          "proposals_presented",
+          "tier_decision_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "tier_selected": {
+            "or": [
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  1
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  2
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  3
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "build_automation": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "tier_decision_recorded",
+            {
+              "cmp": [
+                "tier_selected",
+                ">",
+                0
+              ]
+            }
+          ]
+        },
+        "add": [
+          "automation_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_and_fix_automation": {
+        "owner": "agent",
+        "pre": "automation_written",
+        "add": [
+          "automation_tested",
+          "automation_working"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "revise_automation": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "automation_written",
+            "automation_tested",
+            {
+              "not": "automation_working"
+            }
+          ]
+        },
+        "add": [
+          "automation_revised"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_temp_files": {
+        "owner": "agent",
+        "pre": "cleanup_needed",
+        "add": [
+          "temp_files_cleaned"
+        ],
+        "del": [
+          "work_dir_created",
+          "frames_extracted",
+          "transcript_available",
+          "cleanup_needed"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "provide_video_path": [
+              {
+                "act": {
+                  "cap": "check_prerequisites",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "extract_recording_content",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "audio_without_transcript": [
+                      {
+                        "act": {
+                          "cap": "ask_whisper_choice",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "transcript_ready": [
+                      {
+                        "act": {
+                          "cap": "transcribe_audio",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_audio": []
+                  }
+                }
+              },
+              {
+                "rec": {
+                  "name": "reconstruct_until_confirmed",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "analyze_recording",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "present_reconstruction",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "confirmed": [],
+                          "needs_correction": [
+                            {
+                              "continue": "reconstruct_until_confirmed"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_environment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "present_proposals",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_build": [
+                      {
+                        "act": {
+                          "cap": "cleanup_temp_files",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "build_tier": [
+                      {
+                        "act": {
+                          "cap": "build_automation",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "test_and_fix_automation",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "cleanup_temp_files",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "no_video_path": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "process_reconstructed",
+        "reconstruction_confirmed",
+        "environment_fingerprinted",
+        "proposals_presented",
+        {
+          "or": [
+            {
+              "cmp": [
+                "tier_selected",
+                "==",
+                0
+              ]
+            },
+            {
+              "and": [
+                "automation_written",
+                "automation_tested",
+                "automation_working"
+              ]
+            }
+          ]
+        },
+        "temp_files_cleaned"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "frame_interval_seconds",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "frame_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "tier_selected",
+          "==",
+          0
+        ]
+      },
+      {
+        "not": "video_path_known"
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "automate-this",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_prerequisites": {
+        "owner": "agent",
+        "pre": "video_path_known",
+        "add": [
+          "prerequisites_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "extract_recording_content": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "video_path_known",
+            "prerequisites_checked"
+          ]
+        },
+        "add": [
+          "work_dir_created",
+          "frames_extracted",
+          "audio_checked",
+          "cleanup_needed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "frame_interval_seconds": {
+            "or": [
+              {
+                "cmp": [
+                  "frame_interval_seconds",
+                  "==",
+                  2
+                ]
+              },
+              {
+                "cmp": [
+                  "frame_interval_seconds",
+                  "==",
+                  4
+                ]
+              }
+            ]
+          },
+          "frame_count": {
+            "cmp": [
+              "frame_count",
+              ">=",
+              0
+            ]
+          },
+          "has_audio": {
+            "or": [
+              "has_audio",
+              {
+                "not": "has_audio"
+              }
+            ]
+          }
+        }
+      },
+      "transcribe_audio": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            "has_audio"
+          ]
+        },
+        "add": [
+          "transcript_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_whisper_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            "has_audio",
+            {
+              "not": "transcript_available"
+            }
+          ]
+        },
+        "add": [
+          "whisper_choice_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "user_wants_whisper_install": {
+            "or": [
+              "user_wants_whisper_install",
+              {
+                "not": "user_wants_whisper_install"
+              }
+            ]
+          }
+        }
+      },
+      "analyze_recording": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "process_reconstructed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_reconstruction": {
+        "owner": "agent",
+        "pre": "process_reconstructed",
+        "add": [
+          "reconstruction_feedback_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "reconstruction_confirmed": {
+            "or": [
+              "reconstruction_confirmed",
+              {
+                "not": "reconstruction_confirmed"
+              }
+            ]
+          }
+        }
+      },
+      "check_environment": {
+        "owner": "agent",
+        "pre": "reconstruction_confirmed",
+        "add": [
+          "environment_fingerprinted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_proposals": {
+        "owner": "agent",
+        "pre": "environment_fingerprinted",
+        "add": [
+          "proposals_presented",
+          "tier_decision_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "tier_selected": {
+            "or": [
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  1
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  2
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "==",
+                  3
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "build_automation": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "tier_decision_recorded",
+            {
+              "cmp": [
+                "tier_selected",
+                ">",
+                0
+              ]
+            }
+          ]
+        },
+        "add": [
+          "automation_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_and_fix_automation": {
+        "owner": "agent",
+        "pre": "automation_written",
+        "add": [
+          "automation_tested",
+          "automation_working"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "revise_automation": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "automation_written",
+            "automation_tested",
+            {
+              "not": "automation_working"
+            }
+          ]
+        },
+        "add": [
+          "automation_revised"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "cleanup_temp_files": {
+        "owner": "agent",
+        "pre": "cleanup_needed",
+        "add": [
+          "temp_files_cleaned"
+        ],
+        "del": [
+          "work_dir_created",
+          "frames_extracted",
+          "transcript_available",
+          "cleanup_needed"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "provide_video_path": [
+              {
+                "act": {
+                  "cap": "check_prerequisites",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "extract_recording_content",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "audio_without_transcript": [
+                      {
+                        "act": {
+                          "cap": "ask_whisper_choice",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "transcript_ready": [
+                      {
+                        "act": {
+                          "cap": "transcribe_audio",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_audio": []
+                  }
+                }
+              },
+              {
+                "rec": {
+                  "name": "reconstruct_until_confirmed",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "analyze_recording",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "present_reconstruction",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "confirmed": [],
+                          "needs_correction": [
+                            {
+                              "continue": "reconstruct_until_confirmed"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_environment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "present_proposals",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_build": [
+                      {
+                        "act": {
+                          "cap": "cleanup_temp_files",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "build_tier": [
+                      {
+                        "act": {
+                          "cap": "build_automation",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "test_and_fix_automation",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "cleanup_temp_files",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "no_video_path": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "process_reconstructed",
+        "reconstruction_confirmed",
+        "environment_fingerprinted",
+        "proposals_presented",
+        {
+          "or": [
+            {
+              "cmp": [
+                "tier_selected",
+                "==",
+                0
+              ]
+            },
+            {
+              "and": [
+                "automation_written",
+                "automation_tested",
+                "automation_working"
+              ]
+            }
+          ]
+        },
+        "temp_files_cleaned"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "frame_interval_seconds",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "frame_count",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "tier_selected",
+          "==",
+          0
+        ]
+      },
+      {
+        "not": "video_path_known"
+      }
+    ]
+  },
+  "bindings": {
+    "check_prerequisites": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "extract_recording_content": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "transcribe_audio": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_whisper_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "analyze_recording": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "present_reconstruction": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "check_environment": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "present_proposals": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "build_automation": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "test_and_fix_automation": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "revise_automation": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "cleanup_temp_files": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

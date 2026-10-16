@@ -1,0 +1,624 @@
+{
+  "pack": {
+    "name": "preset",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_for_project_id": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_id_provided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_model_choice": {
+        "owner": "agent",
+        "pre": "models_listed",
+        "add": [
+          "model_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_region_and_project_choice": {
+        "owner": "agent",
+        "pre": "alternatives_known",
+        "add": [
+          "region_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "project_id_already_available": [
+              {
+                "act": {
+                  "cap": "check_azure_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_project",
+                  "by": "agent"
+                }
+              }
+            ],
+            "project_id_needed": [
+              {
+                "act": {
+                  "cap": "ask_for_project_id",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_azure_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_project",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "project_id_already_available": [
+              "project_id_provided"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "list_models",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_user_model_choice",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_current_region_capacity",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "current_region_has_capacity": [
+              {
+                "act": {
+                  "cap": "deploy_model",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_current_region_capacity": [
+              {
+                "act": {
+                  "cap": "query_all_regions_capacity",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "select_alternative_region": [
+                      {
+                        "act": {
+                          "cap": "ask_user_region_and_project_choice",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "filter_projects_by_region",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "existing_project_in_region": [
+                              {
+                                "act": {
+                                  "cap": "create_project_in_region",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "deploy_model",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "create_new_project_in_region": [
+                              {
+                                "act": {
+                                  "cap": "create_project_in_region",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "deploy_model",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "decline_alternative_region": []
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "current_region_has_capacity": [
+              "current_region_has_capacity"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "monitor_deployment",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "deployment_completed",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "preset",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_azure_auth": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "azure_authenticated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "get_project": {
+        "owner": "agent",
+        "pre": "azure_authenticated",
+        "add": [
+          "project_verified",
+          "current_region_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_models": {
+        "owner": "agent",
+        "pre": "project_verified",
+        "add": [
+          "models_listed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_current_region_capacity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_verified",
+            "model_selected"
+          ]
+        },
+        "add": [
+          "current_region_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_all_regions_capacity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_verified",
+            "model_selected"
+          ]
+        },
+        "add": [
+          "alternatives_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "filter_projects_by_region": {
+        "owner": "agent",
+        "pre": "region_selected",
+        "add": [
+          "project_in_selected_region_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_project_in_region": {
+        "owner": "agent",
+        "pre": "region_selected",
+        "add": [
+          "project_in_selected_region_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_model": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "model_selected",
+            {
+              "or": [
+                "current_region_has_capacity",
+                "project_in_selected_region_ready"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "deployment_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_deployment": {
+        "owner": "agent",
+        "pre": "deployment_created",
+        "add": [
+          "deployment_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_for_project_id": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_id_provided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_model_choice": {
+        "owner": "agent",
+        "pre": "models_listed",
+        "add": [
+          "model_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_region_and_project_choice": {
+        "owner": "agent",
+        "pre": "alternatives_known",
+        "add": [
+          "region_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "project_id_already_available": [
+              {
+                "act": {
+                  "cap": "check_azure_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_project",
+                  "by": "agent"
+                }
+              }
+            ],
+            "project_id_needed": [
+              {
+                "act": {
+                  "cap": "ask_for_project_id",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_azure_auth",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "get_project",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "project_id_already_available": [
+              "project_id_provided"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "list_models",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_user_model_choice",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_current_region_capacity",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "current_region_has_capacity": [
+              {
+                "act": {
+                  "cap": "deploy_model",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_current_region_capacity": [
+              {
+                "act": {
+                  "cap": "query_all_regions_capacity",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "select_alternative_region": [
+                      {
+                        "act": {
+                          "cap": "ask_user_region_and_project_choice",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "filter_projects_by_region",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "existing_project_in_region": [
+                              {
+                                "act": {
+                                  "cap": "create_project_in_region",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "deploy_model",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "create_new_project_in_region": [
+                              {
+                                "act": {
+                                  "cap": "create_project_in_region",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "deploy_model",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "decline_alternative_region": []
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "current_region_has_capacity": [
+              "current_region_has_capacity"
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "monitor_deployment",
+          "by": "agent"
+        }
+      }
+    ],
+    "goal": "deployment_completed",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_azure_auth": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "get_project": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "list_models": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "check_current_region_capacity": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "query_all_regions_capacity": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "filter_projects_by_region": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "create_project_in_region": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "deploy_model": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "monitor_deployment": {
+      "via": "windows_desktop",
+      "needs": [
+        "azure_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "ask_for_project_id": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "ask_user_model_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "ask_user_region_and_project_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

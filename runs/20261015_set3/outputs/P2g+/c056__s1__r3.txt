@@ -1,0 +1,44 @@
+```ce
+Skill `cli-exercise`.
+Roles: `agent`, `user`.
+Tool `check_readiness` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; adds `readiness_checked`.
+Tool `ask_install_approval` (owner `agent`): via `ask_user`; needs `user_conversation`; adds `install_approved`.
+Tool `install_dependencies` (owner `agent`): via `bash`; needs `shell`, `linux`, `package_registries`, `allowlisted_internet`, `local_filesystem`; requires `install_approved`; adds `dependencies_ready`.
+Tool `prepare_workspace` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; adds `workspace_ready`.
+Tool `record_contract` (owner `agent`): via `write`; needs `local_filesystem`; adds `contract_recorded`.
+Tool `run_exact_cases` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `workspace_ready` and `contract_recorded`; adds `observations_captured`.
+Tool `run_exploration` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `workspace_ready` and `contract_recorded`; adds `observations_captured`.
+Tool `render_video_evidence` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `observations_captured`; adds `video_ready`.
+Tool `render_html_report` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `observations_captured`; adds `html_ready`.
+Tool `cleanup_runtime` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; adds `cleaned_up`.
+Tool `deliver_media_only` (owner `agent`): via `reply`; needs `user_conversation`; requires `video_ready` and `cleaned_up`; adds `delivered`.
+Tool `deliver_media_and_report` (owner `agent`): via `reply`; needs `user_conversation`; requires `video_ready` and `html_ready` and `cleaned_up`; adds `delivered`.
+Initially true: none.
+Goal: `delivered`.
+Protocol:
+  - `agent` uses `check_readiness`.
+  - `user` chooses one of (observed):
+    - branch `dependencies_already_ready` (assuming `dependencies_ready`): none.
+    - branch `dependencies_missing`:
+      - `agent` uses `ask_install_approval`.
+      - `agent` uses `install_dependencies`.
+  - `agent` uses `prepare_workspace`.
+  - `agent` uses `record_contract`.
+  - `user` chooses one of (observed):
+    - branch `exact_request` (assuming `is_exact_request`):
+      - `agent` uses `run_exact_cases`.
+    - branch `exploratory_request` (assuming `is_exploratory_request`):
+      - `agent` uses `run_exploration`.
+    - branch `mixed_request` (assuming `is_exact_request` and `is_exploratory_request`):
+      - `agent` uses `run_exact_cases`.
+      - `agent` uses `run_exploration`.
+  - `agent` uses `render_video_evidence`.
+  - `user` chooses one of (observed):
+    - branch `video_only` (assuming not `report_requested`):
+      - `agent` uses `cleanup_runtime`.
+      - `agent` uses `deliver_media_only`.
+    - branch `video_and_html` (assuming `report_requested`):
+      - `agent` uses `render_html_report`.
+      - `agent` uses `cleanup_runtime`.
+      - `agent` uses `deliver_media_and_report`.
+```

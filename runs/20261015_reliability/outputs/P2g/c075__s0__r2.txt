@@ -1,0 +1,31 @@
+```ce
+Skill `llm-finetuning-training-engineer`.
+Roles: `agent`, `eval_engineer`.
+Tool `prepare_dataset_and_reports` (owner `agent`): via `bash`; requires `brief_present`; adds `dataset_card_written`, `validation_report_written`, `phase2_complete`.
+Tool `run_generic_preflight` (owner `agent`): via `bash`; requires `phase2_complete`; adds `env_report_present`.
+Tool `generate_training_files` (owner `agent`): via `bash`; requires `env_report_present` and `env_ready`; adds `train_config_written`, `train_py_written`.
+Tool `commit_training_files` (owner `agent`): via `bash`; requires `train_config_written` and `train_py_written`; adds `train_files_committed`.
+Tool `launch_training` (owner `agent`): via `bash`; requires `train_files_committed`; adds `training_running`.
+Tool `monitor_training` (owner `agent`): via `bash`; requires `training_running`; adds `progress_reported`.
+Tool `report_failure_with_logs` (owner `agent`): via `read`; requires `training_failed`; adds `failure_reported`.
+Tool `export_artifact_and_smoke_test` (owner `agent`): via `bash`; requires `training_completed` and `promote_verdict_received`; adds `artifact_exported`, `smoke_test_passed`.
+Initially true: `brief_present`, `env_ready`.
+Goal: any of (all of (`phase2_complete`, `env_report_present`, `train_files_committed`, `training_completed`), all of (`phase2_complete`, `env_report_present`, `failure_reported`), all of (`artifact_exported`, `smoke_test_passed`)).
+Protocol:
+  - `agent` uses `prepare_dataset_and_reports`.
+  - `agent` uses `run_generic_preflight`.
+  - `agent` chooses one of (observed):
+    - branch `blocked_or_warnings`: none.
+    - branch `ready_to_train`:
+      - `agent` uses `generate_training_files`.
+      - `agent` uses `commit_training_files`.
+      - `agent` uses `launch_training`.
+      - `agent` uses `monitor_training`.
+      - `agent` chooses one of (observed):
+        - branch `completed`:
+          - `agent` tells `eval_engineer` `checkpoint_ready`.
+          - `eval_engineer` tells `agent` `PROMOTE`.
+          - `agent` uses `export_artifact_and_smoke_test`.
+        - branch `failed`:
+          - `agent` uses `report_failure_with_logs`.
+```

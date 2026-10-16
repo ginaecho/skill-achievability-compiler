@@ -1,0 +1,663 @@
+{
+  "pack": {
+    "name": "ui-widget-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_path": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation"
+          ]
+        },
+        "add": [
+          "path_chosen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_ext_apps_plugin": {
+        "owner": "agent",
+        "pre": "mcp_apps_path",
+        "add": [
+          "ext_apps_plugin_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "invoke_ext_apps_skill": {
+        "owner": "agent",
+        "pre": "ext_apps_plugin_installed",
+        "add": [
+          "ext_apps_skill_invoked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_atk_cli_skill_env": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "oai_apps_path"
+          ]
+        },
+        "add": [
+          "atk_cli_tag_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_widget_references": {
+        "owner": "agent",
+        "pre": "oai_apps_path",
+        "add": [
+          "widget_references_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_widget_dependencies": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "widget_references_read"
+          ]
+        },
+        "add": [
+          "widget_dependencies_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_mcp_widgets": {
+        "owner": "agent",
+        "pre": "widget_dependencies_ready",
+        "add": [
+          "widgets_implemented",
+          "widget_resources_registered",
+          "mcp_server_updated",
+          "tool_definitions_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_background_server_and_tunnel": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:local_servers",
+            {
+              "and": [
+                "mcp_server_updated",
+                "atk_cli_tag_set"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "server_running",
+          "tunnel_running",
+          "tunnel_url_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_and_verify_tools": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "server_running",
+                "tunnel_running",
+                "tool_definitions_ready"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "inspector_synced",
+          "e2e_verified",
+          "health_ok"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "provision_agent_if_needed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            {
+              "and": [
+                "e2e_verified",
+                "agent_manifest_changed"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "agent_provisioned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_with_summary": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "widgets_implemented",
+            "server_running",
+            "tunnel_running",
+            "e2e_verified"
+          ]
+        },
+        "add": [
+          "project_summary_delivered",
+          "widget_links_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_path",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "oai_apps": [
+              {
+                "act": {
+                  "cap": "set_atk_cli_skill_env",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_widget_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "install_widget_dependencies",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "implement_mcp_widgets",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_background_server_and_tunnel",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_and_verify_tools",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "provision_needed": [
+                      {
+                        "act": {
+                          "cap": "provision_agent_if_needed",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_provision_needed": []
+                  },
+                  "assumes": {
+                    "provision_needed": [
+                      "agent_manifest_changed"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_with_summary",
+                  "by": "agent"
+                }
+              }
+            ],
+            "mcp_apps": [
+              {
+                "act": {
+                  "cap": "install_ext_apps_plugin",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "invoke_ext_apps_skill",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "mcp_apps": [
+              "mcp_apps_path"
+            ],
+            "oai_apps": [
+              "oai_apps_path"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "project_summary_delivered",
+        "widget_links_delivered"
+      ]
+    },
+    "init_true": [
+      "needs:user_conversation",
+      "needs:shell",
+      "needs:package_registries",
+      "needs:local_servers",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "ui-widget-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_path": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "path_chosen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_ext_apps_plugin": {
+        "owner": "agent",
+        "pre": "mcp_apps_path",
+        "add": [
+          "ext_apps_plugin_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "invoke_ext_apps_skill": {
+        "owner": "agent",
+        "pre": "ext_apps_plugin_installed",
+        "add": [
+          "ext_apps_skill_invoked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_atk_cli_skill_env": {
+        "owner": "agent",
+        "pre": "oai_apps_path",
+        "add": [
+          "atk_cli_tag_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_widget_references": {
+        "owner": "agent",
+        "pre": "oai_apps_path",
+        "add": [
+          "widget_references_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_widget_dependencies": {
+        "owner": "agent",
+        "pre": "widget_references_read",
+        "add": [
+          "widget_dependencies_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_mcp_widgets": {
+        "owner": "agent",
+        "pre": "widget_dependencies_ready",
+        "add": [
+          "widgets_implemented",
+          "widget_resources_registered",
+          "mcp_server_updated",
+          "tool_definitions_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_background_server_and_tunnel": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "mcp_server_updated",
+            "atk_cli_tag_set"
+          ]
+        },
+        "add": [
+          "server_running",
+          "tunnel_running",
+          "tunnel_url_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_and_verify_tools": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "server_running",
+            "tunnel_running",
+            "tool_definitions_ready"
+          ]
+        },
+        "add": [
+          "inspector_synced",
+          "e2e_verified",
+          "health_ok"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "provision_agent_if_needed": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "e2e_verified",
+            "agent_manifest_changed"
+          ]
+        },
+        "add": [
+          "agent_provisioned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reply_with_summary": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "widgets_implemented",
+            "server_running",
+            "tunnel_running",
+            "e2e_verified"
+          ]
+        },
+        "add": [
+          "project_summary_delivered",
+          "widget_links_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_path",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "oai_apps": [
+              {
+                "act": {
+                  "cap": "set_atk_cli_skill_env",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_widget_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "install_widget_dependencies",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "implement_mcp_widgets",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_background_server_and_tunnel",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_and_verify_tools",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "provision_needed": [
+                      {
+                        "act": {
+                          "cap": "provision_agent_if_needed",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_provision_needed": []
+                  },
+                  "assumes": {
+                    "provision_needed": [
+                      "agent_manifest_changed"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "reply_with_summary",
+                  "by": "agent"
+                }
+              }
+            ],
+            "mcp_apps": [
+              {
+                "act": {
+                  "cap": "install_ext_apps_plugin",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "invoke_ext_apps_skill",
+                  "by": "agent"
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "mcp_apps": [
+              "mcp_apps_path"
+            ],
+            "oai_apps": [
+              "oai_apps_path"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "project_summary_delivered",
+        "widget_links_delivered"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_path": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_ext_apps_plugin": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "invoke_ext_apps_skill": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "set_atk_cli_skill_env": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "read_widget_references": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "install_widget_dependencies": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "implement_mcp_widgets": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_background_server_and_tunnel": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "local_servers"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "inspect_and_verify_tools": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "provision_agent_if_needed": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "reply_with_summary": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

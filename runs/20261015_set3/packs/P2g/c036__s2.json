@@ -1,0 +1,411 @@
+{
+  "pack": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_skills_checked",
+          "installed_skill_already_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_cli": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_checked",
+          "catalog_match_found",
+          "no_strong_match",
+          "catalog_check_failed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_fallback": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_checked",
+          "catalog_match_found",
+          "no_strong_match",
+          "catalog_check_failed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_nvidia_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "user_approved_install",
+                "catalog_match_found"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "skill_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_install_approval": {
+        "owner": "agent",
+        "pre": "catalog_match_found",
+        "add": [
+          "user_approved_install"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_installed_skills",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "already_installed": [
+              {
+                "goal": {
+                  "or": [
+                    "catalog_match_found",
+                    "no_strong_match",
+                    "catalog_check_failed",
+                    "installed_skill_already_available"
+                  ]
+                }
+              }
+            ],
+            "not_installed": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_catalog_check_succeeds": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "cli_unavailable_or_fails": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_fallback",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "strong_match_found": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "recommend_only": [],
+                            "user_wants_install": [
+                              {
+                                "act": {
+                                  "cap": "ask_install_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "install_nvidia_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "no_strong_match_found": [],
+                    "catalog_lookup_failed": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "catalog_match_found",
+        "no_strong_match",
+        "catalog_check_failed",
+        "installed_skill_already_available"
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_skills_checked",
+          "installed_skill_already_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_checked",
+          "catalog_match_found",
+          "no_strong_match",
+          "catalog_check_failed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_fallback": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_checked",
+          "catalog_match_found",
+          "no_strong_match",
+          "catalog_check_failed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_nvidia_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "user_approved_install",
+            "catalog_match_found"
+          ]
+        },
+        "add": [
+          "skill_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_install_approval": {
+        "owner": "agent",
+        "pre": "catalog_match_found",
+        "add": [
+          "user_approved_install"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_installed_skills",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "already_installed": [
+              {
+                "goal": {
+                  "or": [
+                    "catalog_match_found",
+                    "no_strong_match",
+                    "catalog_check_failed",
+                    "installed_skill_already_available"
+                  ]
+                }
+              }
+            ],
+            "not_installed": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_catalog_check_succeeds": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "cli_unavailable_or_fails": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_fallback",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "strong_match_found": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "recommend_only": [],
+                            "user_wants_install": [
+                              {
+                                "act": {
+                                  "cap": "ask_install_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "install_nvidia_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "no_strong_match_found": [],
+                    "catalog_lookup_failed": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "catalog_match_found",
+        "no_strong_match",
+        "catalog_check_failed",
+        "installed_skill_already_available"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_installed_skills": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "query_catalog_cli": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "query_catalog_fallback": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "install_nvidia_skill": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "ask_install_approval": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,594 @@
+{
+  "pack": {
+    "name": "readme-generator",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_doc_context": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation"
+          ]
+        },
+        "add": [
+          "doc_context_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scan_repository": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:local_filesystem"
+          ]
+        },
+        "add": [
+          "repo_scanned",
+          "project_identity_known",
+          "entry_points_known",
+          "scripts_known",
+          "config_known",
+          "examples_extracted",
+          "env_vars_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_repository_text": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:local_filesystem",
+            "repo_scanned"
+          ]
+        },
+        "add": [
+          "architecture_known",
+          "tests_known",
+          "manifests_known",
+          "exports_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "capture_cli_help": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "entry_points_known"
+          ]
+        },
+        "add": [
+          "cli_output_captured",
+          "commands_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "research_framework_context": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "repo_scanned"
+          ]
+        },
+        "add": [
+          "external_context_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "draft_readme": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:local_filesystem",
+            {
+              "and": [
+                "doc_context_known",
+                "repo_scanned",
+                "project_identity_known"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "readme_written",
+          "maintainer_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "refine_docs": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:local_filesystem",
+            "readme_written"
+          ]
+        },
+        "add": [
+          "format_validated",
+          "links_checked",
+          "hallucination_prevented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "git_commit_docs": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "readme_written"
+          ]
+        },
+        "add": [
+          "docs_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "git_push_docs": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:allowlisted_internet",
+            "needs:github_account",
+            "docs_committed"
+          ]
+        },
+        "add": [
+          "docs_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_doc_context",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "scan_repository",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_repository_text",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "capture_cli_help": [
+              {
+                "act": {
+                  "cap": "capture_cli_help",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_cli_help": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "research_needed": [
+              {
+                "act": {
+                  "cap": "research_framework_context",
+                  "by": "agent"
+                }
+              }
+            ],
+            "repo_sufficient": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "draft_readme",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "refine_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "no_git_actions": [],
+            "commit_only": [
+              {
+                "act": {
+                  "cap": "git_commit_docs",
+                  "by": "agent"
+                }
+              }
+            ],
+            "commit_and_push": [
+              {
+                "act": {
+                  "cap": "git_commit_docs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "git_push_docs",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "readme_written",
+        "maintainer_ready",
+        "hallucination_prevented"
+      ]
+    },
+    "init_true": [
+      "needs:user_conversation",
+      "needs:local_filesystem",
+      "needs:shell",
+      "needs:linux",
+      "needs:allowlisted_internet",
+      "needs:github_account"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "readme-generator",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_doc_context": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "doc_context_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scan_repository": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "repo_scanned",
+          "project_identity_known",
+          "entry_points_known",
+          "scripts_known",
+          "config_known",
+          "examples_extracted",
+          "env_vars_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_repository_text": {
+        "owner": "agent",
+        "pre": "repo_scanned",
+        "add": [
+          "architecture_known",
+          "tests_known",
+          "manifests_known",
+          "exports_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "capture_cli_help": {
+        "owner": "agent",
+        "pre": "entry_points_known",
+        "add": [
+          "cli_output_captured",
+          "commands_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "research_framework_context": {
+        "owner": "agent",
+        "pre": "repo_scanned",
+        "add": [
+          "external_context_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "draft_readme": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "doc_context_known",
+            "repo_scanned",
+            "project_identity_known"
+          ]
+        },
+        "add": [
+          "readme_written",
+          "maintainer_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "refine_docs": {
+        "owner": "agent",
+        "pre": "readme_written",
+        "add": [
+          "format_validated",
+          "links_checked",
+          "hallucination_prevented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "git_commit_docs": {
+        "owner": "agent",
+        "pre": "readme_written",
+        "add": [
+          "docs_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "git_push_docs": {
+        "owner": "agent",
+        "pre": "docs_committed",
+        "add": [
+          "docs_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_doc_context",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "scan_repository",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_repository_text",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "capture_cli_help": [
+              {
+                "act": {
+                  "cap": "capture_cli_help",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_cli_help": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "research_needed": [
+              {
+                "act": {
+                  "cap": "research_framework_context",
+                  "by": "agent"
+                }
+              }
+            ],
+            "repo_sufficient": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "draft_readme",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "refine_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "no_git_actions": [],
+            "commit_only": [
+              {
+                "act": {
+                  "cap": "git_commit_docs",
+                  "by": "agent"
+                }
+              }
+            ],
+            "commit_and_push": [
+              {
+                "act": {
+                  "cap": "git_commit_docs",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "git_push_docs",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "readme_written",
+        "maintainer_ready",
+        "hallucination_prevented"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_doc_context": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "scan_repository": {
+      "via": "read",
+      "needs": [
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "inspect_repository_text": {
+      "via": "read",
+      "needs": [
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "capture_cli_help": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "research_framework_context": {
+      "via": "web_search",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "draft_readme": {
+      "via": "write",
+      "needs": [
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "refine_docs": {
+      "via": "edit",
+      "needs": [
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "git_commit_docs": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "git_push_docs": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "allowlisted_internet",
+        "github_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

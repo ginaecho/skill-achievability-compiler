@@ -1,0 +1,58 @@
+```ce
+Skill `debian-linux-triage`.
+Roles: `agent`, `user`.
+
+Tool `confirm_release` (owner `agent`):
+  adds `release_confirmed`;
+  picks `debian_release` with `debian_release` != ``.
+Tool `diagnose_with_journalctl` (owner `agent`):
+  via `bash`;
+  requires `release_confirmed`;
+  adds `logs_collected`;
+  picks `error_patterns` with `error_patterns` != ``.
+Tool `run_remediation` (owner `agent`):
+  via `bash`;
+  requires `logs_collected`;
+  adds `remediation_applied`.
+Tool `verify_fix` (owner `agent`):
+  via `bash`;
+  requires `remediation_applied`;
+  adds `issue_resolved`.
+Tool `check_apparmor` (owner `agent`):
+  via `bash`;
+  adds `apparmor_checked`.
+Tool `rollback` (owner `agent`):
+  via `bash`;
+  requires `remediation_applied`;
+  adds `rolled_back`.
+Tool `ask_user_question` (owner `agent`):
+  via `ask_user`;
+  adds `user_answered`;
+  picks `user_response` with `user_response` != ``.
+
+Initially true: none.
+Initially: `debian_release` == `` and `error_patterns` == `` and `user_response` == ``.
+Goal: `issue_resolved`.
+
+Protocol:
+  - `agent` uses `confirm_release`.
+  - loop `triage_loop`:
+    - `agent` uses `diagnose_with_journalctl`.
+    - `agent` chooses one of (observed):
+      - branch `needs_clarification`:
+        - `agent` uses `ask_user_question`.
+        - repeat `triage_loop`.
+      - branch `diagnosed`:
+        - `agent` uses `check_apparmor`.
+        - `agent` uses `run_remediation`.
+        - `agent` uses `verify_fix`.
+        - `agent` chooses one of (observed):
+          - branch `fix_success`:
+            - `agent` chooses one of (observed):
+              - branch `cleanup_requested`:
+                - `agent` uses `rollback`.
+              - branch `no_cleanup`: none.
+          - branch `fix_failed`:
+            - `agent` uses `rollback`.
+            - repeat `triage_loop`.
+```

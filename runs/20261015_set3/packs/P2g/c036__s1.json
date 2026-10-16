@@ -1,0 +1,852 @@
+{
+  "pack": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_skills_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_nvidia_catalog_cli": {
+        "owner": "agent",
+        "pre": "nvidia_relevant",
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_nvidia_catalog_web": {
+        "owner": "agent",
+        "pre": "nvidia_relevant",
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_install_approval": {
+        "owner": "agent",
+        "pre": "strong_match_found",
+        "add": [
+          "install_approval_asked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_nvidia_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "install_approved",
+            "catalog_available"
+          ]
+        },
+        "add": [
+          "skill_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "nvidia_relevant": [
+              {
+                "act": {
+                  "cap": "check_installed_skills",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "installed_match": [
+                      {
+                        "msg": {
+                          "from": "agent",
+                          "to": "user",
+                          "label": "handoff_to_installed_skill"
+                        }
+                      }
+                    ],
+                    "not_installed_match": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "cli_catalog_ok": [
+                              {
+                                "act": {
+                                  "cap": "list_nvidia_catalog_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "cli_catalog_unavailable": [
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "external": true,
+                                  "branches": {
+                                    "web_catalog_ok": [
+                                      {
+                                        "act": {
+                                          "cap": "fetch_nvidia_catalog_web",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "web_catalog_unavailable": [
+                                      {
+                                        "msg": {
+                                          "from": "agent",
+                                          "to": "user",
+                                          "label": "catalog_check_failed"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "strong_match": [
+                              {
+                                "msg": {
+                                  "from": "agent",
+                                  "to": "user",
+                                  "label": "recommend_skill"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "ask_install_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_install": [
+                                      {
+                                        "act": {
+                                          "cap": "install_nvidia_skill",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "msg": {
+                                          "from": "agent",
+                                          "to": "user",
+                                          "label": "restart_or_reload_agent"
+                                        }
+                                      }
+                                    ],
+                                    "decline_install": []
+                                  }
+                                }
+                              }
+                            ],
+                            "medium_match": [
+                              {
+                                "msg": {
+                                  "from": "agent",
+                                  "to": "user",
+                                  "label": "recommend_shortlist"
+                                }
+                              }
+                            ],
+                            "no_match": [
+                              {
+                                "msg": {
+                                  "from": "agent",
+                                  "to": "user",
+                                  "label": "no_strong_match"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "not_nvidia_relevant": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "nvidia_relevant",
+        "catalog_checked",
+        {
+          "or": [
+            "already_installed_match",
+            "recommendation_given",
+            "no_strong_match_reported",
+            "catalog_check_failed_reported"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "recommended_count",
+          "==",
+          0
+        ]
+      }
+    ],
+    "skills": {
+      "agent": [
+        {
+          "select": {
+            "branches": {
+              "nvidia_relevant": [
+                {
+                  "act": {
+                    "cap": "check_installed_skills"
+                  }
+                },
+                {
+                  "select": {
+                    "branches": {
+                      "installed_match": [
+                        {
+                          "send": {
+                            "to": "user",
+                            "label": "handoff_to_installed_skill"
+                          }
+                        }
+                      ],
+                      "not_installed_match": [
+                        {
+                          "select": {
+                            "branches": {
+                              "cli_catalog_ok": [
+                                {
+                                  "act": {
+                                    "cap": "list_nvidia_catalog_cli"
+                                  }
+                                }
+                              ],
+                              "cli_catalog_unavailable": [
+                                {
+                                  "select": {
+                                    "branches": {
+                                      "web_catalog_ok": [
+                                        {
+                                          "act": {
+                                            "cap": "fetch_nvidia_catalog_web"
+                                          }
+                                        }
+                                      ],
+                                      "web_catalog_unavailable": [
+                                        {
+                                          "send": {
+                                            "to": "user",
+                                            "label": "catalog_check_failed"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "select": {
+                            "branches": {
+                              "strong_match": [
+                                {
+                                  "send": {
+                                    "to": "user",
+                                    "label": "recommend_skill"
+                                  }
+                                },
+                                {
+                                  "act": {
+                                    "cap": "ask_install_approval"
+                                  }
+                                }
+                              ],
+                              "medium_match": [
+                                {
+                                  "send": {
+                                    "to": "user",
+                                    "label": "recommend_shortlist"
+                                  }
+                                }
+                              ],
+                              "no_match": [
+                                {
+                                  "send": {
+                                    "to": "user",
+                                    "label": "no_strong_match"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "not_nvidia_relevant": []
+            }
+          }
+        }
+      ],
+      "user": [
+        {
+          "branch": {
+            "from": "agent",
+            "branches": {
+              "recommend_skill": [
+                {
+                  "select": {
+                    "branches": {
+                      "approve_install": [
+                        {
+                          "recv": {
+                            "from": "agent",
+                            "label": "recommend_skill"
+                          }
+                        }
+                      ],
+                      "decline_install": [
+                        {
+                          "recv": {
+                            "from": "agent",
+                            "label": "recommend_skill"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "handoff_to_installed_skill": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "handoff_to_installed_skill"
+                  }
+                }
+              ],
+              "recommend_shortlist": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "recommend_shortlist"
+                  }
+                }
+              ],
+              "no_strong_match": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "no_strong_match"
+                  }
+                }
+              ],
+              "catalog_check_failed": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "catalog_check_failed"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "pre_binding": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_skills_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_nvidia_catalog_cli": {
+        "owner": "agent",
+        "pre": "nvidia_relevant",
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_nvidia_catalog_web": {
+        "owner": "agent",
+        "pre": "nvidia_relevant",
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_install_approval": {
+        "owner": "agent",
+        "pre": "strong_match_found",
+        "add": [
+          "install_approval_asked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_nvidia_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "install_approved",
+            "catalog_available"
+          ]
+        },
+        "add": [
+          "skill_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "nvidia_relevant": [
+              {
+                "act": {
+                  "cap": "check_installed_skills",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "installed_match": [
+                      {
+                        "msg": {
+                          "from": "agent",
+                          "to": "user",
+                          "label": "handoff_to_installed_skill"
+                        }
+                      }
+                    ],
+                    "not_installed_match": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "external": true,
+                          "branches": {
+                            "cli_catalog_ok": [
+                              {
+                                "act": {
+                                  "cap": "list_nvidia_catalog_cli",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "cli_catalog_unavailable": [
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "external": true,
+                                  "branches": {
+                                    "web_catalog_ok": [
+                                      {
+                                        "act": {
+                                          "cap": "fetch_nvidia_catalog_web",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "web_catalog_unavailable": [
+                                      {
+                                        "msg": {
+                                          "from": "agent",
+                                          "to": "user",
+                                          "label": "catalog_check_failed"
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "strong_match": [
+                              {
+                                "msg": {
+                                  "from": "agent",
+                                  "to": "user",
+                                  "label": "recommend_skill"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "ask_install_approval",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_install": [
+                                      {
+                                        "act": {
+                                          "cap": "install_nvidia_skill",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "msg": {
+                                          "from": "agent",
+                                          "to": "user",
+                                          "label": "restart_or_reload_agent"
+                                        }
+                                      }
+                                    ],
+                                    "decline_install": []
+                                  }
+                                }
+                              }
+                            ],
+                            "medium_match": [
+                              {
+                                "msg": {
+                                  "from": "agent",
+                                  "to": "user",
+                                  "label": "recommend_shortlist"
+                                }
+                              }
+                            ],
+                            "no_match": [
+                              {
+                                "msg": {
+                                  "from": "agent",
+                                  "to": "user",
+                                  "label": "no_strong_match"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "not_nvidia_relevant": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "nvidia_relevant",
+        "catalog_checked",
+        {
+          "or": [
+            "already_installed_match",
+            "recommendation_given",
+            "no_strong_match_reported",
+            "catalog_check_failed_reported"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "recommended_count",
+          "==",
+          0
+        ]
+      }
+    ],
+    "skills": {
+      "agent": [
+        {
+          "select": {
+            "branches": {
+              "nvidia_relevant": [
+                {
+                  "act": {
+                    "cap": "check_installed_skills"
+                  }
+                },
+                {
+                  "select": {
+                    "branches": {
+                      "installed_match": [
+                        {
+                          "send": {
+                            "to": "user",
+                            "label": "handoff_to_installed_skill"
+                          }
+                        }
+                      ],
+                      "not_installed_match": [
+                        {
+                          "select": {
+                            "branches": {
+                              "cli_catalog_ok": [
+                                {
+                                  "act": {
+                                    "cap": "list_nvidia_catalog_cli"
+                                  }
+                                }
+                              ],
+                              "cli_catalog_unavailable": [
+                                {
+                                  "select": {
+                                    "branches": {
+                                      "web_catalog_ok": [
+                                        {
+                                          "act": {
+                                            "cap": "fetch_nvidia_catalog_web"
+                                          }
+                                        }
+                                      ],
+                                      "web_catalog_unavailable": [
+                                        {
+                                          "send": {
+                                            "to": "user",
+                                            "label": "catalog_check_failed"
+                                          }
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "select": {
+                            "branches": {
+                              "strong_match": [
+                                {
+                                  "send": {
+                                    "to": "user",
+                                    "label": "recommend_skill"
+                                  }
+                                },
+                                {
+                                  "act": {
+                                    "cap": "ask_install_approval"
+                                  }
+                                }
+                              ],
+                              "medium_match": [
+                                {
+                                  "send": {
+                                    "to": "user",
+                                    "label": "recommend_shortlist"
+                                  }
+                                }
+                              ],
+                              "no_match": [
+                                {
+                                  "send": {
+                                    "to": "user",
+                                    "label": "no_strong_match"
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "not_nvidia_relevant": []
+            }
+          }
+        }
+      ],
+      "user": [
+        {
+          "branch": {
+            "from": "agent",
+            "branches": {
+              "recommend_skill": [
+                {
+                  "select": {
+                    "branches": {
+                      "approve_install": [
+                        {
+                          "recv": {
+                            "from": "agent",
+                            "label": "recommend_skill"
+                          }
+                        }
+                      ],
+                      "decline_install": [
+                        {
+                          "recv": {
+                            "from": "agent",
+                            "label": "recommend_skill"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              ],
+              "handoff_to_installed_skill": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "handoff_to_installed_skill"
+                  }
+                }
+              ],
+              "recommend_shortlist": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "recommend_shortlist"
+                  }
+                }
+              ],
+              "no_strong_match": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "no_strong_match"
+                  }
+                }
+              ],
+              "catalog_check_failed": [
+                {
+                  "recv": {
+                    "from": "agent",
+                    "label": "catalog_check_failed"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  },
+  "bindings": {
+    "check_installed_skills": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "list_nvidia_catalog_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "fetch_nvidia_catalog_web": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_install_approval": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "install_nvidia_skill": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    }
+  },
+  "live_goal": null
+}

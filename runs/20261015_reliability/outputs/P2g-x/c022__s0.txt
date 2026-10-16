@@ -1,0 +1,86 @@
+```ce
+Skill `neon-auth`.
+Roles: `agent`, `user`.
+
+Tool `inspect_existing_identity` (owner `agent`): via `bash`; adds `identity_found`.
+Tool `check_neon_project_region_config` (owner `agent`): via `bash`; adds `aws_region_checked`, `ip_allow_checked`, `private_networking_checked`.
+Tool `choose_identity` (owner `agent`):
+  requires `identity_found`;
+  picks `identity_choice` with
+    (`identity_choice` == "managed_auth") or
+    (`identity_choice` == "self_managed_auth") or
+    (`identity_choice` == "keep_existing") or
+    (`identity_choice` == "supabase_migration") or
+    (`identity_choice` == "withdraw");
+  sets `needs_managed_setup` to 1,
+    `needs_self_managed_setup` to 0,
+    `needs_login_implementation` to 0;
+  adds `decision_made`.
+Tool `enable_managed_auth_via_config` (owner `agent`): via `bash`;
+  requires `needs_managed_setup` == 1;
+  adds `auth_config_declared`, `managed_auth_enabled`.
+Tool `deploy_config` (owner `agent`): via `bash`;
+  requires `auth_config_declared`;
+  adds `deployed`.
+Tool `verify_auth_flows` (owner `agent`): via `bash`;
+  requires `deployed` and `needs_login_implementation` == 1;
+  adds `flows_verified`.
+Tool `add_trusted_domain` (owner `agent`): via `bash`;
+  adds `domain_trusted`.
+Tool `prepare_self_managed_auth` (owner `agent`): via `bash`;
+  requires `needs_self_managed_setup` == 1;
+  adds `self_managed_setup_done`.
+Tool `plan_supabase_migration` (owner `agent`): via `bash`;
+  requires `identity_choice` == "supabase_migration";
+  adds `migration_planned`.
+Tool `withdraw_auth` (owner `agent`): via `bash`;
+  requires `identity_choice` == "withdraw";
+  adds `withdrawn`.
+
+Initially true: none.
+Initially: `needs_managed_setup` == 0, `needs_self_managed_setup` == 0,
+           `needs_login_implementation` == 0, `identity_choice` == "none".
+
+Goal: any of (
+  (`managed_auth_enabled` and `domain_trusted` and `flows_verified`),
+  (`self_managed_setup_done`),
+  (`keep_existing` and `withdrawn`),
+  (`migration_planned` and `managed_auth_enabled` and `domain_trusted` and `flows_verified`),
+  (`withdrawn`)
+).
+
+Protocol:
+  - `agent` uses `inspect_existing_identity`.
+  - `agent` chooses one of (observed):
+    - branch `identity_present`:
+      - `agent` uses `choose_identity`.
+      - `agent` chooses one of (observed):
+        - branch `managed_setup`:
+          - `agent` uses `check_neon_project_region_config`.
+          - `agent` uses `enable_managed_auth_via_config`.
+          - `agent` uses `deploy_config`.
+          - `agent` uses `add_trusted_domain`.
+          - `agent` sets `needs_login_implementation` to 1.
+          - `agent` uses `verify_auth_flows`.
+        - branch `self_managed_setup`:
+          - `agent` sets `needs_self_managed_setup` to 1.
+          - `agent` uses `prepare_self_managed_auth`.
+        - branch `keep_existing`:
+          - `agent` uses `withdraw_auth`.
+        - branch `supabase_migration`:
+          - `agent` uses `plan_supabase_migration`.
+          - `agent` uses `check_neon_project_region_config`.
+          - `agent` uses `enable_managed_auth_via_config`.
+          - `agent` uses `deploy_config`.
+          - `agent` uses `add_trusted_domain`.
+          - `agent` sets `needs_login_implementation` to 1.
+          - `agent` uses `verify_auth_flows`.
+        - branch `withdraw_auth`: none.
+    - branch `identity_absent`:
+      - `agent` uses `check_neon_project_region_config`.
+      - `agent` uses `enable_managed_auth_via_config`.
+      - `agent` uses `deploy_config`.
+      - `agent` uses `add_trusted_domain`.
+      - `agent` sets `needs_login_implementation` to 1.
+      - `agent` uses `verify_auth_flows`.
+```

@@ -288,9 +288,11 @@ than one `azure.ai.agent`, the A2A topology every `A tells B` message needs (a
 endpoint); and every intent artifact (`reach` on its needs, plus each
 frontmatter `tools:` name against the declared toolbox tools and the runtime).
 
-The verdict is IMPOSSIBLE if any item is, UNKNOWN if nothing is impossible but
-something rests on an assumption, else ACHIEVABLE; the exit code follows
-`reach` (0, 1, 3, and 2 for an error). With OpenTelemetry installed the gate
+The verdict is IMPOSSIBLE if any item is; REJECTED if nothing is impossible but
+a pack's protocol is rejected (the goal is reachable, but the coordination can
+deadlock; this is not a goal refutation); UNKNOWN if something rests on an
+assumption; else ACHIEVABLE. The exit code follows `reach` (0, 1, 3, and 2 for
+an error), plus 4 for REJECTED. With OpenTelemetry installed the gate
 emits one `skillc.verdict gate <verdict>` span.
 
 ## Observed environment of a deployed hosted agent

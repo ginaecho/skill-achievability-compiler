@@ -190,3 +190,11 @@ not need it today; the same model with a carelessly edited prompt, or a
 tool with a weak check, does. And the pre-deploy half of skillc, which
 refused the email deliverable before any version existed, holds for every
 arm and costs no model tokens.
+
+### Compacted-pack arm
+
+Every result above gates the authored pack. [HOSTS_E2E.md](HOSTS_E2E.md) replaces it with packs
+gpt-5.4 compacted from the same six skills and coordinator instructions (3 samples): none
+reproduces the authored gate labels. Two are refuted on all three correct configurations (6
+false IMPOSSIBLE: role functions bound `via mcp`, or a goal over branch labels), one does not
+parse, and no email-variant pack is refuted for the missing email connection.

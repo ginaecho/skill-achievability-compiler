@@ -64,7 +64,10 @@ def text_report(result: ReachResult) -> str:
     for cond, status in result.status.items():
         lines.append(f"  {MARK[status]} {cond}")
     if result.plan:
-        lines += ["", f"plan ({result.plan_verdict.label} by the trusted checker):"]
+        pv = result.plan_verdict
+        lines += ["", f"plan ({pv.label} by the trusted checker"
+                  + (f"; protocol REJECTED ({pv.protocol_reason}), goal not refuted"
+                     if pv.protocol == "REJECTED" else "") + "):"]
         for i, step in enumerate(result.plan, 1):
             lines.append(f"  {i}. {step.title}")
             lines.append(f"       $ {step.how}")

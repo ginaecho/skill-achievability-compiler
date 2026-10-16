@@ -1,0 +1,36 @@
+```ce
+Skill `entra-agent-id`.
+Roles: `agent`, `user`.
+Tool `search_current_docs` (owner `agent`): via `web_search`; adds `docs_searched`.
+Tool `read_allowlisted_docs` (owner `agent`): via `web_fetch`; requires `docs_searched`; adds `docs_verified`.
+Tool `inspect_workspace_references` (owner `agent`): via `read`; adds `local_references_checked`.
+Tool `install_python_dependencies` (owner `agent`): via `bash`; requires `package_registries`; adds `python_deps_ready`.
+Tool `write_provisioning_script` (owner `agent`): via `write`; adds `script_written`.
+Tool `run_provisioning_script` (owner `agent`): via `bash`; requires all of (`script_written`, `python_deps_ready`, `azure_credentials_provided`, `entra_role_available`, `graph_access_available`); needs `allowlisted_internet`; adds all of (`blueprint_created`, `blueprint_principal_created`, `agent_identity_created`, `odata_header_used`, `user_sponsor_used`).
+Tool `grant_admin_consent` (owner `agent`): via `azure_console`; requires `azure_credentials_provided`; needs `azure_account`; adds `admin_consent_granted`.
+Tool `wait_for_permission_propagation` (owner `agent`): via `bash`; requires `admin_consent_granted`; adds `propagation_wait_done`.
+Tool `cleanup_agent_identity_resources` (owner `agent`): via `bash`; requires any of (`blueprint_created`, `blueprint_principal_created`, `agent_identity_created`); needs `allowlisted_internet`; removes all of (`blueprint_created`, `blueprint_principal_created`, `agent_identity_created`).
+Initially true: `package_registries`.
+Initially: true.
+Goal: all of (`docs_verified`, `python_deps_ready`, `script_written`, `blueprint_created`, `blueprint_principal_created`, `agent_identity_created`, `odata_header_used`, `user_sponsor_used`).
+Protocol:
+  - `agent` uses `search_current_docs`.
+  - `agent` uses `read_allowlisted_docs`.
+  - `agent` uses `inspect_workspace_references`.
+  - `user` chooses one of (observed):
+    - branch `provide_credentials_and_roles`:
+      - `agent` uses `install_python_dependencies`.
+      - `agent` uses `write_provisioning_script`.
+      - `user` chooses one of (observed):
+        - branch `admin_consent_already_granted`:
+          - `agent` uses `run_provisioning_script`.
+        - branch `admin_consent_needed`:
+          - `agent` uses `grant_admin_consent`.
+          - `agent` uses `wait_for_permission_propagation`.
+          - `agent` uses `run_provisioning_script`.
+      - `user` chooses one of (observed):
+        - branch `keep_resources`: none.
+        - branch `cleanup_after_demo`:
+          - `agent` uses `cleanup_agent_identity_resources`.
+    - branch `missing_credentials_or_roles`: none.
+```

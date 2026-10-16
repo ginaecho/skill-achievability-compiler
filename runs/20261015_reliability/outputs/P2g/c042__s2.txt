@@ -1,0 +1,79 @@
+```ce
+Skill `executing-plans`.
+Roles: `agent`, `user`.
+Tool `setup_workspace_and_ledger` (owner `agent`): via `bash`; requires `plan_available`; adds `isolated_workspace_ready`, `ledger_ready`, `todos_created`, `tdd_loaded`, `preflight_scanned`.
+Tool `take_task` (owner `agent`): via `bash`; requires `isolated_workspace_ready`; adds `task_brief_read`, `task_in_progress`, `base_known`.
+Tool `implement_task_with_tdd` (owner `agent`): via `bash`; requires `task_brief_read` and `tdd_loaded`; adds `task_steps_executed`, `expected_outputs_checked`, `tests_failed_then_passed`, `commands_outputs_read`.
+Tool `record_ruling` (owner `agent`): via `write`; requires `ledger_ready`; adds `ruling_recorded`.
+Tool `commit_task_changes` (owner `agent`): via `bash`; requires `task_steps_executed`; adds `task_committed`.
+Tool `complete_task` (owner `agent`): via `bash`; requires `task_committed` and `expected_outputs_checked` and `commands_outputs_read`; adds `task_complete`, `task_tests_passed`, `ledger_updated`.
+Tool `perform_final_review_inline` (owner `agent`): via `bash`; requires `task_complete`; adds `final_review_done`, `self_review_recorded`, `review_findings_sorted`.
+Tool `fix_review_findings` (owner `agent`): via `bash`; requires `final_review_done`; adds `important_findings_addressed`, `fixes_verified_by_tdd`, `suite_green_after_fix_pass`, `fixes_committed`.
+Tool `record_final_review_decisions` (owner `agent`): via `write`; requires `ledger_ready` and `final_review_done`; adds `deferred_minors_recorded`, `final_rulings_recorded`.
+Tool `delete_plan_workspace` (owner `agent`): via `bash`; requires `final_review_done`; adds `workspace_deleted`.
+Tool `finish_branch` (owner `agent`): via `bash`; requires `workspace_deleted`; adds `branch_finished`.
+Tool `ask_for_stop_decision` (owner `agent`): via `ask_user`; requires any of (`irreversible_operation_needed`, `security_sensitive_action_needed`, `external_side_effect_needs_consent`, `plan_irrecoverably_broken`); adds `user_guidance_received`.
+Initially true: `plan_available`.
+Initially: not `isolated_workspace_ready`.
+Initially: not `ledger_ready`.
+Initially: not `todos_created`.
+Initially: not `tdd_loaded`.
+Initially: not `preflight_scanned`.
+Initially: not `task_brief_read`.
+Initially: not `task_in_progress`.
+Initially: not `base_known`.
+Initially: not `task_steps_executed`.
+Initially: not `expected_outputs_checked`.
+Initially: not `tests_failed_then_passed`.
+Initially: not `commands_outputs_read`.
+Initially: not `ruling_recorded`.
+Initially: not `task_committed`.
+Initially: not `task_complete`.
+Initially: not `task_tests_passed`.
+Initially: not `ledger_updated`.
+Initially: not `final_review_done`.
+Initially: not `self_review_recorded`.
+Initially: not `review_findings_sorted`.
+Initially: not `important_findings_addressed`.
+Initially: not `fixes_verified_by_tdd`.
+Initially: not `suite_green_after_fix_pass`.
+Initially: not `fixes_committed`.
+Initially: not `deferred_minors_recorded`.
+Initially: not `final_rulings_recorded`.
+Initially: not `workspace_deleted`.
+Initially: not `branch_finished`.
+Initially: not `irreversible_operation_needed`.
+Initially: not `security_sensitive_action_needed`.
+Initially: not `external_side_effect_needs_consent`.
+Initially: not `plan_irrecoverably_broken`.
+Initially: not `user_guidance_received`.
+Goal: all of (`isolated_workspace_ready`, `ledger_ready`, `preflight_scanned`, `task_complete`, `task_tests_passed`, `final_review_done`, `deferred_minors_recorded`, `final_rulings_recorded`, `workspace_deleted`, `branch_finished`).
+Protocol:
+  - `agent` uses `setup_workspace_and_ledger`.
+  - loop `execute_tasks`:
+    - `agent` chooses one of (observed):
+      - branch `stop_and_ask`:
+        - `agent` uses `ask_for_stop_decision`.
+      - branch `take_next_task`:
+        - `agent` uses `take_task`.
+        - `agent` uses `implement_task_with_tdd`.
+        - `agent` chooses one of (observed):
+          - branch `ruling_needed`:
+            - `agent` uses `record_ruling`.
+          - branch `no_ruling_needed`: none.
+        - `agent` uses `commit_task_changes`.
+        - `agent` uses `complete_task`.
+        - `agent` chooses one of (observed):
+          - branch `more_tasks`:
+            - repeat `execute_tasks`.
+          - branch `no_more_tasks`: none.
+  - `agent` uses `perform_final_review_inline`.
+  - `agent` chooses one of (observed):
+    - branch `fix_important_or_critical_findings`:
+      - `agent` uses `fix_review_findings`.
+      - `agent` uses `record_final_review_decisions`.
+    - branch `no_fix_pass_needed`:
+      - `agent` uses `record_final_review_decisions`.
+  - `agent` uses `delete_plan_workspace`.
+  - `agent` uses `finish_branch`.
+```

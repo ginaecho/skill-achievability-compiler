@@ -1,0 +1,33 @@
+```ce
+Skill `sandbox-next`.
+Roles: `agent`, `user`.
+Tool `inspect_app_line` (owner `agent`): via `read`; adds `app_inspected`.
+Tool `ask_porting_intent` (owner `agent`): via `ask_user`; requires `app_inspected`; adds `porting_checked`.
+Tool `load_sandbox_stable_skill` (owner `agent`): via `skill`; requires `app_inspected`; adds `stable_skill_loaded`.
+Tool `load_sandbox_migrate_to_next_skill` (owner `agent`): via `skill`; requires `porting_checked`; adds `migrate_skill_loaded`.
+Tool `fetch_preview_docs` (owner `agent`): via `web_fetch`; requires `app_inspected`; needs `allowlisted_internet`; adds `preview_docs_opened`.
+Tool `inspect_installed_next_types` (owner `agent`): via `bash`; requires `app_inspected`; adds `next_types_checked`.
+Tool `edit_next_app_code` (owner `agent`): via `edit`; requires `preview_docs_opened` and `next_types_checked`; adds `next_app_updated`; removes `uses_stable_only_api`, `mixes_package_and_image_lines`, `puts_live_secrets_in_sandbox_env`.
+Tool `typecheck_next_app` (owner `agent`): via `bash`; requires `next_app_updated`; adds `typecheck_passed`.
+Tool `verify_next_lockfile_and_image_line` (owner `agent`): via `read`; requires `next_app_updated`; adds `next_line_aligned`; removes `mixes_package_and_image_lines`.
+Initially true: none.
+Goal: any of (`stable_skill_loaded`, `migrate_skill_loaded`, all of (`app_inspected`, `preview_docs_opened`, `next_types_checked`, `next_app_updated`, `typecheck_passed`, `next_line_aligned`, not `uses_stable_only_api`, not `mixes_package_and_image_lines`, not `puts_live_secrets_in_sandbox_env`)).
+Protocol:
+  - `agent` uses `inspect_app_line`.
+  - `agent` chooses one of (observed):
+    - branch `app_on_stable_line`:
+      - `agent` uses `load_sandbox_stable_skill`.
+    - branch `app_on_preview_line`:
+      - `agent` uses `ask_porting_intent`.
+      - `user` chooses one of (observed):
+        - branch `port_stable_to_next_requested`:
+          - `agent` uses `load_sandbox_migrate_to_next_skill`.
+        - branch `work_on_existing_next_app`:
+          - `agent` uses `fetch_preview_docs`.
+          - `agent` uses `inspect_installed_next_types`.
+          - `agent` uses `edit_next_app_code`.
+          - `agent` uses `typecheck_next_app`.
+          - `agent` uses `verify_next_lockfile_and_image_line`.
+    - branch `bridge_only_app`:
+      - `agent` uses `load_sandbox_stable_skill`.
+```

@@ -1,0 +1,38 @@
+```ce
+Skill `render-deploy`.
+Roles: `agent`, `user`.
+Tool `check_git_remote` (owner `agent`): via `bash`; adds `git_remote_checked`, `git_remote_present`.
+Tool `analyze_codebase` (owner `agent`): via `read`; requires `git_remote_present`; adds `deployment_analyzed`, `simple_single_service`, `needs_complex_infra`.
+Tool `write_render_blueprint` (owner `agent`): via `write`; requires `deployment_analyzed`; adds `render_yaml_created`.
+Tool `check_render_cli` (owner `agent`): via `bash`; adds `render_cli_checked`, `render_cli_available`.
+Tool `validate_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `render_cli_available`; adds `blueprint_valid`.
+Tool `commit_and_push_blueprint` (owner `agent`): via `bash`; requires `render_yaml_created` and `git_remote_present`; adds `render_yaml_pushed`.
+Tool `get_remote_url` (owner `agent`): via `bash`; requires `git_remote_present`; adds `repo_url_known`, `blueprint_ready_for_dashboard`.
+Tool `create_direct_service` (owner `agent`): via `render_mcp`; needs `render_account`; requires `git_remote_present` and `deployment_analyzed` and `simple_single_service`; adds `service_created`, `deployment_live`.
+Initially true: none.
+Goal: any of (`blueprint_ready_for_dashboard`, `deployment_live`).
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `docker_image_path`:
+      - `user` chooses one of (observed):
+        - branch `switch_to_git_repo`: none.
+        - branch `use_render_dashboard_for_image`: none.
+    - branch `git_repo_path`:
+      - `agent` uses `check_git_remote`.
+      - `user` chooses one of (observed):
+        - branch `no_remote_stop`: none.
+        - branch `remote_present_continue`:
+          - `agent` uses `analyze_codebase`.
+          - `user` chooses one of (observed):
+            - branch `direct_creation`:
+              - `agent` uses `create_direct_service`.
+            - branch `blueprint`:
+              - `agent` uses `write_render_blueprint`.
+              - `user` chooses one of (observed):
+                - branch `validate_with_cli`:
+                  - `agent` uses `check_render_cli`.
+                  - `agent` uses `validate_blueprint`.
+                - branch `skip_cli_validation`: none.
+              - `agent` uses `commit_and_push_blueprint`.
+              - `agent` uses `get_remote_url`.
+```

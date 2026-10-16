@@ -1,0 +1,52 @@
+```ce
+Skill `session-start`.
+Roles: `agent`, `user`.
+
+Tool `read_state_doc` (owner `agent`):
+  via `read`;
+  picks `state_versions` with true;
+  picks `state_deployed_rev` with true;
+  picks `state_open_issues` with true;
+  picks `state_next` with true.
+
+Tool `live_check` (owner `agent`):
+  via `bash`;
+  picks `live_value` with true;
+  sets `live_match` to `live_value` == `state_deployed_rev`.
+
+Tool `git_status` (owner `agent`):
+  via `bash`;
+  picks `git_dirty` with true;
+  picks `git_recent_commits` with true.
+
+Tool `reconcile_state_doc` (owner `agent`):
+  via `edit`;
+  requires `live_match` == false;
+  adds `reconciled`.
+
+Tool `flag_mismatch` (owner `agent`):
+  via `ask_user`;
+  requires `live_match` == false;
+  adds `mismatch_flagged`.
+
+Tool `print_briefing` (owner `agent`):
+  via `bash`;
+  requires `state_versions` != "";
+  adds `briefing_printed`.
+
+Initially true: none.
+Initially: `live_match` == true.
+
+Goal: `briefing_printed`.
+
+Protocol:
+  - `agent` uses `read_state_doc`.
+  - `agent` uses `live_check`.
+  - `agent` uses `git_status`.
+  - `agent` chooses one of:
+    - branch `drift_or_dirty_shutdown`:
+      - `agent` uses `reconcile_state_doc`.
+      - `agent` uses `flag_mismatch`.
+    - branch `clean`: none.
+  - `agent` uses `print_briefing`.
+```

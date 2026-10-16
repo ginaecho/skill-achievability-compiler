@@ -25,7 +25,7 @@ A CE document, by example::
     Protocol:
       - `agent` uses `search_flights`.
       - `user` chooses one of (observed):
-        - branch `accept`:
+        - branch `accept` (assuming `fare_acceptable`):
           - `agent` uses `book_flight`.
         - branch `decline`: none.
     Behaviour of `user`:
@@ -43,6 +43,7 @@ indented two spaces per level; ``#`` starts a comment outside backticks)::
                 | sets `V` to E | picks `V` with F
                 | via `T` | needs `R`, ...     (runtime bindings, see
                 | runs `P`, ... | effect `E`    frontend.runtime / toolpolicy)
+        (a repeated requires is and-ed; repeated needs/runs/adds/removes are unioned)
     Initially true: `P`, ... .   | Initially true: none.
     Initially: F.                (one line per initial constraint)
     Goal: F.
@@ -57,6 +58,8 @@ indented two spaces per level; ``#`` starts a comment outside backticks)::
                                 - select one of:     - branch on `A` one of:
         - branch `L`:               - branch `L`:
         - branch `L`: none.
+        - branch `L` (assuming `P`, ...):      (protocol only: facts the
+        - branch `L` (assuming `P`, ...): none.  branch establishes on entry)
     - loop `X`:  | - loop `X`: none.      (both)
     - repeat `X`.                          (both)
     - checkpoint: F.                       (both)
@@ -83,7 +86,9 @@ from typing import Any
 
 from ..pack import CAP_FIELDS, validate_pack
 
-CE_VERSION = "1.2"   # 1.1: "Initially true: none."; 1.2: runs/effect clauses, Live goal
+CE_VERSION = "1.4"   # 1.1: "Initially true: none."; 1.2: runs/effect clauses, Live goal;
+#                     1.3: branch assumptions "- branch `L` (assuming `P`, ...):";
+#                     1.4: repeated requires/needs/runs/adds/removes clauses merge
 INDENT = "  "
 # Effect classes of a Tool (frontend.toolpolicy); cf. MCP's readOnly/openWorld hints.
 EFFECTS = ("local", "reads_external", "writes_external", "publishes")
@@ -120,7 +125,9 @@ def canonical_pack(pack: dict) -> dict:
     Defaults are made explicit (`pre: true`, empty effect lists and maps,
     empty roles and initial state), `false` choice flags are dropped (absent
     and false mean the same to the checker), and an empty `skills` map is
-    dropped.  Formulas, names and every ordered list are kept exactly.
+    dropped.  A choice's branch assumptions (`assumes`) are sorted and
+    deduplicated, and empty ones dropped (they are sets).  Formulas, names and
+    every other ordered list are kept exactly.
     """
     out: dict[str, Any] = {
         "name": pack["name"],
@@ -147,15 +154,25 @@ def canonical_pack(pack: dict) -> dict:
     return out
 
 
+def _canon_assumes(assumes: Any) -> dict:
+    if not isinstance(assumes, dict):
+        return {}
+    return {lbl: sorted(set(preds)) for lbl, preds in sorted(assumes.items()) if preds}
+
+
 def _canon_steps(steps: list) -> list:
     out = []
     for s in steps:
         (kind, body), = s.items()
         if kind in ("choice", "select", "branch"):
             b = {k: v for k, v in body.items()
-                 if k != "branches" and not (k in CHOICE_FLAGS and v is False)}
+                 if k not in ("branches", "assumes")
+                 and not (k in CHOICE_FLAGS and v is False)}
             b["branches"] = {lbl: _canon_steps(br)
                              for lbl, br in body["branches"].items()}
+            assumes = _canon_assumes(body.get("assumes"))
+            if assumes:
+                b["assumes"] = assumes
             out.append({kind: b})
         elif kind == "rec":
             out.append({"rec": {"name": body["name"],
@@ -290,7 +307,7 @@ def _render_steps(steps: list, depth: int, local: bool, out: list) -> None:
                 (kind == "choice") != local:
             if kind == "choice":
                 flags = [f for f in CHOICE_FLAGS if b.get(f) is True]
-                extra = set(b) - {"by", "branches", *CHOICE_FLAGS}
+                extra = set(b) - {"by", "branches", "assumes", *CHOICE_FLAGS}
                 if extra:
                     raise CEError(f"choice has fields CE cannot express: {sorted(extra)}")
                 head = f"{_name(b['by'])} chooses one of"
@@ -301,12 +318,20 @@ def _render_steps(steps: list, depth: int, local: bool, out: list) -> None:
             else:
                 head = f"branch on {_name(b['from'])} one of"
             out.append(f"{ind}- {head}:")
+            assumes = _canon_assumes(b.get("assumes")) if kind == "choice" else {}
+            unknown = set(assumes) - set(b["branches"])
+            if unknown:
+                raise CEError(f"choice assumes facts for labels that are not branches: "
+                              f"{sorted(unknown)}")
             for label, branch in b["branches"].items():
+                bhead = f"branch {_name(label)}"
+                if assumes.get(label):
+                    bhead += f" (assuming {_names(assumes[label])})"
                 if branch:
-                    out.append(f"{ind}{INDENT}- branch {_name(label)}:")
+                    out.append(f"{ind}{INDENT}- {bhead}:")
                     _render_steps(branch, depth + 2, local, out)
                 else:
-                    out.append(f"{ind}{INDENT}- branch {_name(label)}: none.")
+                    out.append(f"{ind}{INDENT}- {bhead}: none.")
         elif kind == "goal":
             out.append(f"{ind}- checkpoint: {render_formula(b)}.")
         elif kind == "rec":
@@ -774,6 +799,14 @@ def _names_or_none(st: _Stream) -> list[str]:
     return names
 
 
+def _union(old: list, new: list, repeated: bool) -> list:
+    """A list clause's names; a repeated clause adds its new names in
+    first-seen order (CE 1.4).  A single clause is kept exactly as written."""
+    if not repeated:
+        return new
+    return old + [n for n in dict.fromkeys(new) if n not in old]
+
+
 def _parse_cap(st: _Stream) -> tuple[dict, dict]:
     cap: dict[str, Any] = {}
     binding: dict[str, Any] = {"via": None, "needs": [], "runs": [], "effect": None}
@@ -788,12 +821,13 @@ def _parse_cap(st: _Stream) -> tuple[dict, dict]:
         return cap, binding
     st.sym(":")
     seen = set()
+    requires: list = []
     while True:
         col = st.col()
         if st.is_word("via", "needs", "runs", "effect"):
             key = st.peek().value
             st.i += 1
-            if key in seen:
+            if key in seen and key in ("via", "effect"):
                 raise CEError(f"'{key}' may appear once per tool", st.line, col)
             if key == "via":
                 binding["via"] = st.name("the runtime tool in backticks")
@@ -804,23 +838,18 @@ def _parse_cap(st: _Stream) -> tuple[dict, dict]:
                     raise CEError(f"unknown effect {binding['effect']!r}: use one of "
                                   + ", ".join(f"`{e}`" for e in EFFECTS), st.line, ecol)
             else:
-                binding[key] = st.names()
+                binding[key] = _union(binding[key], st.names(), key in seen)
             seen.add(key)
         elif st.is_word("requires"):
             st.i += 1
-            if "requires" in seen:
-                raise CEError("'requires' may appear once per tool; combine "
-                              "conditions with 'and'", st.line, col)
-            cap["pre"] = st.formula()
+            # a repeated 'requires' is conjoined with the earlier ones (CE 1.4)
+            requires.append(st.formula())
+            cap["pre"] = requires[0] if len(requires) == 1 else {"and": list(requires)}
             seen.add("requires")
         elif st.is_word("adds", "removes"):
             key = "add" if st.peek().value == "adds" else "del"
             st.i += 1
-            if key in seen:
-                raise CEError(f"'{'adds' if key == 'add' else 'removes'}' may "
-                              "appear once per tool; list every predicate in "
-                              "one clause", st.line, col)
-            cap[key] = st.names()
+            cap[key] = _union(cap[key], st.names(), key in seen)
             seen.add(key)
         elif st.is_word("sets"):
             st.i += 1
@@ -938,7 +967,11 @@ def _parse_step(st: _Stream, lines: list[_Line], pos: int, depth: int,
             for flag in CHOICE_FLAGS:
                 if flag in flags:
                     body[flag] = True
-        body["branches"], pos = _parse_branches(st, lines, pos, depth, False)
+        assumes: dict[str, list] = {}
+        body["branches"], pos = _parse_branches(st, lines, pos, depth, False,
+                                                assumes)
+        if assumes:
+            body["assumes"] = _canon_assumes(assumes)
         return {"choice": body}, pos
     raise st.fail("'uses', 'tells' or 'chooses' after the role")
 
@@ -979,7 +1012,10 @@ def _parse_local_step(st: _Stream, lines: list[_Line], pos: int,
 
 
 def _parse_branches(st: _Stream, lines: list[_Line], pos: int, depth: int,
-                    local: bool) -> tuple[dict, int]:
+                    local: bool, assumes: dict | None = None) -> tuple[dict, int]:
+    """The '- branch `L`:' lines of a choice.  In a protocol choice (`assumes`
+    given) a branch head may carry '(assuming `P`, ...)'; the facts are
+    collected into `assumes[L]`."""
     st.sym(":")
     st.end()
     header = st.line
@@ -997,6 +1033,19 @@ def _parse_branches(st: _Stream, lines: list[_Line], pos: int, depth: int,
         label = bst.name("the branch label in backticks")
         if label in branches:
             raise CEError(f"duplicate branch label {label!r}", ln.no, col)
+        if bst.is_sym("("):
+            pcol = bst.col()
+            if assumes is None:
+                raise CEError("'(assuming ...)' is allowed only on the branches of a "
+                              "protocol choice ('`R` chooses one of'), not in a "
+                              "behaviour", ln.no, pcol)
+            bst.sym("(")
+            if not bst.is_word("assuming"):
+                raise bst.fail("'assuming' (write '- branch `L` (assuming `P`, ...):')")
+            bst.word("assuming")
+            preds = bst.names()
+            bst.sym(")")
+            assumes[label] = preds
         branches[label], pos = _parse_block_head(bst, lines, pos, depth + 2,
                                                  local)
     if not branches:

@@ -1,0 +1,47 @@
+```ce
+Skill `automate-this`.
+Roles: `agent`, `user`.
+Tool `check_prereqs` (owner `agent`): via `bash`; requires `video_path_known`; adds `ffmpeg_checked`, `whisper_checked`.
+Tool `inspect_recording` (owner `agent`): via `bash`; requires `video_path_known`, `ffmpeg_checked`; adds `work_dir_ready`, `frames_extracted`, `audio_checked`; picks `frame_count` with `frame_count` >= 0.
+Tool `transcribe_audio` (owner `agent`): via `bash`; requires `work_dir_ready`, `audio_checked`, `audio_present`, `whisper_available`; adds `transcript_ready`.
+Tool `ask_whisper_decision` (owner `agent`): via `ask_user`; requires `audio_present`, not `whisper_available`; adds `whisper_decision_made`.
+Tool `present_reconstruction` (owner `agent`): via `reply`; requires `frames_extracted`; adds `reconstruction_presented`.
+Tool `fingerprint_environment` (owner `agent`): via `bash`; requires `reconstruction_confirmed`; adds `environment_fingerprinted`.
+Tool `present_proposals` (owner `agent`): via `reply`; requires `environment_fingerprinted`; adds `automation_proposals_presented`.
+Tool `ask_tier_choice` (owner `agent`): via `ask_user`; requires `automation_proposals_presented`; adds `tier_choice_made`.
+Tool `build_automation` (owner `agent`): via `write`; requires `tier_choice_made`; adds `automation_written`.
+Tool `test_and_fix_automation` (owner `agent`): via `bash`; requires `automation_written`; adds `automation_tested`, `automation_working`.
+Tool `deliver_result` (owner `agent`): via `reply`; requires `automation_working`; adds `automation_delivered`.
+Tool `cleanup_temp_files` (owner `agent`): via `bash`; requires `work_dir_ready`; adds `temp_files_cleaned`.
+Initially true: none.
+Initially: `frame_count` == 0.
+Goal: `automation_delivered` and `temp_files_cleaned`.
+Protocol:
+  - `agent` uses `check_prereqs`.
+  - `agent` uses `inspect_recording`.
+  - `agent` chooses one of (observed):
+    - branch `audio_with_whisper` (assuming `audio_present`, `whisper_available`):
+      - `agent` uses `transcribe_audio`.
+    - branch `audio_without_whisper` (assuming `audio_present`, not `whisper_available`):
+      - `agent` uses `ask_whisper_decision`.
+      - `user` chooses one of (observed):
+        - branch `install_whisper_declined`: none.
+        - branch `install_whisper_accepted`: none.
+    - branch `no_audio` (assuming not `audio_present`): none.
+  - `agent` uses `present_reconstruction`.
+  - `user` chooses one of (observed):
+    - branch `confirm_reconstruction` (assuming `reconstruction_confirmed`):
+      - `agent` uses `fingerprint_environment`.
+      - `agent` uses `present_proposals`.
+      - `agent` uses `ask_tier_choice`.
+      - loop `fix_until_working`:
+        - `agent` uses `build_automation`.
+        - `agent` uses `test_and_fix_automation`.
+        - `agent` chooses one of (observed):
+          - branch `working` (assuming `automation_working`): none.
+          - branch `needs_fix` (assuming not `automation_working`):
+            - repeat `fix_until_working`.
+      - `agent` uses `deliver_result`.
+    - branch `correction_needed`: none.
+  - `agent` uses `cleanup_temp_files`.
+```

@@ -1,0 +1,56 @@
+```ce
+Skill `view-pdf`.
+Roles: `agent`, `user`.
+Tool `list_pdfs` (owner `agent`): via `skill`; adds `pdfs_listed`.
+Tool `display_pdf` (owner `agent`): via `skill`; requires any of (`local_pdf_available`, `pdf_url_available`); adds `pdf_displayed`, `viewer_open`; sets `current_page` to 1.
+Tool `display_pdf_with_form_elicitation` (owner `agent`): via `skill`; requires any of (`local_pdf_available`, `pdf_url_available`); adds `pdf_displayed`, `viewer_open`, `form_input_prompted`; sets `current_page` to 1.
+Tool `get_text` (owner `agent`): via `skill`; requires `pdf_displayed`; adds `relevant_text_obtained`.
+Tool `get_screenshot` (owner `agent`): via `skill`; requires `pdf_displayed`; adds `screenshot_obtained`.
+Tool `add_annotations` (owner `agent`): via `skill`; requires `pdf_displayed`; adds `annotations_added`.
+Tool `update_annotations` (owner `agent`): via `skill`; requires `annotations_added`; adds `annotations_updated`.
+Tool `remove_annotations` (owner `agent`): via `skill`; requires `annotations_added`; adds `annotations_updated`.
+Tool `fill_form` (owner `agent`): via `skill`; requires `pdf_displayed`; adds `form_filled`.
+Tool `place_signature_image` (owner `agent`): via `skill`; requires `pdf_displayed` and `signature_image_available`; adds `signature_placed`.
+Tool `navigate_viewer` (owner `agent`): via `skill`; requires `pdf_displayed`.
+Initially true: none.
+Goal: `viewer_open` and any of (`annotations_added`, `form_filled`, `signature_placed`, `screenshot_obtained`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `list_local_pdfs`:
+      - `agent` uses `list_pdfs`.
+    - branch `open_known_source`: none.
+  - `agent` chooses one of (observed):
+    - branch `open_pdf`:
+      - `agent` uses `display_pdf`.
+    - branch `open_pdf_and_elicit_form_inputs`:
+      - `agent` uses `display_pdf_with_form_elicitation`.
+  - `agent` chooses one of (observed):
+    - branch `review_or_prepare_annotations`:
+      - `agent` uses `get_text`.
+      - `user` chooses one of (observed):
+        - branch `approve_annotations`:
+          - `agent` uses `add_annotations`.
+          - `agent` uses `get_screenshot`.
+          - loop `annotation_iteration`:
+            - `user` chooses one of (observed):
+              - branch `edit_annotations`:
+                - `agent` chooses one of (observed):
+                  - branch `update`:
+                    - `agent` uses `update_annotations`.
+                  - branch `remove`:
+                    - `agent` uses `remove_annotations`.
+                - `agent` uses `get_screenshot`.
+                - repeat `annotation_iteration`.
+              - branch `done`: none.
+        - branch `decline_annotations`:
+          - `agent` uses `get_screenshot`.
+    - branch `fill_form_workflow`:
+      - `agent` uses `fill_form`.
+      - `agent` uses `get_screenshot`.
+    - branch `sign_workflow`:
+      - `agent` uses `place_signature_image`.
+      - `agent` uses `get_screenshot`.
+    - branch `navigate_only`:
+      - `agent` uses `navigate_viewer`.
+      - `agent` uses `get_screenshot`.
+```

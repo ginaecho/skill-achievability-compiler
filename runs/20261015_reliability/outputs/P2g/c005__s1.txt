@@ -1,0 +1,54 @@
+```ce
+Skill `context-engine`.
+Roles: `agent`, `user`.
+Tool `check_context_file` (owner `agent`): via `read`; adds `context_file_exists`.
+Tool `read_context` (owner `agent`): via `read`; requires `context_file_exists`; adds `context_loaded`, `has_last_updated`, `required_fields_checked`.
+Tool `ask_setup_prompt` (owner `agent`): via `ask_user`; requires not `context_file_exists`; adds `setup_prompted`.
+Tool `ask_stale_prompt` (owner `agent`): via `ask_user`; requires `context_loaded` and `context_is_stale`; adds `stale_prompted`.
+Tool `load_stale_note` (owner `agent`): via `read`; requires `context_loaded` and `context_is_stale`; adds `stale_noted`.
+Tool `ask_missing_critical_field` (owner `agent`): via `ask_user`; requires `context_loaded` and `critical_field_missing`; adds `gap_noted`.
+Tool `read_anonymization_protocol` (owner `agent`): via `read`; adds `anonymization_rules_loaded`.
+Tool `apply_anonymization` (owner `agent`): via `read`; requires `anonymization_rules_loaded` and `external_call_pending`; adds `external_payload_anonymized`.
+Tool `ask_update_context_file` (owner `agent`): via `ask_user`; requires `context_update_learned`; adds `update_confirmation_requested`.
+Tool `append_context_update` (owner `agent`): via `write`; requires `context_update_learned` and `user_approved_update`; adds `context_file_updated`, `timestamp_updated`.
+Initially true: none.
+Initially: `context_file_exists` or not `context_file_exists`.
+Initially: `context_is_stale` or not `context_is_stale`.
+Initially: `critical_field_missing` or not `critical_field_missing`.
+Initially: `external_call_pending` or not `external_call_pending`.
+Initially: `context_update_learned` or not `context_update_learned`.
+Initially: `user_approved_update` or not `user_approved_update`.
+Goal: (`context_loaded` or `setup_prompted`) and (not `external_call_pending` or `external_payload_anonymized`) and (not `context_update_learned` or `update_confirmation_requested`).
+Protocol:
+  - `agent` uses `check_context_file`.
+  - `agent` chooses one of (observed):
+    - branch `context_missing`:
+      - `agent` uses `ask_setup_prompt`.
+    - branch `context_present`:
+      - `agent` uses `read_context`.
+      - `agent` chooses one of (observed):
+        - branch `stale`:
+          - `agent` uses `ask_stale_prompt`.
+          - `user` chooses one of (observed):
+            - branch `continue`:
+              - `agent` uses `load_stale_note`.
+            - branch `refresh`: none.
+        - branch `fresh`: none.
+      - `agent` chooses one of (observed):
+        - branch `critical_gap`:
+          - `agent` uses `ask_missing_critical_field`.
+        - branch `no_critical_gap`: none.
+  - `agent` chooses one of (observed):
+    - branch `external_call_needed`:
+      - `agent` uses `read_anonymization_protocol`.
+      - `agent` uses `apply_anonymization`.
+    - branch `no_external_call`: none.
+  - `agent` chooses one of (observed):
+    - branch `learned_update`:
+      - `agent` uses `ask_update_context_file`.
+      - `user` chooses one of (observed):
+        - branch `approve_update`:
+          - `agent` uses `append_context_update`.
+        - branch `decline_update`: none.
+    - branch `no_update_learned`: none.
+```

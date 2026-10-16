@@ -1,0 +1,754 @@
+{
+  "pack": {
+    "name": "genotoxic",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_references": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "references_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_trailmark": {
+        "owner": "agent",
+        "pre": {
+          "not": "trailmark_available"
+        },
+        "add": [
+          "trailmark_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_trailmark_analysis": {
+        "owner": "agent",
+        "pre": "trailmark_available",
+        "add": [
+          "graph_built",
+          "preanalysis_done",
+          "graph_exported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_mutation_framework": {
+        "owner": "agent",
+        "pre": {
+          "not": "mutation_framework_available"
+        },
+        "add": [
+          "mutation_framework_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_mutation_testing": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "mutation_framework_available",
+            "tests_pass"
+          ]
+        },
+        "add": [
+          "mutation_run_complete",
+          "survived_mutants_captured",
+          "all_survived_mutants_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_necessist": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "necessist_supported",
+            {
+              "not": "necessist_available"
+            }
+          ]
+        },
+        "add": [
+          "necessist_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_necessist": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "necessist_supported",
+            "necessist_available",
+            "tests_pass"
+          ]
+        },
+        "add": [
+          "necessist_run_complete",
+          "necessist_removals_captured",
+          "all_necessist_removals_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "graph_built",
+            "preanalysis_done",
+            "survived_mutants_captured",
+            "all_survived_mutants_triaged",
+            {
+              "or": [
+                {
+                  "and": [
+                    "necessist_supported",
+                    "necessist_removals_captured",
+                    "all_necessist_removals_triaged"
+                  ]
+                },
+                {
+                  "not": "necessist_supported"
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "report_written",
+          "summary_statistics_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "notify_user": {
+        "owner": "agent",
+        "pre": "summary_statistics_ready",
+        "add": [
+          "user_notified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_references",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "trailmark_already_available": [],
+            "install_trailmark": [
+              {
+                "act": {
+                  "cap": "install_trailmark",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_trailmark_analysis",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "mutation_framework_already_available": [],
+            "install_mutation_framework": [
+              {
+                "act": {
+                  "cap": "install_mutation_framework",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_mutation_testing",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "necessist_supported": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "necessist_already_available": [],
+                    "install_necessist": [
+                      {
+                        "act": {
+                          "cap": "install_necessist",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_necessist",
+                  "by": "agent"
+                }
+              }
+            ],
+            "necessist_not_supported": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "triage_completed": [
+              {
+                "act": {
+                  "cap": "write_report",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "notify_user",
+                  "by": "agent"
+                }
+              }
+            ],
+            "triage_not_completed": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "graph_built",
+        "preanalysis_done",
+        "mutation_run_complete",
+        "survived_mutants_captured",
+        "all_survived_mutants_triaged",
+        "report_written",
+        "summary_statistics_ready",
+        "user_notified",
+        {
+          "or": [
+            {
+              "and": [
+                "necessist_supported",
+                "necessist_run_complete",
+                "necessist_removals_captured",
+                "all_necessist_removals_triaged"
+              ]
+            },
+            {
+              "not": "necessist_supported"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "tests_pass"
+    ],
+    "init_constraints": [
+      {
+        "not": "trailmark_available"
+      },
+      {
+        "not": "mutation_framework_available"
+      },
+      {
+        "not": "necessist_available"
+      },
+      {
+        "not": "necessist_supported"
+      },
+      {
+        "not": "references_loaded"
+      },
+      {
+        "not": "graph_built"
+      },
+      {
+        "not": "preanalysis_done"
+      },
+      {
+        "not": "graph_exported"
+      },
+      {
+        "not": "mutation_run_complete"
+      },
+      {
+        "not": "survived_mutants_captured"
+      },
+      {
+        "not": "necessist_run_complete"
+      },
+      {
+        "not": "necessist_removals_captured"
+      },
+      {
+        "not": "all_survived_mutants_triaged"
+      },
+      {
+        "not": "all_necessist_removals_triaged"
+      },
+      {
+        "not": "report_written"
+      },
+      {
+        "not": "summary_statistics_ready"
+      },
+      {
+        "not": "user_notified"
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "genotoxic",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_references": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "references_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_trailmark": {
+        "owner": "agent",
+        "pre": {
+          "not": "trailmark_available"
+        },
+        "add": [
+          "trailmark_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_trailmark_analysis": {
+        "owner": "agent",
+        "pre": "trailmark_available",
+        "add": [
+          "graph_built",
+          "preanalysis_done",
+          "graph_exported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_mutation_framework": {
+        "owner": "agent",
+        "pre": {
+          "not": "mutation_framework_available"
+        },
+        "add": [
+          "mutation_framework_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_mutation_testing": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "mutation_framework_available",
+            "tests_pass"
+          ]
+        },
+        "add": [
+          "mutation_run_complete",
+          "survived_mutants_captured",
+          "all_survived_mutants_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_necessist": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "necessist_supported",
+            {
+              "not": "necessist_available"
+            }
+          ]
+        },
+        "add": [
+          "necessist_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_necessist": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "necessist_supported",
+            "necessist_available",
+            "tests_pass"
+          ]
+        },
+        "add": [
+          "necessist_run_complete",
+          "necessist_removals_captured",
+          "all_necessist_removals_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "graph_built",
+            "preanalysis_done",
+            "survived_mutants_captured",
+            "all_survived_mutants_triaged",
+            {
+              "or": [
+                {
+                  "and": [
+                    "necessist_supported",
+                    "necessist_removals_captured",
+                    "all_necessist_removals_triaged"
+                  ]
+                },
+                {
+                  "not": "necessist_supported"
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "report_written",
+          "summary_statistics_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "notify_user": {
+        "owner": "agent",
+        "pre": "summary_statistics_ready",
+        "add": [
+          "user_notified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "read_references",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "trailmark_already_available": [],
+            "install_trailmark": [
+              {
+                "act": {
+                  "cap": "install_trailmark",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_trailmark_analysis",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "mutation_framework_already_available": [],
+            "install_mutation_framework": [
+              {
+                "act": {
+                  "cap": "install_mutation_framework",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_mutation_testing",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "necessist_supported": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "necessist_already_available": [],
+                    "install_necessist": [
+                      {
+                        "act": {
+                          "cap": "install_necessist",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_necessist",
+                  "by": "agent"
+                }
+              }
+            ],
+            "necessist_not_supported": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "triage_completed": [
+              {
+                "act": {
+                  "cap": "write_report",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "notify_user",
+                  "by": "agent"
+                }
+              }
+            ],
+            "triage_not_completed": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "graph_built",
+        "preanalysis_done",
+        "mutation_run_complete",
+        "survived_mutants_captured",
+        "all_survived_mutants_triaged",
+        "report_written",
+        "summary_statistics_ready",
+        "user_notified",
+        {
+          "or": [
+            {
+              "and": [
+                "necessist_supported",
+                "necessist_run_complete",
+                "necessist_removals_captured",
+                "all_necessist_removals_triaged"
+              ]
+            },
+            {
+              "not": "necessist_supported"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "tests_pass"
+    ],
+    "init_constraints": [
+      {
+        "not": "trailmark_available"
+      },
+      {
+        "not": "mutation_framework_available"
+      },
+      {
+        "not": "necessist_available"
+      },
+      {
+        "not": "necessist_supported"
+      },
+      {
+        "not": "references_loaded"
+      },
+      {
+        "not": "graph_built"
+      },
+      {
+        "not": "preanalysis_done"
+      },
+      {
+        "not": "graph_exported"
+      },
+      {
+        "not": "mutation_run_complete"
+      },
+      {
+        "not": "survived_mutants_captured"
+      },
+      {
+        "not": "necessist_run_complete"
+      },
+      {
+        "not": "necessist_removals_captured"
+      },
+      {
+        "not": "all_survived_mutants_triaged"
+      },
+      {
+        "not": "all_necessist_removals_triaged"
+      },
+      {
+        "not": "report_written"
+      },
+      {
+        "not": "summary_statistics_ready"
+      },
+      {
+        "not": "user_notified"
+      }
+    ]
+  },
+  "bindings": {
+    "read_references": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_trailmark": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "run_trailmark_analysis": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "install_mutation_framework": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_mutation_testing": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "install_necessist": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_necessist": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "write_report": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "notify_user": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

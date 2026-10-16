@@ -1,0 +1,29 @@
+```ce
+Skill `windows-infra-admin`.
+Roles: `agent`, `user`.
+Tool `document_scope` (owner `agent`): via `write`; adds `scope_documented`.
+Tool `enumerate_affected_objects` (owner `agent`): via `windows_desktop`; requires `scope_documented`; adds `affected_objects_enumerated`.
+Tool `preview_change_with_whatif` (owner `agent`): via `windows_desktop`; requires `affected_objects_enumerated`; adds `whatif_reviewed`.
+Tool `enable_logging_and_transcript` (owner `agent`): via `windows_desktop`; adds `logging_enabled`.
+Tool `export_prechange_state` (owner `agent`): via `windows_desktop`; requires `scope_documented`; adds `prechange_exports_completed`.
+Tool `apply_infra_change` (owner `agent`): via `windows_desktop`; requires (`scope_documented` and `affected_objects_enumerated` and `whatif_reviewed` and `logging_enabled` and `prechange_exports_completed`); adds `change_applied`.
+Tool `validate_postchange_state` (owner `agent`): via `windows_desktop`; requires `change_applied`; adds `postchange_validated`.
+Tool `rollback_infra_change` (owner `agent`): via `windows_desktop`; requires (`change_applied` and `prechange_exports_completed`); adds `rollback_completed`; removes `change_applied`.
+Initially true: none.
+Goal: all of (`scope_documented`, `affected_objects_enumerated`, `whatif_reviewed`, `logging_enabled`, `prechange_exports_completed`, any of (`postchange_validated`, `rollback_completed`)).
+Protocol:
+  - `agent` uses `document_scope`.
+  - `agent` uses `export_prechange_state`.
+  - `agent` uses `enumerate_affected_objects`.
+  - `agent` uses `preview_change_with_whatif`.
+  - `agent` uses `enable_logging_and_transcript`.
+  - `user` chooses one of (observed):
+    - branch `approve_change`:
+      - `agent` uses `apply_infra_change`.
+      - `agent` chooses one of (external):
+        - branch `validation_passes`:
+          - `agent` uses `validate_postchange_state`.
+        - branch `validation_fails`:
+          - `agent` uses `rollback_infra_change`.
+    - branch `decline_change`: none.
+```

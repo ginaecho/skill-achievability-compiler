@@ -1,0 +1,68 @@
+```ce
+Skill `orchestrate`.
+Roles: `agent`, `user`.
+
+Tool `read_story_and_state` (owner `agent`):
+  via `read`;
+  adds `story_read`, `current_task_identified`.
+
+Tool `read_agents_md` (owner `agent`):
+  via `read`;
+  adds `project_context_loaded`.
+
+Tool `analyse_task` (owner `agent`):
+  requires `story_read`, `current_task_identified`, `project_context_loaded`;
+  adds `analysis_done`.
+  picks `task_type` with `task_type` == `FRONTEND` or `task_type` == `BACKEND`.
+
+Tool `ask_clarifying_question` (owner `agent`):
+  via `ask_user`;
+  requires `analysis_done`;
+  adds `question_asked`.
+
+Tool `resolve_answer` (owner `agent`):
+  requires `question_asked`;
+  adds `answer_received`.
+
+Tool `decide_more_questions` (owner `agent`):
+  requires `answer_received`;
+  adds `more_questions_needed` or adds `questions_complete`.
+
+Tool `halt_escalate` (owner `agent`):
+  via `ask_user`;
+  requires `security_issue_found` or `contradiction_found` or `scope_change_found` or `unclear_acceptance_criteria`;
+  adds `escalated`.
+
+Tool `write_spec_output` (owner `agent`):
+  via `write`;
+  requires `questions_complete`;
+  adds `spec_written`.
+
+Tool `update_state_json` (owner `agent`):
+  via `edit`;
+  requires `spec_written`;
+  adds `state_updated`.
+
+Initially true: none.
+Initially: `task_type` == ``.
+Goal: `spec_written` and `state_updated`.
+
+Protocol:
+  - `agent` uses `read_story_and_state`.
+  - `agent` uses `read_agents_md`.
+  - `agent` uses `analyse_task`.
+  - `agent` chooses one of (observed):
+    - branch `security_contradiction_or_scope_issue`:
+      - `agent` uses `halt_escalate`.
+    - branch `no_blockers`:
+      - loop `clarify`:
+        - `agent` uses `ask_clarifying_question`.
+        - `agent` uses `resolve_answer`.
+        - `agent` uses `decide_more_questions`.
+        - `agent` chooses one of (observed):
+          - branch `more_questions`:
+            - repeat `clarify`.
+          - branch `done`:
+            - `agent` uses `write_spec_output`.
+            - `agent` uses `update_state_json`.
+```

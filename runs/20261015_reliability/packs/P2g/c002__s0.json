@@ -1,0 +1,642 @@
+{
+  "pack": {
+    "name": "expo-overview",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_package_json": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "package_json_checked",
+          "expo_or_eas_work"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_app_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "app_config_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_intent": {
+        "owner": "agent",
+        "pre": "goal_ambiguous",
+        "add": [
+          "intent_confirmed"
+        ],
+        "del": [
+          "goal_ambiguous"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "load_leaf_skill": {
+        "owner": "agent",
+        "pre": "expo_or_eas_work",
+        "add": [
+          "leaf_skill_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_expo_app": {
+        "owner": "agent",
+        "pre": "new_expo_app_requested",
+        "add": [
+          "expo_app_scaffolded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_eas_login": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "eas_delivery_task"
+          ]
+        },
+        "add": [
+          "eas_login_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "init_eas_linking": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            {
+              "and": [
+                "eas_delivery_task",
+                "missing_eas_project_id"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "eas_project_linked"
+        ],
+        "del": [
+          "missing_eas_project_id"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "submit_feedback": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries"
+          ]
+        },
+        "add": [
+          "feedback_submitted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "request_mentions_expo_or_eas": [
+              {
+                "act": {
+                  "cap": "read_package_json",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "load_leaf_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "check_project_files": [
+              {
+                "act": {
+                  "cap": "read_package_json",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "expo_dependency_found": [
+                      {
+                        "act": {
+                          "cap": "read_app_config",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "ambiguous_goal": [
+                              {
+                                "act": {
+                                  "cap": "ask_intent",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "load_leaf_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "goal_clear": [
+                              {
+                                "act": {
+                                  "cap": "load_leaf_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "no_expo_signal": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "native_app_using_eas_for_delivery": [
+                              {
+                                "act": {
+                                  "cap": "read_app_config",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "load_leaf_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "not_expo_or_eas_work": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "new_expo_app_setup_needed": [
+              {
+                "act": {
+                  "cap": "scaffold_expo_app",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_scaffold_needed": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "eas_auth_and_linking_needed": [
+              {
+                "act": {
+                  "cap": "check_eas_login",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "missing_project_id": [
+                      {
+                        "act": {
+                          "cap": "init_eas_linking",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_already_linked": []
+                  }
+                }
+              }
+            ],
+            "no_eas_auth_or_linking_needed": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "submit_actionable_feedback": [
+              {
+                "act": {
+                  "cap": "submit_feedback",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_feedback": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "leaf_skill_loaded",
+        "not_applicable"
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "expo-overview",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_package_json": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "package_json_checked",
+          "expo_or_eas_work"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_app_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "app_config_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_intent": {
+        "owner": "agent",
+        "pre": "goal_ambiguous",
+        "add": [
+          "intent_confirmed"
+        ],
+        "del": [
+          "goal_ambiguous"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "load_leaf_skill": {
+        "owner": "agent",
+        "pre": "expo_or_eas_work",
+        "add": [
+          "leaf_skill_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_expo_app": {
+        "owner": "agent",
+        "pre": "new_expo_app_requested",
+        "add": [
+          "expo_app_scaffolded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_eas_login": {
+        "owner": "agent",
+        "pre": "eas_delivery_task",
+        "add": [
+          "eas_login_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "init_eas_linking": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "eas_delivery_task",
+            "missing_eas_project_id"
+          ]
+        },
+        "add": [
+          "eas_project_linked"
+        ],
+        "del": [
+          "missing_eas_project_id"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "submit_feedback": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "feedback_submitted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "request_mentions_expo_or_eas": [
+              {
+                "act": {
+                  "cap": "read_package_json",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "load_leaf_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "check_project_files": [
+              {
+                "act": {
+                  "cap": "read_package_json",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "expo_dependency_found": [
+                      {
+                        "act": {
+                          "cap": "read_app_config",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "ambiguous_goal": [
+                              {
+                                "act": {
+                                  "cap": "ask_intent",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "load_leaf_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "goal_clear": [
+                              {
+                                "act": {
+                                  "cap": "load_leaf_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "no_expo_signal": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "native_app_using_eas_for_delivery": [
+                              {
+                                "act": {
+                                  "cap": "read_app_config",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "load_leaf_skill",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "not_expo_or_eas_work": []
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "new_expo_app_setup_needed": [
+              {
+                "act": {
+                  "cap": "scaffold_expo_app",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_scaffold_needed": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "eas_auth_and_linking_needed": [
+              {
+                "act": {
+                  "cap": "check_eas_login",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "missing_project_id": [
+                      {
+                        "act": {
+                          "cap": "init_eas_linking",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_already_linked": []
+                  }
+                }
+              }
+            ],
+            "no_eas_auth_or_linking_needed": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "submit_actionable_feedback": [
+              {
+                "act": {
+                  "cap": "submit_feedback",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_feedback": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "leaf_skill_loaded",
+        "not_applicable"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "read_package_json": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_app_config": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "ask_intent": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "load_leaf_skill": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "scaffold_expo_app": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "check_eas_login": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "init_eas_linking": {
+      "via": "bash",
+      "needs": [
+        "shell"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "submit_feedback": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    }
+  },
+  "live_goal": null
+}

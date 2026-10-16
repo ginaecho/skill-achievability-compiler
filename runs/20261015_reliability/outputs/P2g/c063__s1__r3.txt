@@ -1,0 +1,53 @@
+```ce
+Skill `view-pdf`.
+Roles: `agent`, `user`.
+Tool `list_pdfs` (owner `agent`): via `windows_desktop`; adds `pdfs_listed`.
+Tool `display_pdf` (owner `agent`): via `windows_desktop`; requires (`viewer_count` == 0) and any of (`local_pdf_available`, `pdf_url_available`); adds `pdf_displayed`, `viewer_active`; sets `viewer_count` to `viewer_count` + 1.
+Tool `get_text` (owner `agent`): via `windows_desktop`; requires `viewer_active`; adds `relevant_content_understood`.
+Tool `get_screenshot` (owner `agent`): via `windows_desktop`; requires `viewer_active`; adds `visual_result_shown`.
+Tool `add_annotations` (owner `agent`): via `windows_desktop`; requires `viewer_active` and `annotation_plan_approved`; adds `annotations_applied`.
+Tool `update_annotations` (owner `agent`): via `windows_desktop`; requires `viewer_active` and `annotations_applied`; adds `annotations_applied`.
+Tool `remove_annotations` (owner `agent`): via `windows_desktop`; requires `viewer_active` and `annotations_applied`; adds `annotations_applied`.
+Tool `fill_form` (owner `agent`): via `windows_desktop`; requires `viewer_active` and `form_values_available`; adds `form_filled`.
+Tool `place_signature_image` (owner `agent`): via `windows_desktop`; requires `viewer_active` and `signature_image_available` and `signature_target_known`; adds `signature_placed`.
+Initially true: none.
+Initially: `viewer_count` == 0.
+Goal: any of (`pdf_displayed`, `annotations_applied`, `form_filled`, `signature_placed`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `open_local_pdf`:
+      - `agent` uses `list_pdfs`.
+    - branch `open_direct_source`: none.
+  - `agent` uses `display_pdf`.
+  - `agent` chooses one of (observed):
+    - branch `view_only`: none.
+    - branch `collaborative_annotation`:
+      - `agent` uses `get_text`.
+      - `user` chooses one of (observed):
+        - branch `approve_annotation_plan`:
+          - `agent` uses `add_annotations`.
+          - `agent` uses `get_screenshot`.
+          - `user` chooses one of (observed):
+            - branch `accept_annotations`: none.
+            - branch `revise_annotations`:
+              - `agent` chooses one of (observed):
+                - branch `update_existing`:
+                  - `agent` uses `update_annotations`.
+                  - `agent` uses `get_screenshot`.
+                - branch `remove_some`:
+                  - `agent` uses `remove_annotations`.
+                  - `agent` uses `get_screenshot`.
+        - branch `decline_annotation_plan`: none.
+    - branch `form_filling`:
+      - `user` chooses one of (observed):
+        - branch `provide_form_values`:
+          - `agent` uses `fill_form`.
+          - `agent` uses `get_screenshot`.
+        - branch `cancel_form_filling`: none.
+    - branch `signing`:
+      - `user` chooses one of (observed):
+        - branch `provide_signature_image_and_target`:
+          - `agent` uses `place_signature_image`.
+          - `agent` uses `get_screenshot`.
+        - branch `cancel_signing`: none.
+```

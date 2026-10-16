@@ -1,0 +1,45 @@
+```ce
+Skill `libfuzzer`.
+Roles: `agent`, `user`.
+Tool `inspect_project` (owner `agent`): via `read`; adds `project_inspected`.
+Tool `install_clang_llvm` (owner `agent`): via `bash`; needs `shell`, `linux`, `package_registries`, `allowlisted_internet`; adds `clang_llvm_installed`.
+Tool `verify_clang` (owner `agent`): via `bash`; requires `clang_llvm_installed`; adds `clang_verified`.
+Tool `write_harness` (owner `agent`): via `write`; requires `project_inspected`; adds `harness_written`.
+Tool `fetch_fuzzed_data_provider` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `fuzzed_data_provider_available`.
+Tool `build_fuzzer` (owner `agent`): via `bash`; requires `clang_verified` and `harness_written`; adds `fuzzer_built`.
+Tool `prepare_corpus_and_dictionary` (owner `agent`): via `bash`; requires `fuzzer_built`; adds `corpus_ready`, `dictionary_ready`.
+Tool `run_fuzzing_campaign` (owner `agent`): via `bash`; requires `fuzzer_built` and `corpus_ready`; adds `campaign_run`, `findings_triaged`.
+Tool `minimize_corpus` (owner `agent`): via `bash`; requires `campaign_run`; adds `corpus_minimized`.
+Tool `analyze_coverage` (owner `agent`): via `bash`; requires `fuzzer_built` and `corpus_ready`; adds `coverage_analyzed`.
+Tool `deliver_libfuzzer_guidance` (owner `agent`): via `reply`; adds `libfuzzer_guidance_delivered`.
+Initially true: none.
+Goal: `libfuzzer_guidance_delivered`.
+Protocol:
+  - `agent` uses `deliver_libfuzzer_guidance`.
+  - `user` chooses one of (observed):
+    - branch `project_available` (assuming `project_present`):
+      - `agent` uses `inspect_project`.
+      - `user` chooses one of (observed):
+        - branch `need_install` (assuming `clang_missing`):
+          - `agent` uses `install_clang_llvm`.
+          - `agent` uses `verify_clang`.
+        - branch `already_installed` (assuming `clang_llvm_installed`):
+          - `agent` uses `verify_clang`.
+      - `agent` uses `write_harness`.
+      - `user` chooses one of (observed):
+        - branch `use_fuzzed_data_provider`:
+          - `agent` uses `fetch_fuzzed_data_provider`.
+        - branch `no_fuzzed_data_provider`: none.
+      - `agent` uses `build_fuzzer`.
+      - `agent` uses `prepare_corpus_and_dictionary`.
+      - `agent` uses `run_fuzzing_campaign`.
+      - `user` chooses one of (observed):
+        - branch `minimize_corpus`:
+          - `agent` uses `minimize_corpus`.
+        - branch `skip_minimization`: none.
+      - `user` chooses one of (observed):
+        - branch `analyze_coverage`:
+          - `agent` uses `analyze_coverage`.
+        - branch `skip_coverage`: none.
+    - branch `guidance_only`: none.
+```

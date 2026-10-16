@@ -1,0 +1,55 @@
+```ce
+Skill `foundationpose-pipeline`.
+Roles: `agent`, `user`.
+Tool `locate_checkout` (owner `agent`): via `read`; adds `checkout_found`.
+Tool `clone_checkout` (owner `agent`): via `bash`; needs `github_account`; adds `checkout_found`.
+Tool `ask_for_inputs` (owner `agent`): via `ask_user`; picks `has_execution_request` with true; picks `needs_adaptation` with true or not `needs_adaptation`; picks `has_pose_gt` with true or not `has_pose_gt`; picks `wants_rescore_only` with true or not `wants_rescore_only`; picks `wants_batch_run` with true or not `wants_batch_run`; picks `wants_depth_metrics` with true or not `wants_depth_metrics`.
+Tool `adapt_dataset` (owner `agent`): via `bash`; requires `checkout_found` and `needs_adaptation`; adds `dataset_adapted`.
+Tool `smoke_check_engine` (owner `agent`): via `bash`; requires `checkout_found`; adds `engine_validated`.
+Tool `build_gt_cache` (owner `agent`): via `bash`; requires `checkout_found` and `has_pose_gt`; adds `gt_cache_ready`.
+Tool `run_pipeline` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated` and `gt_cache_ready`; adds `results_ready`.
+Tool `run_inference` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated`; adds `results_ready`.
+Tool `rescore_results` (owner `agent`): via `bash`; requires `checkout_found` and `has_pose_gt`; adds `results_ready`.
+Tool `run_batch_eval` (owner `agent`): via `bash`; requires `checkout_found` and `engine_validated`; adds `results_ready`.
+Tool `inspect_outputs` (owner `agent`): via `read`; requires `results_ready`; adds `provenance_checked`, `metrics_interpreted`.
+Initially true: none.
+Initially: not `checkout_found`.
+Initially: not `dataset_adapted`.
+Initially: not `engine_validated`.
+Initially: not `gt_cache_ready`.
+Initially: not `results_ready`.
+Initially: not `provenance_checked`.
+Initially: not `metrics_interpreted`.
+Initially: not `needs_adaptation`.
+Initially: not `has_pose_gt`.
+Initially: not `wants_rescore_only`.
+Initially: not `wants_batch_run`.
+Initially: not `wants_depth_metrics`.
+Goal: `results_ready` and `provenance_checked` and `metrics_interpreted`.
+Protocol:
+  - `agent` uses `ask_for_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `checkout_present`:
+      - `agent` uses `locate_checkout`.
+    - branch `checkout_missing_and_execution_requested`:
+      - `agent` uses `clone_checkout`.
+  - `agent` chooses one of (observed):
+    - branch `adapt_first`:
+      - `agent` uses `adapt_dataset`.
+    - branch `already_adapted_layout`: none.
+  - `agent` uses `smoke_check_engine`.
+  - `agent` chooses one of (observed):
+    - branch `pose_gt_available`:
+      - `agent` uses `build_gt_cache`.
+    - branch `no_pose_gt`: none.
+  - `agent` chooses one of (observed):
+    - branch `rescore_completed_run`:
+      - `agent` uses `rescore_results`.
+    - branch `batch_run`:
+      - `agent` uses `run_batch_eval`.
+    - branch `single_run_with_scoring`:
+      - `agent` uses `run_pipeline`.
+    - branch `inference_only`:
+      - `agent` uses `run_inference`.
+  - `agent` uses `inspect_outputs`.
+```

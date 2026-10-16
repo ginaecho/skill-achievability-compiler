@@ -1,0 +1,46 @@
+```ce
+Skill `llm-finetuning-eval-engineer`.
+Roles: `agent`, `user`.
+Tool `inspect workspace` (owner `agent`): via `read`; adds `workspace inspected`.
+Tool `build harness from traces` (owner `agent`): via `write`; requires `workspace inspected` and `traces exist`; adds `eval harness built`, `goldens written`, `graders written`, `drift suite frozen`.
+Tool `build synthetic harness` (owner `agent`): via `write`; requires `workspace inspected` and `no traces exist`; adds `eval harness built`, `goldens written`, `graders written`, `drift suite frozen`.
+Tool `run phase0 baseline` (owner `agent`): via `bash`; requires `eval harness built` and `goldens written` and `graders written` and `drift suite frozen`; adds `baseline written`, `phase0 results written`, `results schema complete`.
+Tool `check phase5 inputs` (owner `agent`): via `read`; requires `workspace inspected`; adds `checkpoint present`, `training data present`.
+Tool `run data quality gate` (owner `agent`): via `bash`; requires `checkpoint present` and `training data present` and `goldens written`; adds `data quality checked`.
+Tool `run checkpoint eval and drift gate` (owner `agent`): via `bash`; requires `data quality checked` and `baseline written` and `drift suite frozen`; adds `phase5 results written`, `results schema complete`, `drift evaluated`.
+Tool `run paired arena gate` (owner `agent`): via `bash`; requires `drift evaluated` and `baseline written`; adds `paired arena evaluated`.
+Tool `run canary gate` (owner `agent`): via `bash`; requires `paired arena evaluated` and `has production canary target`; adds `canary evaluated`.
+Tool `write promotion report` (owner `agent`): via `write`; requires `phase0 results written` and `results schema complete` and (`baseline only request` or (`data quality checked` and `drift evaluated` and `paired arena evaluated` and (`canary evaluated` or `no production canary target`))); adds `promotion report written`.
+Tool `reply with verdict` (owner `agent`): via `reply`; requires `promotion report written`; adds `deliverable complete`.
+Initially true: none.
+Goal: `deliverable complete`.
+Protocol:
+  - `agent` uses `inspect workspace`.
+  - `user` chooses one of (observed):
+    - branch `phase0 only` (assuming `baseline only request`):
+      - `user` chooses one of (observed):
+        - branch `with traces` (assuming `traces exist`):
+          - `agent` uses `build harness from traces`.
+        - branch `without traces` (assuming `no traces exist`):
+          - `agent` uses `build synthetic harness`.
+      - `agent` uses `run phase0 baseline`.
+      - `agent` uses `write promotion report`.
+      - `agent` uses `reply with verdict`.
+    - branch `phase5 gate`:
+      - `user` chooses one of (observed):
+        - branch `with traces` (assuming `traces exist`):
+          - `agent` uses `build harness from traces`.
+        - branch `without traces` (assuming `no traces exist`):
+          - `agent` uses `build synthetic harness`.
+      - `agent` uses `run phase0 baseline`.
+      - `agent` uses `check phase5 inputs`.
+      - `agent` uses `run data quality gate`.
+      - `agent` uses `run checkpoint eval and drift gate`.
+      - `agent` uses `run paired arena gate`.
+      - `user` chooses one of (observed):
+        - branch `canary applicable` (assuming `has production canary target`):
+          - `agent` uses `run canary gate`.
+        - branch `no canary` (assuming `no production canary target`): none.
+      - `agent` uses `write promotion report`.
+      - `agent` uses `reply with verdict`.
+```

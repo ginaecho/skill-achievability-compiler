@@ -1,0 +1,584 @@
+{
+  "pack": {
+    "name": "property-based-testing",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_inspected",
+          "task_context_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_code_and_tests": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "candidate_property_identified",
+          "existing_pbt_reviewed",
+          "failure_context_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_references": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "reference_guidance_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_dependency_decision": {
+        "owner": "agent",
+        "pre": "candidate_property_identified",
+        "add": [
+          "dependency_decision_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_property_tests": {
+        "owner": "agent",
+        "pre": "candidate_property_identified",
+        "add": [
+          "property_tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_pbt_dependency": {
+        "owner": "agent",
+        "pre": "dependency_decision_known",
+        "add": [
+          "pbt_dependency_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_test_suite": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:package_registries",
+            "property_tests_written"
+          ]
+        },
+        "add": [
+          "tests_executed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "tests_pass": {
+            "or": [
+              "tests_pass",
+              {
+                "not": "tests_pass"
+              }
+            ]
+          }
+        }
+      },
+      "revise_tests_or_report": {
+        "owner": "agent",
+        "pre": "tests_executed",
+        "add": [
+          "deliverable_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_project",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "review_code_and_tests",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "write_new_or_extend_tests": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "project_already_has_pbt_library": [
+                      {
+                        "act": {
+                          "cap": "add_property_tests",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_test_suite",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "revise_tests_or_report",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_lacks_pbt_library": [
+                      {
+                        "act": {
+                          "cap": "ask_dependency_decision",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "approve_dependency": [
+                              {
+                                "act": {
+                                  "cap": "add_pbt_dependency",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "add_property_tests",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_test_suite",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "revise_tests_or_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "decline_dependency": [
+                              {
+                                "act": {
+                                  "cap": "revise_tests_or_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "review_existing_property_tests": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "revise_tests_or_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "interpret_failed_property_test": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "revise_tests_or_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "poor_pbt_candidate": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "revise_tests_or_report",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deliverable_prepared",
+    "init_true": [
+      "needs:shell",
+      "needs:linux",
+      "needs:package_registries"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "property-based-testing",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_inspected",
+          "task_context_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_code_and_tests": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "candidate_property_identified",
+          "existing_pbt_reviewed",
+          "failure_context_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_references": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "reference_guidance_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_dependency_decision": {
+        "owner": "agent",
+        "pre": "candidate_property_identified",
+        "add": [
+          "dependency_decision_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_property_tests": {
+        "owner": "agent",
+        "pre": "candidate_property_identified",
+        "add": [
+          "property_tests_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_pbt_dependency": {
+        "owner": "agent",
+        "pre": "dependency_decision_known",
+        "add": [
+          "pbt_dependency_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_test_suite": {
+        "owner": "agent",
+        "pre": "property_tests_written",
+        "add": [
+          "tests_executed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "tests_pass": {
+            "or": [
+              "tests_pass",
+              {
+                "not": "tests_pass"
+              }
+            ]
+          }
+        }
+      },
+      "revise_tests_or_report": {
+        "owner": "agent",
+        "pre": "tests_executed",
+        "add": [
+          "deliverable_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_project",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "review_code_and_tests",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "write_new_or_extend_tests": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "project_already_has_pbt_library": [
+                      {
+                        "act": {
+                          "cap": "add_property_tests",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "run_test_suite",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "revise_tests_or_report",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "project_lacks_pbt_library": [
+                      {
+                        "act": {
+                          "cap": "ask_dependency_decision",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "approve_dependency": [
+                              {
+                                "act": {
+                                  "cap": "add_pbt_dependency",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "add_property_tests",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "run_test_suite",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "revise_tests_or_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "decline_dependency": [
+                              {
+                                "act": {
+                                  "cap": "revise_tests_or_report",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "review_existing_property_tests": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "revise_tests_or_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "interpret_failed_property_test": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "revise_tests_or_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "poor_pbt_candidate": [
+              {
+                "act": {
+                  "cap": "check_references",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "revise_tests_or_report",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deliverable_prepared",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect_project": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "review_code_and_tests": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "check_references": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_dependency_decision": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "add_property_tests": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "add_pbt_dependency": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_test_suite": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "revise_tests_or_report": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    }
+  },
+  "live_goal": null
+}

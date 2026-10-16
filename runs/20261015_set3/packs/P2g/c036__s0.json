@@ -1,0 +1,664 @@
+{
+  "pack": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_taxonomy_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "taxonomy_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_cli": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_github": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_installed_skill": {
+        "owner": "agent",
+        "pre": "installed_match",
+        "add": [
+          "recommendation_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_catalog_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "catalog_available",
+            "strong_match",
+            {
+              "not": "installed_match"
+            }
+          ]
+        },
+        "add": [
+          "recommendation_given",
+          "approval_requested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_no_catalog_match": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "catalog_checked",
+            {
+              "not": "strong_match"
+            }
+          ]
+        },
+        "add": [
+          "no_match_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_catalog_failure": {
+        "owner": "agent",
+        "pre": {
+          "not": "catalog_available"
+        },
+        "add": [
+          "catalog_failure_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "approval_granted",
+                "strong_match",
+                {
+                  "not": "installed_match"
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "skill_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_post_install_guidance": {
+        "owner": "agent",
+        "pre": "skill_installed",
+        "add": [
+          "restart_guidance_sent"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_installed_skills",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "obvious_product_match": [],
+            "taxonomy_or_ambiguous": [
+              {
+                "act": {
+                  "cap": "read_taxonomy_guidance",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "installed_match_found": [
+              {
+                "act": {
+                  "cap": "recommend_installed_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_installed_match": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_catalog_lookup_succeeds": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "cli_unavailable_or_fails": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_github",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "catalog_check_failed": [
+                      {
+                        "act": {
+                          "cap": "report_catalog_failure",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "catalog_checked": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "strong_match_found": [
+                              {
+                                "act": {
+                                  "cap": "recommend_catalog_skill",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_install": [
+                                      {
+                                        "act": {
+                                          "cap": "install_skill",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "send_post_install_guidance",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "decline_install": []
+                                  }
+                                }
+                              }
+                            ],
+                            "no_strong_match": [
+                              {
+                                "act": {
+                                  "cap": "report_no_catalog_match",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "recommendation_given",
+        "no_match_reported",
+        "catalog_failure_reported",
+        "skill_installed"
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "nvidia-skill-finder",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_installed_skills": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "installed_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_taxonomy_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "taxonomy_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_catalog_github": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_checked",
+          "catalog_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_installed_skill": {
+        "owner": "agent",
+        "pre": "installed_match",
+        "add": [
+          "recommendation_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "recommend_catalog_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "catalog_available",
+            "strong_match",
+            {
+              "not": "installed_match"
+            }
+          ]
+        },
+        "add": [
+          "recommendation_given",
+          "approval_requested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_no_catalog_match": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "catalog_checked",
+            {
+              "not": "strong_match"
+            }
+          ]
+        },
+        "add": [
+          "no_match_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "report_catalog_failure": {
+        "owner": "agent",
+        "pre": {
+          "not": "catalog_available"
+        },
+        "add": [
+          "catalog_failure_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "approval_granted",
+            "strong_match",
+            {
+              "not": "installed_match"
+            }
+          ]
+        },
+        "add": [
+          "skill_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_post_install_guidance": {
+        "owner": "agent",
+        "pre": "skill_installed",
+        "add": [
+          "restart_guidance_sent"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_installed_skills",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "obvious_product_match": [],
+            "taxonomy_or_ambiguous": [
+              {
+                "act": {
+                  "cap": "read_taxonomy_guidance",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "installed_match_found": [
+              {
+                "act": {
+                  "cap": "recommend_installed_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_installed_match": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "cli_catalog_lookup_succeeds": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_cli",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "cli_unavailable_or_fails": [
+                      {
+                        "act": {
+                          "cap": "query_catalog_github",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "catalog_check_failed": [
+                      {
+                        "act": {
+                          "cap": "report_catalog_failure",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "catalog_checked": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "strong_match_found": [
+                              {
+                                "act": {
+                                  "cap": "recommend_catalog_skill",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_install": [
+                                      {
+                                        "act": {
+                                          "cap": "install_skill",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "send_post_install_guidance",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "decline_install": []
+                                  }
+                                }
+                              }
+                            ],
+                            "no_strong_match": [
+                              {
+                                "act": {
+                                  "cap": "report_no_catalog_match",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "recommendation_given",
+        "no_match_reported",
+        "catalog_failure_reported",
+        "skill_installed"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_installed_skills": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_taxonomy_guidance": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "query_catalog_cli": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "query_catalog_github": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "recommend_installed_skill": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "recommend_catalog_skill": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "report_no_catalog_match": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "report_catalog_failure": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "install_skill": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "send_post_install_guidance": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,47 @@
+```ce
+Skill `build-agent`.
+Roles: `agent`, `user`.
+Tool `read_capture_reference` (owner `agent`): via `read`; adds `capture_reference_read`.
+Tool `read_authoring_reference` (owner `agent`): via `read`; adds `authoring_reference_read`.
+Tool `read_gotchas_reference` (owner `agent`): via `read`; adds `gotchas_reference_read`.
+Tool `ask_for_task_walkthrough` (owner `agent`): via `ask_user`; adds `task_described`.
+Tool `draft_skill_files` (owner `agent`): via `write`; requires all of (`authoring_reference_read`, `gotchas_reference_read`, any of (`task_described`, `task_transcript_available`)); adds `skill_drafted`.
+Tool `test_skill_on_known_case` (owner `agent`): via `bash`; requires `skill_drafted`; adds `test_run_completed`.
+Tool `revise_skill_files` (owner `agent`): via `edit`; requires all of (`skill_drafted`, `test_run_completed`, `test_failed`); removes `test_failed`; adds `skill_drafted`.
+Tool `register_with_router` (owner `agent`): via `edit`; requires `skill_drafted`; adds `router_registered`.
+Tool `share_with_team` (owner `agent`): via `reply`; requires `skill_drafted`; adds `sharing_offered`.
+Tool `offer_schedule` (owner `agent`): via `ask_user`; requires `skill_drafted`; adds `schedule_offered`.
+Tool `deliver_built_skill` (owner `agent`): via `reply`; requires all of (`skill_drafted`, `test_run_completed`, not `test_failed`, `router_registered`); adds `built_skill_delivered`.
+
+Initially true: none.
+Initially: true.
+Goal: `built_skill_delivered`.
+
+Protocol:
+  - `agent` uses `read_capture_reference`.
+  - `agent` uses `read_authoring_reference`.
+  - `agent` uses `read_gotchas_reference`.
+  - `user` chooses one of (observed):
+    - branch `transcript_available` (assuming `task_transcript_available`): none.
+    - branch `describe_task`:
+      - `agent` uses `ask_for_task_walkthrough`.
+  - `agent` uses `draft_skill_files`.
+  - loop `fix_until_match`:
+    - `agent` chooses one of (observed):
+      - branch `test_matches`:
+        - `agent` uses `test_skill_on_known_case`.
+      - branch `test_needs_fix` (assuming `test_failed`):
+        - `agent` uses `test_skill_on_known_case`.
+        - `agent` uses `revise_skill_files`.
+        - repeat `fix_until_match`.
+  - `agent` uses `register_with_router`.
+  - `user` chooses one of (observed):
+    - branch `recurring_task`:
+      - `agent` uses `offer_schedule`.
+    - branch `not_recurring`: none.
+  - `user` chooses one of (observed):
+    - branch `share_with_team`:
+      - `agent` uses `share_with_team`.
+    - branch `do_not_share`: none.
+  - `agent` uses `deliver_built_skill`.
+```

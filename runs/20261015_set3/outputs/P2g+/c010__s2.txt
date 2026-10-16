@@ -1,0 +1,54 @@
+```ce
+Skill `pr-link-issue`.
+Roles: `agent`, `user`.
+Tool `resolve_current_pr` (owner `agent`): via `bash`; requires `on_branch_with_open_pr`; adds `pr_number_known`, `pr_body_known`.
+Tool `parse_issue_input` (owner `agent`): via `reply`; adds `issue_identified`.
+Tool `fetch_linear_from_issue` (owner `agent`): via `bash`; requires `issue_identified`; adds `linear_key_known`.
+Tool `read_pr_body` (owner `agent`): via `bash`; requires `pr_number_known`; adds `pr_body_known`.
+Tool `ask_linear_key` (owner `agent`): via `ask_user`; requires `issue_identified`; adds `linear_key_known`.
+Tool `update_pr_with_issue_block` (owner `agent`): via `bash`; requires `issue_identified` and `pr_number_known` and `pr_body_known`; adds `pr_updated_with_issue_refs`.
+Tool `update_pr_with_github_issue_only` (owner `agent`): via `bash`; requires `issue_identified` and `pr_number_known` and `pr_body_known`; adds `pr_updated_with_issue_refs`.
+Tool `confirm_pr_url` (owner `agent`): via `bash`; requires `pr_updated_with_issue_refs`; adds `pr_url_known`.
+Tool `report_success` (owner `agent`): via `reply`; requires `pr_updated_with_issue_refs` and `pr_url_known`; adds `user_informed`.
+Tool `report_no_pr` (owner `agent`): via `reply`; requires not `on_branch_with_open_pr`; adds `user_informed`.
+Initially true: none.
+Goal: `user_informed`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `pr_supplied` (assuming `pr_number_known`):
+      - `agent` uses `parse_issue_input`.
+      - `agent` uses `read_pr_body`.
+      - `agent` uses `fetch_linear_from_issue`.
+      - `agent` chooses one of (observed):
+        - branch `linear_found` (assuming `linear_key_known`):
+          - `agent` uses `update_pr_with_issue_block`.
+        - branch `linear_missing`:
+          - `user` chooses one of (observed):
+            - branch `provide_linear_key`:
+              - `agent` uses `ask_linear_key`.
+              - `agent` uses `update_pr_with_issue_block`.
+            - branch `omit_linear_key`: 
+              - `agent` uses `update_pr_with_github_issue_only`.
+      - `agent` uses `confirm_pr_url`.
+      - `agent` uses `report_success`.
+    - branch `pr_not_supplied`:
+      - `agent` chooses one of (observed):
+        - branch `open_pr_exists` (assuming `on_branch_with_open_pr`):
+          - `agent` uses `resolve_current_pr`.
+          - `agent` uses `parse_issue_input`.
+          - `agent` uses `fetch_linear_from_issue`.
+          - `agent` chooses one of (observed):
+            - branch `linear_found` (assuming `linear_key_known`):
+              - `agent` uses `update_pr_with_issue_block`.
+            - branch `linear_missing`:
+              - `user` chooses one of (observed):
+                - branch `provide_linear_key`:
+                  - `agent` uses `ask_linear_key`.
+                  - `agent` uses `update_pr_with_issue_block`.
+                - branch `omit_linear_key`:
+                  - `agent` uses `update_pr_with_github_issue_only`.
+          - `agent` uses `confirm_pr_url`.
+          - `agent` uses `report_success`.
+        - branch `no_open_pr` (assuming not `on_branch_with_open_pr`):
+          - `agent` uses `report_no_pr`.
+```

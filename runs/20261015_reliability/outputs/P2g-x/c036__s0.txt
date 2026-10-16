@@ -1,0 +1,51 @@
+```ce
+Skill `dispatching-parallel-agents`.
+Roles: `coordinator`, `agent`.
+
+Tool `identify_domains` (owner `coordinator`):
+  requires `failures_present`;
+  adds `domains_identified`;
+  picks `domain_count` with `domain_count` >= 2.
+
+Tool `dispatch_agent` (owner `coordinator`):
+  requires `domains_identified`;
+  adds `agent_dispatched`.
+
+Tool `agent_investigates` (owner `agent`):
+  requires `agent_dispatched`;
+  adds `fix_applied`, `summary_returned`.
+
+Tool `review_summaries` (owner `coordinator`):
+  requires all of (`fix_applied`, `summary_returned`);
+  adds `summaries_reviewed`.
+
+Tool `check_conflicts` (owner `coordinator`):
+  requires `summaries_reviewed`;
+  picks `conflicts_found` with `conflicts_found` == false.
+
+Tool `run_full_suite` (owner `coordinator`):
+  requires `summaries_reviewed`;
+  adds `full_suite_pass`.
+
+Tool `integrate_changes` (owner `coordinator`):
+  requires all of (`full_suite_pass`, `conflicts_found` == false);
+  adds `integrated`.
+
+Initially true: `failures_present`.
+Initially: `domain_count` == 0.
+Goal: `integrated` and `full_suite_pass`.
+
+Protocol:
+  - `coordinator` uses `identify_domains`.
+  - `coordinator` chooses one of (observed):
+    - branch `parallel_domains`:
+      - loop `dispatch_loop`:
+        - `coordinator` uses `dispatch_agent`.
+        - `agent` uses `agent_investigates`.
+        - repeat `dispatch_loop`.
+      - `coordinator` uses `review_summaries`.
+      - `coordinator` uses `check_conflicts`.
+      - `coordinator` uses `run_full_suite`.
+      - `coordinator` uses `integrate_changes`.
+    - branch `insufficient_domains`: none.
+```

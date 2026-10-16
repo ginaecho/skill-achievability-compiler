@@ -1,0 +1,47 @@
+```ce
+Skill `context-engine`.
+Roles: `agent`, `user`.
+Tool `check_context_file` (owner `agent`): via `read`; adds `context_file_exists`.
+Tool `read_context_file` (owner `agent`): via `read`; requires `context_file_exists`; adds `context_loaded`, `has_last_updated`.
+Tool `read_anonymization_protocol` (owner `agent`): via `read`; adds `anonymization_rules_loaded`.
+Tool `ask_setup_prompt` (owner `agent`): via `ask_user`; adds `setup_prompt_shown`.
+Tool `ask_stale_refresh_prompt` (owner `agent`): via `ask_user`; requires `context_is_stale`; adds `stale_prompt_shown`.
+Tool `ask_missing_context_question` (owner `agent`): via `ask_user`; requires `required_context_missing`; adds `missing_context_asked`.
+Tool `append_context_update` (owner `agent`): via `edit`; requires `context_file_exists` and `user_confirmed_update`; adds `context_file_updated`, `has_last_updated`.
+Initially true: none.
+Initially: `context_age_days` == 0.
+Goal: any of (`context_loaded`, `setup_prompt_shown`) and `anonymization_rules_loaded` and (not `external_call_planned` or `external_context_anonymized`) and (not `context_update_learned` or any of (not `user_confirmed_update`, `context_file_updated`)).
+Protocol:
+  - `agent` uses `check_context_file`.
+  - `agent` chooses one of (observed):
+    - branch `context_missing`:
+      - `agent` uses `ask_setup_prompt`.
+      - `agent` uses `read_anonymization_protocol`.
+    - branch `context_exists`:
+      - `agent` uses `read_context_file`.
+      - `agent` chooses one of (observed):
+        - branch `stale`:
+          - `agent` uses `ask_stale_refresh_prompt`.
+          - `user` chooses one of (observed):
+            - branch `continue_with_stale`: none.
+            - branch `refresh_elsewhere`: none.
+        - branch `fresh`: none.
+      - `agent` chooses one of (observed):
+        - branch `required_fields_missing`:
+          - `agent` uses `ask_missing_context_question`.
+        - branch `required_fields_present`: none.
+      - `agent` uses `read_anonymization_protocol`.
+      - `agent` chooses one of (observed):
+        - branch `external_call_needed`:
+          - `agent` chooses one of (observed):
+            - branch `already_anonymized`: none.
+            - branch `anonymize_before_external`: none.
+        - branch `no_external_call`: none.
+      - `agent` chooses one of (observed):
+        - branch `learned_new_context`:
+          - `user` chooses one of (observed):
+            - branch `confirm_update`:
+              - `agent` uses `append_context_update`.
+            - branch `decline_update`: none.
+        - branch `no_new_context`: none.
+```

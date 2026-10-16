@@ -1,0 +1,1137 @@
+{
+  "pack": {
+    "name": "declarative-agent-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_atk_cli": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries"
+          ]
+        },
+        "add": [
+          "atk_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_atk_skill_env": {
+        "owner": "agent",
+        "pre": "atk_cli_available",
+        "add": [
+          "atk_skill_env_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_agent_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            {
+              "and": [
+                "atk_cli_available",
+                "atk_skill_env_set"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "manifest_exists",
+          "app_package_exists",
+          "agent_project",
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "parse_manifest_and_detect_issues": {
+        "owner": "agent",
+        "pre": "manifest_exists",
+        "add": [
+          "manifest_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_agent_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "manifest_exists",
+            "manifest_checked"
+          ]
+        },
+        "add": [
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_api_plugin_with_atk": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet",
+            {
+              "and": [
+                "manifest_exists",
+                "manifest_checked",
+                "atk_cli_available",
+                "atk_skill_env_set"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "plugin_added",
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "discover_mcp_tools": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "mcp_tools_discovered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_agent_local": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            {
+              "and": [
+                "app_package_changed",
+                "manifest_checked",
+                "atk_cli_available",
+                "atk_skill_env_set"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "deployed",
+          "env_local_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_title_id": {
+        "owner": "agent",
+        "pre": "env_local_written",
+        "add": [
+          "test_link_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_files_to_user": {
+        "owner": "agent",
+        "pre": "localized_files_ready",
+        "add": [
+          "files_sent"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_atk_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "atk_cli_missing": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "stop": []
+                  }
+                }
+              }
+            ],
+            "atk_cli_available": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "reject_non_agent_project": [],
+                    "reject_missing_manifest_for_edit_or_deploy": [],
+                    "scaffold_new_project": [
+                      {
+                        "act": {
+                          "cap": "set_atk_skill_env",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "scaffold_agent_project",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "parse_manifest_and_detect_issues",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "errors_found": [
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_fix": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "decline_fix": []
+                                  }
+                                }
+                              }
+                            ],
+                            "no_errors": [
+                              {
+                                "act": {
+                                  "cap": "edit_agent_files",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "deploy": [
+                                      {
+                                        "act": {
+                                          "cap": "deploy_agent_local",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "read_title_id",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "skip_deploy": []
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "existing_agent_project": [
+                      {
+                        "act": {
+                          "cap": "parse_manifest_and_detect_issues",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "errors_found": [
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_fix": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "decline_fix": []
+                                  }
+                                }
+                              }
+                            ],
+                            "no_errors": [
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "api_plugin": [
+                                      {
+                                        "act": {
+                                          "cap": "set_atk_skill_env",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "add_api_plugin_with_atk",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "mcp_plugin": [
+                                      {
+                                        "act": {
+                                          "cap": "discover_mcp_tools",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "localization": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "send_files_to_user",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "review_or_edit": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "deployed",
+            "test_link_ready"
+          ]
+        },
+        "files_sent",
+        "manifest_errors_found",
+        "non_agent_project_detected",
+        "manifest_missing_rejected",
+        "atk_cli_missing_reported"
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "declarative-agent-developer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_atk_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "atk_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_atk_skill_env": {
+        "owner": "agent",
+        "pre": "atk_cli_available",
+        "add": [
+          "atk_skill_env_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "scaffold_agent_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "atk_cli_available",
+            "atk_skill_env_set"
+          ]
+        },
+        "add": [
+          "manifest_exists",
+          "app_package_exists",
+          "agent_project",
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "parse_manifest_and_detect_issues": {
+        "owner": "agent",
+        "pre": "manifest_exists",
+        "add": [
+          "manifest_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_agent_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "manifest_exists",
+            "manifest_checked"
+          ]
+        },
+        "add": [
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "add_api_plugin_with_atk": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "manifest_exists",
+            "manifest_checked",
+            "atk_cli_available",
+            "atk_skill_env_set"
+          ]
+        },
+        "add": [
+          "plugin_added",
+          "app_package_changed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "discover_mcp_tools": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "mcp_tools_discovered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_agent_local": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "app_package_changed",
+            "manifest_checked",
+            "atk_cli_available",
+            "atk_skill_env_set"
+          ]
+        },
+        "add": [
+          "deployed",
+          "env_local_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_title_id": {
+        "owner": "agent",
+        "pre": "env_local_written",
+        "add": [
+          "test_link_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "send_files_to_user": {
+        "owner": "agent",
+        "pre": "localized_files_ready",
+        "add": [
+          "files_sent"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_atk_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "atk_cli_missing": [
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "stop": []
+                  }
+                }
+              }
+            ],
+            "atk_cli_available": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "reject_non_agent_project": [],
+                    "reject_missing_manifest_for_edit_or_deploy": [],
+                    "scaffold_new_project": [
+                      {
+                        "act": {
+                          "cap": "set_atk_skill_env",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "scaffold_agent_project",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "parse_manifest_and_detect_issues",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "errors_found": [
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_fix": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "decline_fix": []
+                                  }
+                                }
+                              }
+                            ],
+                            "no_errors": [
+                              {
+                                "act": {
+                                  "cap": "edit_agent_files",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "deploy": [
+                                      {
+                                        "act": {
+                                          "cap": "deploy_agent_local",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "read_title_id",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "skip_deploy": []
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "existing_agent_project": [
+                      {
+                        "act": {
+                          "cap": "parse_manifest_and_detect_issues",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "errors_found": [
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "approve_fix": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "decline_fix": []
+                                  }
+                                }
+                              }
+                            ],
+                            "no_errors": [
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "api_plugin": [
+                                      {
+                                        "act": {
+                                          "cap": "set_atk_skill_env",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "add_api_plugin_with_atk",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "mcp_plugin": [
+                                      {
+                                        "act": {
+                                          "cap": "discover_mcp_tools",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "localization": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "act": {
+                                          "cap": "send_files_to_user",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "review_or_edit": [
+                                      {
+                                        "act": {
+                                          "cap": "edit_agent_files",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "deploy": [
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_agent_local",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "read_title_id",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "skip_deploy": []
+                                          }
+                                        }
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "deployed",
+            "test_link_ready"
+          ]
+        },
+        "files_sent",
+        "manifest_errors_found",
+        "non_agent_project_detected",
+        "manifest_missing_rejected",
+        "atk_cli_missing_reported"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "check_atk_cli": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "set_atk_skill_env": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "scaffold_agent_project": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "parse_manifest_and_detect_issues": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "edit_agent_files": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "add_api_plugin_with_atk": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "discover_mcp_tools": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "deploy_agent_local": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "read_title_id": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "send_files_to_user": {
+      "via": "send_user_file",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

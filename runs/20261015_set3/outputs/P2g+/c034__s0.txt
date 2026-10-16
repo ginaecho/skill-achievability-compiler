@@ -1,0 +1,65 @@
+```ce
+Skill `imagegen`.
+Roles: `agent`, `user`.
+Tool `ask_for_missing_details` (owner `agent`): via `ask_user`; adds `details_collected`.
+Tool `inspect_local_image_for_builtin_edit` (owner `agent`): via `read`; adds `local_edit_target_inspected`.
+Tool `generate_image_builtin` (owner `agent`): adds `image_generated_builtin`.
+Tool `edit_image_builtin` (owner `agent`): requires `edit_target_visible`; adds `image_edited_builtin`.
+Tool `copy_image_into_workspace` (owner `agent`): via `bash`; requires any of (`image_generated_builtin`, `image_edited_builtin`, `cli_image_generated`, `cli_image_edited`, `cli_batch_generated`); adds `workspace_asset_saved`.
+Tool `report_final_result` (owner `agent`): via `reply`; requires `final_artifact_ready`; adds `result_reported`.
+Tool `install_cli_dependency` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `cli_dependency_installed`.
+Tool `run_cli_generate` (owner `agent`): via `bash`; needs `shell`; requires `cli_mode_requested` and `openai_api_key_available`; adds `cli_image_generated`.
+Tool `run_cli_edit` (owner `agent`): via `bash`; needs `shell`; requires `cli_mode_requested` and `openai_api_key_available`; adds `cli_image_edited`.
+Tool `run_cli_generate_batch` (owner `agent`): via `bash`; needs `shell`; requires `cli_mode_requested` and `openai_api_key_available`; adds `cli_batch_generated`.
+Tool `inform_cli_fallback_requires_key` (owner `agent`): via `reply`; adds `cli_fallback_explained`.
+Initially true: none.
+Initially: `final_artifact_ready` == false.
+Goal: `result_reported`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `builtin_mode`:
+      - `user` chooses one of (observed):
+        - branch `generate_intent` (assuming `is_generate_request`):
+          - `agent` chooses one of (observed):
+            - branch `enough_details` (assuming `details_collected`):
+              - `agent` uses `generate_image_builtin`.
+            - branch `need_details`:
+              - `agent` uses `ask_for_missing_details`.
+              - `agent` uses `generate_image_builtin`.
+        - branch `edit_intent` (assuming `is_edit_request`):
+          - `user` chooses one of (observed):
+            - branch `edit_target_already_visible` (assuming `edit_target_visible`):
+              - `agent` uses `edit_image_builtin`.
+            - branch `edit_target_is_local_file`:
+              - `agent` uses `inspect_local_image_for_builtin_edit`.
+              - `user` chooses one of (observed):
+                - branch `image_now_visible` (assuming `edit_target_visible`):
+                  - `agent` uses `edit_image_builtin`.
+                - branch `needs_cli_path_control`:
+                  - `agent` uses `inform_cli_fallback_requires_key`.
+      - `user` chooses one of (observed):
+        - branch `preview_only` (assuming any of (`image_generated_builtin`, `image_edited_builtin`)):
+          - `agent` uses `report_final_result`.
+        - branch `workspace_bound` (assuming any of (`image_generated_builtin`, `image_edited_builtin`)):
+          - `agent` uses `copy_image_into_workspace`.
+          - `agent` uses `report_final_result`.
+    - branch `cli_mode` (assuming `cli_mode_requested`):
+      - `user` chooses one of (observed):
+        - branch `openai_key_available` (assuming `openai_api_key_available`):
+          - `agent` uses `install_cli_dependency`.
+          - `user` chooses one of (observed):
+            - branch `generate_single` (assuming `is_generate_request`):
+              - `agent` uses `run_cli_generate`.
+            - branch `edit_single` (assuming `is_edit_request`):
+              - `agent` uses `run_cli_edit`.
+            - branch `generate_many` (assuming `is_generate_request` and `needs_many_outputs`):
+              - `agent` uses `run_cli_generate_batch`.
+          - `user` chooses one of (observed):
+            - branch `preview_only` (assuming any of (`cli_image_generated`, `cli_image_edited`, `cli_batch_generated`)):
+              - `agent` uses `report_final_result`.
+            - branch `workspace_bound` (assuming any of (`cli_image_generated`, `cli_image_edited`, `cli_batch_generated`)):
+              - `agent` uses `copy_image_into_workspace`.
+              - `agent` uses `report_final_result`.
+        - branch `openai_key_missing`:
+          - `agent` uses `inform_cli_fallback_requires_key`.
+```

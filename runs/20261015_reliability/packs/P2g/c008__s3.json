@@ -1,0 +1,557 @@
+{
+  "pack": {
+    "name": "hf-cloud-serving-image-selection",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_model_config": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "model_architecture_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_aws_catalog": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_read",
+          "selection_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_region_availability": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "catalog_read"
+          ]
+        },
+        "add": [
+          "region_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_dlc_yaml": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_read",
+          "selection_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_github_dlc_data": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_ecr_tags": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "catalog_read",
+          "selection_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "llm_or_generative_reranker": [
+              {
+                "act": {
+                  "cap": "read_model_config",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "multimodal": [
+                      {
+                        "act": {
+                          "cap": "read_aws_catalog",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "text_only": [
+                      {
+                        "act": {
+                          "cap": "read_aws_catalog",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "embedding_or_cross_encoder_reranker": [
+              {
+                "act": {
+                  "cap": "read_model_config",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "classifier_ner_qa_summarization": [
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "diffusion": [
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "user_requests_sglang": [
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "jumpstart_or_byoc": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "catalog_available": [
+              {
+                "act": {
+                  "cap": "read_region_availability",
+                  "by": "agent"
+                }
+              }
+            ],
+            "catalog_needs_fallback": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "github_yaml_available": [
+                      {
+                        "act": {
+                          "cap": "query_github_dlc_data",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_dlc_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "ecr_query_available": [
+                      {
+                        "act": {
+                          "cap": "query_ecr_tags",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_family_compatible_and_not_broken": [],
+            "no_hf_tag_in_region_or_verified_incompatibility_or_hf_broken": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "generic_catalog_image": [],
+                    "skip_mirroring": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "family_selected",
+        "image_uri_selected",
+        "selection_current",
+        "hf_rule_respected",
+        "region_applied",
+        "ami_requirement_determined"
+      ]
+    },
+    "init_true": [
+      "needs:allowlisted_internet",
+      "needs:shell"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "hf-cloud-serving-image-selection",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_model_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "model_architecture_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_aws_catalog": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_read",
+          "selection_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_region_availability": {
+        "owner": "agent",
+        "pre": "catalog_read",
+        "add": [
+          "region_applied"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_dlc_yaml": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_read",
+          "selection_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_github_dlc_data": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_ecr_tags": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "catalog_read",
+          "selection_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "llm_or_generative_reranker": [
+              {
+                "act": {
+                  "cap": "read_model_config",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "multimodal": [
+                      {
+                        "act": {
+                          "cap": "read_aws_catalog",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "text_only": [
+                      {
+                        "act": {
+                          "cap": "read_aws_catalog",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "embedding_or_cross_encoder_reranker": [
+              {
+                "act": {
+                  "cap": "read_model_config",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "classifier_ner_qa_summarization": [
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "diffusion": [
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "user_requests_sglang": [
+              {
+                "act": {
+                  "cap": "read_aws_catalog",
+                  "by": "agent"
+                }
+              }
+            ],
+            "jumpstart_or_byoc": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "catalog_available": [
+              {
+                "act": {
+                  "cap": "read_region_availability",
+                  "by": "agent"
+                }
+              }
+            ],
+            "catalog_needs_fallback": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "github_yaml_available": [
+                      {
+                        "act": {
+                          "cap": "query_github_dlc_data",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_dlc_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "ecr_query_available": [
+                      {
+                        "act": {
+                          "cap": "query_ecr_tags",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_family_compatible_and_not_broken": [],
+            "no_hf_tag_in_region_or_verified_incompatibility_or_hf_broken": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "generic_catalog_image": [],
+                    "skip_mirroring": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "family_selected",
+        "image_uri_selected",
+        "selection_current",
+        "hf_rule_respected",
+        "region_applied",
+        "ami_requirement_determined"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "read_model_config": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_aws_catalog": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "read_region_availability": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "read_dlc_yaml": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "query_github_dlc_data": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "query_ecr_tags": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    }
+  },
+  "live_goal": null
+}

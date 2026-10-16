@@ -1,0 +1,1081 @@
+{
+  "pack": {
+    "name": "automate-this",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_prerequisites": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "prerequisites_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "ffmpeg_available": {
+            "or": [
+              {
+                "cmp": [
+                  "ffmpeg_available",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "ffmpeg_available",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "whisper_available": {
+            "or": [
+              {
+                "cmp": [
+                  "whisper_available",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "whisper_available",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "extract_recording_content": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "video_path_known",
+            "prerequisites_checked",
+            {
+              "cmp": [
+                "ffmpeg_available",
+                "==",
+                1
+              ]
+            }
+          ]
+        },
+        "add": [
+          "work_dir_created",
+          "frames_extracted",
+          "audio_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "long_recording": {
+            "or": [
+              {
+                "cmp": [
+                  "long_recording",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "long_recording",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "audio_present": {
+            "or": [
+              {
+                "cmp": [
+                  "audio_present",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "audio_present",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "transcribe_audio": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            {
+              "cmp": [
+                "audio_present",
+                "==",
+                1
+              ]
+            },
+            {
+              "cmp": [
+                "whisper_available",
+                "==",
+                1
+              ]
+            }
+          ]
+        },
+        "add": [
+          "audio_transcribed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_reconstruction": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "process_reconstructed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "reconstruction_confirmed": {
+            "or": [
+              {
+                "cmp": [
+                  "reconstruction_confirmed",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "reconstruction_confirmed",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "fingerprint_environment": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "reconstruction_confirmed",
+            "==",
+            1
+          ]
+        },
+        "add": [
+          "environment_fingerprinted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "propose_automation_tiers": {
+        "owner": "agent",
+        "pre": "environment_fingerprinted",
+        "add": [
+          "tiers_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_tier_choice": {
+        "owner": "agent",
+        "pre": "tiers_proposed",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "tier_selected": {
+            "and": [
+              {
+                "cmp": [
+                  "tier_selected",
+                  ">=",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "<=",
+                  3
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "build_automation": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "tier_selected",
+            ">=",
+            1
+          ]
+        },
+        "add": [
+          "automation_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_and_fix_automation": {
+        "owner": "agent",
+        "pre": "automation_written",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "automation_working": {
+            "or": [
+              {
+                "cmp": [
+                  "automation_working",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "automation_working",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "cleanup_temp_files": {
+        "owner": "agent",
+        "pre": "work_dir_created",
+        "add": [
+          "cleanup_done"
+        ],
+        "del": [
+          "work_dir_created",
+          "frames_extracted",
+          "audio_transcribed"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_prerequisites",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "ffmpeg_missing": [],
+            "ffmpeg_present": [
+              {
+                "act": {
+                  "cap": "extract_recording_content",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_audio": [],
+                    "audio_with_whisper": [
+                      {
+                        "act": {
+                          "cap": "transcribe_audio",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "audio_without_whisper_proceed": []
+                  }
+                }
+              },
+              {
+                "rec": {
+                  "name": "confirm_reconstruction",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "present_reconstruction",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "confirmed": [],
+                          "revise": [
+                            {
+                              "continue": "confirm_reconstruction"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "act": {
+                  "cap": "fingerprint_environment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "propose_automation_tiers",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_user_tier_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_build": [],
+                    "build_selected_tier": [
+                      {
+                        "act": {
+                          "cap": "build_automation",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "test_until_working",
+                          "body": [
+                            {
+                              "act": {
+                                "cap": "test_and_fix_automation",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "choice": {
+                                "by": "agent",
+                                "observed": true,
+                                "branches": {
+                                  "working": [],
+                                  "fix_again": [
+                                    {
+                                      "act": {
+                                        "cap": "build_automation",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "continue": "test_until_working"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "cleanup_temp_files",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "tiers_proposed",
+        {
+          "or": [
+            {
+              "cmp": [
+                "tier_selected",
+                "==",
+                0
+              ]
+            },
+            {
+              "and": [
+                "automation_written",
+                "automation_working"
+              ]
+            }
+          ]
+        },
+        "cleanup_done"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "ffmpeg_available",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "whisper_available",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "long_recording",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "audio_present",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "reconstruction_confirmed",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "tier_selected",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "automation_working",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "automate-this",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_prerequisites": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "prerequisites_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "ffmpeg_available": {
+            "or": [
+              {
+                "cmp": [
+                  "ffmpeg_available",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "ffmpeg_available",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "whisper_available": {
+            "or": [
+              {
+                "cmp": [
+                  "whisper_available",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "whisper_available",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "extract_recording_content": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "video_path_known",
+            "prerequisites_checked",
+            {
+              "cmp": [
+                "ffmpeg_available",
+                "==",
+                1
+              ]
+            }
+          ]
+        },
+        "add": [
+          "work_dir_created",
+          "frames_extracted",
+          "audio_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "long_recording": {
+            "or": [
+              {
+                "cmp": [
+                  "long_recording",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "long_recording",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          },
+          "audio_present": {
+            "or": [
+              {
+                "cmp": [
+                  "audio_present",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "audio_present",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "transcribe_audio": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "audio_checked",
+            {
+              "cmp": [
+                "audio_present",
+                "==",
+                1
+              ]
+            },
+            {
+              "cmp": [
+                "whisper_available",
+                "==",
+                1
+              ]
+            }
+          ]
+        },
+        "add": [
+          "audio_transcribed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "present_reconstruction": {
+        "owner": "agent",
+        "pre": "frames_extracted",
+        "add": [
+          "process_reconstructed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "reconstruction_confirmed": {
+            "or": [
+              {
+                "cmp": [
+                  "reconstruction_confirmed",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "reconstruction_confirmed",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "fingerprint_environment": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "reconstruction_confirmed",
+            "==",
+            1
+          ]
+        },
+        "add": [
+          "environment_fingerprinted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "propose_automation_tiers": {
+        "owner": "agent",
+        "pre": "environment_fingerprinted",
+        "add": [
+          "tiers_proposed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_tier_choice": {
+        "owner": "agent",
+        "pre": "tiers_proposed",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "tier_selected": {
+            "and": [
+              {
+                "cmp": [
+                  "tier_selected",
+                  ">=",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "tier_selected",
+                  "<=",
+                  3
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "build_automation": {
+        "owner": "agent",
+        "pre": {
+          "cmp": [
+            "tier_selected",
+            ">=",
+            1
+          ]
+        },
+        "add": [
+          "automation_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_and_fix_automation": {
+        "owner": "agent",
+        "pre": "automation_written",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "automation_working": {
+            "or": [
+              {
+                "cmp": [
+                  "automation_working",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "automation_working",
+                  "==",
+                  1
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "cleanup_temp_files": {
+        "owner": "agent",
+        "pre": "work_dir_created",
+        "add": [
+          "cleanup_done"
+        ],
+        "del": [
+          "work_dir_created",
+          "frames_extracted",
+          "audio_transcribed"
+        ],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_prerequisites",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "ffmpeg_missing": [],
+            "ffmpeg_present": [
+              {
+                "act": {
+                  "cap": "extract_recording_content",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_audio": [],
+                    "audio_with_whisper": [
+                      {
+                        "act": {
+                          "cap": "transcribe_audio",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "audio_without_whisper_proceed": []
+                  }
+                }
+              },
+              {
+                "rec": {
+                  "name": "confirm_reconstruction",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "present_reconstruction",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "confirmed": [],
+                          "revise": [
+                            {
+                              "continue": "confirm_reconstruction"
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "act": {
+                  "cap": "fingerprint_environment",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "propose_automation_tiers",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "ask_user_tier_choice",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "no_build": [],
+                    "build_selected_tier": [
+                      {
+                        "act": {
+                          "cap": "build_automation",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "rec": {
+                          "name": "test_until_working",
+                          "body": [
+                            {
+                              "act": {
+                                "cap": "test_and_fix_automation",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "choice": {
+                                "by": "agent",
+                                "observed": true,
+                                "branches": {
+                                  "working": [],
+                                  "fix_again": [
+                                    {
+                                      "act": {
+                                        "cap": "build_automation",
+                                        "by": "agent"
+                                      }
+                                    },
+                                    {
+                                      "continue": "test_until_working"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "cleanup_temp_files",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "tiers_proposed",
+        {
+          "or": [
+            {
+              "cmp": [
+                "tier_selected",
+                "==",
+                0
+              ]
+            },
+            {
+              "and": [
+                "automation_written",
+                "automation_working"
+              ]
+            }
+          ]
+        },
+        "cleanup_done"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "ffmpeg_available",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "whisper_available",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "long_recording",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "audio_present",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "reconstruction_confirmed",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "tier_selected",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "automation_working",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_prerequisites": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "extract_recording_content": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "transcribe_audio": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "present_reconstruction": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "fingerprint_environment": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "propose_automation_tiers": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "ask_user_tier_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "build_automation": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "test_and_fix_automation": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "cleanup_temp_files": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

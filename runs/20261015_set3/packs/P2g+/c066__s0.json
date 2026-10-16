@@ -1,0 +1,601 @@
+{
+  "pack": {
+    "name": "notion-knowledge-capture",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_capture_details": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation"
+          ]
+        },
+        "add": [
+          "capture_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_reference_guides": {
+        "owner": "agent",
+        "pre": "capture_defined",
+        "add": [
+          "destination_identified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "search_notion_context": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:notion_account",
+            "destination_identified"
+          ]
+        },
+        "add": [
+          "prior_context_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "choose_database": {
+        "owner": "user",
+        "pre": {
+          "and": [
+            "needs:user_conversation",
+            "destination_identified"
+          ]
+        },
+        "add": [
+          "database_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_notion_page": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:notion_account",
+            "database_selected"
+          ]
+        },
+        "add": [
+          "notion_page_captured",
+          "structured_content_recorded",
+          "summary_added",
+          "context_added",
+          "source_links_added",
+          "properties_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_notion_page": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:notion_account",
+            {
+              "and": [
+                "database_selected",
+                "prior_context_found"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "notion_page_captured",
+          "structured_content_recorded",
+          "summary_added",
+          "context_added",
+          "source_links_added",
+          "properties_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "link_related_notion_records": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:notion_account",
+            "notion_page_captured"
+          ]
+        },
+        "add": [
+          "related_links_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_followup_tasks": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:notion_account",
+            "notion_page_captured"
+          ]
+        },
+        "add": [
+          "followup_tasks_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "tell_user_to_setup_notion_mcp": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "setup_instructions_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "notion_available": [
+              {
+                "act": {
+                  "cap": "ask_capture_details",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_reference_guides",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "search_notion_context",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "single_destination": [
+                      {
+                        "act": {
+                          "cap": "choose_database",
+                          "by": "user"
+                        }
+                      }
+                    ],
+                    "multiple_candidates": [
+                      {
+                        "act": {
+                          "cap": "choose_database",
+                          "by": "user"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "new_capture": [
+                      {
+                        "act": {
+                          "cap": "create_notion_page",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "update_existing": [
+                      {
+                        "act": {
+                          "cap": "update_notion_page",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "link_related_notion_records",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "followup_tasks_needed": [
+                      {
+                        "act": {
+                          "cap": "create_followup_tasks",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_followup_tasks": []
+                  }
+                }
+              }
+            ],
+            "notion_mcp_not_connected": [
+              {
+                "act": {
+                  "cap": "tell_user_to_setup_notion_mcp",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "notion_page_captured",
+            "structured_content_recorded",
+            "summary_added",
+            "context_added",
+            "source_links_added",
+            "properties_set",
+            "related_links_added"
+          ]
+        },
+        "setup_instructions_given"
+      ]
+    },
+    "init_true": [
+      "needs:user_conversation",
+      "needs:notion_account"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "notion-knowledge-capture",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_capture_details": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "capture_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_reference_guides": {
+        "owner": "agent",
+        "pre": "capture_defined",
+        "add": [
+          "destination_identified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "search_notion_context": {
+        "owner": "agent",
+        "pre": "destination_identified",
+        "add": [
+          "prior_context_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "choose_database": {
+        "owner": "user",
+        "pre": "destination_identified",
+        "add": [
+          "database_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_notion_page": {
+        "owner": "agent",
+        "pre": "database_selected",
+        "add": [
+          "notion_page_captured",
+          "structured_content_recorded",
+          "summary_added",
+          "context_added",
+          "source_links_added",
+          "properties_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "update_notion_page": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "database_selected",
+            "prior_context_found"
+          ]
+        },
+        "add": [
+          "notion_page_captured",
+          "structured_content_recorded",
+          "summary_added",
+          "context_added",
+          "source_links_added",
+          "properties_set"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "link_related_notion_records": {
+        "owner": "agent",
+        "pre": "notion_page_captured",
+        "add": [
+          "related_links_added"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_followup_tasks": {
+        "owner": "agent",
+        "pre": "notion_page_captured",
+        "add": [
+          "followup_tasks_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "tell_user_to_setup_notion_mcp": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "setup_instructions_given"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "notion_available": [
+              {
+                "act": {
+                  "cap": "ask_capture_details",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_reference_guides",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "search_notion_context",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "single_destination": [
+                      {
+                        "act": {
+                          "cap": "choose_database",
+                          "by": "user"
+                        }
+                      }
+                    ],
+                    "multiple_candidates": [
+                      {
+                        "act": {
+                          "cap": "choose_database",
+                          "by": "user"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "new_capture": [
+                      {
+                        "act": {
+                          "cap": "create_notion_page",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "update_existing": [
+                      {
+                        "act": {
+                          "cap": "update_notion_page",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "link_related_notion_records",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "followup_tasks_needed": [
+                      {
+                        "act": {
+                          "cap": "create_followup_tasks",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_followup_tasks": []
+                  }
+                }
+              }
+            ],
+            "notion_mcp_not_connected": [
+              {
+                "act": {
+                  "cap": "tell_user_to_setup_notion_mcp",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "notion_page_captured",
+            "structured_content_recorded",
+            "summary_added",
+            "context_added",
+            "source_links_added",
+            "properties_set",
+            "related_links_added"
+          ]
+        },
+        "setup_instructions_given"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_capture_details": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_reference_guides": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "search_notion_context": {
+      "via": "notion",
+      "needs": [
+        "notion_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "choose_database": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "create_notion_page": {
+      "via": "notion",
+      "needs": [
+        "notion_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "update_notion_page": {
+      "via": "notion",
+      "needs": [
+        "notion_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "link_related_notion_records": {
+      "via": "notion",
+      "needs": [
+        "notion_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "create_followup_tasks": {
+      "via": "notion",
+      "needs": [
+        "notion_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "tell_user_to_setup_notion_mcp": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

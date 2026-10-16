@@ -1,0 +1,703 @@
+{
+  "pack": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_existing_traces": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "traces_present": true
+        }
+      },
+      "analyze_traces_and_define_buckets": {
+        "owner": "agent",
+        "pre": "traces_present",
+        "add": [
+          "failure_buckets_defined",
+          "goldens_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "bucket_count": {
+            "and": [
+              {
+                "cmp": [
+                  "bucket_count",
+                  ">=",
+                  4
+                ]
+              },
+              {
+                "cmp": [
+                  "bucket_count",
+                  "<=",
+                  8
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "build_synthetic_goldens": {
+        "owner": "agent",
+        "pre": {
+          "not": "traces_present"
+        },
+        "add": [
+          "goldens_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_graders": {
+        "owner": "agent",
+        "pre": "goldens_defined",
+        "add": [
+          "graders_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "calibrate_judges": {
+        "owner": "agent",
+        "pre": "graders_written",
+        "add": [
+          "judge_calibrated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "freeze_drift_suite": {
+        "owner": "agent",
+        "pre": "goldens_defined",
+        "add": [
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_baseline_harness": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "goldens_defined",
+            "graders_written",
+            "drift_suite_frozen"
+          ]
+        },
+        "add": [
+          "baseline_written",
+          "phase0_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_phase0_exit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "baseline_written",
+            "phase0_results_written"
+          ]
+        },
+        "add": [
+          "phase0_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_training_data_quality": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "data_quality_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_checkpoint_harness": {
+        "owner": "agent",
+        "pre": "phase0_complete",
+        "add": [
+          "checkpoint_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "evaluate_promotion_stages": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "data_quality_passed",
+            "checkpoint_results_written"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "promotion_verdict_ready": true
+        }
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": "promotion_verdict_ready",
+        "add": [
+          "promotion_report_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase0": [
+              {
+                "act": {
+                  "cap": "check_existing_traces",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "traces_exist": [
+                      {
+                        "act": {
+                          "cap": "analyze_traces_and_define_buckets",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_traces": [
+                      {
+                        "act": {
+                          "cap": "build_synthetic_goldens",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_graders",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "judge_needed": [
+                      {
+                        "act": {
+                          "cap": "calibrate_judges",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "all_deterministic": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "freeze_drift_suite",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_baseline_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_phase0_exit",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase5": [
+              {
+                "act": {
+                  "cap": "check_training_data_quality",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_checkpoint_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "evaluate_promotion_stages",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_promotion_report",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "phase0_complete",
+            "baseline_written",
+            "phase0_results_written",
+            "results_schema_complete"
+          ]
+        },
+        {
+          "and": [
+            "promotion_report_written",
+            "results_schema_complete"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "bucket_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_existing_traces": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "traces_present": true
+        }
+      },
+      "analyze_traces_and_define_buckets": {
+        "owner": "agent",
+        "pre": "traces_present",
+        "add": [
+          "failure_buckets_defined",
+          "goldens_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "bucket_count": {
+            "and": [
+              {
+                "cmp": [
+                  "bucket_count",
+                  ">=",
+                  4
+                ]
+              },
+              {
+                "cmp": [
+                  "bucket_count",
+                  "<=",
+                  8
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "build_synthetic_goldens": {
+        "owner": "agent",
+        "pre": {
+          "not": "traces_present"
+        },
+        "add": [
+          "goldens_defined"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_graders": {
+        "owner": "agent",
+        "pre": "goldens_defined",
+        "add": [
+          "graders_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "calibrate_judges": {
+        "owner": "agent",
+        "pre": "graders_written",
+        "add": [
+          "judge_calibrated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "freeze_drift_suite": {
+        "owner": "agent",
+        "pre": "goldens_defined",
+        "add": [
+          "drift_suite_frozen"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_baseline_harness": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "goldens_defined",
+            "graders_written",
+            "drift_suite_frozen"
+          ]
+        },
+        "add": [
+          "baseline_written",
+          "phase0_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_phase0_exit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "baseline_written",
+            "phase0_results_written"
+          ]
+        },
+        "add": [
+          "phase0_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_training_data_quality": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "data_quality_passed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_checkpoint_harness": {
+        "owner": "agent",
+        "pre": "phase0_complete",
+        "add": [
+          "checkpoint_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "evaluate_promotion_stages": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "data_quality_passed",
+            "checkpoint_results_written"
+          ]
+        },
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "promotion_verdict_ready": true
+        }
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": "promotion_verdict_ready",
+        "add": [
+          "promotion_report_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "phase0": [
+              {
+                "act": {
+                  "cap": "check_existing_traces",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "traces_exist": [
+                      {
+                        "act": {
+                          "cap": "analyze_traces_and_define_buckets",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_traces": [
+                      {
+                        "act": {
+                          "cap": "build_synthetic_goldens",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_graders",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "judge_needed": [
+                      {
+                        "act": {
+                          "cap": "calibrate_judges",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "all_deterministic": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "freeze_drift_suite",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_baseline_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "check_phase0_exit",
+                  "by": "agent"
+                }
+              }
+            ],
+            "phase5": [
+              {
+                "act": {
+                  "cap": "check_training_data_quality",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_checkpoint_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "evaluate_promotion_stages",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_promotion_report",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "and": [
+            "phase0_complete",
+            "baseline_written",
+            "phase0_results_written",
+            "results_schema_complete"
+          ]
+        },
+        {
+          "and": [
+            "promotion_report_written",
+            "results_schema_complete"
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "bucket_count",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_existing_traces": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "analyze_traces_and_define_buckets": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "build_synthetic_goldens": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "write_graders": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "calibrate_judges": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "freeze_drift_suite": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_baseline_harness": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "check_phase0_exit": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "check_training_data_quality": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_checkpoint_harness": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "evaluate_promotion_stages": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "write_promotion_report": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

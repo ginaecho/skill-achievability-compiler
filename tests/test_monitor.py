@@ -683,3 +683,32 @@ def test_copilot_hooks_inactive_without_config_and_fail_open(tmp_path):
                                    "toolArgs": "{\"command\": \"rm -rf x\"}"}, tmp_path)[:2] == ("", 0)
     out, code, err = _copilot("noSuchEvent", {"cwd": str(tmp_path)}, tmp_path)
     assert (out, code) == ("", 0) and "unknown Copilot hook event" in err
+
+
+UNOBSERVED = """Skill `fix-tests`.
+Roles: `planner`, `worker`.
+Tool `edit_code` (owner `worker`): via `edit`; adds `fixed`.
+Tool `review` (owner `planner`): via `edit`; adds `reviewed`.
+Goal: `fixed`.
+Protocol:
+  - `worker` chooses one of:
+    - branch `ask`:
+      - `planner` uses `review`.
+      - `worker` uses `edit_code`.
+    - branch `direct`:
+      - `worker` uses `edit_code`.
+"""
+
+
+def test_protocol_rejected_plan_is_denied_although_the_goal_is_reachable(tmp_path):
+    # the goal is reachable along 'direct', but the planner cannot observe the
+    # branch it must act in: not a refutation, and not admissible either
+    m = mon(tmp_path)
+    d = m.submit_plan(UNOBSERVED)
+    assert d.action == DENY and d.next == "replan"
+    assert "protocol REJECTED (NON_PROJECTABLE)" in d.reason
+    assert "deadlock" in d.reason and "goal is reachable" in d.reason
+    assert m.state.plan is None
+    observed = UNOBSERVED.replace("`worker` chooses one of:", "`worker` chooses one of (observed):")
+    assert m.submit_plan(observed).action == ALLOW
+

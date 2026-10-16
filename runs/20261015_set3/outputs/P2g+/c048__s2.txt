@@ -1,0 +1,34 @@
+```ce
+Skill `research-summarizer`.
+Roles: `agent`, `user`.
+Tool `ask_source_mode` (owner `agent`): via `ask_user`; needs `user_conversation`; picks `source_count` with `source_count` >= 1.
+Tool `ask_compare_more_sources` (owner `agent`): via `ask_user`; needs `user_conversation`; requires `comparison_requested`; requires `source_count` == 1; picks `source_count` with `source_count` >= 2.
+Tool `generate_summary_scaffold` (owner `agent`): via `bash`; requires `summary_requested`; adds `scaffold_ready`.
+Tool `extract_citations_json` (owner `agent`): via `bash`; requires `citations_requested`; adds `citations_extracted`; adds `extractor_succeeded`; picks `bibliography_count` with `bibliography_count` >= 0.
+Tool `write_single_source_brief` (owner `agent`): via `reply`; requires `single_source_requested`; adds `brief_delivered`; adds `anchored_findings`; adds `quality_rated`; adds `missing_metadata_not_invented`.
+Tool `write_comparison_brief` (owner `agent`): via `reply`; requires `comparison_requested`; requires `source_count` >= 2; adds `brief_delivered`; adds `comparison_matrix_complete`; adds `quality_rated`; adds `contradictions_highlighted`; adds `missing_metadata_not_invented`.
+Tool `write_citation_bibliography` (owner `agent`): via `reply`; requires `citations_requested`; requires `citations_extracted`; requires `extractor_succeeded`; adds `brief_delivered`; adds `bibliography_sorted`; adds `citations_classified`; sets `output_bibliography_count` to `bibliography_count`; adds `missing_metadata_not_invented`.
+Initially true: none.
+Initially: `source_count` == 0.
+Initially: `bibliography_count` == 0.
+Initially: `output_bibliography_count` == 0.
+Goal: `brief_delivered` and `missing_metadata_not_invented` and any of (`anchored_findings`, `comparison_matrix_complete`, (`bibliography_sorted` and `citations_classified`)) and any of (`quality_rated`, `citations_classified`).
+Protocol:
+  - `agent` uses `ask_source_mode`.
+  - `user` chooses one of (observed):
+    - branch `single_source_summary` (assuming `summary_requested`, `single_source_requested`):
+      - `agent` uses `generate_summary_scaffold`.
+      - `agent` uses `write_single_source_brief`.
+    - branch `multi_source_comparison` (assuming `summary_requested`, `comparison_requested`):
+      - `user` chooses one of (observed):
+        - branch `already_has_multiple_sources` (assuming `source_count` >= 2):
+          - `agent` uses `generate_summary_scaffold`.
+          - `agent` uses `write_comparison_brief`.
+        - branch `only_one_source` (assuming `source_count` == 1):
+          - `agent` uses `ask_compare_more_sources`.
+          - `agent` uses `generate_summary_scaffold`.
+          - `agent` uses `write_comparison_brief`.
+    - branch `citation_extraction` (assuming `citations_requested`):
+      - `agent` uses `extract_citations_json`.
+      - `agent` uses `write_citation_bibliography`.
+```

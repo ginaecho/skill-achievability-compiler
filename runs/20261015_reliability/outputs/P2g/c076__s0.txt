@@ -1,0 +1,43 @@
+```ce
+Skill `orchestrate`.
+Roles: `agent`, `user`.
+Tool `read_context_and_state` (owner `agent`): via `read`; adds `agents_read`, `state_read`, `story_read`, `current_task_identified`.
+Tool `ask_task_type` (owner `agent`): via `ask_user`; requires `current_task_identified`; adds `task_type_confirmed`.
+Tool `ask_clarifying_question` (owner `agent`): via `ask_user`; requires `current_task_identified`; adds `answer_received`.
+Tool `write_orchestrator_output` (owner `agent`): via `write`; requires all of (`agents_read`, `state_read`, `story_read`, `current_task_identified`, `task_type_confirmed`, `questions_resolved`, not `halt_required`); adds `orchestrator_output_written`, `spec_complete`.
+Tool `update_pipeline_state` (owner `agent`): via `write`; requires all of (`orchestrator_output_written`, `task_type_confirmed`); adds `state_updated`, `orchestration_completed`.
+Initially true: none.
+Goal: all of (`orchestrator_output_written`, `state_updated`, `orchestration_completed`, `spec_complete`, `task_type_confirmed`, not `halt_required`).
+Protocol:
+  - `agent` uses `read_context_and_state`.
+  - `agent` chooses one of (observed):
+    - branch `task_type_clear`:
+      - `agent` uses `ask_clarifying_question`.
+      - `agent` chooses one of (observed):
+        - branch `more_questions_needed`:
+          - loop `clarify`:
+            - `agent` uses `ask_clarifying_question`.
+            - `agent` chooses one of (observed):
+              - branch `continue`: none.
+              - branch `resolved`:
+                - `agent` uses `write_orchestrator_output`.
+                - `agent` uses `update_pipeline_state`.
+        - branch `resolved_now`:
+          - `agent` uses `write_orchestrator_output`.
+          - `agent` uses `update_pipeline_state`.
+    - branch `task_type_unclear`:
+      - `agent` uses `ask_task_type`.
+      - `agent` chooses one of (observed):
+        - branch `halt_trigger_found`: none.
+        - branch `questions_needed`:
+          - loop `clarify_after_type`:
+            - `agent` uses `ask_clarifying_question`.
+            - `agent` chooses one of (observed):
+              - branch `continue`: none.
+              - branch `resolved`:
+                - `agent` uses `write_orchestrator_output`.
+                - `agent` uses `update_pipeline_state`.
+        - branch `resolved_now`:
+          - `agent` uses `write_orchestrator_output`.
+          - `agent` uses `update_pipeline_state`.
+```

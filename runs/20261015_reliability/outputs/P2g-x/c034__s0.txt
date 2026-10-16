@@ -1,0 +1,85 @@
+```ce
+Skill `expo-skill-feedback`.
+Roles: `agent`, `user`.
+
+Tool `submit_feedback` (owner `agent`):
+  via `bash`;
+  requires `feedback_text`;
+  picks `category` with `category` == `chosen_category`;
+  picks `subject` with `subject` == `chosen_subject`;
+  adds `feedback_sent`.
+
+Tool `submit_eval_candidate` (owner `agent`):
+  via `bash`;
+  requires `eval_text` and `user_approved_eval`;
+  picks `category` with `category` == `evals`;
+  picks `subject` with `subject` == `chosen_eval_subject`;
+  adds `eval_sent`.
+
+Tool `user_chooses_category` (owner `user`):
+  via `ask_user`;
+  picks `chosen_category` with true.
+
+Tool `user_chooses_subject` (owner `user`):
+  via `ask_user`;
+  picks `chosen_subject` with true.
+
+Tool `user_provides_feedback` (owner `user`):
+  via `ask_user`;
+  picks `feedback_text` with true.
+
+Tool `user_provides_eval` (owner `user`):
+  via `ask_user`;
+  picks `eval_text` with true.
+
+Tool `user_approves_eval` (owner `user`):
+  via `ask_user`;
+  picks `user_approved_eval` with true.
+
+Tool `manage_telemetry` (owner `agent`):
+  via `bash`;
+  sets `telemetry_status` to `new_status`;
+  adds `telemetry_updated`.
+
+Tool `user_chooses_telemetry_action` (owner `user`):
+  via `ask_user`;
+  picks `new_status` with `new_status` == `on` or `new_status` == `off` or `new_status` == `status_check`.
+
+Tool `user_chooses_action` (owner `user`):
+  via `ask_user`;
+  picks `action` with `action` == `feedback` or `action` == `eval` or `action` == `telemetry`.
+
+Initially true: none.
+
+Goal: `feedback_sent` or `eval_sent` or `telemetry_updated`.
+
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `submit_feedback`:
+      - `user` chooses one of (observed):
+        - branch `with_category`:
+          - `user` uses `user_chooses_category`.
+        - branch `skip_category`:
+          - `agent` uses `set_default_category`.
+      - `user` chooses one of (observed):
+        - branch `with_subject`:
+          - `user` uses `user_chooses_subject`.
+        - branch `skip_subject`:
+          - `agent` uses `set_no_subject`.
+      - `user` uses `user_provides_feedback`.
+      - `agent` uses `submit_feedback`.
+    - branch `submit_eval`:
+      - `user` chooses one of (observed):
+        - branch `has_user`:
+          - `user` uses `user_provides_eval`.
+          - `user` uses `user_chooses_eval_subject`.
+          - `user` chooses one of (observed):
+            - branch `user_approves`:
+              - `user` uses `user_approves_eval`.
+              - `agent` uses `submit_eval_candidate`.
+            - branch `user_declines`: none.
+        - branch `no_user`: none.
+    - branch `manage_telemetry`:
+      - `user` uses `user_chooses_telemetry_action`.
+      - `agent` uses `manage_telemetry`.
+```

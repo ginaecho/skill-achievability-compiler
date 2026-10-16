@@ -1,0 +1,128 @@
+```ce
+Skill `hf-cloud-serving-image-selection`.
+Roles: `agent`, `aws_catalog`.
+
+Tool `fetch_aws_dlc_catalog_page` (owner `agent`):
+  via `web_fetch`;
+  adds `catalog_page_loaded`.
+
+Tool `fetch_yaml_data_dir` (owner `agent`):
+  via `bash`;
+  requires `catalog_page_failed`;
+  adds `yaml_data_loaded`;
+  picks `image_family_yaml_dir` with `image_family_yaml_dir` != ``.
+
+Tool `fetch_huggingface_config` (owner `agent`):
+  via `bash`;
+  requires `model_id_known`;
+  adds `config_fetched`;
+  picks `architecture_type` with `architecture_type` != ``.
+
+Tool `select_cu130_vllm_image` (owner `aws_catalog`):
+  requires `catalog_page_loaded` or `yaml_data_loaded`;
+  sets `chosen_image_uri` to `image_uri_value`;
+  sets `chosen_cuda` to `cu130_like`;
+  adds `image_selected`.
+
+Tool `select_cu124_vllm_image` (owner `aws_catalog`):
+  requires `catalog_page_loaded` or `yaml_data_loaded`;
+  sets `chosen_image_uri` to `image_uri_value`;
+  sets `chosen_cuda` to `cu124_like`;
+  adds `image_selected`.
+
+Tool `select_tei_image` (owner `aws_catalog`):
+  requires `catalog_page_loaded` or `yaml_data_loaded`;
+  requires `instance_type_known`;
+  sets `chosen_image_uri` to `image_uri_value`;
+  sets `chosen_cuda` to `none`;
+  adds `image_selected`.
+
+Tool `select_hf_inference_cpu_image` (owner `aws_catalog`):
+  requires `catalog_page_loaded` or `yaml_data_loaded`;
+  sets `chosen_image_uri` to `image_uri_value`;
+  sets `chosen_cuda` to `none`;
+  adds `image_selected`.
+
+Tool `select_djl_image` (owner `aws_catalog`):
+  requires `catalog_page_loaded` or `yaml_data_loaded`;
+  sets `chosen_image_uri` to `image_uri_value`;
+  sets `chosen_cuda` to `none`;
+  adds `image_selected`.
+
+Tool `select_aws_vllm_fallback_image` (owner `aws_catalog`):
+  requires `catalog_page_loaded` or `yaml_data_loaded`;
+  requires `compatibility_verified` or `region_gap_verified`;
+  sets `chosen_image_uri` to `image_uri_value`;
+  sets `chosen_cuda` to `cu130_like`;
+  adds `image_selected`.
+
+Tool `determine_ami_version` (owner `agent`):
+  requires `image_selected`;
+  picks `ami_version` with `ami_version` != ``.
+
+Tool `pass_uri_to_deploy` (owner `agent`):
+  via `bash`;
+  requires `image_selected`;
+  requires `ami_version_known`;
+  adds `uri_passed_to_deploy`.
+
+Tool `mirror_image` (owner `agent`):
+  via `bash`;
+  requires `public_ecr_uri_known`;
+  sets `chosen_image_uri` to `mirrored_uri`;
+  adds `image_selected`.
+
+Tool `mirror_tei_upstream` (owner `agent`):
+  via `bash`;
+  requires `tei_architecture_gap_verified`;
+  sets `chosen_image_uri` to `mirrored_uri`;
+  adds `image_selected`.
+
+Initially true: none.
+Initially: `chosen_image_uri` == ``.
+Initially: `ami_version` == ``.
+Goal: `uri_passed_to_deploy` and `ami_version` != ``.
+
+Protocol:
+  - `agent` uses `fetch_aws_dlc_catalog_page`.
+  - `agent` chooses one of (observed):
+    - branch `page_failed`:
+      - `agent` uses `fetch_yaml_data_dir`.
+    - branch `page_loaded`: none.
+  - `agent` chooses one of (observed):
+    - branch `text_generation_llm`:
+      - `aws_catalog` uses `select_cu130_vllm_image`.
+      - `agent` uses `determine_ami_version`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `multimodal_llm`:
+      - `aws_catalog` uses `select_cu130_vllm_image`.
+      - `agent` uses `determine_ami_version`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `embeddings`:
+      - `aws_catalog` uses `select_tei_image`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `encoder_reranker`:
+      - `aws_catalog` uses `select_tei_image`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `generative_reranker`:
+      - `agent` uses `fetch_huggingface_config`.
+      - `aws_catalog` uses `select_cu130_vllm_image`.
+      - `agent` uses `determine_ami_version`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `classifier_or_ner_or_qa`:
+      - `aws_catalog` uses `select_hf_inference_cpu_image`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `text_to_image`:
+      - `aws_catalog` uses `select_djl_image`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `vllm_fallback`:
+      - `aws_catalog` uses `select_aws_vllm_fallback_image`.
+      - `agent` uses `determine_ami_version`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `public_ecr_mirror`:
+      - `agent` uses `mirror_image`.
+      - `agent` uses `pass_uri_to_deploy`.
+    - branch `tei_upstream_mirror`:
+      - `agent` uses `mirror_tei_upstream`.
+      - `agent` uses `pass_uri_to_deploy`.
+```

@@ -1,0 +1,67 @@
+{
+  "model": "Decision-1",
+  "state": {
+    "document": "---\nname: arduino-azure-iot-edge-integration\ndescription: 'Design and implement Arduino integration with Azure IoT Hub and IoT Edge, including secure provisioning, resilient telemetry, command handling, and production guardrails.'\n---\n\n# Arduino Azure IoT Edge Integration\n\nUse this skill when the user needs to connect Arduino-class devices to Azure IoT, especially in edge-heavy scenarios (gateways, intermittent networks, offline buffering, and local actuation).\n\n## When to use it\n\nUse this skill for requests such as:\n\n- \"I want to connect Arduino sensors to Azure\"\n- \"How do I send MQTT telemetry to IoT Hub?\"\n- \"I need an edge gateway for field devices\"\n- \"I want cloud-to-device commands and OTA configuration updates\"\n\n## Mandatory documentation review\n\nBefore recommending an IoT Edge topology or runtime behavior, review:\n\n- https://learn.microsoft.com/azure/iot-edge/\n\nIf documentation cannot be consulted, proceed with explicit assumptions and highlight them in a dedicated section.\n\n## Official Arduino references and best practices (required)\n\nBefore proposing firmware, wiring, or communication implementation details, consult official Arduino sources first:\n\n- https://www.arduino.cc/en/Guide\n- https://docs.arduino.cc/\n- https://docs.arduino.cc/language-reference/\n- references/arduino-official-best-practices.md\n\nWhen choosing between implementation alternatives, prioritize official Arduino guidance over community snippets unless there is a clear technical reason to deviate.\n\n## Objectives\n\n- Produce a secure end-to-end reference path from the Arduino device to cloud insights.\n- Handle unstable links (store-and-forward, retries, idempotency).\n- Define an actionable device and cloud backlog.\n\n## Integration patterns\n\n### Pattern A: Arduino direct to IoT Hub\n\nUse when connectivity is stable and cloud latency is acceptable.\n\n- Protocol: MQTT over TLS.\n- Identity: per-device credentials (SAS or X.509).\n- Telemetry payload: compact JSON with timestamp, device ID, metrics, and optional quality flags.\n\n### Pattern B: Arduino to local gateway, then IoT Edge\n\nUse when links are constrained, local control is required, or batching improves cost/reliability.\n\n- Arduino communicates with a local gateway (serial, BLE, local MQTT, RS-485, Modbus bridge).\n- The gateway publishes upstream through the IoT Edge runtime and routes data to IoT Hub.\n- Local modules can filter, aggregate, and trigger actions even during cloud outages.\n\n## Design flow\n\n### 1) Device contract\n\nDefine:\n\n- Sensor catalog and units.\n- Sampling frequency and expected throughput.\n- Message schema versioning strategy.\n- Desired/reported device twin properties to control runtime behavior.\n\n### 2) Security baseline\n\nRequire:\n\n- Unique identity per device.\n- No hardcoded secrets in source code or firmware artifacts.\n- Credential rotation strategy.\n- Signed firmware and a controlled update process when possible.\n\n### 3) Reliability and offline behavior\n\nPlan and document:\n\n- Backoff with jitter.\n- Local queue/buffer strategy with bounded size.\n- Duplicate suppression or downstream idempotent processing.\n- Fallback to last-known-good configuration.\n\n### 4) Cloud and edge routing\n\nDefine routes for:\n\n- Raw telemetry to cold storage.\n- Curated telemetry to hot analytics.\n- Alerts to operations channels.\n- Commands and configuration back to edge/device.\n\n### 5) Observability\n\nSpecify minimum operations telemetry:\n\n- Device heartbeat and firmware version.\n- Connectivity state transitions.\n- Message send success/error counters.\n- Gateway module health and restart reasons.\n\n## Reuse other skills\n\nWhen relevant, combine with:\n\n- `azure-smart-city-iot-solution-builder` for city-wide architecture and phased rollout.\n- `azure-resource-visualizer` for relationship diagrams.\n- `appinsights-instrumentation` for app and service telemetry patterns.\n\nAlso use `references/arduino-official-best-practices.md` as a quality baseline for firmware and hardware recommendations, and `references/arduino-iot-checklist.md` before finalizing architecture or implementation guidance.\n\n## Required output\n\nAlways provide:\n\n1. Chosen connectivity pattern and rationale.\n2. Message contract (fields, units, sample payload).\n3. Security checklist for identity/credentials/updates.\n4. Reliability plan (retry, buffering, dedupe).\n5. Implementation backlog (firmware, gateway, cloud).\n\n## Output template\n\n1. Scenario and assumptions\n2. Recommended architecture\n3. Device and gateway contract\n4. Security and reliability controls\n5. Deployment plan and validation tests\n\n## Guidelines\n\n- Do not propose production deployments with shared credentials across devices.\n- Do not assume always-on connectivity in field deployments.\n- Do not omit command authorization and auditing in actuator scenarios.\n",
+    "runtime": {
+      "name": "scout-desktop",
+      "description": "Microsoft Scout on a Windows PC: a PowerShell shell, the local filesystem, the public web, a browser it can drive, and the signed-in user's own and shared Microsoft 365 work data (what they can access: their mail, calendar, the chats, meetings and channels they are in, files shared with them) through WorkIQ. No accounts or credentials for other external services.",
+      "tools": {
+        "bash": "run PowerShell commands on Windows: scripts, CLIs, git, package installs from public registries",
+        "read": "read files on the local filesystem",
+        "write": "create and overwrite files",
+        "edit": "edit existing files",
+        "web_fetch": "fetch public web pages and unauthenticated public APIs",
+        "web_search": "search the public web",
+        "browser": "drive a Microsoft Edge browser (Playwright): navigate, click, fill forms, take screenshots",
+        "m365": "read the signed-in user's own and shared Microsoft 365 work data (what they can access) through WorkIQ: mail, calendar, meetings, Teams chats and channels they are in, files, people",
+        "teams_message": "send a Teams message as the signed-in user",
+        "azure_devops_mcp": "read and update Azure DevOps work items, repos and pipelines the user can access",
+        "ask_user": "ask the user a question and read the answer in the conversation",
+        "windows_os": "Windows itself: winget, Windows apps and the Windows App SDK"
+      }
+    },
+    "pack": "Skill `arduino-azure-iot-edge-integration`.\nRoles: `agent`.\nTool `review_iot_edge_docs` (owner `agent`): via `web_fetch`; needs `public_internet`; adds `iot_edge_docs_reviewed`, `iot_edge_topology_basis_ready`.\nTool `review_arduino_guide` (owner `agent`): via `web_fetch`; needs `public_internet`; adds `arduino_guide_reviewed`.\nTool `review_arduino_docs` (owner `agent`): via `web_fetch`; needs `public_internet`; adds `arduino_docs_reviewed`.\nTool `review_arduino_language_reference` (owner `agent`): via `web_fetch`; needs `public_internet`; adds `arduino_language_reference_reviewed`.\nTool `review_local_best_practices` (owner `agent`): via `read`; needs `local_filesystem`; adds `local_best_practices_reviewed`, `quality_baseline_reviewed`.\nTool `review_local_checklist` (owner `agent`): via `read`; needs `local_filesystem`; adds `local_checklist_reviewed`.\nGoal: `iot_edge_topology_basis_ready` and `arduino_guide_reviewed` and `arduino_docs_reviewed` and `arduino_language_reference_reviewed` and `local_best_practices_reviewed` and `local_checklist_reviewed` and `pattern_chosen` and `rationale_provided` and `scenario_and_assumptions_provided` and `recommended_architecture_provided` and `device_and_gateway_contract_provided` and `message_contract_provided` and `security_checklist_provided` and `reliability_plan_provided` and `security_and_reliability_controls_provided` and `implementation_backlog_provided` and `deployment_plan_and_validation_tests_provided` and `quality_baseline_reviewed`.\nProtocol:\n  - `agent` uses `review_iot_edge_docs`.\n  - `agent` uses `review_arduino_guide`.\n  - `agent` uses `review_arduino_docs`.\n  - `agent` uses `review_arduino_language_reference`.\n  - `agent` uses `review_local_best_practices`.\n  - `agent` uses `review_local_checklist`.\n"
+  },
+  "questions": {
+    "F1": {
+      "type": "noul",
+      "instructions": "no invented Tool (every Tool corresponds to an instruction)",
+      "criteria": {
+        "true": "Every Tool in the pack corresponds to an operation that some sentence of the document asks for, or the pack declares no Tool.",
+        "false": "At least one Tool in the pack is invented: no sentence of the document asks for that operation."
+      }
+    },
+    "F2": {
+      "type": "noul",
+      "instructions": "no omitted mandatory step",
+      "criteria": {
+        "true": "No mandatory step is omitted: every step without which the document's core deliverable cannot be produced appears in the pack. Optional or follow-up work may be omitted or skippable.",
+        "false": "The pack omits at least one mandatory step, a step without which the document's core deliverable cannot be produced."
+      }
+    },
+    "F3": {
+      "type": "noul",
+      "instructions": "the Goal states the document's deliverable",
+      "criteria": {
+        "true": "The pack's Goal names the deliverable of one representative request of the document.",
+        "false": "The pack's Goal does not name the deliverable of one representative request (for example it is `true`, empty, or names something else)."
+      }
+    },
+    "F4": {
+      "type": "noul",
+      "instructions": "no invented ordering (every protocol order is stated or implied by the document)",
+      "criteria": {
+        "true": "No ordering is invented: every order the protocol puts between two steps is stated or implied by the document (for example by data dependence), or the protocol imposes no order.",
+        "false": "The protocol puts at least two steps in an order the document neither states nor implies."
+      }
+    },
+    "F5": {
+      "type": "noul",
+      "instructions": "bindings plausible (each `via` names a runtime tool that can perform the Tool)",
+      "criteria": {
+        "true": "Bindings are plausible: each `via` names a tool from runtime.tools that can really perform the Tool; a `via` naming something outside that list is plausible only if the runtime indeed cannot perform the operation.",
+        "false": "At least one `via` names a tool that cannot perform the Tool, or names something outside runtime.tools although the runtime can perform the operation."
+      }
+    }
+  }
+}

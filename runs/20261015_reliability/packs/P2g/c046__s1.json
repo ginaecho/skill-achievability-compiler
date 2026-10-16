@@ -1,0 +1,772 @@
+{
+  "pack": {
+    "name": "nextjs-on-cloudflare",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_vinext_skill_installed": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "vinext_skill_available": {
+            "or": [
+              "vinext_skill_available",
+              {
+                "not": "vinext_skill_available"
+              }
+            ]
+          }
+        }
+      },
+      "install_vinext_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "vinext_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_upstream_skill_docs": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "upstream_guidance_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_local_skill_docs": {
+        "owner": "agent",
+        "pre": "vinext_skill_available",
+        "add": [
+          "upstream_guidance_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "existing_nextjs_project": {
+            "or": [
+              "existing_nextjs_project",
+              {
+                "not": "existing_nextjs_project"
+              }
+            ]
+          },
+          "existing_opennext_setup": {
+            "or": [
+              "existing_opennext_setup",
+              {
+                "not": "existing_opennext_setup"
+              }
+            ]
+          }
+        }
+      },
+      "ask_project_intent": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "explicit_keep_opennext": {
+            "or": [
+              "explicit_keep_opennext",
+              {
+                "not": "explicit_keep_opennext"
+              }
+            ]
+          },
+          "wants_new_project": {
+            "or": [
+              "wants_new_project",
+              {
+                "not": "wants_new_project"
+              }
+            ]
+          },
+          "wants_migration": {
+            "or": [
+              "wants_migration",
+              {
+                "not": "wants_migration"
+              }
+            ]
+          },
+          "wants_deployment_help": {
+            "or": [
+              "wants_deployment_help",
+              {
+                "not": "wants_deployment_help"
+              }
+            ]
+          }
+        }
+      },
+      "check_compatibility": {
+        "owner": "agent",
+        "pre": "existing_nextjs_project",
+        "add": [
+          "compatibility_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_up_new_vinext_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet",
+            "needs:local_filesystem",
+            "upstream_guidance_read"
+          ]
+        },
+        "add": [
+          "vinext_configured",
+          "cloudflare_target_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "migrate_project_to_vinext": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:package_registries",
+            "needs:allowlisted_internet",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "existing_nextjs_project",
+                "upstream_guidance_read",
+                "compatibility_checked"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "vinext_configured",
+          "cloudflare_target_selected"
+        ],
+        "del": [
+          "existing_opennext_setup"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "follow_workers_integration_docs": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "workers_docs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_vinext_skill_installed",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_project",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_project_intent",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "skills_available": [
+              {
+                "act": {
+                  "cap": "read_local_skill_docs",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skills_missing": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "install_upstream_skills": [
+                      {
+                        "act": {
+                          "cap": "install_vinext_skill",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_local_skill_docs",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "read_remote_docs_directly": [
+                      {
+                        "act": {
+                          "cap": "read_upstream_skill_docs",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "follow_workers_integration_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "preserve_existing_opennext": [
+              {
+                "act": {
+                  "cap": "ask_project_intent",
+                  "by": "agent"
+                }
+              }
+            ],
+            "new_project": [
+              {
+                "act": {
+                  "cap": "set_up_new_vinext_project",
+                  "by": "agent"
+                }
+              }
+            ],
+            "migrate_existing_project": [
+              {
+                "act": {
+                  "cap": "check_compatibility",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "migrate_project_to_vinext",
+                  "by": "agent"
+                }
+              }
+            ],
+            "deployment_guidance_only": [
+              {
+                "act": {
+                  "cap": "ask_project_intent",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "explicit_keep_opennext",
+        {
+          "and": [
+            "upstream_guidance_read",
+            "workers_docs_read",
+            {
+              "or": [
+                "vinext_configured",
+                {
+                  "and": [
+                    "existing_opennext_setup",
+                    {
+                      "not": "wants_migration"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:package_registries",
+      "needs:allowlisted_internet",
+      "needs:local_filesystem"
+    ],
+    "init_constraints": [
+      {
+        "not": "vinext_skill_available"
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "nextjs-on-cloudflare",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_vinext_skill_installed": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "vinext_skill_available": {
+            "or": [
+              "vinext_skill_available",
+              {
+                "not": "vinext_skill_available"
+              }
+            ]
+          }
+        }
+      },
+      "install_vinext_skill": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "vinext_skill_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_upstream_skill_docs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "upstream_guidance_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_local_skill_docs": {
+        "owner": "agent",
+        "pre": "vinext_skill_available",
+        "add": [
+          "upstream_guidance_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "existing_nextjs_project": {
+            "or": [
+              "existing_nextjs_project",
+              {
+                "not": "existing_nextjs_project"
+              }
+            ]
+          },
+          "existing_opennext_setup": {
+            "or": [
+              "existing_opennext_setup",
+              {
+                "not": "existing_opennext_setup"
+              }
+            ]
+          }
+        }
+      },
+      "ask_project_intent": {
+        "owner": "agent",
+        "pre": true,
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "explicit_keep_opennext": {
+            "or": [
+              "explicit_keep_opennext",
+              {
+                "not": "explicit_keep_opennext"
+              }
+            ]
+          },
+          "wants_new_project": {
+            "or": [
+              "wants_new_project",
+              {
+                "not": "wants_new_project"
+              }
+            ]
+          },
+          "wants_migration": {
+            "or": [
+              "wants_migration",
+              {
+                "not": "wants_migration"
+              }
+            ]
+          },
+          "wants_deployment_help": {
+            "or": [
+              "wants_deployment_help",
+              {
+                "not": "wants_deployment_help"
+              }
+            ]
+          }
+        }
+      },
+      "check_compatibility": {
+        "owner": "agent",
+        "pre": "existing_nextjs_project",
+        "add": [
+          "compatibility_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_up_new_vinext_project": {
+        "owner": "agent",
+        "pre": "upstream_guidance_read",
+        "add": [
+          "vinext_configured",
+          "cloudflare_target_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "migrate_project_to_vinext": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "existing_nextjs_project",
+            "upstream_guidance_read",
+            "compatibility_checked"
+          ]
+        },
+        "add": [
+          "vinext_configured",
+          "cloudflare_target_selected"
+        ],
+        "del": [
+          "existing_opennext_setup"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "follow_workers_integration_docs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workers_docs_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_vinext_skill_installed",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_project",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_project_intent",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "skills_available": [
+              {
+                "act": {
+                  "cap": "read_local_skill_docs",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skills_missing": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "install_upstream_skills": [
+                      {
+                        "act": {
+                          "cap": "install_vinext_skill",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "read_local_skill_docs",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "read_remote_docs_directly": [
+                      {
+                        "act": {
+                          "cap": "read_upstream_skill_docs",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "follow_workers_integration_docs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "preserve_existing_opennext": [
+              {
+                "act": {
+                  "cap": "ask_project_intent",
+                  "by": "agent"
+                }
+              }
+            ],
+            "new_project": [
+              {
+                "act": {
+                  "cap": "set_up_new_vinext_project",
+                  "by": "agent"
+                }
+              }
+            ],
+            "migrate_existing_project": [
+              {
+                "act": {
+                  "cap": "check_compatibility",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "migrate_project_to_vinext",
+                  "by": "agent"
+                }
+              }
+            ],
+            "deployment_guidance_only": [
+              {
+                "act": {
+                  "cap": "ask_project_intent",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "explicit_keep_opennext",
+        {
+          "and": [
+            "upstream_guidance_read",
+            "workers_docs_read",
+            {
+              "or": [
+                "vinext_configured",
+                {
+                  "and": [
+                    "existing_opennext_setup",
+                    {
+                      "not": "wants_migration"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "not": "vinext_skill_available"
+      }
+    ]
+  },
+  "bindings": {
+    "check_vinext_skill_installed": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_vinext_skill": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "read_upstream_skill_docs": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "read_local_skill_docs": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "inspect_project": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "ask_project_intent": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "check_compatibility": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "set_up_new_vinext_project": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "migrate_project_to_vinext": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "package_registries",
+        "allowlisted_internet",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "follow_workers_integration_docs": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

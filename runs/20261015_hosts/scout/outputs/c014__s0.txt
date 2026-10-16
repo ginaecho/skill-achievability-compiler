@@ -1,0 +1,44 @@
+```ce
+Skill `web-design-reviewer`.
+Roles: `agent`, `user`.
+Tool `ask_url` (owner `agent`): via `ask_user`; adds `url_known`.
+Tool `inspect_workspace` (owner `agent`): via `bash`; requires `workspace_available`; adds `project_detected`, `framework_known`, `styling_known`, `source_location_known`.
+Tool `review_site` (owner `agent`): via `browser`; requires `url_known`; adds `issues_identified`, `screenshots_captured`.
+Tool `traverse_pages` (owner `agent`): via `browser`; requires `url_known`; adds `additional_pages_checked`.
+Tool `apply_design_fix` (owner `agent`): via `edit`; requires `issues_identified` and `workspace_available`; adds `source_changed`, `issues_fixed`.
+Tool `reload_and_reverify` (owner `agent`): via `browser`; requires `url_known` and `source_changed`; adds `fixes_verified`.
+Tool `consult_user_on_major_change` (owner `agent`): via `ask_user`; adds `user_guidance_received`.
+Tool `report_results` (owner `agent`): via `write`; adds `report_written`.
+Initially true: `browser_available`.
+Initially: `fix_attempts` == 0.
+Goal: `issues_identified` and `screenshots_captured` and `report_written` and any of (`fixes_verified`, not `workspace_available`).
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `url_already_provided`: none.
+    - branch `url_missing`:
+      - `agent` uses `ask_url`.
+  - `user` chooses one of (observed):
+    - branch `workspace_available`:
+      - `agent` uses `inspect_workspace`.
+      - loop `fix_cycle`:
+        - `agent` uses `review_site`.
+        - `agent` uses `traverse_pages`.
+        - `user` chooses one of (observed):
+          - branch `major_change_needed`:
+            - `agent` uses `consult_user_on_major_change`.
+          - branch `no_major_change_needed`: none.
+        - `agent` chooses one of (observed):
+          - branch `fix_issue`:
+            - `agent` uses `apply_design_fix`.
+            - `agent` uses `reload_and_reverify`.
+            - `agent` chooses one of (observed):
+              - branch `issues_remaining`:
+                - repeat `fix_cycle`.
+              - branch `no_issues_remaining`: none.
+          - branch `review_only`: none.
+      - `agent` uses `report_results`.
+    - branch `workspace_unavailable`:
+      - `agent` uses `review_site`.
+      - `agent` uses `traverse_pages`.
+      - `agent` uses `report_results`.
+```

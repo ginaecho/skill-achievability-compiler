@@ -1,0 +1,50 @@
+```ce
+Skill `aflpp`.
+Roles: `agent`, `user`.
+Tool `inspect_project` (owner `agent`): via `read`; adds `project_inspected`.
+Tool `ask_project_mode` (owner `agent`): via `ask_user`; requires `project_inspected`; adds `mode_chosen`.
+Tool `install_aflpp_host` (owner `agent`): via `bash`; requires `mode_chosen`; adds `aflpp_available`.
+Tool `write_wrapper_script` (owner `agent`): via `write`; requires `mode_chosen`; adds `wrapper_ready`.
+Tool `build_target` (owner `agent`): via `bash`; requires `project_inspected` and any of (`aflpp_available`, `wrapper_ready`); adds `target_built`.
+Tool `create_seed_corpus` (owner `agent`): via `bash`; requires `target_built`; adds `seed_corpus_ready`.
+Tool `start_campaign` (owner `agent`): via `bash`; requires `target_built` and `seed_corpus_ready`; adds `campaign_running`.
+Tool `monitor_campaign` (owner `agent`): via `bash`; requires `campaign_running`; adds `campaign_observed`.
+Tool `stop_campaign` (owner `agent`): via `bash`; requires `campaign_running`; removes `campaign_running`; adds `campaign_stopped`.
+Tool `minimize_corpus` (owner `agent`): via `bash`; requires `campaign_stopped`; adds `corpus_minimized`.
+Tool `triage_crashes` (owner `agent`): via `bash`; requires `campaign_stopped`; adds `crashes_triaged`.
+Tool `write_guidance` (owner `agent`): via `reply`; adds `aflpp_guidance_delivered`.
+
+Initially true: none.
+Initially: true.
+Goal: `aflpp_guidance_delivered`.
+Protocol:
+  - `agent` uses `inspect_project`.
+  - `user` chooses one of (observed):
+    - branch `guidance_only`:
+      - `agent` uses `write_guidance`.
+    - branch `run_campaign`:
+      - `agent` uses `ask_project_mode`.
+      - `agent` chooses one of (observed):
+        - branch `host_mode`:
+          - `agent` uses `install_aflpp_host`.
+        - branch `docker_mode`:
+          - `agent` uses `write_wrapper_script`.
+      - `agent` uses `build_target`.
+      - `agent` uses `create_seed_corpus`.
+      - `agent` uses `start_campaign`.
+      - `agent` uses `monitor_campaign`.
+      - `user` chooses one of (observed):
+        - branch `stop_now`:
+          - `agent` uses `stop_campaign`.
+        - branch `continue_then_stop`:
+          - `agent` uses `monitor_campaign`.
+          - `agent` uses `stop_campaign`.
+      - `agent` chooses one of (observed):
+        - branch `minimize_and_triage`:
+          - `agent` uses `minimize_corpus`.
+          - `agent` uses `triage_crashes`.
+        - branch `triage_only`:
+          - `agent` uses `triage_crashes`.
+        - branch `skip_postprocessing`: none.
+      - `agent` uses `write_guidance`.
+```

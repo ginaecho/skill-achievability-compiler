@@ -1,0 +1,51 @@
+```ce
+Skill `gh-fix-ci`.
+Roles: `agent`, `user`.
+Tool `check_gh_auth` (owner `agent`): via `bash`; requires `in_repo`; adds `gh_auth_checked`.
+Tool `resolve_pr` (owner `agent`): via `bash`; requires `gh_auth_checked`; adds `pr_resolved`.
+Tool `inspect_pr_checks` (owner `agent`): via `bash`; requires `pr_resolved`; adds `failure_context_summarized`.
+Tool `report_external_check` (owner `agent`): via `bash`; requires `pr_resolved`; adds `external_check_reported`.
+Tool `draft_inline_plan` (owner `agent`): via `ask_user`; requires `failure_context_summarized`; adds `plan_proposed`.
+Tool `load_plan_skill` (owner `agent`): via `skill`; requires `failure_context_summarized`; adds `plan_skill_checked`.
+Tool `request_plan_approval` (owner `agent`): via `ask_user`; requires `plan_proposed`; adds `approval_requested`.
+Tool `implement_fix` (owner `agent`): via `bash`; requires `plan_proposed` and `user_approved`; adds `fix_implemented`.
+Tool `summarize_changes_and_tests` (owner `agent`): via `ask_user`; requires `fix_implemented`; adds `changes_summarized`.
+Tool `suggest_recheck` (owner `agent`): via `ask_user`; requires `fix_implemented`; adds `recheck_suggested`.
+Initially true: `in_repo`.
+Initially: not `gh_auth_checked`.
+Initially: not `pr_resolved`.
+Initially: not `failure_context_summarized`.
+Initially: not `external_check_reported`.
+Initially: not `plan_skill_checked`.
+Initially: not `plan_proposed`.
+Initially: not `approval_requested`.
+Initially: not `user_approved`.
+Initially: not `fix_implemented`.
+Initially: not `changes_summarized`.
+Initially: not `recheck_suggested`.
+Goal: `failure_context_summarized` and `plan_proposed` and ( `user_approved` or not `fix_implemented` ) and ( `fix_implemented` or ( not `fix_implemented` and not `changes_summarized` and not `recheck_suggested` ) ) and ( `fix_implemented` or true ) and ( `external_check_reported` or true ).
+Protocol:
+  - `agent` uses `check_gh_auth`.
+  - `user` chooses one of (observed):
+    - branch `authenticated`:
+      - `agent` uses `resolve_pr`.
+      - `agent` uses `inspect_pr_checks`.
+      - `agent` chooses one of (observed):
+        - branch `has_external_checks`:
+          - `agent` uses `report_external_check`.
+        - branch `github_actions_only`: none.
+      - `agent` uses `load_plan_skill`.
+      - `agent` chooses one of (observed):
+        - branch `plan_skill_available`:
+          - `agent` uses `draft_inline_plan`.
+        - branch `plan_skill_unavailable`:
+          - `agent` uses `draft_inline_plan`.
+      - `agent` uses `request_plan_approval`.
+      - `user` chooses one of (observed):
+        - branch `approve`:
+          - `agent` uses `implement_fix`.
+          - `agent` uses `summarize_changes_and_tests`.
+          - `agent` uses `suggest_recheck`.
+        - branch `decline`: none.
+    - branch `unauthenticated`: none.
+```

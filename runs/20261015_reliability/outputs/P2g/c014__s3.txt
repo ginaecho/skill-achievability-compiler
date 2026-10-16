@@ -1,0 +1,32 @@
+```ce
+Skill `web-design-reviewer`.
+Roles: `agent`, `user`.
+Tool `ask_target_url` (owner `agent`): via `ask_user`; requires not `url_known`; adds `url_known`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `project_inspected`, `framework_detected`, `styling_detected`.
+Tool `capture_review_baseline` (owner `agent`): via `bash`; requires `url_known`; needs `shell`, `linux`, `local_filesystem`; adds `baseline_captured`, `issues_detected`.
+Tool `edit_source_files` (owner `agent`): via `edit`; requires `issues_detected` and `project_inspected`; adds `source_fixed`.
+Tool `reverify_design` (owner `agent`): via `bash`; requires `url_known` and `baseline_captured` and `source_fixed`; needs `shell`, `linux`, `local_filesystem`; adds `reverified`, `review_complete`; removes `issues_detected`.
+Tool `report_results` (owner `agent`): via `write`; requires `review_complete`; adds `report_written`.
+Initially true: none.
+Goal: `url_known` and `baseline_captured` and `project_inspected` and `framework_detected` and `styling_detected` and `review_complete` and `report_written`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `url_already_provided`: none.
+    - branch `need_url`:
+      - `agent` uses `ask_target_url`.
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `capture_review_baseline`.
+  - loop `fix_cycle`:
+    - `agent` chooses one of (observed):
+      - branch `fix_detected_issues`:
+        - `agent` uses `edit_source_files`.
+        - `agent` uses `reverify_design`.
+      - branch `review_only_or_no_fix_possible`:
+        - `agent` uses `reverify_design`.
+      - branch `consult_user_after_multiple_attempts`: none.
+    - `agent` chooses one of (observed):
+      - branch `issues_remaining`:
+        - repeat `fix_cycle`.
+      - branch `no_issues_remaining`: none.
+  - `agent` uses `report_results`.
+```

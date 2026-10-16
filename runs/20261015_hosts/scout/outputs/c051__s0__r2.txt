@@ -1,0 +1,49 @@
+```ce
+Skill `make-repo-contribution`.
+Roles: `agent`, `user`.
+Tool `inspect_repo_guidance` (owner `agent`): via `read`; adds `guidance_checked`, `security_boundaries_respected`.
+Tool `search_existing_issues` (owner `agent`): via `bash`; requires `guidance_checked`; adds `issues_searched`.
+Tool `ask_user_issue_choice` (owner `agent`): via `ask_user`; requires `issues_searched` and `related_issue_found`; adds `issue_selected`.
+Tool `ask_user_template_choice` (owner `agent`): via `ask_user`; requires `guidance_checked` and `multiple_templates_found`; adds `template_choice_made`.
+Tool `ask_user_for_results` (owner `agent`): via `ask_user`; requires `guidance_checked` and `prerequisites_identified`; adds `user_confirmed_prerequisites`.
+Tool `create_issue` (owner `agent`): via `bash`; requires `guidance_checked` and `issue_required` and not `issue_selected`; adds `issue_selected`, `issue_created`.
+Tool `create_branch` (owner `agent`): via `bash`; requires `guidance_checked` and not `branch_ready`; adds `branch_ready`; removes `on_default_branch`.
+Tool `create_commits` (owner `agent`): via `bash`; requires `guidance_checked` and `branch_ready` and `changes_grouped` and `commit_messages_prepared`; adds `commits_created`.
+Tool `push_branch` (owner `agent`): via `bash`; requires `guidance_checked` and `branch_ready` and `commits_created`; adds `branch_pushed`.
+Tool `create_pr` (owner `agent`): via `bash`; requires `guidance_checked` and `branch_pushed` and `pr_content_prepared`; adds `pr_created`, `issue_referenced_in_pr`.
+Initially true: `on_default_branch`.
+Initially: true.
+Goal: all of (`guidance_checked`, `security_boundaries_respected`, any of (`issue_selected`, not `issue_required`), `branch_ready`, not `on_default_branch`, any of (not `prerequisites_identified`, `user_confirmed_prerequisites`), any of (not `commits_created`, (`commits_created` and `branch_ready`)), any of (not `pr_created`, (`pr_created` and `branch_pushed` and `pr_content_prepared` and any of (not `issue_selected`, `issue_referenced_in_pr`)))).
+Protocol:
+  - `agent` uses `inspect_repo_guidance`.
+  - `agent` uses `search_existing_issues`.
+  - `agent` chooses one of (observed):
+    - branch `related_issue_found`:
+      - `agent` uses `ask_user_issue_choice`.
+    - branch `no_related_issue_found`: none.
+  - `agent` chooses one of (observed):
+    - branch `multiple_templates`:
+      - `agent` uses `ask_user_template_choice`.
+    - branch `single_or_no_template`: none.
+  - `agent` chooses one of (observed):
+    - branch `prerequisites_exist`:
+      - `agent` uses `ask_user_for_results`.
+    - branch `no_prerequisites`: none.
+  - `agent` chooses one of (observed):
+    - branch `create_required_issue`:
+      - `agent` uses `create_issue`.
+    - branch `issue_already_selected_or_not_required`: none.
+  - `agent` chooses one of (observed):
+    - branch `branch_already_ready`: none.
+    - branch `create_new_branch`:
+      - `agent` uses `create_branch`.
+  - `agent` chooses one of (observed):
+    - branch `no_commit_requested`: none.
+    - branch `commit_changes`:
+      - `agent` uses `create_commits`.
+      - `agent` uses `push_branch`.
+  - `agent` chooses one of (observed):
+    - branch `no_pr_requested`: none.
+    - branch `create_pull_request`:
+      - `agent` uses `create_pr`.
+```

@@ -1,0 +1,56 @@
+```ce
+Skill `nextflow-development`.
+Roles: `agent`, `user`.
+Tool `fetch_study_info` (owner `agent`): via `bash`; requires `public_dataset_case`; adds `study_info_available`.
+Tool `download_public_data` (owner `agent`): via `bash`; requires `public_dataset_case` and `study_info_available`; adds `input_data_available`.
+Tool `check_environment` (owner `agent`): via `bash`; picks `environment_ok` with (`environment_ok` == 0 or `environment_ok` == 1).
+Tool `detect_data_type` (owner `agent`): via `bash`; requires `input_data_available`; adds `data_type_detected`.
+Tool `run_test_profile` (owner `agent`): via `bash`; requires `environment_ok` == 1 and `pipeline_selected`; adds `test_profile_passed`.
+Tool `create_samplesheet` (owner `agent`): via `bash`; requires `input_data_available` and `pipeline_selected`; adds `samplesheet_ready`.
+Tool `validate_samplesheet` (owner `agent`): via `bash`; requires `pipeline_selected`; adds `samplesheet_ready`.
+Tool `check_genome` (owner `agent`): via `bash`; requires `genome_confirmed`; picks `genome_available` with (`genome_available` == 0 or `genome_available` == 1).
+Tool `download_genome` (owner `agent`): via `bash`; requires `genome_confirmed`; adds `genome_ready`.
+Tool `run_pipeline` (owner `agent`): via `bash`; requires `environment_ok` == 1 and `test_profile_passed` and `pipeline_selected` and `samplesheet_ready` and `genome_confirmed` and `genome_ready`; adds `results_generated`.
+Tool `verify_outputs` (owner `agent`): via `bash`; requires `results_generated`; adds `outputs_verified`.
+Tool `deliver_completion` (owner `agent`): via `reply`; requires `outputs_verified`; adds `analysis_run_completed`.
+Initially true: none.
+Initially: `environment_ok` == 0.
+Initially: `genome_available` == 0.
+Goal: `analysis_run_completed`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `public_dataset` (assuming `public_dataset_case`):
+      - `agent` uses `fetch_study_info`.
+      - `user` chooses one of (observed):
+        - branch `download_selected_subset`:
+          - `agent` uses `download_public_data`.
+    - branch `local_fastq` (assuming `local_data_case` and `input_data_available`): none.
+  - loop `environment_retry`:
+    - `agent` uses `check_environment`.
+    - `user` chooses one of (observed):
+      - branch `environment_passed` (assuming `environment_ok` == 1): none.
+      - branch `fix_environment` (assuming `environment_ok` == 0):
+        - repeat `environment_retry`.
+  - `agent` uses `detect_data_type`.
+  - `user` chooses one of (observed):
+    - branch `select_rnaseq` (assuming `pipeline_selected`): none.
+    - branch `select_sarek` (assuming `pipeline_selected`): none.
+    - branch `select_atacseq` (assuming `pipeline_selected`): none.
+  - `agent` uses `run_test_profile`.
+  - `user` chooses one of (observed):
+    - branch `generate_samplesheet`:
+      - `agent` uses `create_samplesheet`.
+    - branch `validate_existing_samplesheet`:
+      - `agent` uses `validate_samplesheet`.
+  - `user` chooses one of (observed):
+    - branch `confirm_genome` (assuming `genome_confirmed`): none.
+  - `agent` uses `check_genome`.
+  - `user` chooses one of (observed):
+    - branch `genome_already_available` (assuming `genome_available` == 1):
+      - `agent` uses `run_pipeline`.
+    - branch `download_genome_first` (assuming `genome_available` == 0):
+      - `agent` uses `download_genome`.
+      - `agent` uses `run_pipeline`.
+  - `agent` uses `verify_outputs`.
+  - `agent` uses `deliver_completion`.
+```

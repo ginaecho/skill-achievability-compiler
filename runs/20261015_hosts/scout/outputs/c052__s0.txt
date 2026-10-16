@@ -1,0 +1,36 @@
+```ce
+Skill `gh-fix-ci`.
+Roles: `agent`, `user`.
+Tool `check_gh_auth` (owner `agent`): via `bash`; needs `shell`; adds `gh_auth_ok`.
+Tool `ask_user_login_gh` (owner `agent`): via `ask_user`; requires not `gh_auth_ok`; adds `user_prompted_login`.
+Tool `resolve_pr` (owner `agent`): via `bash`; needs `shell`; requires `gh_auth_ok`; adds `pr_resolved`.
+Tool `inspect_pr_checks` (owner `agent`): via `bash`; needs `shell`; requires `gh_auth_ok` and `pr_resolved`; adds `checks_inspected`, `failure_context_available`.
+Tool `report_external_check_urls` (owner `agent`): via `bash`; needs `shell`; requires `checks_inspected`; adds `external_check_urls_reported`.
+Tool `summarize_failures` (owner `agent`): via `bash`; needs `shell`; requires `checks_inspected`; adds `failure_summary_reported`.
+Tool `draft_fix_plan` (owner `agent`): via `bash`; needs `shell`; requires `failure_summary_reported`; adds `fix_plan_drafted`.
+Tool `request_plan_approval` (owner `agent`): via `ask_user`; requires `fix_plan_drafted`; adds `approval_requested`, `approval_observed`.
+Tool `implement_fix` (owner `agent`): via `bash`; needs `shell`; requires `approval_observed`; adds `fix_implemented`, `diffs_summarized`, `tests_summarized`.
+Tool `ask_about_opening_pr` (owner `agent`): via `ask_user`; requires `fix_implemented`; adds `asked_about_opening_pr`.
+Tool `suggest_recheck` (owner `agent`): via `ask_user`; requires any of (`failure_summary_reported`, `fix_implemented`); adds `recheck_suggested`.
+Initially true: none.
+Goal: all of (`failure_summary_reported`, `fix_plan_drafted`, any of ((not `gh_auth_ok` and `user_prompted_login`), (`gh_auth_ok` and `pr_resolved`))).
+Protocol:
+  - `agent` uses `check_gh_auth`.
+  - `agent` chooses one of (observed):
+    - branch `authenticated`:
+      - `agent` uses `resolve_pr`.
+      - `agent` uses `inspect_pr_checks`.
+      - `agent` uses `report_external_check_urls`.
+      - `agent` uses `summarize_failures`.
+      - `agent` uses `draft_fix_plan`.
+      - `agent` uses `request_plan_approval`.
+      - `user` chooses one of (observed):
+        - branch `approve`:
+          - `agent` uses `implement_fix`.
+          - `agent` uses `ask_about_opening_pr`.
+          - `agent` uses `suggest_recheck`.
+        - branch `decline`:
+          - `agent` uses `suggest_recheck`.
+    - branch `unauthenticated`:
+      - `agent` uses `ask_user_login_gh`.
+```

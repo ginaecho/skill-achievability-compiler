@@ -1,0 +1,642 @@
+{
+  "pack": {
+    "name": "hf-cloud-serving-image-selection",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "fetch_catalog_page": {
+        "owner": "agent",
+        "pre": "aws_catalog_reachable",
+        "add": [
+          "catalog_data_available",
+          "image_uri_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_region_availability": {
+        "owner": "agent",
+        "pre": "aws_catalog_reachable",
+        "add": [
+          "region_account_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_hf_config": {
+        "owner": "agent",
+        "pre": "hf_config_reachable",
+        "add": [
+          "model_architecture_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_catalog_yaml": {
+        "owner": "agent",
+        "pre": "github_catalog_reachable",
+        "add": [
+          "catalog_data_available",
+          "image_uri_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_dlc_releases": {
+        "owner": "agent",
+        "pre": "github_catalog_reachable",
+        "add": [
+          "release_notes_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_ecr_tags": {
+        "owner": "agent",
+        "pre": "ecr_query_possible",
+        "add": [
+          "catalog_data_available",
+          "image_uri_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_for_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deployment_inputs_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_user_for_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hf_config_accessible": [
+              {
+                "act": {
+                  "cap": "fetch_hf_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "hf_config_not_accessible": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_page_works": [
+              {
+                "act": {
+                  "cap": "fetch_catalog_page",
+                  "by": "agent"
+                }
+              }
+            ],
+            "catalog_page_fails": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "use_catalog_yaml": [
+                      {
+                        "act": {
+                          "cap": "fetch_catalog_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "use_release_notes": [
+                      {
+                        "act": {
+                          "cap": "query_dlc_releases",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "fetch_catalog_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "query_ecr_directly": [
+                      {
+                        "act": {
+                          "cap": "query_ecr_tags",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "region_account_needed": [
+              {
+                "act": {
+                  "cap": "fetch_region_availability",
+                  "by": "agent"
+                }
+              }
+            ],
+            "region_account_not_needed": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "select_hf_vllm": [],
+            "select_hf_vllm_omni": [],
+            "select_tei": [],
+            "select_hf_inference_toolkit_cpu": [],
+            "select_hf_sglang": [],
+            "select_djl": [],
+            "select_generic_vllm_fallback": [],
+            "select_generic_djl_fallback": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deployment_inputs_known",
+        "image_uri_found",
+        {
+          "or": [
+            "hf_family_selected",
+            "generic_family_selected"
+          ]
+        },
+        {
+          "or": [
+            {
+              "not": "generic_family_selected"
+            },
+            "generic_fallback_allowed"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "aws_catalog_reachable",
+      "github_catalog_reachable",
+      "user_conversation_available"
+    ],
+    "init_constraints": [
+      {
+        "not": "catalog_data_available"
+      },
+      {
+        "not": "region_account_known"
+      },
+      {
+        "not": "model_architecture_known"
+      },
+      {
+        "not": "release_notes_available"
+      },
+      {
+        "not": "deployment_inputs_known"
+      },
+      {
+        "not": "mirroring_needed"
+      },
+      {
+        "not": "ecr_query_possible"
+      },
+      {
+        "not": "hf_config_reachable"
+      },
+      {
+        "not": "generic_fallback_allowed"
+      },
+      {
+        "not": "generic_family_selected"
+      },
+      {
+        "not": "hf_family_selected"
+      },
+      {
+        "not": "tei_selected"
+      },
+      {
+        "not": "vllm_selected"
+      },
+      {
+        "not": "vllm_omni_selected"
+      },
+      {
+        "not": "hf_inference_toolkit_selected"
+      },
+      {
+        "not": "djl_selected"
+      },
+      {
+        "not": "sglang_selected"
+      },
+      {
+        "not": "image_uri_found"
+      },
+      {
+        "not": "ami_override_required"
+      },
+      {
+        "cmp": [
+          "target_region",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "instance_class",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "hf-cloud-serving-image-selection",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "fetch_catalog_page": {
+        "owner": "agent",
+        "pre": "aws_catalog_reachable",
+        "add": [
+          "catalog_data_available",
+          "image_uri_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_region_availability": {
+        "owner": "agent",
+        "pre": "aws_catalog_reachable",
+        "add": [
+          "region_account_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_hf_config": {
+        "owner": "agent",
+        "pre": "hf_config_reachable",
+        "add": [
+          "model_architecture_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_catalog_yaml": {
+        "owner": "agent",
+        "pre": "github_catalog_reachable",
+        "add": [
+          "catalog_data_available",
+          "image_uri_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_dlc_releases": {
+        "owner": "agent",
+        "pre": "github_catalog_reachable",
+        "add": [
+          "release_notes_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_ecr_tags": {
+        "owner": "agent",
+        "pre": "ecr_query_possible",
+        "add": [
+          "catalog_data_available",
+          "image_uri_found"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_for_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deployment_inputs_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_user_for_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hf_config_accessible": [
+              {
+                "act": {
+                  "cap": "fetch_hf_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "hf_config_not_accessible": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_page_works": [
+              {
+                "act": {
+                  "cap": "fetch_catalog_page",
+                  "by": "agent"
+                }
+              }
+            ],
+            "catalog_page_fails": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "use_catalog_yaml": [
+                      {
+                        "act": {
+                          "cap": "fetch_catalog_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "use_release_notes": [
+                      {
+                        "act": {
+                          "cap": "query_dlc_releases",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "fetch_catalog_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "query_ecr_directly": [
+                      {
+                        "act": {
+                          "cap": "query_ecr_tags",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "region_account_needed": [
+              {
+                "act": {
+                  "cap": "fetch_region_availability",
+                  "by": "agent"
+                }
+              }
+            ],
+            "region_account_not_needed": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "select_hf_vllm": [],
+            "select_hf_vllm_omni": [],
+            "select_tei": [],
+            "select_hf_inference_toolkit_cpu": [],
+            "select_hf_sglang": [],
+            "select_djl": [],
+            "select_generic_vllm_fallback": [],
+            "select_generic_djl_fallback": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deployment_inputs_known",
+        "image_uri_found",
+        {
+          "or": [
+            "hf_family_selected",
+            "generic_family_selected"
+          ]
+        },
+        {
+          "or": [
+            {
+              "not": "generic_family_selected"
+            },
+            "generic_fallback_allowed"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "aws_catalog_reachable",
+      "github_catalog_reachable",
+      "user_conversation_available"
+    ],
+    "init_constraints": [
+      {
+        "not": "catalog_data_available"
+      },
+      {
+        "not": "region_account_known"
+      },
+      {
+        "not": "model_architecture_known"
+      },
+      {
+        "not": "release_notes_available"
+      },
+      {
+        "not": "deployment_inputs_known"
+      },
+      {
+        "not": "mirroring_needed"
+      },
+      {
+        "not": "ecr_query_possible"
+      },
+      {
+        "not": "hf_config_reachable"
+      },
+      {
+        "not": "generic_fallback_allowed"
+      },
+      {
+        "not": "generic_family_selected"
+      },
+      {
+        "not": "hf_family_selected"
+      },
+      {
+        "not": "tei_selected"
+      },
+      {
+        "not": "vllm_selected"
+      },
+      {
+        "not": "vllm_omni_selected"
+      },
+      {
+        "not": "hf_inference_toolkit_selected"
+      },
+      {
+        "not": "djl_selected"
+      },
+      {
+        "not": "sglang_selected"
+      },
+      {
+        "not": "image_uri_found"
+      },
+      {
+        "not": "ami_override_required"
+      },
+      {
+        "cmp": [
+          "target_region",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "instance_class",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "fetch_catalog_page": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "fetch_region_availability": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "fetch_hf_config": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "fetch_catalog_yaml": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "query_dlc_releases": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "query_ecr_tags": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "ask_user_for_inputs": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    }
+  },
+  "live_goal": null
+}

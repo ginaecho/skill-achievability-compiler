@@ -1,0 +1,669 @@
+{
+  "pack": {
+    "name": "libfuzzer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_clang_llvm": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:package_registries",
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "clang_llvm_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_clang": {
+        "owner": "agent",
+        "pre": "clang_llvm_installed",
+        "add": [
+          "clang_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_harness": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "harness_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_fuzzed_data_provider": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet"
+          ]
+        },
+        "add": [
+          "fuzzed_data_provider_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_fuzzer": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "clang_verified",
+            "harness_written"
+          ]
+        },
+        "add": [
+          "fuzzer_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_corpus_and_dictionary": {
+        "owner": "agent",
+        "pre": "fuzzer_built",
+        "add": [
+          "corpus_ready",
+          "dictionary_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_fuzzing_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "fuzzer_built",
+            "corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_run",
+          "findings_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": "campaign_run",
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "analyze_coverage": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "fuzzer_built",
+            "corpus_ready"
+          ]
+        },
+        "add": [
+          "coverage_analyzed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_libfuzzer_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "libfuzzer_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "deliver_libfuzzer_guidance",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "project_available": [
+              {
+                "act": {
+                  "cap": "inspect_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "need_install": [
+                      {
+                        "act": {
+                          "cap": "install_clang_llvm",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "verify_clang",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "already_installed": [
+                      {
+                        "act": {
+                          "cap": "verify_clang",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "already_installed": [
+                      "clang_llvm_installed"
+                    ],
+                    "need_install": [
+                      "clang_missing"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "use_fuzzed_data_provider": [
+                      {
+                        "act": {
+                          "cap": "fetch_fuzzed_data_provider",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_fuzzed_data_provider": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "build_fuzzer",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "prepare_corpus_and_dictionary",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_fuzzing_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "minimize_corpus": [
+                      {
+                        "act": {
+                          "cap": "minimize_corpus",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_minimization": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "analyze_coverage": [
+                      {
+                        "act": {
+                          "cap": "analyze_coverage",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_coverage": []
+                  }
+                }
+              }
+            ],
+            "guidance_only": []
+          },
+          "assumes": {
+            "project_available": [
+              "project_present"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "libfuzzer_guidance_delivered",
+    "init_true": [
+      "needs:shell",
+      "needs:linux",
+      "needs:package_registries",
+      "needs:allowlisted_internet"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "libfuzzer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_project": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_clang_llvm": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "clang_llvm_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_clang": {
+        "owner": "agent",
+        "pre": "clang_llvm_installed",
+        "add": [
+          "clang_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_harness": {
+        "owner": "agent",
+        "pre": "project_inspected",
+        "add": [
+          "harness_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_fuzzed_data_provider": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "fuzzed_data_provider_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_fuzzer": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "clang_verified",
+            "harness_written"
+          ]
+        },
+        "add": [
+          "fuzzer_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_corpus_and_dictionary": {
+        "owner": "agent",
+        "pre": "fuzzer_built",
+        "add": [
+          "corpus_ready",
+          "dictionary_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_fuzzing_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "fuzzer_built",
+            "corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_run",
+          "findings_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": "campaign_run",
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "analyze_coverage": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "fuzzer_built",
+            "corpus_ready"
+          ]
+        },
+        "add": [
+          "coverage_analyzed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_libfuzzer_guidance": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "libfuzzer_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "deliver_libfuzzer_guidance",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "project_available": [
+              {
+                "act": {
+                  "cap": "inspect_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "need_install": [
+                      {
+                        "act": {
+                          "cap": "install_clang_llvm",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "verify_clang",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "already_installed": [
+                      {
+                        "act": {
+                          "cap": "verify_clang",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "already_installed": [
+                      "clang_llvm_installed"
+                    ],
+                    "need_install": [
+                      "clang_missing"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_harness",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "use_fuzzed_data_provider": [
+                      {
+                        "act": {
+                          "cap": "fetch_fuzzed_data_provider",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_fuzzed_data_provider": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "build_fuzzer",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "prepare_corpus_and_dictionary",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_fuzzing_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "minimize_corpus": [
+                      {
+                        "act": {
+                          "cap": "minimize_corpus",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_minimization": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "analyze_coverage": [
+                      {
+                        "act": {
+                          "cap": "analyze_coverage",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_coverage": []
+                  }
+                }
+              }
+            ],
+            "guidance_only": []
+          },
+          "assumes": {
+            "project_available": [
+              "project_present"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "libfuzzer_guidance_delivered",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect_project": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_clang_llvm": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "package_registries",
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "verify_clang": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "write_harness": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "fetch_fuzzed_data_provider": {
+      "via": "web_fetch",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "build_fuzzer": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "prepare_corpus_and_dictionary": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_fuzzing_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "minimize_corpus": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "analyze_coverage": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "deliver_libfuzzer_guidance": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

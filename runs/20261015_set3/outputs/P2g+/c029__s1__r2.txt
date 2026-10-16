@@ -1,0 +1,56 @@
+```ce
+Skill `playwright-interactive`.
+Roles: `agent`, `user`.
+Tool `guide_enable_js_repl` (owner `agent`): via `reply`; requires not `js_repl_enabled`; adds `js_repl_guidance_given`.
+Tool `guide_restart_session` (owner `agent`): via `reply`; requires any of (`js_repl_guidance_given`, not `danger_full_access`); adds `restart_guidance_given`.
+Tool `write_qa_inventory` (owner `agent`): via `reply`; adds `qa_inventory_written`.
+Tool `setup_playwright_workspace` (owner `agent`): via `bash`; requires `project_workspace`; adds `playwright_installed`, `playwright_import_ok`.
+Tool `start_or_confirm_dev_server` (owner `agent`): via `bash`; requires `web_target`; adds `dev_server_ready`.
+Tool `launch_or_reuse_web_session` (owner `agent`): via `bash`; requires `playwright_import_ok` and `js_repl_enabled`; adds `runtime_session_ready`, `persistent_handles_alive`.
+Tool `launch_or_reuse_electron_session` (owner `agent`): via `bash`; requires `playwright_import_ok` and `js_repl_enabled`; adds `runtime_session_ready`, `persistent_handles_alive`.
+Tool `reload_renderer_session` (owner `agent`): via `bash`; requires `runtime_session_ready` and `persistent_handles_alive`; adds `runtime_session_ready`.
+Tool `relaunch_process_session` (owner `agent`): via `bash`; requires `runtime_session_ready` and `persistent_handles_alive`; adds `runtime_session_ready`, `persistent_handles_alive`.
+Tool `run_functional_and_visual_qa` (owner `agent`): via `bash`; requires `qa_inventory_written` and `runtime_session_ready`; adds `functional_qa_passed`, `visual_qa_passed`, `viewport_fit_checked`, `screenshots_captured`, `exploratory_pass_done`.
+Tool `cleanup_playwright_session` (owner `agent`): via `bash`; requires `runtime_session_ready`; removes `runtime_session_ready`, `persistent_handles_alive`; adds `cleanup_done`.
+Tool `deliver_signoff` (owner `agent`): via `reply`; requires `functional_qa_passed` and `visual_qa_passed` and `viewport_fit_checked` and `screenshots_captured` and `exploratory_pass_done`; adds `signoff_delivered`.
+Initially true: none.
+Initially: true.
+Goal: `signoff_delivered`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `ready` (assuming `js_repl_enabled` and `danger_full_access` and `project_workspace`):
+      - `agent` uses `write_qa_inventory`.
+      - `user` chooses one of (observed):
+        - branch `web` (assuming `web_target`):
+          - `agent` uses `setup_playwright_workspace`.
+          - `agent` uses `start_or_confirm_dev_server`.
+          - `agent` uses `launch_or_reuse_web_session`.
+          - `user` chooses one of (observed):
+            - branch `reload_renderer_only` (assuming `renderer_only_change`):
+              - `agent` uses `reload_renderer_session`.
+            - branch `relaunch_for_process_change` (assuming any of (`process_ownership_changed`, `startup_change`)):
+              - `agent` uses `relaunch_process_session`.
+            - branch `no_change_yet`: none.
+          - `agent` uses `run_functional_and_visual_qa`.
+        - branch `electron` (assuming `electron_target`):
+          - `agent` uses `setup_playwright_workspace`.
+          - `agent` uses `launch_or_reuse_electron_session`.
+          - `user` chooses one of (observed):
+            - branch `reload_renderer_only` (assuming `renderer_only_change`):
+              - `agent` uses `reload_renderer_session`.
+            - branch `relaunch_for_process_change` (assuming any of (`process_ownership_changed`, `startup_change`)):
+              - `agent` uses `relaunch_process_session`.
+            - branch `no_change_yet`: none.
+          - `agent` uses `run_functional_and_visual_qa`.
+      - `user` chooses one of (observed):
+        - branch `cleanup_now`:
+          - `agent` uses `cleanup_playwright_session`.
+          - `agent` uses `deliver_signoff`.
+        - branch `keep_session_alive`:
+          - `agent` uses `deliver_signoff`.
+    - branch `enable_js_repl_needed` (assuming not `js_repl_enabled`):
+      - `agent` uses `guide_enable_js_repl`.
+      - `agent` uses `guide_restart_session`.
+    - branch `restart_with_danger_full_access` (assuming `js_repl_enabled` and not `danger_full_access`):
+      - `agent` uses `guide_restart_session`.
+```

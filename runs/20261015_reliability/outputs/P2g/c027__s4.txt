@@ -1,0 +1,51 @@
+```ce
+Skill `declarative-agent-developer`.
+Roles: `agent`, `user`.
+Tool `check_atk_cli` (owner `agent`): via `bash`; requires `workspace_checked`; adds `atk_cli_available`, `atk_telemetry_set`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_checked`; picks `workspace_gate` with any of (`workspace_gate` == 1, `workspace_gate` == 2, `workspace_gate` == 3, `workspace_gate` == 4, `workspace_gate` == 5, `workspace_gate` == 6).
+Tool `scaffold_project` (owner `agent`): via `bash`; requires `atk_cli_available` and `workspace_gate` == 3; adds `manifest_exists`, `project_valid`.
+Tool `detect_manifest_problems` (owner `agent`): via `read`; requires `workspace_checked` and `manifest_exists`; adds `problems_checked`; picks `problem_state` with any of (`problem_state` == 0, `problem_state` == 1, `problem_state` == 2, `problem_state` == 3).
+Tool `edit_agent_files` (owner `agent`): via `edit`; requires `project_valid` and `problem_state` == 0; adds `apppackage_changed`, `instructions_updated`, `starters_updated`, `app_name_meaningful`.
+Tool `add_api_plugin` (owner `agent`): via `bash`; requires `project_valid` and `problem_state` == 0 and `atk_cli_available`; adds `apppackage_changed`, `plugin_added`.
+Tool `deploy_agent` (owner `agent`): via `bash`; requires `apppackage_changed` and `problem_state` == 0 and `atk_cli_available`; adds `deployed`, `test_link_available`.
+Tool `read_title_id` (owner `agent`): via `read`; requires `deployed`; adds `title_id_read`, `test_link_available`.
+Tool `review_instructions` (owner `agent`): via `read`; requires `project_valid` and `problem_state` == 0; adds `instructions_reviewed`.
+Tool `localize_agent` (owner `agent`): via `edit`; requires `project_valid` and `problem_state` == 0 and `manifest_exists`; adds `apppackage_changed`, `localized`.
+Initially true: none.
+Initially: `workspace_gate` == 0.
+Initially: `problem_state` == 0.
+Goal: any of (`rejected_text_only`, all of (`problems_reported`, `user_decision_requested`), all of (`deployed`, `test_link_available`), `instructions_reviewed`).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `check_atk_cli`.
+  - `agent` chooses one of (observed):
+    - branch `reject_non_agent`:
+      - `agent` uses `inspect_workspace`.
+    - branch `reject_missing_manifest_for_edit_or_deploy`:
+      - `agent` uses `inspect_workspace`.
+    - branch `scaffold_new_project`:
+      - `agent` uses `scaffold_project`.
+      - `agent` uses `detect_manifest_problems`.
+      - `agent` chooses one of (observed):
+        - branch `problems_found_after_scaffold`: none.
+        - branch `no_problems_after_scaffold`:
+          - `agent` uses `edit_agent_files`.
+          - `agent` uses `deploy_agent`.
+          - `agent` uses `read_title_id`.
+    - branch `fix_existing_manifest`:
+      - `agent` uses `detect_manifest_problems`.
+    - branch `review_behavior_issues`:
+      - `agent` uses `detect_manifest_problems`.
+      - `agent` uses `review_instructions`.
+    - branch `edit_valid_project`:
+      - `agent` uses `detect_manifest_problems`.
+      - `agent` chooses one of (observed):
+        - branch `general_edit`:
+          - `agent` uses `edit_agent_files`.
+        - branch `add_api_plugin`:
+          - `agent` uses `add_api_plugin`.
+        - branch `localize`:
+          - `agent` uses `localize_agent`.
+      - `agent` uses `deploy_agent`.
+      - `agent` uses `read_title_id`.
+```

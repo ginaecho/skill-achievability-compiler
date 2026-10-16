@@ -1,0 +1,40 @@
+```ce
+Skill `transcribe`.
+Roles: `agent`, `user`.
+Tool `check_api_key` (owner `agent`): via `bash`; requires `shell`; adds `api_key_present`.
+Tool `install_openai_with_uv` (owner `agent`): via `bash`; requires `shell` and `package_registries`; adds `openai_installed`.
+Tool `install_openai_with_pip` (owner `agent`): via `bash`; requires `shell` and `package_registries`; adds `openai_installed`.
+Tool `run_fast_transcription` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `api_key_present` and `openai_installed` and `audio_paths_provided`; adds `transcription_output_saved`.
+Tool `run_diarized_transcription` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `api_key_present` and `openai_installed` and `audio_paths_provided` and `diarization_requested`; adds `transcription_output_saved`.
+Tool `rerun_fast_transcription` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `api_key_present` and `openai_installed` and `audio_paths_provided`; adds `transcription_output_saved`.
+Tool `rerun_diarized_transcription` (owner `agent`): via `bash`; needs `allowlisted_internet`; requires `api_key_present` and `openai_installed` and `audio_paths_provided` and `diarization_requested`; adds `transcription_output_saved`.
+Tool `reply_set_key_instructions` (owner `agent`): via `reply`; adds `user_told_to_set_api_key`.
+Tool `reply_confirm_completion` (owner `agent`): via `reply`; requires `transcription_output_saved`; adds `transcription_delivered`.
+Initially true: `shell`, `package_registries`.
+Goal: `transcription_delivered`.
+Protocol:
+  - `agent` uses `check_api_key`.
+  - `agent` chooses one of (external):
+    - branch `key_present` (assuming `api_key_present`):
+      - `agent` chooses one of (external):
+        - branch `uv_available`:
+          - `agent` uses `install_openai_with_uv`.
+        - branch `uv_unavailable`:
+          - `agent` uses `install_openai_with_pip`.
+      - `user` chooses one of (observed):
+        - branch `diarized_request` (assuming `audio_paths_provided`, `diarization_requested`):
+          - `agent` uses `run_diarized_transcription`.
+          - `agent` chooses one of (external):
+            - branch `accepted`: none.
+            - branch `needs_single_targeted_change`:
+              - `agent` uses `rerun_diarized_transcription`.
+        - branch `fast_text_request` (assuming `audio_paths_provided`):
+          - `agent` uses `run_fast_transcription`.
+          - `agent` chooses one of (external):
+            - branch `accepted`: none.
+            - branch `needs_single_targeted_change`:
+              - `agent` uses `rerun_fast_transcription`.
+      - `agent` uses `reply_confirm_completion`.
+    - branch `key_missing`:
+      - `agent` uses `reply_set_key_instructions`.
+```

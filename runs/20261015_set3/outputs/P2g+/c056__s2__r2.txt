@@ -1,0 +1,51 @@
+```ce
+Skill `cli-exercise`.
+Roles: `agent`, `user`.
+Tool `read_needed_modules` (owner `agent`): via `read`; adds `request_understood`, `needed_modules_read`.
+Tool `check_readiness` (owner `agent`): via `bash`; requires `request_understood`; adds `readiness_checked`.
+Tool `ask_install_approval` (owner `agent`): via `ask_user`; requires `readiness_checked`; adds `install_decision_known`.
+Tool `install_dependencies` (owner `agent`): via `bash`; requires `install_decision_known` and `user_approved_install`; adds `dependencies_ready`.
+Tool `record_contract_and_identity` (owner `agent`): via `write`; requires `request_understood` and `dependencies_ready`; adds `contract_recorded`, `executable_identity_recorded`, `effect_scope_recorded`.
+Tool `run_exact_cases` (owner `agent`): via `bash`; requires `dependencies_ready` and `contract_recorded` and `exact_cases_requested`; adds `cases_exercised`, `observed_results_collected`.
+Tool `run_exploration` (owner `agent`): via `bash`; requires `dependencies_ready` and `contract_recorded` and `exploration_requested`; adds `cases_exercised`, `observed_results_collected`.
+Tool `render_video_evidence` (owner `agent`): via `bash`; requires `cases_exercised` and `observed_results_collected`; adds `video_ready`.
+Tool `render_html_report` (owner `agent`): via `bash`; requires `cases_exercised` and `observed_results_collected` and `html_requested`; adds `html_ready`.
+Tool `reply_with_evidence` (owner `agent`): via `reply`; requires `video_ready`; adds `evidence_delivered`.
+Initially true: none.
+Goal: `evidence_delivered` and `video_ready` and (not `html_requested` or `html_ready`).
+Protocol:
+  - `agent` uses `read_needed_modules`.
+  - `agent` uses `check_readiness`.
+  - `user` chooses one of (observed):
+    - branch `dependencies_already_ready` (assuming `dependencies_ready`):
+      - `agent` uses `record_contract_and_identity`.
+      - `user` chooses one of (observed):
+        - branch `exact_request` (assuming `exact_cases_requested`):
+          - `agent` uses `run_exact_cases`.
+        - branch `explore_request` (assuming `exploration_requested`):
+          - `agent` uses `run_exploration`.
+      - `agent` uses `render_video_evidence`.
+      - `user` chooses one of (observed):
+        - branch `html_wanted` (assuming `html_requested`):
+          - `agent` uses `render_html_report`.
+        - branch `video_only`: none.
+      - `agent` uses `reply_with_evidence`.
+    - branch `dependencies_missing`:
+      - `agent` uses `ask_install_approval`.
+      - `user` chooses one of (observed):
+        - branch `approve_install` (assuming `user_approved_install`):
+          - `agent` uses `install_dependencies`.
+          - `agent` uses `record_contract_and_identity`.
+          - `user` chooses one of (observed):
+            - branch `exact_request` (assuming `exact_cases_requested`):
+              - `agent` uses `run_exact_cases`.
+            - branch `explore_request` (assuming `exploration_requested`):
+              - `agent` uses `run_exploration`.
+          - `agent` uses `render_video_evidence`.
+          - `user` chooses one of (observed):
+            - branch `html_wanted` (assuming `html_requested`):
+              - `agent` uses `render_html_report`.
+            - branch `video_only`: none.
+          - `agent` uses `reply_with_evidence`.
+        - branch `decline_install`: none.
+```

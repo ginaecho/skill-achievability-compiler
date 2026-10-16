@@ -1,0 +1,683 @@
+{
+  "pack": {
+    "name": "skill-creator",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_for_examples": {
+        "owner": "agent",
+        "pre": {
+          "not": "usage_understood"
+        },
+        "add": [
+          "usage_understood"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "initialize_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "new_skill",
+            "skill_name_valid"
+          ]
+        },
+        "add": [
+          "skill_initialized",
+          "skill_folder_exists",
+          "skill_md_exists",
+          "agents_yaml_exists"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_skill_files": {
+        "owner": "agent",
+        "pre": "skill_folder_exists",
+        "add": [
+          "resources_planned",
+          "resources_created",
+          "skill_md_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_existing_files": {
+        "owner": "agent",
+        "pre": "skill_folder_exists",
+        "add": [
+          "resources_created",
+          "skill_md_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_skill_files": {
+        "owner": "agent",
+        "pre": "skill_folder_exists",
+        "add": [
+          "skill_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_agents_yaml": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_folder_exists",
+            "skill_md_updated"
+          ]
+        },
+        "add": [
+          "agents_yaml_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_scripts": {
+        "owner": "agent",
+        "pre": "resources_created",
+        "add": [
+          "scripts_tested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_folder_exists",
+            "skill_md_updated"
+          ]
+        },
+        "add": [
+          "skill_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "usage_clear": [],
+            "need_examples": [
+              {
+                "act": {
+                  "cap": "ask_for_examples",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "create_new_skill": [
+              {
+                "act": {
+                  "cap": "initialize_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "update_existing_skill": [
+              {
+                "act": {
+                  "cap": "read_skill_files",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "write_new_files": [
+              {
+                "act": {
+                  "cap": "edit_skill_files",
+                  "by": "agent"
+                }
+              }
+            ],
+            "modify_existing_files": [
+              {
+                "act": {
+                  "cap": "edit_existing_files",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "refresh_agents_yaml": [
+              {
+                "act": {
+                  "cap": "generate_agents_yaml",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_agents_yaml": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "test_representative_scripts": [
+              {
+                "act": {
+                  "cap": "test_scripts",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_scripts_to_test": []
+          }
+        }
+      },
+      {
+        "rec": {
+          "name": "validation_fix_loop",
+          "body": [
+            {
+              "act": {
+                "cap": "validate_skill",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "validation_passes": [],
+                  "validation_fails_and_fix": [
+                    {
+                      "act": {
+                        "cap": "edit_existing_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "validation_fix_loop"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "skill_md_updated",
+        "skill_validated",
+        {
+          "or": [
+            "agents_yaml_current",
+            {
+              "not": "agents_yaml_exists"
+            }
+          ]
+        },
+        {
+          "or": [
+            "scripts_tested",
+            {
+              "not": "resources_created"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "or": [
+          "skill_name_valid",
+          {
+            "not": "skill_name_valid"
+          }
+        ]
+      },
+      {
+        "or": [
+          "new_skill",
+          {
+            "not": "new_skill"
+          }
+        ]
+      },
+      {
+        "or": [
+          "usage_understood",
+          {
+            "not": "usage_understood"
+          }
+        ]
+      },
+      {
+        "or": [
+          "skill_folder_exists",
+          {
+            "not": "skill_folder_exists"
+          }
+        ]
+      },
+      {
+        "or": [
+          "agents_yaml_exists",
+          {
+            "not": "agents_yaml_exists"
+          }
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "skill-creator",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_for_examples": {
+        "owner": "agent",
+        "pre": {
+          "not": "usage_understood"
+        },
+        "add": [
+          "usage_understood"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "initialize_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "new_skill",
+            "skill_name_valid"
+          ]
+        },
+        "add": [
+          "skill_initialized",
+          "skill_folder_exists",
+          "skill_md_exists",
+          "agents_yaml_exists"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_skill_files": {
+        "owner": "agent",
+        "pre": "skill_folder_exists",
+        "add": [
+          "resources_planned",
+          "resources_created",
+          "skill_md_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "edit_existing_files": {
+        "owner": "agent",
+        "pre": "skill_folder_exists",
+        "add": [
+          "resources_created",
+          "skill_md_updated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_skill_files": {
+        "owner": "agent",
+        "pre": "skill_folder_exists",
+        "add": [
+          "skill_reviewed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "generate_agents_yaml": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_folder_exists",
+            "skill_md_updated"
+          ]
+        },
+        "add": [
+          "agents_yaml_current"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "test_scripts": {
+        "owner": "agent",
+        "pre": "resources_created",
+        "add": [
+          "scripts_tested"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_skill": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_folder_exists",
+            "skill_md_updated"
+          ]
+        },
+        "add": [
+          "skill_validated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "usage_clear": [],
+            "need_examples": [
+              {
+                "act": {
+                  "cap": "ask_for_examples",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "create_new_skill": [
+              {
+                "act": {
+                  "cap": "initialize_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "update_existing_skill": [
+              {
+                "act": {
+                  "cap": "read_skill_files",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "write_new_files": [
+              {
+                "act": {
+                  "cap": "edit_skill_files",
+                  "by": "agent"
+                }
+              }
+            ],
+            "modify_existing_files": [
+              {
+                "act": {
+                  "cap": "edit_existing_files",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "refresh_agents_yaml": [
+              {
+                "act": {
+                  "cap": "generate_agents_yaml",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_agents_yaml": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "test_representative_scripts": [
+              {
+                "act": {
+                  "cap": "test_scripts",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_scripts_to_test": []
+          }
+        }
+      },
+      {
+        "rec": {
+          "name": "validation_fix_loop",
+          "body": [
+            {
+              "act": {
+                "cap": "validate_skill",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "validation_passes": [],
+                  "validation_fails_and_fix": [
+                    {
+                      "act": {
+                        "cap": "edit_existing_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "validation_fix_loop"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "skill_md_updated",
+        "skill_validated",
+        {
+          "or": [
+            "agents_yaml_current",
+            {
+              "not": "agents_yaml_exists"
+            }
+          ]
+        },
+        {
+          "or": [
+            "scripts_tested",
+            {
+              "not": "resources_created"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "or": [
+          "skill_name_valid",
+          {
+            "not": "skill_name_valid"
+          }
+        ]
+      },
+      {
+        "or": [
+          "new_skill",
+          {
+            "not": "new_skill"
+          }
+        ]
+      },
+      {
+        "or": [
+          "usage_understood",
+          {
+            "not": "usage_understood"
+          }
+        ]
+      },
+      {
+        "or": [
+          "skill_folder_exists",
+          {
+            "not": "skill_folder_exists"
+          }
+        ]
+      },
+      {
+        "or": [
+          "agents_yaml_exists",
+          {
+            "not": "agents_yaml_exists"
+          }
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "ask_for_examples": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "initialize_skill": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "edit_skill_files": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "edit_existing_files": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "read_skill_files": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "generate_agents_yaml": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "test_scripts": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "validate_skill": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    }
+  },
+  "live_goal": null
+}

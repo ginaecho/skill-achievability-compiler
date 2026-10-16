@@ -1,0 +1,32 @@
+```ce
+Skill `playwright`.
+Roles: `agent`, `developer`, `user`.
+Tool `read_state` (owner `agent`): via `read`; adds `backend_task`, `frontend_task`.
+Tool `read_inputs` (owner `agent`): via `read`.
+Tool `start_dev_server` (owner `agent`): via `bash`; requires `frontend_task`; adds `dev_server_running`.
+Tool `write_playwright_tests` (owner `agent`): via `write`; requires `frontend_task`; adds `playwright_tests_written`, `page_objects_written`.
+Tool `run_playwright_tests` (owner `agent`): via `bash`; requires `frontend_task` and `dev_server_running` and `playwright_tests_written`; adds `playwright_tests_executed`; picks `playwright_result` with (`playwright_result` == 0 or `playwright_result` == 1).
+Tool `append_qa_report` (owner `agent`): via `bash`; requires `playwright_tests_executed`; adds `qa_report_updated`.
+Tool `update_state_skipped` (owner `agent`): via `bash`; requires `backend_task`; adds `state_updated`, `playwright_skipped`; removes `stage_complete`.
+Tool `update_state_completed` (owner `agent`): via `bash`; requires `playwright_tests_executed` and `playwright_result` == 0; adds `state_updated`, `playwright_completed`, `stage_complete`.
+Tool `notify_developer_failure` (owner `agent`): via `ask_user`; requires `playwright_tests_executed` and `playwright_result` == 1; adds `developer_notified`.
+Initially true: none.
+Initially: `playwright_result` == -1.
+Goal: any of (`playwright_skipped`, all of (`playwright_completed`, `stage_complete`, `qa_report_updated`), all of (`developer_notified`, `qa_report_updated`)).
+Protocol:
+  - `agent` uses `read_state`.
+  - `agent` chooses one of (observed):
+    - branch `backend_task`:
+      - `agent` uses `update_state_skipped`.
+    - branch `frontend_task`:
+      - `agent` uses `read_inputs`.
+      - `agent` uses `start_dev_server`.
+      - `agent` uses `write_playwright_tests`.
+      - `agent` uses `run_playwright_tests`.
+      - `agent` uses `append_qa_report`.
+      - `agent` chooses one of (observed):
+        - branch `tests_passed`:
+          - `agent` uses `update_state_completed`.
+        - branch `tests_failed`:
+          - `agent` uses `notify_developer_failure`.
+```

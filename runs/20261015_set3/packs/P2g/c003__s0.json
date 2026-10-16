@@ -1,0 +1,461 @@
+{
+  "pack": {
+    "name": "burpsuite-project-parser",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "run_verified_query": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "project_file_available",
+                "burp_cli_available",
+                "query_selected"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "query_ran"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "query_exit_code": {
+            "cmp": [
+              "query_exit_code",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "run_control_query": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "project_file_available",
+                "burp_cli_available"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "control_ran"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "control_exit_code": {
+            "cmp": [
+              "control_exit_code",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "inspect_project_file": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:local_filesystem",
+            "project_file_available"
+          ]
+        },
+        "add": [
+          "project_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_to_confirm_extension": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:user_conversation",
+            {
+              "or": [
+                {
+                  "cmp": [
+                    "control_exit_code",
+                    "==",
+                    3
+                  ]
+                },
+                {
+                  "cmp": [
+                    "control_exit_code",
+                    "==",
+                    4
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "user_prompted_extension_check"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "run_verified_query",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "query_succeeded": [],
+            "query_empty_unverified": [
+              {
+                "act": {
+                  "cap": "run_control_query",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "control_confirms_parser": [],
+                    "control_inconclusive_or_extension_missing": [
+                      {
+                        "act": {
+                          "cap": "inspect_project_file",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "ask_user_to_confirm_extension",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "query_bad_usage_or_missing_path": [],
+            "query_non_json_extension_missing": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "cmp": [
+            "query_exit_code",
+            "==",
+            0
+          ]
+        },
+        {
+          "and": [
+            {
+              "cmp": [
+                "query_exit_code",
+                "==",
+                3
+              ]
+            },
+            {
+              "cmp": [
+                "control_exit_code",
+                "==",
+                0
+              ]
+            }
+          ]
+        },
+        "user_prompted_extension_check"
+      ]
+    },
+    "init_true": [
+      "project_file_available",
+      "burp_cli_available",
+      "query_selected",
+      "needs:shell",
+      "needs:linux",
+      "needs:local_filesystem",
+      "needs:user_conversation"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "query_exit_code",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "control_exit_code",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "burpsuite-project-parser",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "run_verified_query": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_file_available",
+            "burp_cli_available",
+            "query_selected"
+          ]
+        },
+        "add": [
+          "query_ran"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "query_exit_code": {
+            "cmp": [
+              "query_exit_code",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "run_control_query": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_file_available",
+            "burp_cli_available"
+          ]
+        },
+        "add": [
+          "control_ran"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "control_exit_code": {
+            "cmp": [
+              "control_exit_code",
+              ">=",
+              0
+            ]
+          }
+        }
+      },
+      "inspect_project_file": {
+        "owner": "agent",
+        "pre": "project_file_available",
+        "add": [
+          "project_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_to_confirm_extension": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            {
+              "cmp": [
+                "control_exit_code",
+                "==",
+                3
+              ]
+            },
+            {
+              "cmp": [
+                "control_exit_code",
+                "==",
+                4
+              ]
+            }
+          ]
+        },
+        "add": [
+          "user_prompted_extension_check"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "run_verified_query",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "external": true,
+          "branches": {
+            "query_succeeded": [],
+            "query_empty_unverified": [
+              {
+                "act": {
+                  "cap": "run_control_query",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "external": true,
+                  "branches": {
+                    "control_confirms_parser": [],
+                    "control_inconclusive_or_extension_missing": [
+                      {
+                        "act": {
+                          "cap": "inspect_project_file",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "ask_user_to_confirm_extension",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ],
+            "query_bad_usage_or_missing_path": [],
+            "query_non_json_extension_missing": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        {
+          "cmp": [
+            "query_exit_code",
+            "==",
+            0
+          ]
+        },
+        {
+          "and": [
+            {
+              "cmp": [
+                "query_exit_code",
+                "==",
+                3
+              ]
+            },
+            {
+              "cmp": [
+                "control_exit_code",
+                "==",
+                0
+              ]
+            }
+          ]
+        },
+        "user_prompted_extension_check"
+      ]
+    },
+    "init_true": [
+      "project_file_available",
+      "burp_cli_available",
+      "query_selected"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "query_exit_code",
+          "==",
+          0
+        ]
+      },
+      {
+        "cmp": [
+          "control_exit_code",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "run_verified_query": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "run_control_query": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "inspect_project_file": {
+      "via": "read",
+      "needs": [
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "ask_user_to_confirm_extension": {
+      "via": "ask_user",
+      "needs": [
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    }
+  },
+  "live_goal": null
+}

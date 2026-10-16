@@ -1,0 +1,49 @@
+```ce
+Skill `make-repo-contribution`.
+Roles: `agent`, `user`.
+Tool `search_repo_guidance` (owner `agent`): via `read`; adds `guidance_checked`, `templates_checked`.
+Tool `search_existing_issues` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked`; adds `issue_search_done`.
+Tool `ask_user_to_choose_issue` (owner `agent`): via `ask_user`; requires `issue_search_done`; adds `issue_choice_resolved`.
+Tool `draft_issue_body` (owner `agent`): via `write`; requires `guidance_checked`; adds `issue_body_ready`.
+Tool `create_issue` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked` and `issue_body_ready`; adds `issue_selected`.
+Tool `create_branch` (owner `agent`): via `bash`; requires `guidance_checked`; adds `branch_ready`; removes `on_default_branch`.
+Tool `review_and_group_changes` (owner `agent`): via `read`; adds `changes_reviewed`, `changes_grouped`.
+Tool `ask_user_to_run_prerequisites` (owner `agent`): via `ask_user`; requires `guidance_checked`; adds `prerequisites_requested`.
+Tool `record_user_prerequisite_confirmation` (owner `agent`): via `ask_user`; requires `prerequisites_requested`; adds `prerequisites_confirmed`.
+Tool `create_commits` (owner `agent`): via `bash`; requires `branch_ready` and `changes_grouped` and `prerequisites_confirmed`; adds `commits_created`.
+Tool `push_branch` (owner `agent`): via `bash`; needs `github_account`; requires `commits_created`; adds `branch_pushed`.
+Tool `draft_pr_and_create` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked` and `templates_checked` and `branch_pushed`; adds `pr_created`.
+Initially true: none.
+Initially: `on_default_branch`.
+Goal: any of (`issue_selected`, not `issue_selected`) and `guidance_checked` and `templates_checked` and any of (`prerequisites_confirmed`, not `prerequisites_requested`) and any of (`branch_ready`, not `commits_created`) and any of (`commits_created`, not `branch_pushed`) and any of (`pr_created`, not `branch_pushed`).
+Protocol:
+  - `agent` uses `search_repo_guidance`.
+  - `agent` uses `search_existing_issues`.
+  - `user` chooses one of (observed):
+    - branch `use_existing_issue`:
+      - `agent` uses `ask_user_to_choose_issue`.
+    - branch `no_existing_issue`:
+      - `user` chooses one of (observed):
+        - branch `issue_required`:
+          - `agent` uses `draft_issue_body`.
+          - `agent` uses `create_issue`.
+        - branch `issue_not_required`: none.
+  - `user` chooses one of (observed):
+    - branch `prerequisites_apply`:
+      - `agent` uses `ask_user_to_run_prerequisites`.
+      - `agent` uses `record_user_prerequisite_confirmation`.
+    - branch `no_prerequisites`: none.
+  - `user` chooses one of (observed):
+    - branch `create_branch_and_commit`:
+      - `agent` uses `create_branch`.
+      - `agent` uses `review_and_group_changes`.
+      - `agent` uses `create_commits`.
+      - `user` chooses one of (observed):
+        - branch `push_and_open_pr`:
+          - `agent` uses `push_branch`.
+          - `agent` uses `draft_pr_and_create`.
+        - branch `push_only`:
+          - `agent` uses `push_branch`.
+        - branch `commit_only`: none.
+    - branch `no_code_contribution`: none.
+```

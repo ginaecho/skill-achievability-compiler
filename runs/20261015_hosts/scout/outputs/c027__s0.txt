@@ -1,0 +1,54 @@
+```ce
+Skill `declarative-agent-developer`.
+Roles: `agent`, `user`.
+Tool `set_atk_skill_env` (owner `agent`): via `bash`; adds `atk_skill_env_set`.
+Tool `check_atk_cli` (owner `agent`): via `bash`; adds `atk_cli_checked`; adds `atk_cli_available`.
+Tool `inspect_workspace` (owner `agent`): via `bash`; adds `workspace_fingerprinted`; picks `workspace_gate` with any of (`workspace_gate` == 1, `workspace_gate` == 2, `workspace_gate` == 3, `workspace_gate` == 4, `workspace_gate` == 5).
+Tool `parse_and_validate_manifest` (owner `agent`): via `bash`; requires `workspace_fingerprinted`; adds `problem_detected`; picks `problem_kind` with any of (`problem_kind` == 1, `problem_kind` == 2, `problem_kind` == 3, `problem_kind` == 4).
+Tool `ask_user_how_to_proceed` (owner `agent`): via `ask_user`; requires `problem_detected`; adds `user_guidance_received`.
+Tool `scaffold_agent_project` (owner `agent`): via `bash`; requires `atk_cli_available`; requires `workspace_gate` == 3; adds `agent_project_exists`; adds `manifest_exists`.
+Tool `edit_agent_project` (owner `agent`): via `edit`; requires any of (`workspace_gate` == 5, `agent_project_exists`); adds `app_package_changed`; adds `instructions_updated`; adds `starters_updated`; adds `meaningful_name_set`.
+Tool `add_plugin_with_atk` (owner `agent`): via `bash`; requires `atk_cli_available`; requires any of (`workspace_gate` == 5, `agent_project_exists`); adds `app_package_changed`; adds `plugin_added`.
+Tool `deploy_agent_local` (owner `agent`): via `bash`; requires `atk_cli_available`; requires `app_package_changed`; requires not `problem_detected`; adds `deployed`; adds `test_link_available`.
+Tool `read_title_id` (owner `agent`): via `read`; requires `deployed`; adds `title_id_read`; adds `test_link_available`.
+Initially true: none.
+Initially: `workspace_gate` == 0.
+Initially: `problem_kind` == 0.
+Goal: any of (`rejected_text_only`, `user_guidance_received`, all of (`deployed`, `test_link_available`)).
+Protocol:
+  - `agent` uses `set_atk_skill_env`.
+  - `agent` uses `check_atk_cli`.
+  - `user` chooses one of (observed):
+    - branch `atk_missing`: none.
+    - branch `atk_available`:
+      - `agent` uses `inspect_workspace`.
+      - `agent` chooses one of (observed):
+        - branch `reject_non_agent_project`:
+          - checkpoint: `rejected_text_only` or `user_guidance_received` or ( `deployed` and `test_link_available` ).
+        - branch `reject_missing_manifest_for_edit_or_deploy`:
+          - checkpoint: `rejected_text_only` or `user_guidance_received` or ( `deployed` and `test_link_available` ).
+        - branch `scaffold_new_project`:
+          - `agent` uses `scaffold_agent_project`.
+          - `agent` uses `edit_agent_project`.
+          - `user` chooses one of (observed):
+            - branch `do_not_deploy`: none.
+            - branch `deploy`:
+              - `agent` uses `deploy_agent_local`.
+              - `agent` uses `read_title_id`.
+        - branch `manifest_has_errors`:
+          - `agent` uses `parse_and_validate_manifest`.
+          - `agent` uses `ask_user_how_to_proceed`.
+        - branch `valid_agent_project`:
+          - `user` chooses one of (observed):
+            - branch `edit_or_review`:
+              - `agent` uses `edit_agent_project`.
+            - branch `add_api_plugin`:
+              - `agent` uses `add_plugin_with_atk`.
+              - `agent` uses `edit_agent_project`.
+            - branch `no_file_change`: none.
+          - `user` chooses one of (observed):
+            - branch `do_not_deploy`: none.
+            - branch `deploy_after_change`:
+              - `agent` uses `deploy_agent_local`.
+              - `agent` uses `read_title_id`.
+```

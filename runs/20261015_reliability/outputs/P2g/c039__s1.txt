@@ -1,0 +1,28 @@
+```ce
+Skill `address-sanitizer`.
+Roles: `agent`, `user`.
+Tool `build_with_asan` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; adds `asan_built`, `debug_symbols_enabled`.
+Tool `set_asan_options` (owner `agent`): via `bash`; needs `shell`; requires `asan_built`; adds `asan_options_configured`.
+Tool `run_asan_binary` (owner `agent`): via `bash`; needs `shell`, `linux`; requires `asan_built` and `asan_options_configured`; adds `asan_run_completed`; picks `memory_error_detected` with true.
+Tool `run_fuzzer_with_asan` (owner `agent`): via `bash`; needs `shell`, `linux`; requires `asan_built` and `asan_options_configured` and `fuzzer_memory_limit_disabled`; adds `asan_run_completed`; picks `memory_error_detected` with true.
+Tool `disable_fuzzer_memory_limit` (owner `agent`): via `bash`; needs `shell`; adds `fuzzer_memory_limit_disabled`.
+Tool `read_asan_report` (owner `agent`): via `read`; requires `asan_run_completed`; adds `asan_report_read`, `stack_trace_available`.
+Tool `interpret_leak_report` (owner `agent`): via `read`; requires `asan_report_read`; adds `leak_status_understood`.
+Initially true: none.
+Goal: `asan_built` and `asan_options_configured` and `asan_run_completed` and `asan_report_read`.
+Protocol:
+  - `agent` uses `build_with_asan`.
+  - `user` chooses one of (observed):
+    - branch `run_tests_or_program`:
+      - `agent` uses `set_asan_options`.
+      - `agent` uses `run_asan_binary`.
+    - branch `run_fuzzer`:
+      - `agent` uses `set_asan_options`.
+      - `agent` uses `disable_fuzzer_memory_limit`.
+      - `agent` uses `run_fuzzer_with_asan`.
+  - `agent` uses `read_asan_report`.
+  - `user` chooses one of (observed):
+    - branch `review_leaks`:
+      - `agent` uses `interpret_leak_report`.
+    - branch `skip_leaks`: none.
+```

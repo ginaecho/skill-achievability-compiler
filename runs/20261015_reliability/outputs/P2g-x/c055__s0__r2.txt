@@ -1,0 +1,107 @@
+```ce
+Skill `hiring-screener`.
+Roles: `agent`, `owner`.
+
+Tool `get_rubric` (owner `agent`):
+  via `read`;
+  adds `rubric_loaded`.
+
+Tool `build_rubric` (owner `agent`):
+  via `ask_user`;
+  adds `rubric_loaded`.
+
+Tool `read_applications` (owner `agent`):
+  via `read`;
+  requires `rubric_loaded`;
+  adds `candidates_read`.
+
+Tool `score_and_band` (owner `agent`):
+  requires `candidates_read`;
+  adds `scored`;
+
+Tool `draft_replies` (owner `agent`):
+  requires `scored`;
+  adds `replies_drafted`.
+
+Tool `approve_drafts` (owner `agent`):
+  via `ask_user`;
+  requires `replies_drafted`;
+  adds `drafts_approved`.
+
+Tool `send_replies` (owner `agent`):
+  via `bash`;
+  needs `gmail_connected`;
+  requires `drafts_approved`;
+  adds `replies_sent`.
+
+Tool `schedule_interviews` (owner `agent`):
+  via `bash`;
+  needs `google_calendar_connected`;
+  requires `scored`;
+  adds `interviews_scheduled`.
+
+Tool `publish_artifact` (owner `agent`):
+  via `artifact`;
+  requires `scored`;
+  adds `artifact_published`.
+
+Tool `select_hire` (owner `agent`):
+  via `ask_user`;
+  adds `hire_selected`.
+
+Tool `create_onboarding_checklist` (owner `agent`):
+  via `write`;
+  requires `hire_selected`;
+  adds `onboarding_ready`.
+
+Tool `handoff_payroll` (owner `agent`):
+  via `bash`;
+  needs `gusto_connected`;
+  requires `hire_selected`;
+  adds `payroll_handoff_done`.
+
+Initially true: none.
+Initially: `gmail_connected` == false.
+Initially: `google_calendar_connected` == false.
+Initially: `gusto_connected` == false.
+
+Goal:
+  `artifact_published` and
+  (`replies_sent` or not `gmail_connected`) and
+  (`interviews_scheduled` or not `google_calendar_connected`) and
+  (`onboarding_ready` or not `hire_selected`) and
+  (`payroll_handoff_done` or not `hire_selected` or not `gusto_connected`).
+
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `rubric_found`:
+      - `agent` uses `get_rubric`.
+    - branch `build_rubric`:
+      - `agent` uses `build_rubric`.
+  - `agent` uses `read_applications`.
+  - `agent` uses `score_and_band`.
+  - `agent` uses `draft_replies`.
+  - `agent` uses `approve_drafts`.
+  - `agent` chooses one of (observed):
+    - branch `gmail_available`:
+      - `agent` uses `send_replies`.
+    - branch `no_gmail`:
+      none.
+  - `agent` chooses one of (observed):
+    - branch `calendar_available`:
+      - `agent` uses `schedule_interviews`.
+    - branch `no_calendar`:
+      none.
+  - `agent` uses `publish_artifact`.
+  - `owner` chooses one of (observed):
+    - branch `hire_chosen`:
+      - `agent` uses `select_hire`.
+      - `agent` uses `create_onboarding_checklist`.
+      - `agent` chooses one of (observed):
+        - branch `gusto_available`:
+          - `agent` uses `handoff_payroll`.
+        - branch `no_gusto`:
+          none.
+    - branch `no_hire_yet`:
+      none.
+```

@@ -1,0 +1,686 @@
+{
+  "pack": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_harness_from_traces": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "failure_buckets_defined",
+          "goldens_ready",
+          "graders_ready",
+          "drift_suite_frozen",
+          "eval_directory_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_synthetic_harness": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "goldens_ready",
+          "graders_ready",
+          "drift_suite_frozen",
+          "eval_directory_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "calibrate_judges": {
+        "owner": "agent",
+        "pre": "graders_ready",
+        "add": [
+          "judge_calibration_done",
+          "judge_status_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_base_baseline": {
+        "owner": "agent",
+        "pre": "eval_directory_ready",
+        "add": [
+          "baseline_written",
+          "phase0_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_phase0_exit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "eval_directory_ready",
+            "drift_suite_frozen",
+            "baseline_written",
+            "phase0_results_written",
+            "results_schema_complete"
+          ]
+        },
+        "add": [
+          "phase0_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_data_quality_gate": {
+        "owner": "agent",
+        "pre": "checkpoint_handed_off",
+        "add": [
+          "stage1_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_checkpoint_eval": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkpoint_handed_off",
+            "phase0_complete",
+            "stage1_done"
+          ]
+        },
+        "add": [
+          "stage2_done",
+          "checkpoint_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_paired_arena": {
+        "owner": "agent",
+        "pre": "stage2_done",
+        "add": [
+          "stage3_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_canary_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "stage3_done",
+            "has_production_canary_target"
+          ]
+        },
+        "add": [
+          "stage4_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "stage1_done",
+            "stage2_done",
+            "stage3_done",
+            {
+              "or": [
+                {
+                  "and": [
+                    "has_production_canary_target",
+                    "stage4_done"
+                  ]
+                },
+                {
+                  "not": "has_production_canary_target"
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "promotion_report_written",
+          "verdict_issued"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "traces_exist": [
+              {
+                "act": {
+                  "cap": "build_harness_from_traces",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_traces_yet": [
+              {
+                "act": {
+                  "cap": "build_synthetic_harness",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "judge_used": [
+              {
+                "act": {
+                  "cap": "calibrate_judges",
+                  "by": "agent"
+                }
+              }
+            ],
+            "all_deterministic": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_base_baseline",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_phase0_exit",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "checkpoint_handed_off": [
+              {
+                "act": {
+                  "cap": "run_data_quality_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_checkpoint_eval",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_paired_arena",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "canary_applicable": [
+                      {
+                        "act": {
+                          "cap": "run_canary_gate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "local_only": []
+                  },
+                  "assumes": {
+                    "canary_applicable": [
+                      "has_production_canary_target"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_promotion_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_checkpoint_yet": []
+          },
+          "assumes": {
+            "checkpoint_handed_off": [
+              "checkpoint_handed_off"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "phase0_complete",
+        "promotion_report_written",
+        "verdict_issued"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "llm-finetuning-eval-engineer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "workspace_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_harness_from_traces": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "failure_buckets_defined",
+          "goldens_ready",
+          "graders_ready",
+          "drift_suite_frozen",
+          "eval_directory_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_synthetic_harness": {
+        "owner": "agent",
+        "pre": "workspace_inspected",
+        "add": [
+          "goldens_ready",
+          "graders_ready",
+          "drift_suite_frozen",
+          "eval_directory_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "calibrate_judges": {
+        "owner": "agent",
+        "pre": "graders_ready",
+        "add": [
+          "judge_calibration_done",
+          "judge_status_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_base_baseline": {
+        "owner": "agent",
+        "pre": "eval_directory_ready",
+        "add": [
+          "baseline_written",
+          "phase0_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_phase0_exit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "eval_directory_ready",
+            "drift_suite_frozen",
+            "baseline_written",
+            "phase0_results_written",
+            "results_schema_complete"
+          ]
+        },
+        "add": [
+          "phase0_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_data_quality_gate": {
+        "owner": "agent",
+        "pre": "checkpoint_handed_off",
+        "add": [
+          "stage1_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_checkpoint_eval": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "checkpoint_handed_off",
+            "phase0_complete",
+            "stage1_done"
+          ]
+        },
+        "add": [
+          "stage2_done",
+          "checkpoint_results_written",
+          "results_schema_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_paired_arena": {
+        "owner": "agent",
+        "pre": "stage2_done",
+        "add": [
+          "stage3_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_canary_gate": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "stage3_done",
+            "has_production_canary_target"
+          ]
+        },
+        "add": [
+          "stage4_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_promotion_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "stage1_done",
+            "stage2_done",
+            "stage3_done",
+            {
+              "or": [
+                {
+                  "and": [
+                    "has_production_canary_target",
+                    "stage4_done"
+                  ]
+                },
+                {
+                  "not": "has_production_canary_target"
+                }
+              ]
+            }
+          ]
+        },
+        "add": [
+          "promotion_report_written",
+          "verdict_issued"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_workspace",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "traces_exist": [
+              {
+                "act": {
+                  "cap": "build_harness_from_traces",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_traces_yet": [
+              {
+                "act": {
+                  "cap": "build_synthetic_harness",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "judge_used": [
+              {
+                "act": {
+                  "cap": "calibrate_judges",
+                  "by": "agent"
+                }
+              }
+            ],
+            "all_deterministic": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "run_base_baseline",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "check_phase0_exit",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "checkpoint_handed_off": [
+              {
+                "act": {
+                  "cap": "run_data_quality_gate",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_checkpoint_eval",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_paired_arena",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "canary_applicable": [
+                      {
+                        "act": {
+                          "cap": "run_canary_gate",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "local_only": []
+                  },
+                  "assumes": {
+                    "canary_applicable": [
+                      "has_production_canary_target"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "write_promotion_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "no_checkpoint_yet": []
+          },
+          "assumes": {
+            "checkpoint_handed_off": [
+              "checkpoint_handed_off"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "phase0_complete",
+        "promotion_report_written",
+        "verdict_issued"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "build_harness_from_traces": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "build_synthetic_harness": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "calibrate_judges": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_base_baseline": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "check_phase0_exit": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "run_data_quality_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "run_checkpoint_eval": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "run_paired_arena": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_canary_gate": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "write_promotion_report": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

@@ -1,0 +1,766 @@
+{
+  "pack": {
+    "name": "preset",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_azure_auth": {
+        "owner": "agent",
+        "pre": "azure_cli_installed",
+        "add": [
+          "azure_authenticated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "azure_authenticated",
+            "project_resource_id_available"
+          ]
+        },
+        "add": [
+          "project_verified",
+          "current_region_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_models": {
+        "owner": "agent",
+        "pre": "project_verified",
+        "add": [
+          "models_listed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_current_region_capacity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_verified",
+            "model_selected"
+          ]
+        },
+        "add": [
+          "current_region_capacity_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_all_regions_capacity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_verified",
+            "model_selected"
+          ]
+        },
+        "add": [
+          "all_regions_capacity_checked",
+          "alternative_regions_shown"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "find_project_in_selected_region": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "azure_authenticated",
+            "region_selected"
+          ]
+        },
+        "add": [
+          "regional_project_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_project_in_selected_region": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "azure_authenticated",
+            "region_selected"
+          ]
+        },
+        "add": [
+          "deployment_target_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_model_current_region": {
+        "owner": "agent",
+        "pre": "current_region_capacity_checked",
+        "add": [
+          "deployment_started",
+          "deployment_target_ready",
+          "globalstandard_sku_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_model_selected_region": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "region_selected",
+            "deployment_target_ready"
+          ]
+        },
+        "add": [
+          "deployment_started",
+          "globalstandard_sku_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_deployment": {
+        "owner": "agent",
+        "pre": "deployment_started",
+        "add": [
+          "deployment_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_result": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deployment_completed",
+            "globalstandard_sku_used"
+          ]
+        },
+        "add": [
+          "deployment_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_azure_auth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "project_id_provided": [
+              {
+                "act": {
+                  "cap": "verify_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "list_models",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "model_chosen": [
+                      {
+                        "act": {
+                          "cap": "check_current_region_capacity",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "current_region_has_capacity": [
+                              {
+                                "act": {
+                                  "cap": "deploy_model_current_region",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "monitor_deployment",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "deliver_result",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "current_region_no_capacity": [
+                              {
+                                "act": {
+                                  "cap": "check_all_regions_capacity",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "select_alternative_region": [
+                                      {
+                                        "act": {
+                                          "cap": "find_project_in_selected_region",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "user",
+                                          "observed": true,
+                                          "branches": {
+                                            "existing_project_in_region": [
+                                              {
+                                                "act": {
+                                                  "cap": "create_project_in_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_model_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "monitor_deployment",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deliver_result",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "create_new_project_in_region": [
+                                              {
+                                                "act": {
+                                                  "cap": "create_project_in_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_model_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "monitor_deployment",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deliver_result",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "no_region_selected": []
+                                  },
+                                  "assumes": {
+                                    "select_alternative_region": [
+                                      "region_selected"
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "no_model_chosen": []
+                  },
+                  "assumes": {
+                    "model_chosen": [
+                      "model_selected"
+                    ]
+                  }
+                }
+              }
+            ],
+            "project_id_not_provided": []
+          },
+          "assumes": {
+            "project_id_provided": [
+              "project_resource_id_available"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deployment_reported",
+    "init_true": [
+      "azure_cli_installed"
+    ],
+    "init_constraints": [
+      true
+    ]
+  },
+  "pre_binding": {
+    "name": "preset",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_azure_auth": {
+        "owner": "agent",
+        "pre": "azure_cli_installed",
+        "add": [
+          "azure_authenticated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_project": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "azure_authenticated",
+            "project_resource_id_available"
+          ]
+        },
+        "add": [
+          "project_verified",
+          "current_region_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "list_models": {
+        "owner": "agent",
+        "pre": "project_verified",
+        "add": [
+          "models_listed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_current_region_capacity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_verified",
+            "model_selected"
+          ]
+        },
+        "add": [
+          "current_region_capacity_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_all_regions_capacity": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "project_verified",
+            "model_selected"
+          ]
+        },
+        "add": [
+          "all_regions_capacity_checked",
+          "alternative_regions_shown"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "find_project_in_selected_region": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "azure_authenticated",
+            "region_selected"
+          ]
+        },
+        "add": [
+          "regional_project_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_project_in_selected_region": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "azure_authenticated",
+            "region_selected"
+          ]
+        },
+        "add": [
+          "deployment_target_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_model_current_region": {
+        "owner": "agent",
+        "pre": "current_region_capacity_checked",
+        "add": [
+          "deployment_started",
+          "deployment_target_ready",
+          "globalstandard_sku_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deploy_model_selected_region": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "region_selected",
+            "deployment_target_ready"
+          ]
+        },
+        "add": [
+          "deployment_started",
+          "globalstandard_sku_used"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_deployment": {
+        "owner": "agent",
+        "pre": "deployment_started",
+        "add": [
+          "deployment_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_result": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "deployment_completed",
+            "globalstandard_sku_used"
+          ]
+        },
+        "add": [
+          "deployment_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_azure_auth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "project_id_provided": [
+              {
+                "act": {
+                  "cap": "verify_project",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "list_models",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "model_chosen": [
+                      {
+                        "act": {
+                          "cap": "check_current_region_capacity",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "current_region_has_capacity": [
+                              {
+                                "act": {
+                                  "cap": "deploy_model_current_region",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "monitor_deployment",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "deliver_result",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "current_region_no_capacity": [
+                              {
+                                "act": {
+                                  "cap": "check_all_regions_capacity",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "select_alternative_region": [
+                                      {
+                                        "act": {
+                                          "cap": "find_project_in_selected_region",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "user",
+                                          "observed": true,
+                                          "branches": {
+                                            "existing_project_in_region": [
+                                              {
+                                                "act": {
+                                                  "cap": "create_project_in_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_model_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "monitor_deployment",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deliver_result",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "create_new_project_in_region": [
+                                              {
+                                                "act": {
+                                                  "cap": "create_project_in_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deploy_model_selected_region",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "monitor_deployment",
+                                                  "by": "agent"
+                                                }
+                                              },
+                                              {
+                                                "act": {
+                                                  "cap": "deliver_result",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "no_region_selected": []
+                                  },
+                                  "assumes": {
+                                    "select_alternative_region": [
+                                      "region_selected"
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "no_model_chosen": []
+                  },
+                  "assumes": {
+                    "model_chosen": [
+                      "model_selected"
+                    ]
+                  }
+                }
+              }
+            ],
+            "project_id_not_provided": []
+          },
+          "assumes": {
+            "project_id_provided": [
+              "project_resource_id_available"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deployment_reported",
+    "init_true": [
+      "azure_cli_installed"
+    ],
+    "init_constraints": [
+      true
+    ]
+  },
+  "bindings": {
+    "check_azure_auth": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "verify_project": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "list_models": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "check_current_region_capacity": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "check_all_regions_capacity": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "find_project_in_selected_region": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "create_project_in_selected_region": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "deploy_model_current_region": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "deploy_model_selected_region": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "monitor_deployment": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "deliver_result": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

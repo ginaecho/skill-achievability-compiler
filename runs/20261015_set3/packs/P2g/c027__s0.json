@@ -1,0 +1,634 @@
+{
+  "pack": {
+    "name": "aflpp",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_aflpp": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "aflpp_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_wrapper_script": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "wrapper_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_fuzz_target": {
+        "owner": "agent",
+        "pre": "source_available",
+        "add": [
+          "fuzz_target_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_seed_corpus": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "seed_corpus_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_system_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "system_tuned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_primary_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "fuzz_target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_running",
+          "primary_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_secondary_campaigns": {
+        "owner": "agent",
+        "pre": "primary_running",
+        "add": [
+          "secondary_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_observed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_stopped"
+        ],
+        "del": [
+          "campaign_running",
+          "primary_running",
+          "secondary_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_crashes": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "crashes_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "install_host_aflpp": [
+              {
+                "act": {
+                  "cap": "install_aflpp",
+                  "by": "agent"
+                }
+              }
+            ],
+            "use_wrapper": [
+              {
+                "act": {
+                  "cap": "write_wrapper_script",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "tune_host": [
+              {
+                "act": {
+                  "cap": "run_system_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_tuning": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "build_fuzz_target",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "create_seed_corpus",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "start_primary_campaign",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "single_core": [],
+            "multi_core": [
+              {
+                "act": {
+                  "cap": "start_secondary_campaigns",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "monitor_campaign",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "stop_and_collect": [
+              {
+                "act": {
+                  "cap": "stop_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "minimize_corpus",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "triage_crashes",
+                  "by": "agent"
+                }
+              }
+            ],
+            "keep_running": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "fuzz_target_built",
+        "seed_corpus_ready",
+        "campaign_stopped",
+        "campaign_observed",
+        "corpus_minimized",
+        "crashes_triaged"
+      ]
+    },
+    "init_true": [
+      "source_available"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "cores",
+          ">=",
+          1
+        ]
+      },
+      {
+        "cmp": [
+          "secondary_count",
+          "==",
+          {
+            "-": [
+              "cores",
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "aflpp",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_aflpp": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "aflpp_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_wrapper_script": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "wrapper_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_fuzz_target": {
+        "owner": "agent",
+        "pre": "source_available",
+        "add": [
+          "fuzz_target_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_seed_corpus": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "seed_corpus_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_system_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "system_tuned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_primary_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "fuzz_target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_running",
+          "primary_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_secondary_campaigns": {
+        "owner": "agent",
+        "pre": "primary_running",
+        "add": [
+          "secondary_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_observed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_campaign": {
+        "owner": "agent",
+        "pre": "campaign_running",
+        "add": [
+          "campaign_stopped"
+        ],
+        "del": [
+          "campaign_running",
+          "primary_running",
+          "secondary_running"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_crashes": {
+        "owner": "agent",
+        "pre": "campaign_stopped",
+        "add": [
+          "crashes_triaged"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "install_host_aflpp": [
+              {
+                "act": {
+                  "cap": "install_aflpp",
+                  "by": "agent"
+                }
+              }
+            ],
+            "use_wrapper": [
+              {
+                "act": {
+                  "cap": "write_wrapper_script",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "tune_host": [
+              {
+                "act": {
+                  "cap": "run_system_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_tuning": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "build_fuzz_target",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "create_seed_corpus",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "start_primary_campaign",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "single_core": [],
+            "multi_core": [
+              {
+                "act": {
+                  "cap": "start_secondary_campaigns",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "monitor_campaign",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "stop_and_collect": [
+              {
+                "act": {
+                  "cap": "stop_campaign",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "minimize_corpus",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "triage_crashes",
+                  "by": "agent"
+                }
+              }
+            ],
+            "keep_running": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "fuzz_target_built",
+        "seed_corpus_ready",
+        "campaign_stopped",
+        "campaign_observed",
+        "corpus_minimized",
+        "crashes_triaged"
+      ]
+    },
+    "init_true": [
+      "source_available"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "cores",
+          ">=",
+          1
+        ]
+      },
+      {
+        "cmp": [
+          "secondary_count",
+          "==",
+          {
+            "-": [
+              "cores",
+              1
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "install_aflpp": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "write_wrapper_script": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "build_fuzz_target": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "create_seed_corpus": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_system_config": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "start_primary_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "start_secondary_campaigns": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "monitor_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "stop_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "minimize_corpus": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "triage_crashes": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

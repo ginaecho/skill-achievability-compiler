@@ -1,0 +1,42 @@
+```ce
+Skill `aspire-project-v2-migration`.
+Roles: `agent`, `user`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `apphost_identified`, `workspace_inspected`, `local_changes_preserved`.
+Tool `lookup_aspire_docs` (owner `agent`): via `bash`; requires `workspace_inspected`; adds `docs_checked`, `api_shapes_checked`.
+Tool `assess_versions_and_capabilities` (owner `agent`): via `read`; requires `apphost_identified`; adds `eligibility_assessed`; picks `eligible` with (`eligible` == 0 or `eligible` == 1); picks `migration_needed` with (`migration_needed` == 0 or `migration_needed` == 1); picks `gateway_decision_required` with (`gateway_decision_required` == 0 or `gateway_decision_required` == 1).
+Tool `prepare_assessment_plan` (owner `agent`): requires `workspace_inspected` and `eligibility_assessed`; adds `assessment_presented`, `exact_plan_listed`, `approval_requested`.
+Tool `apply_approved_edits` (owner `agent`): via `edit`; requires `assessment_presented` and `user_approved`; adds `files_edited`, `approved_subset_applied`, `narrow_suppressions_added`.
+Tool `regenerate_sdk_artifacts` (owner `agent`): via `bash`; requires `files_edited`; adds `sdk_regenerated`.
+Tool `restore_and_build` (owner `agent`): via `bash`; requires `files_edited`; adds `restored`, `built`.
+Tool `start_apphost` (owner `agent`): via `bash`; requires `built`; adds `apphost_started`.
+Tool `wait_and_inspect_resources` (owner `agent`): via `bash`; requires `apphost_started`; adds `runtime_validated`.
+Tool `reassess_idempotence` (owner `agent`): via `read`; requires `files_edited`; adds `idempotence_checked`.
+Tool `report_results` (owner `agent`): requires any of (`assessment_presented`, `idempotence_checked`); adds `reported`.
+Initially true: none.
+Initially: `eligible` == 0.
+Initially: `migration_needed` == 0.
+Initially: `gateway_decision_required` == 0.
+Goal: `reported` and any of ((`assessment_presented` and not `user_approved`), (`assessment_presented` and `user_approved` and `approved_subset_applied` and `idempotence_checked`)).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `assess_versions_and_capabilities`.
+  - `agent` uses `lookup_aspire_docs`.
+  - `agent` uses `prepare_assessment_plan`.
+  - `user` chooses one of (observed):
+    - branch `approve_exact_plan`:
+      - `agent` uses `apply_approved_edits`.
+      - `agent` chooses one of (observed):
+        - branch `sdk_regeneration_needed`:
+          - `agent` uses `regenerate_sdk_artifacts`.
+        - branch `no_sdk_regeneration_needed`: none.
+      - `agent` uses `restore_and_build`.
+      - `agent` chooses one of (observed):
+        - branch `runtime_validation_authorized`:
+          - `agent` uses `start_apphost`.
+          - `agent` uses `wait_and_inspect_resources`.
+        - branch `runtime_validation_not_authorized`: none.
+      - `agent` uses `reassess_idempotence`.
+      - `agent` uses `report_results`.
+    - branch `decline_or_request_changes`:
+      - `agent` uses `report_results`.
+```

@@ -1,0 +1,36 @@
+```ce
+Skill `orchestrate`.
+Roles: `agent`, `user`.
+Tool `read_inputs` (owner `agent`): via `read`; adds `agents_read`, `state_read`, `story_read`, `current_task_identified`.
+Tool `ask_clarifying_question` (owner `agent`): via `ask_user`; requires `current_task_identified`; adds `user_answer_received`.
+Tool `write_orchestrator_output` (owner `agent`): via `write`; requires `all_questions_resolved`; requires `task_type_confirmed`; adds `orchestrator_output_written`.
+Tool `update_state` (owner `agent`): via `write`; requires `orchestrator_output_written`; requires `task_type_confirmed`; adds `state_updated`, `orchestration_completed`.
+Initially true: none.
+Goal: `orchestrator_output_written` and `state_updated` and `orchestration_completed` and `task_type_confirmed`.
+Protocol:
+  - `agent` uses `read_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `task_type_clear_frontend`:
+      - `agent` uses `ask_clarifying_question`.
+    - branch `task_type_clear_backend`:
+      - `agent` uses `ask_clarifying_question`.
+    - branch `task_type_unclear`:
+      - `agent` uses `ask_clarifying_question`.
+  - `user` chooses one of (observed):
+    - branch `frontend_confirmed`: none.
+    - branch `backend_confirmed`: none.
+  - loop `clarify`:
+    - `agent` chooses one of (observed):
+      - branch `need_more_questions`:
+        - `agent` uses `ask_clarifying_question`.
+        - `user` chooses one of (observed):
+          - branch `answered`: none.
+          - branch `contradiction_or_scope_or_security_issue`: none.
+        - `agent` chooses one of (observed):
+          - branch `resolved_continue`: repeat `clarify`.
+          - branch `resolved_done`: none.
+          - branch `halt_escalate`: none.
+      - branch `no_more_questions`: none.
+  - `agent` uses `write_orchestrator_output`.
+  - `agent` uses `update_state`.
+```

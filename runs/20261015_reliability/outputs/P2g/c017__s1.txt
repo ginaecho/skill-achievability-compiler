@@ -1,0 +1,49 @@
+```ce
+Skill `huggingface-spaces`.
+Roles: `agent`, `user`.
+Tool `check_hf_cli` (owner `agent`): via `bash`; adds `hf_cli_checked`.
+Tool `install_hf_cli` (owner `agent`): via `bash`; requires `hf_cli_checked`; adds `hf_cli_installed`.
+Tool `check_hf_auth` (owner `agent`): via `bash`; requires `hf_cli_checked`; needs `allowlisted_internet`; adds `hf_auth_checked`.
+Tool `complete_hf_oauth_login` (owner `agent`): via `bash`; requires `hf_auth_checked`; needs `allowlisted_internet`, `user_conversation`; adds `hf_authenticated`.
+Tool `inspect_space_references` (owner `agent`): via `read`; adds `references_checked`.
+Tool `search_existing_spaces` (owner `agent`): via `bash`; requires `hf_authenticated`; needs `allowlisted_internet`; adds `prior_art_found`.
+Tool `prepare_space_files` (owner `agent`): via `write`; adds `space_files_prepared`, `readme_frontmatter_ready`, `app_ready`, `requirements_ready`.
+Tool `local_sanity_check` (owner `agent`): via `bash`; requires `space_files_prepared`; adds `local_check_done`.
+Tool `create_space_repo` (owner `agent`): via `bash`; requires `hf_authenticated`; needs `allowlisted_internet`, `huggingface_account`; adds `space_created`.
+Tool `upload_space_files` (owner `agent`): via `bash`; requires `space_created` and `space_files_prepared`; needs `allowlisted_internet`, `huggingface_account`; adds `files_uploaded`.
+Tool `verify_space_runtime` (owner `agent`): via `bash`; requires `files_uploaded`; needs `allowlisted_internet`, `huggingface_account`; adds `space_verified`.
+Tool `debug_space_from_logs` (owner `agent`): via `bash`; requires `files_uploaded`; needs `allowlisted_internet`, `huggingface_account`; adds `fix_attempted`.
+
+Initially true: none.
+Goal: `space_created` and `files_uploaded` and `space_verified`.
+Protocol:
+  - `agent` uses `check_hf_cli`.
+  - `agent` chooses one of (observed):
+    - branch `hf_present`: none.
+    - branch `install_hf`:
+      - `agent` uses `install_hf_cli`.
+  - `agent` uses `check_hf_auth`.
+  - `agent` chooses one of (observed):
+    - branch `already_logged_in`:
+      - `agent` uses `inspect_space_references`.
+    - branch `oauth_login`:
+      - `agent` uses `complete_hf_oauth_login`.
+      - `agent` uses `inspect_space_references`.
+  - `agent` chooses one of (observed):
+    - branch `search_prior_art`:
+      - `agent` uses `search_existing_spaces`.
+    - branch `skip_search`: none.
+  - `agent` uses `prepare_space_files`.
+  - `agent` uses `local_sanity_check`.
+  - `agent` uses `create_space_repo`.
+  - `agent` uses `upload_space_files`.
+  - loop `verify_and_fix`:
+    - `agent` chooses one of (external):
+      - branch `space_ok`:
+        - `agent` uses `verify_space_runtime`.
+      - branch `space_broken`:
+        - `agent` uses `debug_space_from_logs`.
+        - `agent` uses `prepare_space_files`.
+        - `agent` uses `upload_space_files`.
+        - repeat `verify_and_fix`.
+```

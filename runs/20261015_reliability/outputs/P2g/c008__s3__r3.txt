@@ -1,0 +1,47 @@
+```ce
+Skill `hf-cloud-serving-image-selection`.
+Roles: `agent`, `user`.
+Tool `read_model_config` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `model_architecture_known`.
+Tool `read_aws_catalog` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `catalog_read`, `selection_current`.
+Tool `read_region_availability` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; requires `catalog_read`; adds `region_applied`.
+Tool `read_dlc_yaml` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `catalog_read`, `selection_current`.
+Tool `query_github_dlc_data` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `catalog_read`.
+Tool `query_ecr_tags` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`; adds `catalog_read`, `selection_current`.
+Initially true: none.
+Goal: all of (`family_selected`, `image_uri_selected`, `selection_current`, `hf_rule_respected`, `region_applied`, `ami_requirement_determined`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `llm_or_generative_reranker`:
+      - `agent` uses `read_model_config`.
+      - `agent` chooses one of (observed):
+        - branch `multimodal`:
+          - `agent` uses `read_aws_catalog`.
+        - branch `text_only`:
+          - `agent` uses `read_aws_catalog`.
+    - branch `embedding_or_cross_encoder_reranker`:
+      - `agent` uses `read_model_config`.
+      - `agent` uses `read_aws_catalog`.
+    - branch `classifier_ner_qa_summarization`:
+      - `agent` uses `read_aws_catalog`.
+    - branch `diffusion`:
+      - `agent` uses `read_aws_catalog`.
+    - branch `user_requests_sglang`:
+      - `agent` uses `read_aws_catalog`.
+    - branch `jumpstart_or_byoc`: none.
+  - `agent` chooses one of (external):
+    - branch `catalog_available`:
+      - `agent` uses `read_region_availability`.
+    - branch `catalog_needs_fallback`:
+      - `agent` chooses one of (external):
+        - branch `github_yaml_available`:
+          - `agent` uses `query_github_dlc_data`.
+          - `agent` uses `read_dlc_yaml`.
+        - branch `ecr_query_available`:
+          - `agent` uses `query_ecr_tags`.
+  - `agent` chooses one of (observed):
+    - branch `catalog_family_compatible_and_not_broken`: none.
+    - branch `no_hf_tag_in_region_or_verified_incompatibility_or_hf_broken`:
+      - `agent` chooses one of (observed):
+        - branch `generic_catalog_image`: none.
+        - branch `skip_mirroring`: none.
+```

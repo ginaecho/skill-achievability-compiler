@@ -77,6 +77,7 @@ local policy, not a claim about the organization's deployment.
 
 - `file_safety_evidence_absent`: Source-backed policy modeled with no clean-file evidence. Expected `{'verdict': 'IMPOSSIBLE', 'reason': 'BLOCKED_GUARD'}`.
 - `database_encryption_evidence_absent`: Source-backed policy modeled with no database-encryption evidence. Expected `{'verdict': 'IMPOSSIBLE', 'reason': 'BLOCKED_GUARD'}`.
+- `triage_fraud_handoff_separation`: Separation of duty: Triage hands the triaged claim off to Fraud, so the first fraud-stage action (connecting to the fraud database) is owned by a role other than the one that triages the claim. Expected `{'separated': True}`.
 
 ## What does not work / remains unverified
 

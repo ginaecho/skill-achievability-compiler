@@ -1,0 +1,50 @@
+```ce
+Skill `expo-migrate-module`.
+Roles: `agent`, `user`.
+Tool `check_expo_version` (owner `agent`): via `read`; adds `module_expo_checked`, `example_expo_checked`.
+Tool `warn_experimental_api` (owner `agent`): via `reply`; requires `module_expo_ok` and `example_expo_ok`; adds `experimental_warning_given`.
+Tool `inspect_repo_and_contract` (owner `agent`): via `read`; requires `module_expo_ok` and `example_expo_ok`; adds `contract_established`, `references_read`.
+Tool `verify_macro_surface` (owner `agent`): via `read`; requires `contract_established`; adds `surface_verified`.
+Tool `edit_migration` (owner `agent`): via `edit`; requires `surface_verified`; adds `migration_applied`.
+Tool `run_verification` (owner `agent`): via `bash`; requires `migration_applied`; adds `verification_run`, `example_app_checked`, `config_checked`, `surface_compared`.
+Tool `ask_blocked_resolution` (owner `agent`): via `ask_user`; requires `blocked_item_found`; adds `resolution_answered`.
+Tool `ask_issue_approval` (owner `agent`): via `ask_user`; requires `blocked_item_found`; adds `issue_approval_answered`.
+Tool `open_tracking_issue` (owner `agent`): via `bash`; needs `github_account`; requires `blocked_item_found` and `issue_approved`; adds `tracking_issue_opened`.
+Tool `report_upgrade_required` (owner `agent`): via `reply`; requires `upgrade_required`; adds `user_informed`.
+Tool `report_results` (owner `agent`): via `reply`; requires `migration_applied` and `verification_run`; adds `user_informed`.
+Initially true: none.
+Goal: `user_informed`.
+Protocol:
+  - `agent` uses `check_expo_version`.
+  - `agent` chooses one of (observed):
+    - branch `version_too_old` (assuming `upgrade_required`):
+      - `agent` uses `report_upgrade_required`.
+    - branch `version_ok` (assuming `module_expo_ok`, `example_expo_ok`):
+      - `agent` uses `warn_experimental_api`.
+      - `agent` uses `inspect_repo_and_contract`.
+      - `agent` uses `verify_macro_surface`.
+      - `agent` chooses one of (observed):
+        - branch `no_blocked_items`:
+          - `agent` uses `edit_migration`.
+        - branch `blocked_items_found` (assuming `blocked_item_found`):
+          - `agent` uses `ask_blocked_resolution`.
+          - `user` chooses one of (observed):
+            - branch `coexist` (assuming `coexist_chosen`):
+              - `agent` uses `ask_issue_approval`.
+              - `user` chooses one of (observed):
+                - branch `issue_yes` (assuming `issue_approved`):
+                  - `agent` uses `open_tracking_issue`.
+                  - `agent` uses `edit_migration`.
+                - branch `issue_no`:
+                  - `agent` uses `edit_migration`.
+            - branch `revert` (assuming `revert_chosen`):
+              - `agent` uses `ask_issue_approval`.
+              - `user` chooses one of (observed):
+                - branch `issue_yes` (assuming `issue_approved`):
+                  - `agent` uses `open_tracking_issue`.
+                  - `agent` uses `edit_migration`.
+                - branch `issue_no`:
+                  - `agent` uses `edit_migration`.
+      - `agent` uses `run_verification`.
+      - `agent` uses `report_results`.
+```

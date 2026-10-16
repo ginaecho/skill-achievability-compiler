@@ -1,0 +1,49 @@
+```ce
+Skill `doc-coauthoring`.
+Roles: `agent`, `user`, `reader_agent`.
+Tool `offer_workflow` (owner `agent`): via `reply`; adds `workflow_offered`.
+Tool `ask_context_questions` (owner `agent`): via `reply`; requires `workflow_offered`; adds `context_questions_asked`.
+Tool `read_shared_context` (owner `agent`): via `google_drive`; needs `google_drive_account`; adds `shared_context_read`.
+Tool `search_connected_resources` (owner `agent`): via `mcp_resources`; adds `unknown_entities_researched`.
+Tool `ask_clarifying_questions` (owner `agent`): via `reply`; requires `context_questions_asked`; adds `clarifying_questions_asked`.
+Tool `propose_structure` (owner `agent`): via `reply`; requires `clarifying_questions_asked`; adds `structure_proposed`.
+Tool `create_doc_artifact` (owner `agent`): via `artifact`; requires `structure_proposed`; adds `doc_scaffold_created`, `artifact_mode`.
+Tool `create_doc_file` (owner `agent`): via `write`; requires `structure_proposed`; adds `doc_scaffold_created`, `file_mode`.
+Tool `refine_sections` (owner `agent`): via `reply`; requires `doc_scaffold_created`; adds `all_sections_refined`.
+Tool `reader_test_with_subagent` (owner `reader_agent`): via `agent`; requires `all_sections_refined`; adds `reader_testing_passed`.
+Tool `manual_reader_test_instructions` (owner `agent`): via `reply`; requires `all_sections_refined`; adds `reader_testing_passed`.
+Tool `final_review_and_completion` (owner `agent`): via `reply`; requires `reader_testing_passed`; adds `document_completed`.
+Initially true: `sub_agents_available`.
+Goal: `document_completed`.
+Protocol:
+  - `agent` uses `offer_workflow`.
+  - `user` chooses one of (observed):
+    - branch `accept_workflow`:
+      - `agent` uses `ask_context_questions`.
+      - `user` chooses one of (observed):
+        - branch `provide_shared_doc_link`:
+          - `agent` uses `read_shared_context`.
+        - branch `mention_unknown_entities`:
+          - `user` chooses one of (observed):
+            - branch `confirm_search`:
+              - `agent` uses `search_connected_resources`.
+            - branch `decline_search`: none.
+        - branch `direct_info_dump`: none.
+      - `agent` uses `ask_clarifying_questions`.
+      - `agent` uses `propose_structure`.
+      - `user` chooses one of (observed):
+        - branch `use_artifact`:
+          - `agent` uses `create_doc_artifact`.
+        - branch `use_file`:
+          - `agent` uses `create_doc_file`.
+      - `agent` uses `refine_sections`.
+      - `agent` chooses one of (observed):
+        - branch `subagent_reader_testing` (assuming `sub_agents_available`):
+          - spawn `reader_agent`.
+          - `reader_agent` uses `reader_test_with_subagent`.
+        - branch `manual_reader_testing`:
+          - `agent` uses `manual_reader_test_instructions`.
+      - `agent` uses `final_review_and_completion`.
+    - branch `decline_workflow`:
+      - `agent` uses `final_review_and_completion`.
+```

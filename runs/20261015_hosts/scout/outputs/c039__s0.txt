@@ -1,0 +1,32 @@
+```ce
+Skill `address-sanitizer`.
+Roles: `agent`, `user`.
+Tool `check_platform` (owner `agent`): via `bash`; adds `platform_checked`.
+Tool `build_with_asan` (owner `agent`): via `bash`; requires `platform_supported`; adds `asan_built`, `debug_symbols_enabled`, `asan_instrumented`.
+Tool `set_asan_options` (owner `agent`): via `bash`; requires `asan_built`; adds `asan_configured`.
+Tool `run_asan_binary` (owner `agent`): via `bash`; requires `asan_built` and `asan_configured`; adds `program_executed`.
+Tool `adjust_fuzzer_memory_limits` (owner `agent`): via `bash`; requires `asan_built`; adds `fuzzer_memory_limits_disabled`.
+Tool `read_asan_report` (owner `agent`): via `bash`; requires `program_executed`; adds `asan_report_read`.
+Tool `review_leak_report` (owner `agent`): via `bash`; requires `program_executed`; adds `leak_report_reviewed`.
+Initially true: none.
+Initially: `platform_checked` == false.
+Goal: any of (`asan_report_read`, `leak_report_reviewed`, `program_executed`, `asan_built`).
+Protocol:
+  - `agent` uses `check_platform`.
+  - `user` chooses one of (observed):
+    - branch `linux_or_supported`:
+      - `agent` uses `build_with_asan`.
+      - `agent` uses `set_asan_options`.
+      - `user` chooses one of (observed):
+        - branch `fuzzing`:
+          - `agent` uses `adjust_fuzzer_memory_limits`.
+        - branch `tests_or_debugging`: none.
+      - `agent` uses `run_asan_binary`.
+      - `user` chooses one of (observed):
+        - branch `read_crash_report`:
+          - `agent` uses `read_asan_report`.
+        - branch `review_leaks`:
+          - `agent` uses `review_leak_report`.
+        - branch `stop_after_run`: none.
+    - branch `windows_or_macos_or_skip`: none.
+```

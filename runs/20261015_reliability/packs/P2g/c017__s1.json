@@ -1,0 +1,675 @@
+{
+  "pack": {
+    "name": "huggingface-spaces",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_hf_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "hf_cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_hf_cli": {
+        "owner": "agent",
+        "pre": "hf_cli_checked",
+        "add": [
+          "hf_cli_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_hf_auth": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "hf_cli_checked"
+          ]
+        },
+        "add": [
+          "hf_auth_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "complete_hf_oauth_login": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:allowlisted_internet",
+            "needs:user_conversation",
+            "hf_auth_checked"
+          ]
+        },
+        "add": [
+          "hf_authenticated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_space_references": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "references_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_space_files": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "space_files_prepared",
+          "readme_frontmatter_ready",
+          "app_ready",
+          "requirements_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "local_sanity_check": {
+        "owner": "agent",
+        "pre": "space_files_prepared",
+        "add": [
+          "local_check_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_space_repo": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:allowlisted_internet",
+            "needs:huggingface_account",
+            "hf_authenticated"
+          ]
+        },
+        "add": [
+          "space_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "upload_space_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:allowlisted_internet",
+            "needs:huggingface_account",
+            {
+              "and": [
+                "space_created",
+                "space_files_prepared"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "files_uploaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_space_runtime": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:allowlisted_internet",
+            "needs:huggingface_account",
+            "files_uploaded"
+          ]
+        },
+        "add": [
+          "space_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "debug_space_from_logs": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:allowlisted_internet",
+            "needs:huggingface_account",
+            "files_uploaded"
+          ]
+        },
+        "add": [
+          "fix_attempted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_hf_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hf_present": [],
+            "install_hf": [
+              {
+                "act": {
+                  "cap": "install_hf_cli",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "check_hf_auth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "already_logged_in": [
+              {
+                "act": {
+                  "cap": "inspect_space_references",
+                  "by": "agent"
+                }
+              }
+            ],
+            "oauth_login": [
+              {
+                "act": {
+                  "cap": "complete_hf_oauth_login",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_space_references",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "local_sanity_check",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "create_space_repo",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "upload_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "verify_and_fix",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "space_ok": [
+                    {
+                      "act": {
+                        "cap": "verify_space_runtime",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "space_broken": [
+                    {
+                      "act": {
+                        "cap": "debug_space_from_logs",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "prepare_space_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "upload_space_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "verify_and_fix"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "space_created",
+        "files_uploaded",
+        "space_verified"
+      ]
+    },
+    "init_true": [
+      "needs:allowlisted_internet",
+      "needs:user_conversation"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "huggingface-spaces",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_hf_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "hf_cli_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_hf_cli": {
+        "owner": "agent",
+        "pre": "hf_cli_checked",
+        "add": [
+          "hf_cli_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_hf_auth": {
+        "owner": "agent",
+        "pre": "hf_cli_checked",
+        "add": [
+          "hf_auth_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "complete_hf_oauth_login": {
+        "owner": "agent",
+        "pre": "hf_auth_checked",
+        "add": [
+          "hf_authenticated"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_space_references": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "references_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "prepare_space_files": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "space_files_prepared",
+          "readme_frontmatter_ready",
+          "app_ready",
+          "requirements_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "local_sanity_check": {
+        "owner": "agent",
+        "pre": "space_files_prepared",
+        "add": [
+          "local_check_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_space_repo": {
+        "owner": "agent",
+        "pre": "hf_authenticated",
+        "add": [
+          "space_created"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "upload_space_files": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "space_created",
+            "space_files_prepared"
+          ]
+        },
+        "add": [
+          "files_uploaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "verify_space_runtime": {
+        "owner": "agent",
+        "pre": "files_uploaded",
+        "add": [
+          "space_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "debug_space_from_logs": {
+        "owner": "agent",
+        "pre": "files_uploaded",
+        "add": [
+          "fix_attempted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "check_hf_cli",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "hf_present": [],
+            "install_hf": [
+              {
+                "act": {
+                  "cap": "install_hf_cli",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "check_hf_auth",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "already_logged_in": [
+              {
+                "act": {
+                  "cap": "inspect_space_references",
+                  "by": "agent"
+                }
+              }
+            ],
+            "oauth_login": [
+              {
+                "act": {
+                  "cap": "complete_hf_oauth_login",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_space_references",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "prepare_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "local_sanity_check",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "create_space_repo",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "upload_space_files",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "verify_and_fix",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "space_ok": [
+                    {
+                      "act": {
+                        "cap": "verify_space_runtime",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "space_broken": [
+                    {
+                      "act": {
+                        "cap": "debug_space_from_logs",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "prepare_space_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "upload_space_files",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "verify_and_fix"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "space_created",
+        "files_uploaded",
+        "space_verified"
+      ]
+    },
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_hf_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_hf_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "check_hf_auth": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "complete_hf_oauth_login": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet",
+        "user_conversation"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "inspect_space_references": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "prepare_space_files": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "local_sanity_check": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "create_space_repo": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet",
+        "huggingface_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "upload_space_files": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet",
+        "huggingface_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "verify_space_runtime": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet",
+        "huggingface_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "debug_space_from_logs": {
+      "via": "bash",
+      "needs": [
+        "allowlisted_internet",
+        "huggingface_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

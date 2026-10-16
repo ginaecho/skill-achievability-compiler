@@ -1,0 +1,757 @@
+{
+  "pack": {
+    "name": "executing-plans",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_workspace_and_ledger": {
+        "owner": "agent",
+        "pre": "plan_available",
+        "add": [
+          "workspace_ready",
+          "ledger_ready",
+          "worktree_safe",
+          "plan_read",
+          "spec_checked",
+          "tdd_loaded",
+          "todos_created",
+          "preflight_scanned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_task": {
+        "owner": "agent",
+        "pre": "workspace_ready",
+        "add": [
+          "task_brief_read",
+          "task_in_progress",
+          "base_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_task_with_tdd": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "task_brief_read",
+            "tdd_loaded"
+          ]
+        },
+        "add": [
+          "task_steps_executed",
+          "tests_observed",
+          "expected_outputs_checked"
+        ],
+        "del": [
+          "task_in_progress"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "record_ruling": {
+        "owner": "agent",
+        "pre": "ledger_ready",
+        "add": [
+          "ruling_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_task_changes": {
+        "owner": "agent",
+        "pre": "task_steps_executed",
+        "add": [
+          "task_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "complete_task": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "task_committed",
+            "tests_observed",
+            "expected_outputs_checked",
+            "ledger_ready"
+          ]
+        },
+        "add": [
+          "task_complete",
+          "completion_recorded",
+          "todo_complete",
+          "all_tasks_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "self_review_branch": {
+        "owner": "agent",
+        "pre": "all_tasks_complete",
+        "add": [
+          "review_performed",
+          "self_review_recorded",
+          "findings_graded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fix_review_findings": {
+        "owner": "agent",
+        "pre": "review_performed",
+        "add": [
+          "important_findings_addressed",
+          "fixes_verified",
+          "green_suite"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "record_deferred_minors_and_rulings": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "review_performed",
+            "ledger_ready"
+          ]
+        },
+        "add": [
+          "final_decisions_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "delete_plan_workspace": {
+        "owner": "agent",
+        "pre": "review_performed",
+        "add": [
+          "workspace_deleted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "finish_branch": {
+        "owner": "agent",
+        "pre": "workspace_deleted",
+        "add": [
+          "branch_finished"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_for_stop_decision": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "destructive_operation_pending",
+            "security_sensitive_action_pending",
+            "external_side_effect_pending",
+            "plan_irrecoverably_broken"
+          ]
+        },
+        "add": [
+          "user_guidance_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_workspace_and_ledger",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "task_loop",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "more_tasks": [
+                    {
+                      "act": {
+                        "cap": "start_task",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "must_stop": [
+                            {
+                              "act": {
+                                "cap": "ask_for_stop_decision",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "can_proceed": []
+                        }
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "implement_task_with_tdd",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "ruling_needed": [
+                            {
+                              "act": {
+                                "cap": "record_ruling",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "no_ruling": []
+                        }
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "commit_task_changes",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "complete_task",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "task_loop"
+                    }
+                  ],
+                  "no_more_tasks": [
+                    {
+                      "act": {
+                        "cap": "self_review_branch",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "fix_critical_or_important": [
+                            {
+                              "act": {
+                                "cap": "fix_review_findings",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "record_deferred_minors_and_rulings",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "only_minors_or_rulings": [
+                            {
+                              "act": {
+                                "cap": "record_deferred_minors_and_rulings",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "clean_review": [
+                            {
+                              "act": {
+                                "cap": "record_deferred_minors_and_rulings",
+                                "by": "agent"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "delete_plan_workspace",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "finish_branch",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "workspace_ready",
+        "ledger_ready",
+        "preflight_scanned",
+        "all_tasks_complete",
+        "review_performed",
+        "final_decisions_recorded",
+        "workspace_deleted",
+        "branch_finished"
+      ]
+    },
+    "init_true": [
+      "plan_available",
+      "no_subagent_tool"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "executing-plans",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_workspace_and_ledger": {
+        "owner": "agent",
+        "pre": "plan_available",
+        "add": [
+          "workspace_ready",
+          "ledger_ready",
+          "worktree_safe",
+          "plan_read",
+          "spec_checked",
+          "tdd_loaded",
+          "todos_created",
+          "preflight_scanned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_task": {
+        "owner": "agent",
+        "pre": "workspace_ready",
+        "add": [
+          "task_brief_read",
+          "task_in_progress",
+          "base_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "implement_task_with_tdd": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "task_brief_read",
+            "tdd_loaded"
+          ]
+        },
+        "add": [
+          "task_steps_executed",
+          "tests_observed",
+          "expected_outputs_checked"
+        ],
+        "del": [
+          "task_in_progress"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "record_ruling": {
+        "owner": "agent",
+        "pre": "ledger_ready",
+        "add": [
+          "ruling_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_task_changes": {
+        "owner": "agent",
+        "pre": "task_steps_executed",
+        "add": [
+          "task_committed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "complete_task": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "task_committed",
+            "tests_observed",
+            "expected_outputs_checked",
+            "ledger_ready"
+          ]
+        },
+        "add": [
+          "task_complete",
+          "completion_recorded",
+          "todo_complete",
+          "all_tasks_complete"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "self_review_branch": {
+        "owner": "agent",
+        "pre": "all_tasks_complete",
+        "add": [
+          "review_performed",
+          "self_review_recorded",
+          "findings_graded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fix_review_findings": {
+        "owner": "agent",
+        "pre": "review_performed",
+        "add": [
+          "important_findings_addressed",
+          "fixes_verified",
+          "green_suite"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "record_deferred_minors_and_rulings": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "review_performed",
+            "ledger_ready"
+          ]
+        },
+        "add": [
+          "final_decisions_recorded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "delete_plan_workspace": {
+        "owner": "agent",
+        "pre": "review_performed",
+        "add": [
+          "workspace_deleted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "finish_branch": {
+        "owner": "agent",
+        "pre": "workspace_deleted",
+        "add": [
+          "branch_finished"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_for_stop_decision": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "destructive_operation_pending",
+            "security_sensitive_action_pending",
+            "external_side_effect_pending",
+            "plan_irrecoverably_broken"
+          ]
+        },
+        "add": [
+          "user_guidance_received"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_workspace_and_ledger",
+          "by": "agent"
+        }
+      },
+      {
+        "rec": {
+          "name": "task_loop",
+          "body": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "more_tasks": [
+                    {
+                      "act": {
+                        "cap": "start_task",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "must_stop": [
+                            {
+                              "act": {
+                                "cap": "ask_for_stop_decision",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "can_proceed": []
+                        }
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "implement_task_with_tdd",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "ruling_needed": [
+                            {
+                              "act": {
+                                "cap": "record_ruling",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "no_ruling": []
+                        }
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "commit_task_changes",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "complete_task",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "continue": "task_loop"
+                    }
+                  ],
+                  "no_more_tasks": [
+                    {
+                      "act": {
+                        "cap": "self_review_branch",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "fix_critical_or_important": [
+                            {
+                              "act": {
+                                "cap": "fix_review_findings",
+                                "by": "agent"
+                              }
+                            },
+                            {
+                              "act": {
+                                "cap": "record_deferred_minors_and_rulings",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "only_minors_or_rulings": [
+                            {
+                              "act": {
+                                "cap": "record_deferred_minors_and_rulings",
+                                "by": "agent"
+                              }
+                            }
+                          ],
+                          "clean_review": [
+                            {
+                              "act": {
+                                "cap": "record_deferred_minors_and_rulings",
+                                "by": "agent"
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "delete_plan_workspace",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "finish_branch",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "workspace_ready",
+        "ledger_ready",
+        "preflight_scanned",
+        "all_tasks_complete",
+        "review_performed",
+        "final_decisions_recorded",
+        "workspace_deleted",
+        "branch_finished"
+      ]
+    },
+    "init_true": [
+      "plan_available",
+      "no_subagent_tool"
+    ],
+    "init_constraints": []
+  },
+  "bindings": {
+    "prepare_workspace_and_ledger": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "start_task": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "implement_task_with_tdd": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "record_ruling": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "commit_task_changes": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "complete_task": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "self_review_branch": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "fix_review_findings": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "record_deferred_minors_and_rulings": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "delete_plan_workspace": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "finish_branch": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    },
+    "ask_for_stop_decision": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 14
+    }
+  },
+  "live_goal": null
+}

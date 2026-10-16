@@ -1,0 +1,668 @@
+{
+  "pack": {
+    "name": "aflpp",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_aflpp_from_apt": {
+        "owner": "agent",
+        "pre": "apt_installable",
+        "add": [
+          "aflpp_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_aflpp_wrapper": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "wrapper_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_target_with_aflpp": {
+        "owner": "agent",
+        "pre": "source_available",
+        "add": [
+          "target_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_seed_corpus": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "seed_corpus_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_single_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_multicore_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "multicore_campaign_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_campaign": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "campaign_running",
+            "multicore_campaign_running"
+          ]
+        },
+        "add": [
+          "campaign_observed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            {
+              "or": [
+                "campaign_running",
+                "multicore_campaign_running"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_crash": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "crash_input_available"
+          ]
+        },
+        "add": [
+          "crash_reproduced"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_host_system_config": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:root_privileges"
+          ]
+        },
+        "add": [
+          "host_tuned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "install_from_apt": [
+              {
+                "act": {
+                  "cap": "install_aflpp_from_apt",
+                  "by": "agent"
+                }
+              }
+            ],
+            "use_wrapper": [
+              {
+                "act": {
+                  "cap": "write_aflpp_wrapper",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "build_target_with_aflpp",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "create_seed_corpus",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "single_core": [
+              {
+                "act": {
+                  "cap": "run_single_campaign",
+                  "by": "agent"
+                }
+              }
+            ],
+            "multi_core": [
+              {
+                "act": {
+                  "cap": "run_multicore_campaign",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "monitor": [
+              {
+                "act": {
+                  "cap": "monitor_campaign",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_monitor": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "minimize_corpus": [
+              {
+                "act": {
+                  "cap": "minimize_corpus",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_minimize": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "triage_crash": [
+              {
+                "act": {
+                  "cap": "triage_crash",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_triage": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "run_system_config": [
+              {
+                "act": {
+                  "cap": "run_host_system_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_system_config": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        {
+          "or": [
+            "aflpp_installed",
+            "wrapper_ready"
+          ]
+        },
+        "target_built",
+        "seed_corpus_ready",
+        {
+          "or": [
+            "campaign_running",
+            "multicore_campaign_running"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "apt_installable"
+    ],
+    "init_constraints": [
+      true
+    ]
+  },
+  "pre_binding": {
+    "name": "aflpp",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "install_aflpp_from_apt": {
+        "owner": "agent",
+        "pre": "apt_installable",
+        "add": [
+          "aflpp_installed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_aflpp_wrapper": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "wrapper_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "build_target_with_aflpp": {
+        "owner": "agent",
+        "pre": "source_available",
+        "add": [
+          "target_built"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_seed_corpus": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "seed_corpus_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_single_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "campaign_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_multicore_campaign": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "seed_corpus_ready"
+          ]
+        },
+        "add": [
+          "multicore_campaign_running"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "monitor_campaign": {
+        "owner": "agent",
+        "pre": {
+          "or": [
+            "campaign_running",
+            "multicore_campaign_running"
+          ]
+        },
+        "add": [
+          "campaign_observed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "minimize_corpus": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            {
+              "or": [
+                "campaign_running",
+                "multicore_campaign_running"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "corpus_minimized"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "triage_crash": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_built",
+            "crash_input_available"
+          ]
+        },
+        "add": [
+          "crash_reproduced"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_host_system_config": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "host_tuned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "install_from_apt": [
+              {
+                "act": {
+                  "cap": "install_aflpp_from_apt",
+                  "by": "agent"
+                }
+              }
+            ],
+            "use_wrapper": [
+              {
+                "act": {
+                  "cap": "write_aflpp_wrapper",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "build_target_with_aflpp",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "create_seed_corpus",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "single_core": [
+              {
+                "act": {
+                  "cap": "run_single_campaign",
+                  "by": "agent"
+                }
+              }
+            ],
+            "multi_core": [
+              {
+                "act": {
+                  "cap": "run_multicore_campaign",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "monitor": [
+              {
+                "act": {
+                  "cap": "monitor_campaign",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_monitor": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "minimize_corpus": [
+              {
+                "act": {
+                  "cap": "minimize_corpus",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_minimize": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "triage_crash": [
+              {
+                "act": {
+                  "cap": "triage_crash",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_triage": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "run_system_config": [
+              {
+                "act": {
+                  "cap": "run_host_system_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "skip_system_config": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        {
+          "or": [
+            "aflpp_installed",
+            "wrapper_ready"
+          ]
+        },
+        "target_built",
+        "seed_corpus_ready",
+        {
+          "or": [
+            "campaign_running",
+            "multicore_campaign_running"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "apt_installable"
+    ],
+    "init_constraints": [
+      true
+    ]
+  },
+  "bindings": {
+    "install_aflpp_from_apt": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "write_aflpp_wrapper": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "build_target_with_aflpp": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "create_seed_corpus": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "run_single_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "run_multicore_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "monitor_campaign": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "minimize_corpus": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "triage_crash": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "run_host_system_config": {
+      "via": "bash",
+      "needs": [
+        "root_privileges"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

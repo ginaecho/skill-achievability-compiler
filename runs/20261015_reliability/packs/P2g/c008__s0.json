@@ -1,0 +1,524 @@
+{
+  "pack": {
+    "name": "hf-cloud-serving-image-selection",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_catalog_page": {
+        "owner": "agent",
+        "pre": "allowlisted_catalog",
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_region_availability": {
+        "owner": "agent",
+        "pre": "region_account_uncertain",
+        "add": [
+          "region_account_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_model_config": {
+        "owner": "agent",
+        "pre": "hf_config_public",
+        "add": [
+          "model_arch_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_catalog_yaml": {
+        "owner": "agent",
+        "pre": "catalog_page_unusable",
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_ecr_tags": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "catalog_page_unusable",
+            "ecr_query_possible"
+          ]
+        },
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "mirror_image": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            false,
+            "needs:aws_account",
+            "mirroring_needed"
+          ]
+        },
+        "add": [
+          "image_uri_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_for_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deployment_inputs_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_user_for_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "architecture_preflight_needed": [
+              {
+                "act": {
+                  "cap": "read_model_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "architecture_already_known": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_page_works": [
+              {
+                "act": {
+                  "cap": "read_catalog_page",
+                  "by": "agent"
+                }
+              }
+            ],
+            "catalog_page_unusable": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "use_catalog_yaml": [
+                      {
+                        "act": {
+                          "cap": "read_catalog_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "query_ecr": [
+                      {
+                        "act": {
+                          "cap": "query_ecr_tags",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "region_account_clear": [],
+            "region_account_uncertain": [
+              {
+                "act": {
+                  "cap": "read_region_availability",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_family_uri_available": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "select_hf_vllm": [],
+                    "select_hf_vllm_omni": [],
+                    "select_tei": [],
+                    "select_hf_pytorch_inference_cpu": [],
+                    "select_hf_sglang": [],
+                    "select_vllm_fallback": [],
+                    "select_djl_inference": [],
+                    "select_byoc": []
+                  }
+                }
+              }
+            ],
+            "mirroring_needed": [
+              {
+                "act": {
+                  "cap": "mirror_image",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deployment_inputs_known",
+        "family_selected",
+        "image_uri_selected",
+        "selection_from_current_source",
+        "hf_family_preferred_when_compatible",
+        "no_tgi_used",
+        "region_applied",
+        {
+          "or": [
+            {
+              "and": [
+                "uses_vllm_family",
+                "ami_requirement_resolved"
+              ]
+            },
+            {
+              "not": "uses_vllm_family"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "allowlisted_catalog",
+      "hf_config_public"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "hf-cloud-serving-image-selection",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "read_catalog_page": {
+        "owner": "agent",
+        "pre": "allowlisted_catalog",
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_region_availability": {
+        "owner": "agent",
+        "pre": "region_account_uncertain",
+        "add": [
+          "region_account_resolved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_model_config": {
+        "owner": "agent",
+        "pre": "hf_config_public",
+        "add": [
+          "model_arch_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_catalog_yaml": {
+        "owner": "agent",
+        "pre": "catalog_page_unusable",
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "query_ecr_tags": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "catalog_page_unusable",
+            "ecr_query_possible"
+          ]
+        },
+        "add": [
+          "catalog_read"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "mirror_image": {
+        "owner": "agent",
+        "pre": "mirroring_needed",
+        "add": [
+          "image_uri_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_user_for_inputs": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "deployment_inputs_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_user_for_inputs",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "architecture_preflight_needed": [
+              {
+                "act": {
+                  "cap": "read_model_config",
+                  "by": "agent"
+                }
+              }
+            ],
+            "architecture_already_known": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_page_works": [
+              {
+                "act": {
+                  "cap": "read_catalog_page",
+                  "by": "agent"
+                }
+              }
+            ],
+            "catalog_page_unusable": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "use_catalog_yaml": [
+                      {
+                        "act": {
+                          "cap": "read_catalog_yaml",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "query_ecr": [
+                      {
+                        "act": {
+                          "cap": "query_ecr_tags",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "region_account_clear": [],
+            "region_account_uncertain": [
+              {
+                "act": {
+                  "cap": "read_region_availability",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "catalog_family_uri_available": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "select_hf_vllm": [],
+                    "select_hf_vllm_omni": [],
+                    "select_tei": [],
+                    "select_hf_pytorch_inference_cpu": [],
+                    "select_hf_sglang": [],
+                    "select_vllm_fallback": [],
+                    "select_djl_inference": [],
+                    "select_byoc": []
+                  }
+                }
+              }
+            ],
+            "mirroring_needed": [
+              {
+                "act": {
+                  "cap": "mirror_image",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "deployment_inputs_known",
+        "family_selected",
+        "image_uri_selected",
+        "selection_from_current_source",
+        "hf_family_preferred_when_compatible",
+        "no_tgi_used",
+        "region_applied",
+        {
+          "or": [
+            {
+              "and": [
+                "uses_vllm_family",
+                "ami_requirement_resolved"
+              ]
+            },
+            {
+              "not": "uses_vllm_family"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "allowlisted_catalog",
+      "hf_config_public"
+    ],
+    "init_constraints": []
+  },
+  "bindings": {
+    "read_catalog_page": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_region_availability": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "read_model_config": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "read_catalog_yaml": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "query_ecr_tags": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "mirror_image": {
+      "via": "bash",
+      "needs": [
+        "aws_account"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "ask_user_for_inputs": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    }
+  },
+  "live_goal": null
+}

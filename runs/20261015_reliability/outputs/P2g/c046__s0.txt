@@ -1,0 +1,42 @@
+```ce
+Skill `nextjs-on-cloudflare`.
+Roles: `agent`, `user`.
+Tool `check_vinext_skill_installed` (owner `agent`): via `skill`; adds `vinext_skill_checked`.
+Tool `install_vinext_skills` (owner `agent`): via `bash`; needs `package_registries`; requires `vinext_skill_checked`; adds `vinext_skills_available`.
+Tool `read_upstream_skill_docs` (owner `agent`): via `read`; adds `upstream_guidance_available`.
+Tool `fetch_vinext_docs` (owner `agent`): via `web_fetch`; needs `allowlisted_internet`; adds `vinext_docs_available`.
+Tool `create_vinext_project` (owner `agent`): via `bash`; requires `vinext_docs_available`; adds `project_configured`, `cloudflare_target_selected`, `uses_vinext`.
+Tool `migrate_to_vinext` (owner `agent`): via `bash`; requires `upstream_guidance_available`, `existing_nextjs_project`; adds `project_configured`, `cloudflare_target_selected`, `uses_vinext`, `compatibility_checked`.
+Tool `check_compatibility` (owner `agent`): via `bash`; requires `existing_nextjs_project`; adds `compatibility_checked`.
+Tool `deploy_workers_app` (owner `agent`): via `bash`; needs `cloudflare_account`; requires `project_configured`, `cloudflare_target_selected`, `uses_vinext`; adds `deployed`.
+Initially true: none.
+Initially: not `vinext_skill_checked` and not `vinext_skills_available` and not `upstream_guidance_available` and not `vinext_docs_available` and not `project_configured` and not `cloudflare_target_selected` and not `uses_vinext` and not `compatibility_checked` and not `deployed`.
+Goal: any of (`project_configured`, (`compatibility_checked` and `uses_vinext`), `deployed`).
+Protocol:
+  - `agent` uses `check_vinext_skill_installed`.
+  - `agent` chooses one of (observed):
+    - branch `skills_available`:
+      - `agent` uses `read_upstream_skill_docs`.
+    - branch `skills_missing`:
+      - `agent` chooses one of (observed):
+        - branch `install_available`:
+          - `agent` uses `install_vinext_skills`.
+          - `agent` uses `read_upstream_skill_docs`.
+        - branch `install_unavailable`:
+          - `agent` uses `fetch_vinext_docs`.
+  - `user` chooses one of (observed):
+    - branch `new_project`:
+      - `agent` uses `fetch_vinext_docs`.
+      - `agent` uses `create_vinext_project`.
+    - branch `existing_nextjs_project`:
+      - `agent` uses `check_compatibility`.
+      - `agent` chooses one of (observed):
+        - branch `use_upstream_migration_skill`:
+          - `agent` uses `migrate_to_vinext`.
+        - branch `use_docs_directly`:
+          - `agent` uses `fetch_vinext_docs`.
+          - `agent` uses `migrate_to_vinext`.
+    - branch `deployment_only`:
+      - `agent` uses `fetch_vinext_docs`.
+      - `agent` uses `deploy_workers_app`.
+```

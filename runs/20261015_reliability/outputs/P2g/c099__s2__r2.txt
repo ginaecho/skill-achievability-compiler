@@ -1,0 +1,39 @@
+```ce
+Skill `task-distributor`.
+Roles: `agent`, `user`.
+Tool `resolve_task_inputs` (owner `agent`): via `read`; requires `inputs_provided`; adds `workload_inputs_read`.
+Tool `resolve_task_glob` (owner `agent`): via `read`; requires `task_glob_provided`; adds `task_files_matched`, `match_count_known`.
+Tool `inspect_workload_files` (owner `agent`): via `read`; requires any of (`workload_inputs_read`, `task_files_matched`); adds `workload_profiled`.
+Tool `write_plan_file` (owner `agent`): via `write`; requires `workload_profiled`; adds `plan_written`, `plan_is_markdown`, `queue_design_documented`, `distribution_strategy_documented`, `priority_deadlines_documented`, `fallback_capacity_documented`, `assumptions_documented`.
+Tool `edit_plan_file` (owner `agent`): via `edit`; requires `workload_profiled`; adds `plan_written`, `plan_is_markdown`, `queue_design_documented`, `distribution_strategy_documented`, `priority_deadlines_documented`, `fallback_capacity_documented`, `assumptions_documented`.
+Tool `ask_for_missing_inputs` (owner `agent`): via `ask_user`; requires any of (not `tasks_provided`, not `workers_provided`); adds `inputs_requested`, `inputs_provided`.
+Initially true: none.
+Initially: `tasks_provided` or `task_glob_provided`.
+Initially: true.
+Goal: `plan_written` and `plan_is_markdown` and `queue_design_documented` and `distribution_strategy_documented` and `priority_deadlines_documented` and `fallback_capacity_documented` and `assumptions_documented`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `missing_required_inputs`:
+      - `agent` uses `ask_for_missing_inputs`.
+    - branch `required_inputs_present`: none.
+  - `agent` chooses one of (observed):
+    - branch `use_glob`:
+      - `agent` uses `resolve_task_glob`.
+      - `agent` chooses one of (observed):
+        - branch `empty_scope`: none.
+        - branch `nonempty_scope`:
+          - `agent` uses `inspect_workload_files`.
+          - `agent` chooses one of (observed):
+            - branch `write_new_plan`:
+              - `agent` uses `write_plan_file`.
+            - branch `edit_existing_plan`:
+              - `agent` uses `edit_plan_file`.
+    - branch `use_direct_inputs`:
+      - `agent` uses `resolve_task_inputs`.
+      - `agent` uses `inspect_workload_files`.
+      - `agent` chooses one of (observed):
+        - branch `write_new_plan`:
+          - `agent` uses `write_plan_file`.
+        - branch `edit_existing_plan`:
+          - `agent` uses `edit_plan_file`.
+```

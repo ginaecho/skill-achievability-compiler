@@ -1,0 +1,92 @@
+```ce
+Skill `isaac-mission-control-showcase`.
+Roles: `agent`, `user`.
+
+Tool `run_preflight` (owner `agent`):
+  via `bash`;
+  requires `showcase_scripts_present`;
+  adds `preflight_done`.
+
+Tool `run_startup` (owner `agent`):
+  via `bash`;
+  requires `preflight_done`;
+  adds `stack_running` and `robot_idle`.
+
+Tool `run_demo` (owner `agent`):
+  via `bash`;
+  requires `stack_running`;
+  sets `mission_outcome` to `COMPLETED`;
+  adds `demo_finished`.
+
+Tool `run_stop` (owner `agent`):
+  via `bash`;
+  requires `stack_running`;
+  removes `stack_running`.
+
+Tool `report_status` (owner `agent`):
+  via `bash`;
+  requires `showcase_scripts_present`.
+
+Tool `resolve_deps` (owner `agent`):
+  via `bash`;
+  requires `showcase_scripts_present`;
+  adds `deps_ready`.
+
+Tool `detect_installation` (owner `agent`):
+  via `bash`;
+  picks `isaac_version` with `isaac_version` != none;
+  picks `isaac_path` with `isaac_path` != none;
+  picks `launcher_status` with `launcher_status` != none;
+  picks `bridge_status` with `bridge_status` != none;
+  picks `warehouse_uri_present` with `warehouse_uri_present` == true or `warehouse_uri_present` == false.
+
+Tool `handoff_install` (owner `agent`):
+  via `bash`;
+  needs `isaac_sim_install_skill`.
+
+Tool `prompt_installation` (owner `agent`):
+  via `ask_user`;
+  requires `needs_user_choice`;
+  adds `install_requested`.
+
+Initially true:
+  `showcase_scripts_present`.
+Initially:
+  `mission_outcome` == none and
+  `isaac_version` == none and
+  `isaac_path` == none.
+
+Goal: `demo_finished` and `mission_outcome` == `COMPLETED`.
+
+Protocol:
+  - `agent` uses `resolve_deps`.
+  - `agent` uses `detect_installation`.
+  - `agent` chooses one of (observed):
+    - branch `usable_found`:
+      - `agent` uses `run_preflight`.
+      - `agent` uses `run_startup`.
+      - `agent` uses `run_demo`.
+      - `agent` uses `run_stop`.
+    - branch `needs_choice`:
+      - `agent` uses `prompt_installation`.
+      - `agent` chooses one of (observed):
+        - branch `install`:
+          - `agent` uses `handoff_install`.
+          - `agent` uses `detect_installation`.
+          - `agent` uses `run_preflight`.
+          - `agent` uses `run_startup`.
+          - `agent` uses `run_demo`.
+          - `agent` uses `run_stop`.
+        - branch `cancel`: none.
+    - branch `nothing_installed`:
+      - `agent` uses `prompt_installation`.
+      - `agent` chooses one of (observed):
+        - branch `install`:
+          - `agent` uses `handoff_install`.
+          - `agent` uses `detect_installation`.
+          - `agent` uses `run_preflight`.
+          - `agent` uses `run_startup`.
+          - `agent` uses `run_demo`.
+          - `agent` uses `run_stop`.
+        - branch `cancel`: none.
+```

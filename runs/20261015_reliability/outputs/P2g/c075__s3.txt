@@ -1,0 +1,51 @@
+```ce
+Skill `llm-finetuning-training-engineer`.
+Roles: `agent`, `eval_engineer`.
+Tool `read_brief` (owner `agent`): via `read`; adds `brief_read`, `dataset_expectation_known`, `chosen_method_known`, `base_model_known`, `memory_budget_known`, `deployment_target_known`.
+Tool `prepare_dataset` (owner `agent`): via `bash`; requires `brief_read`; adds `dataset_built`, `chat_template_applied`, `validation_report_written`, `packed_samples_attached`.
+Tool `write_dataset_card` (owner `agent`): via `write`; requires `dataset_built`; adds `dataset_card_written`, `phase2_complete`.
+Tool `confirm_environment` (owner `agent`): via `bash`; requires `phase2_complete`; adds `env_report_present`; picks `env_status` with any of (`env_status` == 1, `env_status` == 2, `env_status` == 3); picks `platform` with any of (`platform` == 1, `platform` == 2).
+Tool `generate_training_files` (owner `agent`): via `bash`; requires `env_report_present` and `env_status` == 1 and `chosen_method_known` and `base_model_known` and `memory_budget_known`; adds `train_config_written`, `train_script_written`.
+Tool `commit_training_files` (owner `agent`): via `bash`; requires `train_config_written` and `train_script_written`; adds `training_files_committed`.
+Tool `launch_training` (owner `agent`): via `bash`; requires `training_files_committed`; adds `training_launched`, `background_process_running`.
+Tool `monitor_training` (owner `agent`): via `bash`; requires `training_launched`; picks `run_outcome` with any of (`run_outcome` == 1, `run_outcome` == 2, `run_outcome` == 3, `run_outcome` == 4); adds `structured_progress_emitted`; adds `failure_excerpt_reported`.
+Tool `triage_environment_failure` (owner `agent`): via `bash`; requires `run_outcome` == 2; adds `preflight_rerun`, `environment_failure_reported`.
+Tool `triage_divergence` (owner `agent`): via `bash`; requires `run_outcome` == 3; adds `run_halted`, `divergence_triaged`.
+Tool `triage_uma_oom` (owner `agent`): via `bash`; requires `run_outcome` == 4; adds `oom_ladder_applied`.
+Tool `export_artifact` (owner `agent`): via `bash`; requires `promote_verdict_received` and `promoted` and `deployment_target_known`; adds `artifact_exported`, `smoke_test_passed`.
+Initially true: `training_brief_exists`.
+Initially: `env_status` == 0.
+Initially: `platform` == 0.
+Initially: `run_outcome` == 0.
+Goal: (`phase2_complete` and `env_report_present` and ((`env_status` == 2 and `environment_failure_reported`) or (`env_status` == 3) or (`env_status` == 1 and `training_files_committed` and (`run_outcome` == 1 or `run_outcome` == 2 or `run_outcome` == 3 or `run_outcome` == 4) and `structured_progress_emitted` and ((`run_outcome` == 2 and `environment_failure_reported`) or (`run_outcome` == 3 and `divergence_triaged`) or (`run_outcome` == 4 and `oom_ladder_applied`) or (`run_outcome` == 1)) and ((not `promote_verdict_received`) or (`promote_verdict_received` and ((`promoted` and `artifact_exported` and `smoke_test_passed`) or (`rejected`)))))).
+Protocol:
+  - `agent` uses `read_brief`.
+  - `agent` uses `prepare_dataset`.
+  - `agent` uses `write_dataset_card`.
+  - `agent` uses `confirm_environment`.
+  - `agent` chooses one of (external):
+    - branch `blocked`:
+      - `agent` uses `triage_environment_failure`.
+    - branch `ready_with_warnings`: none.
+    - branch `ready`:
+      - `agent` uses `generate_training_files`.
+      - `agent` uses `commit_training_files`.
+      - `agent` uses `launch_training`.
+      - loop `monitor_run`:
+        - `agent` uses `monitor_training`.
+        - `agent` chooses one of (external):
+          - branch `completed`: none.
+          - branch `environment_failure`:
+            - `agent` uses `triage_environment_failure`.
+          - branch `divergence`:
+            - `agent` uses `triage_divergence`.
+          - branch `uma_oom`:
+            - `agent` uses `triage_uma_oom`.
+          - branch `still_running`:
+            - repeat `monitor_run`.
+      - `eval_engineer` tells `agent` `phase5_verdict`.
+      - `agent` chooses one of (observed):
+        - branch `PROMOTE`:
+          - `agent` uses `export_artifact`.
+        - branch `REJECT`: none.
+```

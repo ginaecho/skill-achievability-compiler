@@ -1,0 +1,676 @@
+{
+  "pack": {
+    "name": "web-design-reviewer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_url_and_scope": {
+        "owner": "agent",
+        "pre": {
+          "not": "target_url_known"
+        },
+        "add": [
+          "target_url_known",
+          "review_scope_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_detected",
+          "framework_detected",
+          "styling_detected",
+          "source_locations_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_checklist": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checklist_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_target_page": {
+        "owner": "agent",
+        "pre": "target_url_known",
+        "add": [
+          "page_fetched"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "capture_baseline": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "target_url_known"
+          ]
+        },
+        "add": [
+          "baseline_captured",
+          "dom_observed",
+          "issues_detected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_additional_pages": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "baseline_captured"
+          ]
+        },
+        "add": [
+          "additional_pages_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_design_fixes": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "issues_detected",
+            "source_locations_known"
+          ]
+        },
+        "add": [
+          "source_changed",
+          "issues_fixed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "save_fix_notes": {
+        "owner": "agent",
+        "pre": "issues_fixed",
+        "add": [
+          "fix_notes_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reverify_design": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:linux",
+            "issues_fixed"
+          ]
+        },
+        "add": [
+          "reverified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "issues_remaining": {
+            "or": [
+              {
+                "cmp": [
+                  "issues_remaining",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "issues_remaining",
+                  ">",
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "url_known": [],
+            "url_needed": [
+              {
+                "act": {
+                  "cap": "ask_url_and_scope",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "fixes_in_workspace": [
+              {
+                "act": {
+                  "cap": "inspect_workspace",
+                  "by": "agent"
+                }
+              }
+            ],
+            "review_only": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "review_checklist",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "fetch_target_page",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "capture_baseline",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "check_more_pages": [
+              {
+                "act": {
+                  "cap": "inspect_additional_pages",
+                  "by": "agent"
+                }
+              }
+            ],
+            "single_page_only": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "fix_detected_issues": [
+              {
+                "rec": {
+                  "name": "fix_loop",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "apply_design_fixes",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "save_fix_notes",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "reverify_design",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "issues_remain": [
+                            {
+                              "continue": "fix_loop"
+                            }
+                          ],
+                          "no_issues_remain": []
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "report_only": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "target_url_known",
+        "checklist_loaded",
+        "issues_detected",
+        {
+          "or": [
+            "issues_fixed",
+            true
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "issues_fixed",
+                "reverified"
+              ]
+            },
+            {
+              "not": "issues_fixed"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "needs:shell",
+      "needs:linux"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "issues_remaining",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "web-design-reviewer",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_url_and_scope": {
+        "owner": "agent",
+        "pre": {
+          "not": "target_url_known"
+        },
+        "add": [
+          "target_url_known",
+          "review_scope_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_workspace": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "project_detected",
+          "framework_detected",
+          "styling_detected",
+          "source_locations_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "review_checklist": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "checklist_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "fetch_target_page": {
+        "owner": "agent",
+        "pre": "target_url_known",
+        "add": [
+          "page_fetched"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "capture_baseline": {
+        "owner": "agent",
+        "pre": "target_url_known",
+        "add": [
+          "baseline_captured",
+          "dom_observed",
+          "issues_detected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_additional_pages": {
+        "owner": "agent",
+        "pre": "baseline_captured",
+        "add": [
+          "additional_pages_checked"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "apply_design_fixes": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "issues_detected",
+            "source_locations_known"
+          ]
+        },
+        "add": [
+          "source_changed",
+          "issues_fixed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "save_fix_notes": {
+        "owner": "agent",
+        "pre": "issues_fixed",
+        "add": [
+          "fix_notes_saved"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "reverify_design": {
+        "owner": "agent",
+        "pre": "issues_fixed",
+        "add": [
+          "reverified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "issues_remaining": {
+            "or": [
+              {
+                "cmp": [
+                  "issues_remaining",
+                  "==",
+                  0
+                ]
+              },
+              {
+                "cmp": [
+                  "issues_remaining",
+                  ">",
+                  0
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "url_known": [],
+            "url_needed": [
+              {
+                "act": {
+                  "cap": "ask_url_and_scope",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "fixes_in_workspace": [
+              {
+                "act": {
+                  "cap": "inspect_workspace",
+                  "by": "agent"
+                }
+              }
+            ],
+            "review_only": []
+          }
+        }
+      },
+      {
+        "act": {
+          "cap": "review_checklist",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "fetch_target_page",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "capture_baseline",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "check_more_pages": [
+              {
+                "act": {
+                  "cap": "inspect_additional_pages",
+                  "by": "agent"
+                }
+              }
+            ],
+            "single_page_only": []
+          }
+        }
+      },
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "fix_detected_issues": [
+              {
+                "rec": {
+                  "name": "fix_loop",
+                  "body": [
+                    {
+                      "act": {
+                        "cap": "apply_design_fixes",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "save_fix_notes",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "act": {
+                        "cap": "reverify_design",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "choice": {
+                        "by": "agent",
+                        "observed": true,
+                        "branches": {
+                          "issues_remain": [
+                            {
+                              "continue": "fix_loop"
+                            }
+                          ],
+                          "no_issues_remain": []
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            ],
+            "report_only": []
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "target_url_known",
+        "checklist_loaded",
+        "issues_detected",
+        {
+          "or": [
+            "issues_fixed",
+            true
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "issues_fixed",
+                "reverified"
+              ]
+            },
+            {
+              "not": "issues_fixed"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [],
+    "init_constraints": [
+      {
+        "cmp": [
+          "issues_remaining",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "ask_url_and_scope": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_workspace": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "review_checklist": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "fetch_target_page": {
+      "via": "web_fetch",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "capture_baseline": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "inspect_additional_pages": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "apply_design_fixes": {
+      "via": "edit",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "save_fix_notes": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "reverify_design": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "linux"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

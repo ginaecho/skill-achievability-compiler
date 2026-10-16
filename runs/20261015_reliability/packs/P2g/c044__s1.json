@@ -1,0 +1,627 @@
+{
+  "pack": {
+    "name": "isaac-mission-control-showcase",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_dependencies": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "dependencies_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_runtime_state": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "runtime_state_inspected",
+          "selection_safe_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "handoff_installation_skill": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "installation_handoff_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "selection_safe_verified"
+          ]
+        },
+        "add": [
+          "preflight_passed",
+          "runtime_described"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_idle_showcase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "isaac_gui_window_visible",
+          "robot_idle_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_demo_showcase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "isaac_gui_window_visible",
+          "motion_confirmed",
+          "mission_completed",
+          "robot_idle_ready",
+          "acceptance_artifact_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_recorded_showcase": {
+        "owner": "agent",
+        "pre": "showcase_started",
+        "add": [
+          "showcase_stopped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_run_status": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "run_status_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_runtime_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "runtime_state_inspected",
+            {
+              "not": "selection_safe_verified"
+            }
+          ]
+        },
+        "add": [
+          "user_selected_runtime"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_container_resolution": {
+        "owner": "agent",
+        "pre": "runtime_described",
+        "add": [
+          "container_resolution_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_dependencies",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_runtime_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "request_install_or_version_change": [
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "continue_showcase": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "automatic_runtime_selection": [],
+                    "runtime_choice_needed": [
+                      {
+                        "act": {
+                          "cap": "ask_runtime_choice",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_preflight",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "containers_reported": [
+                      {
+                        "act": {
+                          "cap": "ask_container_resolution",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_container_issue": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preflight_only": [],
+                    "start_idle": [
+                      {
+                        "act": {
+                          "cap": "start_idle_showcase",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "run_demo": [
+                      {
+                        "act": {
+                          "cap": "start_demo_showcase",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "inspect_existing_run": [
+                      {
+                        "act": {
+                          "cap": "inspect_run_status",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stop_recorded_run": [
+                      {
+                        "act": {
+                          "cap": "stop_recorded_showcase",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "robot_idle_ready",
+        {
+          "and": [
+            "mission_completed",
+            "motion_confirmed",
+            "robot_idle_ready",
+            "acceptance_artifact_written"
+          ]
+        },
+        "installation_handoff_completed",
+        "run_status_reported",
+        "showcase_stopped"
+      ]
+    },
+    "init_true": [
+      "skill_dir_known"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "isaac-mission-control-showcase",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "prepare_dependencies": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "dependencies_prepared"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_runtime_state": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "runtime_state_inspected",
+          "selection_safe_verified"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "handoff_installation_skill": {
+        "owner": "agent",
+        "pre": "dependencies_prepared",
+        "add": [
+          "installation_handoff_completed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "run_preflight": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "selection_safe_verified"
+          ]
+        },
+        "add": [
+          "preflight_passed",
+          "runtime_described"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_idle_showcase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "isaac_gui_window_visible",
+          "robot_idle_ready"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "start_demo_showcase": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "skill_dir_known",
+            "dependencies_prepared",
+            "preflight_passed"
+          ]
+        },
+        "add": [
+          "showcase_started",
+          "isaac_gui_window_visible",
+          "motion_confirmed",
+          "mission_completed",
+          "robot_idle_ready",
+          "acceptance_artifact_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "stop_recorded_showcase": {
+        "owner": "agent",
+        "pre": "showcase_started",
+        "add": [
+          "showcase_stopped"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_run_status": {
+        "owner": "agent",
+        "pre": "skill_dir_known",
+        "add": [
+          "run_status_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_runtime_choice": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "runtime_state_inspected",
+            {
+              "not": "selection_safe_verified"
+            }
+          ]
+        },
+        "add": [
+          "user_selected_runtime"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_container_resolution": {
+        "owner": "agent",
+        "pre": "runtime_described",
+        "add": [
+          "container_resolution_confirmed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "prepare_dependencies",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "inspect_runtime_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "request_install_or_version_change": [
+              {
+                "act": {
+                  "cap": "handoff_installation_skill",
+                  "by": "agent"
+                }
+              }
+            ],
+            "continue_showcase": [
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "automatic_runtime_selection": [],
+                    "runtime_choice_needed": [
+                      {
+                        "act": {
+                          "cap": "ask_runtime_choice",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_preflight",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "containers_reported": [
+                      {
+                        "act": {
+                          "cap": "ask_container_resolution",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "no_container_issue": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "preflight_only": [],
+                    "start_idle": [
+                      {
+                        "act": {
+                          "cap": "start_idle_showcase",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "run_demo": [
+                      {
+                        "act": {
+                          "cap": "start_demo_showcase",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "inspect_existing_run": [
+                      {
+                        "act": {
+                          "cap": "inspect_run_status",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stop_recorded_run": [
+                      {
+                        "act": {
+                          "cap": "stop_recorded_showcase",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "or": [
+        "robot_idle_ready",
+        {
+          "and": [
+            "mission_completed",
+            "motion_confirmed",
+            "robot_idle_ready",
+            "acceptance_artifact_written"
+          ]
+        },
+        "installation_handoff_completed",
+        "run_status_reported",
+        "showcase_stopped"
+      ]
+    },
+    "init_true": [
+      "skill_dir_known"
+    ],
+    "init_constraints": []
+  },
+  "bindings": {
+    "prepare_dependencies": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "inspect_runtime_state": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "handoff_installation_skill": {
+      "via": "skill",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run_preflight": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "start_idle_showcase": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "start_demo_showcase": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "stop_recorded_showcase": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "inspect_run_status": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "ask_runtime_choice": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "ask_container_resolution": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

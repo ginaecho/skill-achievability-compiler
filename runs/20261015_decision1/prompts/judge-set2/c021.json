@@ -1,0 +1,77 @@
+{
+  "model": "Decision-1",
+  "state": {
+    "document": "---\nname: windows-builder\ndescription: Build Windows images with Packer using WinRM communicator and PowerShell provisioners. Use when creating Windows AMIs, Azure images, or VMware templates.\nmetadata:\n  lifecycle-status: active\n---\n\n# Windows Builder\n\nPlatform-agnostic patterns for building Windows images with Packer.\n\n**Reference:** [WinRM Communicator](https://developer.hashicorp.com/packer/docs/communicators/winrm)\n\n> **Note:** Windows builds incur significant costs and time. Expect 45-120 minutes per build due to Windows Updates. Failed builds may leave resources running - always verify cleanup.\n\n## WinRM Communicator Setup\n\nWindows requires WinRM for Packer communication.\n\n### AWS Example\n\n```hcl\nsource \"amazon-ebs\" \"windows\" {\n  region        = \"us-west-2\"\n  instance_type = \"t3.medium\"\n\n  source_ami_filter {\n    filters = {\n      name = \"Windows_Server-2022-English-Full-Base-*\"\n    }\n    most_recent = true\n    owners      = [\"amazon\"]\n  }\n\n  ami_name = \"windows-server-2022-${local.timestamp}\"\n\n  communicator   = \"winrm\"\n  winrm_username = \"Administrator\"\n  winrm_use_ssl  = true\n  winrm_insecure = true\n  winrm_timeout  = \"15m\"\n\n  user_data_file = \"scripts/setup-winrm.ps1\"\n}\n```\n\n### WinRM Setup Script (scripts/setup-winrm.ps1)\n\n```powershell\n<powershell>\n# Configure WinRM\nwinrm quickconfig -q\nwinrm set winrm/config '@{MaxTimeoutms=\"1800000\"}'\nwinrm set winrm/config/service '@{AllowUnencrypted=\"true\"}'\nwinrm set winrm/config/service/auth '@{Basic=\"true\"}'\n\n# Configure firewall\nnetsh advfirewall firewall add rule name=\"WinRM 5985\" protocol=TCP dir=in localport=5985 action=allow\nnetsh advfirewall firewall add rule name=\"WinRM 5986\" protocol=TCP dir=in localport=5986 action=allow\n\n# Restart WinRM\nnet stop winrm\nnet start winrm\n</powershell>\n```\n\n### Azure Example\n\n```hcl\nsource \"azure-arm\" \"windows\" {\n  client_id       = var.client_id\n  client_secret   = var.client_secret\n  subscription_id = var.subscription_id\n  tenant_id       = var.tenant_id\n\n  managed_image_resource_group_name = \"images-rg\"\n  managed_image_name                = \"windows-${local.timestamp}\"\n\n  os_type         = \"Windows\"\n  image_publisher = \"MicrosoftWindowsServer\"\n  image_offer     = \"WindowsServer\"\n  image_sku       = \"2022-datacenter-g2\"\n\n  location = \"East US\"\n  vm_size  = \"Standard_D2s_v3\"\n\n  # Azure auto-configures WinRM\n  communicator   = \"winrm\"\n  winrm_use_ssl  = true\n  winrm_insecure = true\n  winrm_timeout  = \"15m\"\n  winrm_username = \"packer\"\n}\n```\n\n## PowerShell Provisioners\n\n### Install Software\n\n```hcl\nbuild {\n  sources = [\"source.amazon-ebs.windows\"]\n\n  # Install Chocolatey\n  provisioner \"powershell\" {\n    inline = [\n      \"Set-ExecutionPolicy Bypass -Scope Process -Force\",\n      \"iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))\"\n    ]\n  }\n\n  # Install applications\n  provisioner \"powershell\" {\n    inline = [\n      \"choco install -y googlechrome\",\n      \"choco install -y 7zip\",\n    ]\n  }\n\n  # Install IIS\n  provisioner \"powershell\" {\n    inline = [\n      \"Install-WindowsFeature -Name Web-Server -IncludeManagementTools\"\n    ]\n  }\n}\n```\n\n### Windows Updates\n\n```hcl\nprovisioner \"powershell\" {\n  inline = [\n    \"Install-PackageProvider -Name NuGet -Force\",\n    \"Install-Module -Name PSWindowsUpdate -Force\",\n    \"Import-Module PSWindowsUpdate\",\n    \"Get-WindowsUpdate -Install -AcceptAll -AutoReboot\",\n  ]\n  timeout = \"2h\"\n}\n\n# Wait for reboots\nprovisioner \"windows-restart\" {\n  restart_timeout = \"30m\"\n}\n```\n\n## Cleanup\n\n```hcl\nprovisioner \"powershell\" {\n  inline = [\n    \"# Clear temp files\",\n    \"Remove-Item -Path 'C:\\\\Windows\\\\Temp\\\\*' -Recurse -Force -ErrorAction SilentlyContinue\",\n    \"# Clear Windows Update cache\",\n    \"Stop-Service -Name wuauserv -Force\",\n    \"Remove-Item -Path 'C:\\\\Windows\\\\SoftwareDistribution\\\\*' -Recurse -Force -ErrorAction SilentlyContinue\",\n    \"Start-Service -Name wuauserv\",\n  ]\n}\n```\n\n## Common Issues\n\n**WinRM Timeout**\n- Increase `winrm_timeout` to 15m or more\n- Verify security group allows ports 5985/5986\n- Check user data script completed successfully\n\n**PowerShell Execution Policy**\n```hcl\nprovisioner \"powershell\" {\n  inline = [\n    \"Set-ExecutionPolicy Bypass -Scope Process -Force\",\n    \"# Your commands here\",\n  ]\n}\n```\n\n**Long Build Times**\n- Windows Updates can take 1-2 hours\n- Use pre-patched base images when available\n- Set provisioner `timeout = \"2h\"`\n\n## References\n\n- [WinRM Communicator](https://developer.hashicorp.com/packer/docs/communicators/winrm)\n- [PowerShell Provisioner](https://developer.hashicorp.com/packer/docs/provisioners/powershell)\n",
+    "runtime": {
+      "name": "claude-code-cloud",
+      "description": "A Claude Code cloud session on Linux x86_64 (no GPU, no Docker daemon) with a shell, the working directory, sub-agents and the connectors listed as tools. Network egress goes through an allow-list proxy: the package registries and hosts pypi (PyPI), npm, GitHub (github.com, api.github.com, raw.githubusercontent.com), Ubuntu (apt archives), NuGet and the Go module proxy are open; other hosts are refused (for example huggingface, Microsoft Learn and Azure, Cloudflare, Expo, Neon and NVIDIA). The user's GitHub account is usable through the github connector and through the gh CLI via the proxy. There are no accounts or credentials for other external services.",
+      "tools": {
+        "bash": "run shell commands on Linux x86_64: install packages from the open registries (pip from PyPI, npm, apt from Ubuntu, go modules, nuget, GitHub release downloads), build, test, run CLIs and scripts, git, gh, start and stop local servers inside the session; network requests reach only the allow-listed hosts",
+        "read": "read files in the working directory; search them by name pattern or content (glob, grep)",
+        "write": "create and overwrite files",
+        "edit": "edit existing files and Jupyter notebooks",
+        "web_fetch": "fetch a web page or unauthenticated API by URL; hosts outside the egress allow-list are refused",
+        "web_search": "search the public web and read result snippets",
+        "ask_user": "ask the user a question (with options) and read the answer in the conversation",
+        "agent": "start sub-agents that work in parallel, send them messages and list them",
+        "skill": "load an installed Claude Code skill, list and search skills and plugins",
+        "tasks": "create, read, update and stop background tasks; schedule, list and delete cron jobs and wake-ups; monitor a condition; read notifications",
+        "artifact": "publish an HTML page as a private claude.ai artifact; read and answer its comments and its small data store",
+        "send_user_file": "send a file from the session to the user",
+        "push_notification": "send a push notification to the user",
+        "mcp_resources": "list and read resources of the connected MCP servers",
+        "github": "GitHub connector (the user's account): get_file_contents, create_pull_request, list_issues, issue_write, search_code, pull_request_read, actions_list, get_job_logs, create_branch, push_files",
+        "notion": "Notion connector (the user's workspace): notion-search, notion-fetch, notion-create-pages, notion-update-page, notion-create-database",
+        "google_drive": "Google Drive connector (the user's drive): search_files, read_file_content, create_file, update_file, share_file",
+        "jam": "Jam connector (bug-report recordings): search, getDetails, getConsoleLogs, getNetworkRequests, analyzeVideo",
+        "mem": "Mem connector (the user's notes): create_note, search_notes, get_note, update_note",
+        "bigdata_com": "Bigdata.com connector (financial data and documents): bigdata_company_tearsheet, bigdata_search, find_securities, bigdata_fetch_document",
+        "etoro": "eToro connector (the user's trading account): get-my-portfolio-summary, get-instruments-overview, prepare-trade",
+        "claude_docs": "Claude Docs connector (living documents on claude.ai): create, read, batch, update, export"
+      }
+    },
+    "pack": "Skill `windows-builder`.\nRoles: `agent`, `user`.\nTool `write_packer_windows_template` (owner `agent`): via `write`; adds `packer_template_written`.\nTool `write_winrm_setup_script` (owner `agent`): via `write`; adds `winrm_setup_script_written`.\nTool `write_powershell_provisioners` (owner `agent`): via `edit`; requires `packer_template_written`; adds `powershell_provisioners_written`.\nTool `write_windows_update_provisioners` (owner `agent`): via `edit`; requires `packer_template_written`; adds `windows_update_provisioners_written`.\nTool `write_cleanup_provisioner` (owner `agent`): via `edit`; requires `packer_template_written`; adds `cleanup_provisioner_written`.\nTool `document_windows_builder_guidance` (owner `agent`): via `write`; adds `guidance_documented`.\nGoal: `packer_template_written` and `winrm_setup_script_written` and `powershell_provisioners_written` and `windows_update_provisioners_written` and `cleanup_provisioner_written` and `guidance_documented`.\nProtocol:\n  - `agent` uses `write_packer_windows_template`.\n  - `agent` uses `write_winrm_setup_script`.\n  - `agent` uses `write_powershell_provisioners`.\n  - `agent` uses `write_windows_update_provisioners`.\n  - `agent` uses `write_cleanup_provisioner`.\n  - `agent` uses `document_windows_builder_guidance`.\n"
+  },
+  "questions": {
+    "F1": {
+      "type": "noul",
+      "instructions": "no invented Tool (every Tool corresponds to an instruction)",
+      "criteria": {
+        "true": "Every Tool in the pack corresponds to an operation that some sentence of the document asks for, or the pack declares no Tool.",
+        "false": "At least one Tool in the pack is invented: no sentence of the document asks for that operation."
+      }
+    },
+    "F2": {
+      "type": "noul",
+      "instructions": "no omitted mandatory step",
+      "criteria": {
+        "true": "No mandatory step is omitted: every step without which the document's core deliverable cannot be produced appears in the pack. Optional or follow-up work may be omitted or skippable.",
+        "false": "The pack omits at least one mandatory step, a step without which the document's core deliverable cannot be produced."
+      }
+    },
+    "F3": {
+      "type": "noul",
+      "instructions": "the Goal states the document's deliverable",
+      "criteria": {
+        "true": "The pack's Goal names the deliverable of one representative request of the document.",
+        "false": "The pack's Goal does not name the deliverable of one representative request (for example it is `true`, empty, or names something else)."
+      }
+    },
+    "F4": {
+      "type": "noul",
+      "instructions": "no invented ordering (every protocol order is stated or implied by the document)",
+      "criteria": {
+        "true": "No ordering is invented: every order the protocol puts between two steps is stated or implied by the document (for example by data dependence), or the protocol imposes no order.",
+        "false": "The protocol puts at least two steps in an order the document neither states nor implies."
+      }
+    },
+    "F5": {
+      "type": "noul",
+      "instructions": "bindings plausible (each `via` names a runtime tool that can perform the Tool)",
+      "criteria": {
+        "true": "Bindings are plausible: each `via` names a tool from runtime.tools that can really perform the Tool; a `via` naming something outside that list is plausible only if the runtime indeed cannot perform the operation.",
+        "false": "At least one `via` names a tool that cannot perform the Tool, or names something outside runtime.tools although the runtime can perform the operation."
+      }
+    }
+  }
+}

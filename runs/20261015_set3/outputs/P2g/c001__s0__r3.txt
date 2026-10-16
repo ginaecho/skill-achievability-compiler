@@ -1,0 +1,49 @@
+```ce
+Skill `render-deploy`.
+Roles: `agent`, `user`.
+Tool `check_git_remote` (owner `agent`): via `bash`; needs `shell`; adds `git_remote_checked`.
+Tool `inspect_repo` (owner `agent`): via `read`; adds `codebase_analyzed`, `simple_single_service`, `complex_app`.
+Tool `check_render_mcp` (owner `agent`): via `mcp_resources`; adds `render_mcp_available`.
+Tool `check_render_cli` (owner `agent`): via `bash`; needs `shell`; adds `render_cli_checked`, `render_cli_available`.
+Tool `install_render_cli` (owner `agent`): via `bash`; needs `shell`, `allowlisted_internet`, `package_registries`; requires `render_cli_checked`; adds `render_cli_available`.
+Tool `write_blueprint` (owner `agent`): via `write`; requires `codebase_analyzed`; adds `render_yaml_created`.
+Tool `validate_blueprint` (owner `agent`): via `bash`; needs `shell`; requires `render_yaml_created` and `render_cli_available`; adds `render_yaml_validated`.
+Tool `commit_and_push_blueprint` (owner `agent`): via `bash`; needs `shell`, `github_account`; requires `render_yaml_created` and `git_remote_checked`; adds `render_yaml_pushed`.
+Tool `generate_blueprint_deeplink` (owner `agent`): via `bash`; needs `shell`; requires `git_remote_checked` and `render_yaml_pushed`; adds `deeplink_ready`, `deployment_started`.
+Initially true: none.
+Goal: any of (`deeplink_ready`, (`service_created` and `env_configured` and `deployment_verified`)).
+Protocol:
+  - `agent` uses `check_git_remote`.
+  - `user` chooses one of (observed):
+    - branch `git_repo`:
+      - `agent` uses `inspect_repo`.
+      - `agent` chooses one of (observed):
+        - branch `direct_creation`: none.
+        - branch `blueprint`:
+          - `agent` uses `write_blueprint`.
+          - `agent` uses `check_render_cli`.
+          - `agent` chooses one of (observed):
+            - branch `cli_available`:
+              - `agent` uses `validate_blueprint`.
+            - branch `install_cli`:
+              - `user` chooses one of (observed):
+                - branch `install`:
+                  - `agent` uses `install_render_cli`.
+                  - `agent` uses `validate_blueprint`.
+                - branch `skip_install`: none.
+          - `agent` uses `commit_and_push_blueprint`.
+          - `agent` uses `generate_blueprint_deeplink`.
+    - branch `docker_image`:
+      - `user` chooses one of (observed):
+        - branch `switch_to_git_repo`:
+          - `agent` uses `inspect_repo`.
+          - `agent` uses `write_blueprint`.
+          - `agent` uses `check_render_cli`.
+          - `agent` chooses one of (observed):
+            - branch `cli_available`:
+              - `agent` uses `validate_blueprint`.
+            - branch `skip_validation`: none.
+          - `agent` uses `commit_and_push_blueprint`.
+          - `agent` uses `generate_blueprint_deeplink`.
+        - branch `use_dashboard_api`: none.
+```

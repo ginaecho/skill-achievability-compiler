@@ -1,0 +1,41 @@
+```ce
+Skill `preset`.
+Roles: `agent`, `user`.
+Tool `check_azure_auth` (owner `agent`): via `bash`; needs `shell`; adds `azure_authenticated`.
+Tool `get_project` (owner `agent`): via `bash`; needs `shell`; requires `azure_authenticated`; adds `project_verified`, `current_region_known`.
+Tool `list_models` (owner `agent`): via `bash`; needs `shell`; requires `project_verified`; adds `models_listed`.
+Tool `ask_for_project_id` (owner `agent`): via `ask_user`; adds `project_id_available`.
+Tool `ask_user_to_select_model` (owner `agent`): via `ask_user`; requires `models_listed`; adds `model_selected`.
+Tool `check_current_region_capacity` (owner `agent`): via `bash`; needs `shell`; requires `project_verified`, `model_selected`; adds `current_region_checked`.
+Tool `query_all_regions_capacity` (owner `agent`): via `bash`; needs `shell`; requires `project_verified`, `model_selected`, `current_region_checked`; adds `alternatives_known`.
+Tool `ask_user_to_select_region` (owner `agent`): via `ask_user`; requires `alternatives_known`; adds `region_selected`.
+Tool `find_project_in_region` (owner `agent`): via `bash`; needs `shell`; requires `region_selected`; adds `project_in_region_ready`.
+Tool `create_project_in_region` (owner `agent`): via `bash`; needs `shell`; requires `region_selected`; adds `project_in_region_ready`.
+Tool `deploy_model` (owner `agent`): via `bash`; needs `shell`; requires `model_selected`; requires any of (`current_region_has_capacity`, `project_in_region_ready`); adds `deployment_created`.
+Tool `monitor_deployment` (owner `agent`): via `bash`; needs `shell`; requires `deployment_created`; adds `deployment_completed`.
+Initially true: none.
+Goal: `deployment_completed`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `project_id_provided`: none.
+    - branch `project_id_needed`:
+      - `agent` uses `ask_for_project_id`.
+  - `agent` uses `check_azure_auth`.
+  - `agent` uses `get_project`.
+  - `agent` uses `list_models`.
+  - `agent` uses `ask_user_to_select_model`.
+  - `agent` uses `check_current_region_capacity`.
+  - `agent` chooses one of (external):
+    - branch `current_region_has_capacity`:
+      - `agent` uses `deploy_model`.
+    - branch `no_current_region_capacity`:
+      - `agent` uses `query_all_regions_capacity`.
+      - `agent` uses `ask_user_to_select_region`.
+      - `agent` chooses one of (observed):
+        - branch `project_found_in_region`:
+          - `agent` uses `find_project_in_region`.
+        - branch `project_needs_creation`:
+          - `agent` uses `create_project_in_region`.
+      - `agent` uses `deploy_model`.
+  - `agent` uses `monitor_deployment`.
+```

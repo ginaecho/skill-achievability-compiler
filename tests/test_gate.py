@@ -143,13 +143,21 @@ def test_email_pack_flipped_in_is_impossible_naming_email_account(project: Path)
     assert rc == 1 and out.rstrip().endswith("gate: IMPOSSIBLE")
 
 
-def test_search_pack_flipped_in_is_impossible_under_base(project: Path):
+def test_search_pack_flipped_in_is_rejected_under_base(project: Path):
+    # without `search` the high-revenue branch is pruned; the standard branch
+    # still reaches the goal, but the declared TaxVerifier behaviour no longer
+    # conforms: a protocol rejection, which does not pass the gate and is
+    # explicitly NOT a goal refutation
     shutil.copy(project / "protocol-variants" / "quarterly_finance_report.search.ce",
                 project / "protocol")
     report = gate(project)
-    assert report.verdict == "IMPOSSIBLE"
+    assert report.verdict == "REJECTED" and report.exit_code == 4
     pack = entry(report, "pack", "quarterly_finance_report.search.ce")
-    assert pack.verdict == "IMPOSSIBLE"
+    assert pack.verdict == "REJECTED"
+    assert "protocol rejected (NON_CONFORMANT)" in pack.reason
+    assert "not" in pack.reason and "refut" in pack.reason
+    assert pack.detail["bound_verdict"] == "ACHIEVABLE"
+    assert pack.detail["bound_protocol"] == "REJECTED"
     assert "Tool `lookup_tax_rules` cannot run here: `search` is not declared" in pack.reason
     assert pack.fixes[0] == "add `azure_ai_search` to a toolbox the agent uses"
     assert pack.detail["withdrawn"] == {"lookup_tax_rules": "search"}
@@ -158,7 +166,7 @@ def test_search_pack_flipped_in_is_impossible_under_base(project: Path):
     # the same project is fine once the toolbox declares the search tool
     assert gate(project, declared="azure.search.yaml").verdict == "ACHIEVABLE"
     rc, out = run(project)
-    assert rc == 1 and "    fix: add `azure_ai_search` to a toolbox the agent uses" in out
+    assert rc == 4 and "    fix: add `azure_ai_search` to a toolbox the agent uses" in out
 
 
 def test_skill_with_undeclared_frontmatter_tool_is_impossible(project: Path):
@@ -248,7 +256,7 @@ def test_render_one_line_per_item_and_indented_fixes(project: Path):
     assert sum(1 for ln in lines if ln.startswith("pack ")) == 2
     assert sum(1 for ln in lines if ln.startswith("skill ")) == 6
     assert any(ln.startswith("    fix: ") for ln in lines)
-    assert lines[-1] == "gate: IMPOSSIBLE"
+    assert lines[-1] == "gate: REJECTED"
 
 
 def test_install_hook_prints_snippet_without_gating(tmp_path: Path):
@@ -468,3 +476,15 @@ def test_group_example_edges_resolve_to_the_senders_own_connection():
                   "quarterly_finance_report.ce: ExpenseAnalyst -> RevenueAnalyst (ExpenseData)")
     assert "over connection expense-analyst-to-revenue-analyst" in ea_ra.reason
     assert report.verdict == "ACHIEVABLE"
+
+
+def test_role_names_match_skill_files_without_case_or_separators():
+    """A compacted pack writes `revenue_analyst`; the skill file is RevenueAnalyst.md."""
+    from skillc.gate import _role_key
+    assert _role_key("revenue_analyst") == _role_key("RevenueAnalyst") == _role_key("revenue-analyst")
+    assert _role_key("TaxVerifier") != _role_key("TaxSpecialist")
+
+
+def test_web_search_is_public_egress_under_isolation():
+    from skillc.gate import EGRESS_TOOLS
+    assert "web_search" in EGRESS_TOOLS and "web_fetch" in EGRESS_TOOLS

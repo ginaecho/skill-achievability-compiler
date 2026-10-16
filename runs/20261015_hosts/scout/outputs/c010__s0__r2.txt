@@ -1,0 +1,47 @@
+```ce
+Skill `chrome-mcp-troubleshooting`.
+Roles: `agent`, `user`.
+Tool `inspect_chrome_mcp_state` (owner `agent`): via `bash`; adds `state_inspected`.
+Tool `toggle_to_claude_code_config` (owner `agent`): via `bash`; requires `state_inspected`; adds `claude_code_config_active`; removes `claude_app_config_active`.
+Tool `toggle_to_claude_app_config` (owner `agent`): via `bash`; requires `state_inspected`; adds `claude_app_config_active`; removes `claude_code_config_active`.
+Tool `repair_claude_code_wrapper` (owner `agent`): via `bash`; requires `state_inspected`; adds `dynamic_wrapper_installed`.
+Tool `set_tmpdir_fallback` (owner `agent`): via `bash`; requires `state_inspected`; adds `tmpdir_configured`.
+Tool `clean_native_host_state` (owner `agent`): via `bash`; requires `state_inspected`; adds `native_host_state_clean`.
+Tool `restart_chrome` (owner `agent`): via `windows_os`; requires `state_inspected`; adds `chrome_restarted`.
+Tool `restart_claude_code` (owner `user`): via `ask_user`; requires `state_inspected`; adds `claude_code_restarted`.
+Tool `reduce_to_one_profile_and_session` (owner `user`): via `ask_user`; requires `state_inspected`; adds `single_profile_and_session`.
+Tool `verify_claude_code_connectivity` (owner `agent`): via `bash`; requires `chrome_restarted` and `claude_code_restarted`; adds `connectivity_verified`; picks `active_mode` with (`active_mode` == 1 or `active_mode` == 2).
+Initially true: none.
+Initially: `active_mode` == 0.
+Goal: `connectivity_verified` and (`active_mode` == 1 or `active_mode` == 2).
+Protocol:
+  - `agent` uses `inspect_chrome_mcp_state`.
+  - `user` chooses one of (observed):
+    - branch `use_claude_code_cli`:
+      - `agent` uses `toggle_to_claude_code_config`.
+      - `agent` chooses one of (observed):
+        - branch `repair_wrapper`:
+          - `agent` uses `repair_claude_code_wrapper`.
+        - branch `skip_wrapper_repair`: none.
+      - `agent` chooses one of (observed):
+        - branch `set_tmpdir`:
+          - `agent` uses `set_tmpdir_fallback`.
+        - branch `skip_tmpdir_fix`: none.
+      - `user` chooses one of (observed):
+        - branch `reduce_conflicts`:
+          - `user` uses `reduce_to_one_profile_and_session`.
+        - branch `skip_conflict_reduction`: none.
+      - `agent` uses `clean_native_host_state`.
+      - `agent` uses `restart_chrome`.
+      - `user` uses `restart_claude_code`.
+      - `agent` uses `verify_claude_code_connectivity`.
+    - branch `use_claude_app_cowork`:
+      - `agent` uses `toggle_to_claude_app_config`.
+      - `user` chooses one of (observed):
+        - branch `reduce_conflicts`:
+          - `user` uses `reduce_to_one_profile_and_session`.
+        - branch `skip_conflict_reduction`: none.
+      - `agent` uses `restart_chrome`.
+      - `user` uses `restart_claude_code`.
+      - `agent` uses `verify_claude_code_connectivity`.
+```

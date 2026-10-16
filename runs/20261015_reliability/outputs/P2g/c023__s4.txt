@@ -1,0 +1,55 @@
+```ce
+Skill `dossier`.
+Roles: `agent`, `user`.
+Tool `ask_subject_identity` (owner `agent`): via `ask_user`; adds `q1_answered`.
+Tool `ask_subject_type` (owner `agent`): via `ask_user`; requires `q1_answered`; adds `q2_answered`.
+Tool `ask_purpose` (owner `agent`): via `ask_user`; requires `q2_answered`; adds `q3_answered`.
+Tool `ask_hypothesis` (owner `agent`): via `ask_user`; requires `q3_answered`; adds `hypothesis_provided`.
+Tool `ask_depth` (owner `agent`): via `ask_user`; requires `hypothesis_provided`; adds `q5_answered`.
+Tool `ask_sensitivities` (owner `agent`): via `ask_user`; requires `q5_answered`; adds `q6_answered`.
+Tool `research_entity` (owner `agent`): via `web_search`; requires `q5_answered`; requires `subject_disambiguated`; requires `hypothesis_ready`; adds `research_complete`; adds `evidence_balanced`; adds `audit_ready`; adds `timeline_ready`; adds `network_ready`; adds `reputation_ready`; adds `red_flags_ready`; adds `hooks_ready`; adds `verdict_ready`.
+Tool `fetch_sources` (owner `agent`): via `web_fetch`; requires `subject_disambiguated`; requires `hypothesis_ready`; adds `sources_fetched`.
+Tool `fetch_free_api_sources` (owner `agent`): via `bash`; requires `subject_disambiguated`; requires `hypothesis_ready`; adds `api_sources_fetched`.
+Tool `generate_docx` (owner `agent`): via `bash`; requires `research_complete`; requires `audit_ready`; requires `verdict_ready`; adds `docx_generated`.
+Tool `validate_docx` (owner `agent`): via `bash`; requires `docx_generated`; adds `docx_validated`; adds `required_sections_present`.
+Tool `deliver_docx` (owner `agent`): via `send_user_file`; requires `docx_validated`; requires `required_sections_present`; adds `docx_delivered`.
+
+Initially true: none.
+Initially: true.
+Goal: `docx_delivered` and `verdict_ready` and `audit_ready` and `evidence_balanced` and `required_sections_present`.
+
+Protocol:
+  - loop `identify_subject`:
+    - `agent` uses `ask_subject_identity`.
+    - `user` chooses one of (observed):
+      - branch `ambiguous`:
+        - repeat `identify_subject`.
+      - branch `specific`:
+        - `agent` uses `ask_subject_type`.
+  - `agent` uses `ask_purpose`.
+  - `agent` uses `ask_hypothesis`.
+  - `user` chooses one of (observed):
+    - branch `provided`:
+      - `agent` uses `ask_depth`.
+    - branch `refused_once`:
+      - `agent` uses `ask_hypothesis`.
+      - `user` chooses one of (observed):
+        - branch `provided_after_pushback`:
+          - `agent` uses `ask_depth`.
+        - branch `fallback_hypothesis`:
+          - `agent` uses `ask_depth`.
+  - `user` chooses one of (observed):
+    - branch `needs_sensitivities`:
+      - `agent` uses `ask_sensitivities`.
+    - branch `skip_sensitivities`: none.
+  - `user` chooses one of (observed):
+    - branch `subject_disambiguated`:
+      - `agent` uses `research_entity`.
+      - `agent` uses `fetch_sources`.
+      - `agent` uses `fetch_free_api_sources`.
+      - `agent` uses `generate_docx`.
+      - `agent` uses `validate_docx`.
+      - `agent` uses `deliver_docx`.
+    - branch `still_ambiguous`:
+      - none.
+```

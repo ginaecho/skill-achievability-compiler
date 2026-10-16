@@ -1,0 +1,54 @@
+```ce
+Skill `doc-coauthoring`.
+Roles: `agent`, `user`, `reader_agent`.
+Tool `ask_workflow_preference` (owner `agent`): via `ask_user`; adds `workflow_preference_known`.
+Tool `ask_context_questions` (owner `agent`): via `ask_user`; requires `using_workflow`; adds `meta_context_received`.
+Tool `read_shared_context` (owner `agent`): via `google_drive`; requires `using_workflow`; adds `external_context_read`.
+Tool `ask_unknown_entity_search_permission` (owner `agent`): via `ask_user`; requires `using_workflow`; adds `entity_search_permission_known`.
+Tool `search_connected_resources` (owner `agent`): via `mcp_resources`; requires `entity_search_permission_granted`; adds `unknown_entities_resolved`.
+Tool `ask_clarifying_questions` (owner `agent`): via `ask_user`; requires `using_workflow`; adds `clarifying_answers_received`.
+Tool `ask_move_to_drafting` (owner `agent`): via `ask_user`; requires `using_workflow`; adds `drafting_readiness_known`.
+Tool `create_doc_scaffold` (owner `agent`): via `artifact`; requires `drafting_ready`; adds `doc_scaffold_created`, `doc_created`.
+Tool `edit_doc_section` (owner `agent`): via `artifact`; requires `doc_created`; adds `section_drafted`, `doc_completed`.
+Tool `review_full_doc` (owner `agent`): via `read`; requires `doc_created`; adds `full_doc_reviewed`, `final_reviewed_and_completed`.
+Tool `reader_test_with_subagent` (owner `agent`): via `agent`; requires `doc_created`; adds `reader_test_passed`.
+Tool `offer_final_review_choice` (owner `agent`): via `ask_user`; requires `reader_test_passed`; adds `final_review_choice_known`.
+Initially true: none.
+Goal: any of (`worked_freeform`, all of (`using_workflow`, `doc_created`, `section_drafted`, `reader_test_passed`, any of (`doc_completed`, `final_reviewed_and_completed`))).
+Protocol:
+  - `agent` uses `ask_workflow_preference`.
+  - `user` chooses one of (observed):
+    - branch `accept_workflow`:
+      - `agent` uses `ask_context_questions`.
+      - `user` chooses one of (observed):
+        - branch `share_external_context`:
+          - `agent` uses `read_shared_context`.
+        - branch `no_external_context`: none.
+      - `user` chooses one of (observed):
+        - branch `mentions_unknown_entities`:
+          - `agent` uses `ask_unknown_entity_search_permission`.
+          - `user` chooses one of (observed):
+            - branch `grant_permission`:
+              - `agent` uses `search_connected_resources`.
+            - branch `deny_permission`: none.
+        - branch `no_unknown_entities`: none.
+      - `agent` uses `ask_clarifying_questions`.
+      - `agent` uses `ask_move_to_drafting`.
+      - `user` chooses one of (observed):
+        - branch `ready_for_drafting`:
+          - `agent` uses `create_doc_scaffold`.
+          - `agent` uses `edit_doc_section`.
+          - `user` chooses one of (observed):
+            - branch `needs_more_section_edits`:
+              - `agent` uses `edit_doc_section`.
+            - branch `section_ok`: none.
+          - `agent` uses `review_full_doc`.
+          - `agent` uses `reader_test_with_subagent`.
+          - `agent` uses `offer_final_review_choice`.
+          - `user` chooses one of (observed):
+            - branch `want_final_review`:
+              - `agent` uses `review_full_doc`.
+            - branch `done_now`: none.
+        - branch `not_ready_for_drafting`: none.
+    - branch `decline_workflow`: none.
+```

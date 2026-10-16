@@ -1,0 +1,46 @@
+```ce
+Skill `orchestrate`.
+Roles: `agent`, `user`.
+Tool `read_inputs` (owner `agent`): via `read`; adds `agents_read`, `state_read`, `story_read`, `current_task_known`, `task_analyzed`.
+Tool `ask_task_type` (owner `agent`): via `ask_user`; requires `current_task_known`; adds `task_type_known`.
+Tool `ask_clarification` (owner `agent`): via `ask_user`; requires `current_task_known` and `task_analyzed`; adds `clarification_progress`.
+Tool `write_orchestrator_output` (owner `agent`): via `write`; requires `task_type_known` and `all_questions_resolved`; adds `orchestrator_output_written`.
+Tool `update_state` (owner `agent`): via `write`; requires `orchestrator_output_written` and `task_type_known`; adds `state_updated`, `orchestration_completed`.
+Tool `send_handoff_message` (owner `agent`): via `ask_user`; requires `orchestration_completed`; adds `handoff_announced`.
+Initially true: none.
+Goal: `orchestrator_output_written` and `state_updated` and `orchestration_completed` and `handoff_announced`.
+Protocol:
+  - `agent` uses `read_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `task_type_clear`:
+      - `agent` chooses one of (observed):
+        - branch `questions_needed`:
+          - loop `clarify_loop`:
+            - `agent` uses `ask_clarification`.
+            - `agent` chooses one of (observed):
+              - branch `continue`: repeat `clarify_loop`.
+              - branch `resolved`:
+                - `agent` uses `write_orchestrator_output`.
+                - `agent` uses `update_state`.
+                - `agent` uses `send_handoff_message`.
+        - branch `resolved`:
+          - `agent` uses `write_orchestrator_output`.
+          - `agent` uses `update_state`.
+          - `agent` uses `send_handoff_message`.
+    - branch `task_type_unclear`:
+      - `agent` uses `ask_task_type`.
+      - `agent` chooses one of (observed):
+        - branch `questions_needed`:
+          - loop `clarify_loop_after_type`:
+            - `agent` uses `ask_clarification`.
+            - `agent` chooses one of (observed):
+              - branch `continue`: repeat `clarify_loop_after_type`.
+              - branch `resolved`:
+                - `agent` uses `write_orchestrator_output`.
+                - `agent` uses `update_state`.
+                - `agent` uses `send_handoff_message`.
+        - branch `resolved`:
+          - `agent` uses `write_orchestrator_output`.
+          - `agent` uses `update_state`.
+          - `agent` uses `send_handoff_message`.
+```

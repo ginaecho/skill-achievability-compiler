@@ -1,0 +1,39 @@
+```ce
+Skill `hf-cloud-serving-image-selection`.
+Roles: `agent`, `user`.
+Tool `fetch_aws_catalog` (owner `agent`): via `web_fetch`; adds `catalog_checked`.
+Tool `fetch_region_availability` (owner `agent`): via `web_fetch`; requires `region_account_check_needed`; adds `region_account_checked`.
+Tool `fetch_hf_config` (owner `agent`): via `web_fetch`; requires `hf_config_check_needed`; adds `model_arch_checked`.
+Tool `fetch_catalog_yaml` (owner `agent`): via `web_fetch`; requires `catalog_fetch_failed`; adds `catalog_checked`.
+Tool `query_dlc_github` (owner `agent`): via `web_fetch`; requires `catalog_fetch_failed`; adds `release_data_checked`.
+Tool `query_ecr_tags` (owner `agent`): via `bash`; requires `catalog_fetch_failed`; adds `ecr_checked`.
+Tool `ask_for_missing_inputs` (owner `agent`): via `ask_user`; requires `missing_inputs`; adds `inputs_complete`.
+Initially true: `missing_inputs`.
+Goal: `inputs_complete` and `catalog_checked` and (`image_uri_found` and ((`hf_dlc_selected` and not `generic_fallback_selected`) or (`generic_fallback_selected` and `fallback_reason_recorded`))).
+Protocol:
+  - `agent` uses `ask_for_missing_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `hf_config_check_needed`:
+      - `agent` uses `fetch_hf_config`.
+    - branch `hf_config_check_not_needed`: none.
+  - `agent` uses `fetch_aws_catalog`.
+  - `agent` chooses one of (observed):
+    - branch `catalog_rendered`: none.
+    - branch `catalog_failed`:
+      - `agent` uses `fetch_catalog_yaml`.
+      - `agent` chooses one of (observed):
+        - branch `yaml_sufficient`: none.
+        - branch `need_more_release_data`:
+          - `agent` chooses one of (observed):
+            - branch `use_github_release_data`:
+              - `agent` uses `query_dlc_github`.
+            - branch `query_ecr`:
+              - `agent` uses `query_ecr_tags`.
+  - `agent` chooses one of (observed):
+    - branch `region_account_check_needed`:
+      - `agent` uses `fetch_region_availability`.
+    - branch `region_account_check_not_needed`: none.
+  - `agent` chooses one of (observed):
+    - branch `compatible_hf_family_selected`: none.
+    - branch `generic_fallback_required`: none.
+```

@@ -1,0 +1,45 @@
+```ce
+Skill `make-repo-contribution`.
+Roles: `agent`, `user`.
+Tool `search_repo_guidance` (owner `agent`): via `read`; adds `guidance_checked`, `repo_guidance_known`.
+Tool `search_existing_issues` (owner `agent`): via `bash`; requires `guidance_checked`; adds `issues_checked`.
+Tool `ask_user_to_choose_issue` (owner `agent`): via `ask_user`; requires `issues_checked`; adds `issue_selected`.
+Tool `ask_user_to_confirm_prereqs` (owner `agent`): via `ask_user`; requires `repo_guidance_known`; adds `prereqs_confirmed`.
+Tool `create_issue` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked`; adds `issue_created`, `issue_selected`.
+Tool `create_branch` (owner `agent`): via `bash`; requires `guidance_checked`; adds `branch_created`.
+Tool `create_commits` (owner `agent`): via `bash`; requires `branch_created`; adds `commits_created`.
+Tool `push_branch` (owner `agent`): via `bash`; needs `github_account`; requires `branch_created` and `commits_created`; adds `branch_pushed`.
+Tool `create_pull_request` (owner `agent`): via `bash`; needs `github_account`; requires `guidance_checked` and `branch_pushed`; adds `pr_created`.
+Initially true: none.
+Goal: `guidance_checked`.
+Protocol:
+  - `agent` uses `search_repo_guidance`.
+  - `agent` chooses one of (observed):
+    - branch `issue_or_pr_or_commit_or_push_requested`:
+      - `agent` uses `search_existing_issues`.
+      - `agent` chooses one of (observed):
+        - branch `existing_issue_found_and_user_selects_one`:
+          - `agent` uses `ask_user_to_choose_issue`.
+        - branch `no_existing_issue_selected`:
+          - `agent` chooses one of (observed):
+            - branch `issue_required_and_user_wants_issue_created`:
+              - `agent` uses `create_issue`.
+            - branch `issue_not_required_or_user_declines_issue_creation`: none.
+      - `agent` uses `ask_user_to_confirm_prereqs`.
+      - `agent` chooses one of (observed):
+        - branch `create_branch_only`:
+          - `agent` uses `create_branch`.
+        - branch `commit_changes`:
+          - `agent` uses `create_branch`.
+          - `agent` uses `create_commits`.
+        - branch `push_code`:
+          - `agent` uses `create_branch`.
+          - `agent` uses `create_commits`.
+          - `agent` uses `push_branch`.
+        - branch `create_pr`:
+          - `agent` uses `create_branch`.
+          - `agent` uses `create_commits`.
+          - `agent` uses `push_branch`.
+          - `agent` uses `create_pull_request`.
+    - branch `guidance_lookup_only`: none.
+```

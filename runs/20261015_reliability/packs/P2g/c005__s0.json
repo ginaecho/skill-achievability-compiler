@@ -1,0 +1,556 @@
+{
+  "pack": {
+    "name": "context-engine",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_context_file": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "context_file_exists"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_context": {
+        "owner": "agent",
+        "pre": "context_file_exists",
+        "add": [
+          "context_loaded",
+          "required_fields_checked",
+          "working_memory_parsed",
+          "staleness_checked",
+          "privacy_rules_loaded",
+          "anonymization_protocol_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "mark_context_fresh": {
+        "owner": "agent",
+        "pre": "staleness_checked",
+        "add": [
+          "context_fresh"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "mark_context_stale": {
+        "owner": "agent",
+        "pre": "staleness_checked",
+        "add": [
+          "context_stale"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_setup_prompt": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "setup_prompted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_stale_continue": {
+        "owner": "agent",
+        "pre": "context_stale",
+        "add": [
+          "stale_prompted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_missing_context": {
+        "owner": "agent",
+        "pre": "context_loaded",
+        "add": [
+          "missing_context_addressed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "append_context_update": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:shell",
+            "needs:local_filesystem",
+            {
+              "and": [
+                "context_loaded",
+                "user_confirmed_update"
+              ]
+            }
+          ]
+        },
+        "add": [
+          "context_file_updated"
+        ],
+        "del": [
+          "context_stale"
+        ],
+        "assigns": {
+          "context_age_days": 0
+        },
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "context_file_exists": [
+              {
+                "act": {
+                  "cap": "check_context_file",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_context",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "fresh_context": [
+                      {
+                        "act": {
+                          "cap": "mark_context_fresh",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stale_context": [
+                      {
+                        "act": {
+                          "cap": "mark_context_stale",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "ask_stale_continue",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "missing_required_fields": [
+                      {
+                        "act": {
+                          "cap": "ask_missing_context",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "required_fields_sufficient": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_update_context": [
+                      {
+                        "act": {
+                          "cap": "append_context_update",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_update_context": []
+                  }
+                }
+              }
+            ],
+            "context_file_missing": [
+              {
+                "act": {
+                  "cap": "ask_setup_prompt",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        {
+          "or": [
+            "context_loaded",
+            "setup_prompted"
+          ]
+        },
+        "privacy_rules_loaded",
+        "anonymization_protocol_loaded",
+        {
+          "or": [
+            "context_fresh",
+            "context_stale",
+            "setup_prompted"
+          ]
+        },
+        {
+          "or": [
+            "required_fields_checked",
+            "setup_prompted"
+          ]
+        },
+        {
+          "or": [
+            "working_memory_parsed",
+            "setup_prompted"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "session_started",
+      "needs:shell",
+      "needs:local_filesystem"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "context_age_days",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "pre_binding": {
+    "name": "context-engine",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_context_file": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "context_file_exists"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "read_context": {
+        "owner": "agent",
+        "pre": "context_file_exists",
+        "add": [
+          "context_loaded",
+          "required_fields_checked",
+          "working_memory_parsed",
+          "staleness_checked",
+          "privacy_rules_loaded",
+          "anonymization_protocol_loaded"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "mark_context_fresh": {
+        "owner": "agent",
+        "pre": "staleness_checked",
+        "add": [
+          "context_fresh"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "mark_context_stale": {
+        "owner": "agent",
+        "pre": "staleness_checked",
+        "add": [
+          "context_stale"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_setup_prompt": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "setup_prompted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_stale_continue": {
+        "owner": "agent",
+        "pre": "context_stale",
+        "add": [
+          "stale_prompted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_missing_context": {
+        "owner": "agent",
+        "pre": "context_loaded",
+        "add": [
+          "missing_context_addressed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "append_context_update": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "context_loaded",
+            "user_confirmed_update"
+          ]
+        },
+        "add": [
+          "context_file_updated"
+        ],
+        "del": [
+          "context_stale"
+        ],
+        "assigns": {
+          "context_age_days": 0
+        },
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "agent",
+          "observed": true,
+          "branches": {
+            "context_file_exists": [
+              {
+                "act": {
+                  "cap": "check_context_file",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "read_context",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "fresh_context": [
+                      {
+                        "act": {
+                          "cap": "mark_context_fresh",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "stale_context": [
+                      {
+                        "act": {
+                          "cap": "mark_context_stale",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "ask_stale_continue",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "missing_required_fields": [
+                      {
+                        "act": {
+                          "cap": "ask_missing_context",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "required_fields_sufficient": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "confirm_update_context": [
+                      {
+                        "act": {
+                          "cap": "append_context_update",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "decline_update_context": []
+                  }
+                }
+              }
+            ],
+            "context_file_missing": [
+              {
+                "act": {
+                  "cap": "ask_setup_prompt",
+                  "by": "agent"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        {
+          "or": [
+            "context_loaded",
+            "setup_prompted"
+          ]
+        },
+        "privacy_rules_loaded",
+        "anonymization_protocol_loaded",
+        {
+          "or": [
+            "context_fresh",
+            "context_stale",
+            "setup_prompted"
+          ]
+        },
+        {
+          "or": [
+            "required_fields_checked",
+            "setup_prompted"
+          ]
+        },
+        {
+          "or": [
+            "working_memory_parsed",
+            "setup_prompted"
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "session_started"
+    ],
+    "init_constraints": [
+      {
+        "cmp": [
+          "context_age_days",
+          "==",
+          0
+        ]
+      }
+    ]
+  },
+  "bindings": {
+    "check_context_file": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "read_context": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "mark_context_fresh": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "mark_context_stale": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "ask_setup_prompt": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "ask_stale_continue": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "ask_missing_context": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "append_context_update": {
+      "via": "bash",
+      "needs": [
+        "shell",
+        "local_filesystem"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    }
+  },
+  "live_goal": null
+}

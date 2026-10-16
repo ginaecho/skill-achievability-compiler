@@ -1,0 +1,69 @@
+```ce
+Skill `declarative-agent-developer`.
+Roles: `agent`, `user`.
+Tool `inspect_workspace` (owner `agent`): via `read`; adds `workspace_checked`.
+Tool `check_atk_cli` (owner `agent`): via `bash`; adds `atk_cli_available`.
+Tool `set_atk_skill_env` (owner `agent`): via `bash`; requires `atk_cli_available`; adds `atk_skill_env_set`.
+Tool `parse_manifest` (owner `agent`): via `bash`; requires `manifest_present`; adds `manifest_parsed`.
+Tool `validate_manifest` (owner `agent`): via `bash`; requires `manifest_parsed`; adds `manifest_valid`.
+Tool `scaffold_agent_project` (owner `agent`): via `bash`; requires `atk_cli_available` and `atk_skill_env_set` and `wants_new_project` and not `manifest_present` and not `non_agent_project`; adds `project_scaffolded`, `manifest_present`, `app_package_present`.
+Tool `edit_agent_files` (owner `agent`): via `edit`; requires `manifest_present` and `manifest_valid` and `user_approved_changes`; adds `app_package_changed`.
+Tool `add_api_plugin` (owner `agent`): via `bash`; requires `atk_cli_available` and `atk_skill_env_set` and `manifest_present` and `manifest_valid` and `user_approved_changes`; adds `app_package_changed`, `api_plugin_added`.
+Tool `deploy_agent` (owner `agent`): via `bash`; requires `atk_cli_available` and `atk_skill_env_set` and `manifest_present` and `manifest_valid` and `app_package_changed`; adds `deployed`, `env_local_written`.
+Tool `read_title_id` (owner `agent`): via `read`; requires `env_local_written`; adds `title_id_read`.
+Initially true: none.
+Initially: not `workspace_checked`.
+Initially: not `atk_cli_available`.
+Initially: not `atk_skill_env_set`.
+Initially: not `manifest_present`.
+Initially: not `app_package_present`.
+Initially: not `non_agent_project`.
+Initially: not `manifest_parsed`.
+Initially: not `manifest_valid`.
+Initially: not `project_scaffolded`.
+Initially: not `user_approved_changes`.
+Initially: not `app_package_changed`.
+Initially: not `api_plugin_added`.
+Initially: not `deployed`.
+Initially: not `env_local_written`.
+Initially: not `title_id_read`.
+Initially: not `wants_new_project`.
+Initially: not `wants_edit_or_deploy`.
+Initially: not `deployment_skipped`.
+Goal: any of (`project_scaffolded`, (`app_package_changed` and any of (`deployment_skipped`, (`deployed` and `title_id_read`))), (`workspace_checked` and any of (`non_agent_project`, (`wants_edit_or_deploy` and not `manifest_present`), not `atk_cli_available`)), not `user_approved_changes`).
+Protocol:
+  - `agent` uses `inspect_workspace`.
+  - `agent` uses `check_atk_cli`.
+  - `user` chooses one of (observed):
+    - branch `new_project`:
+      - `agent` uses `set_atk_skill_env`.
+      - `agent` uses `scaffold_agent_project`.
+    - branch `edit_or_deploy_existing`:
+      - `agent` chooses one of (observed):
+        - branch `reject_non_agent`: none.
+        - branch `reject_missing_manifest`: none.
+        - branch `has_manifest`:
+          - `agent` uses `parse_manifest`.
+          - `agent` chooses one of (observed):
+            - branch `manifest_problem_found`: none.
+            - branch `manifest_ok`:
+              - `agent` uses `validate_manifest`.
+              - `agent` chooses one of (observed):
+                - branch `validation_problem_found`: none.
+                - branch `propose_change`:
+                  - `user` chooses one of (observed):
+                    - branch `approve_changes`:
+                      - `agent` chooses one of (observed):
+                        - branch `edit_files`:
+                          - `agent` uses `edit_agent_files`.
+                        - branch `add_api_plugin`:
+                          - `agent` uses `set_atk_skill_env`.
+                          - `agent` uses `add_api_plugin`.
+                      - `user` chooses one of (observed):
+                        - branch `skip_deploy`: none.
+                        - branch `deploy`:
+                          - `agent` uses `set_atk_skill_env`.
+                          - `agent` uses `deploy_agent`.
+                          - `agent` uses `read_title_id`.
+                    - branch `decline_changes`: none.
+```

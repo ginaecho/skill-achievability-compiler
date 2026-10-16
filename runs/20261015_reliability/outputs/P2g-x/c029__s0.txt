@@ -1,0 +1,50 @@
+```ce
+Skill `aws-ami-builder`.
+Roles: `agent`, `user`.
+
+Tool `install_packer` (owner `agent`):
+  via `bash`;
+  adds `packer_installed`.
+
+Tool `write_packer_template` (owner `agent`):
+  via `write`;
+  requires `user_preferences_known`;
+  adds `template_written`.
+
+Tool `validate_template` (owner `agent`):
+  via `bash`;
+  requires `template_written`, `packer_installed`;
+  adds `template_valid`.
+
+Tool `build_ami` (owner `agent`):
+  via `bash`;
+  needs `aws_account`;
+  requires `template_valid`;
+  adds `ami_built`;
+  sets `ami_id` to some value.
+
+Tool `gather_preferences` (owner `agent`):
+  via `ask_user`;
+  adds `user_preferences_known`;
+  picks `base_os` with `base_os` in ["ubuntu_2204", "amazon_linux_2023"];
+  picks `regions` with true;
+  picks `instance_type` with true;
+  picks `provisioning_script` with true.
+
+Initially true: none.
+Initially: `ami_id` == "".
+
+Goal: `ami_built` and `ami_id` != "".
+
+Protocol:
+  - `agent` uses `install_packer`.
+  - `agent` uses `gather_preferences`.
+  - `agent` uses `write_packer_template`.
+  - `agent` uses `validate_template`.
+  - loop `build_retry`:
+    - `agent` uses `build_ami`.
+    - `user` chooses one of (observed):
+      - branch `success`: none.
+      - branch `retry`:
+        - repeat `build_retry`.
+```

@@ -1,0 +1,30 @@
+```ce
+Skill `research-summarizer`.
+Roles: `agent`, `user`.
+Tool `generate_summary_scaffold` (owner `agent`): via `bash`; requires `single_source_request`; adds `scaffold_generated`.
+Tool `extract_citations` (owner `agent`): via `bash`; requires `citation_extraction_request`; adds `citations_extracted`, `extractor_succeeded`, `citation_count_matches_output`.
+Tool `ask_for_more_sources` (owner `agent`): via `ask_user`; requires `comparison_request`, `only_one_source_provided`; adds `asked_for_more_sources`.
+Tool `deliver_single_source_brief` (owner `agent`): via `reply`; requires `single_source_request`; adds `brief_delivered`, `key_findings_anchored`, `quality_rated`, `missing_metadata_not_invented`.
+Tool `deliver_comparison_brief` (owner `agent`): via `reply`; requires `comparison_request`, `enough_sources`; adds `brief_delivered`, `comparison_matrix_complete`, `quality_rated`, `contradictions_highlighted`, `missing_metadata_not_invented`.
+Tool `deliver_citation_bibliography` (owner `agent`): via `reply`; requires `citation_extraction_request`, `citations_extracted`, `extractor_succeeded`, `citation_count_matches_output`; adds `brief_delivered`, `bibliography_sorted`, `citations_classified`, `missing_metadata_not_invented`.
+Initially true: none.
+Goal: `brief_delivered` and `missing_metadata_not_invented` and (any of (`key_findings_anchored`, `comparison_matrix_complete`, `bibliography_sorted`)) and (any of (`quality_rated`, `citations_classified`)).
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `single_source` (assuming `single_source_request`):
+      - `agent` uses `generate_summary_scaffold`.
+      - `agent` uses `deliver_single_source_brief`.
+    - branch `comparison` (assuming `comparison_request`):
+      - `user` chooses one of (observed):
+        - branch `enough_sources` (assuming `enough_sources`):
+          - `agent` uses `deliver_comparison_brief`.
+        - branch `only_one_source` (assuming `only_one_source_provided`):
+          - `agent` uses `ask_for_more_sources`.
+          - `user` chooses one of (observed):
+            - branch `provides_more_sources` (assuming `enough_sources`):
+              - `agent` uses `deliver_comparison_brief`.
+            - branch `does_not_provide_more_sources`: none.
+    - branch `citation_extraction` (assuming `citation_extraction_request`):
+      - `agent` uses `extract_citations`.
+      - `agent` uses `deliver_citation_bibliography`.
+```

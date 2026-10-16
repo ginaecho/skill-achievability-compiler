@@ -1,0 +1,610 @@
+{
+  "pack": {
+    "name": "chrome-mcp-troubleshooting",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_macos_chrome_mcp_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "state_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "disable_claude_app_native_host": {
+        "owner": "agent",
+        "pre": "user_uses_claude_code_cli",
+        "add": [
+          "claude_app_config_disabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "disable_claude_code_native_host": {
+        "owner": "agent",
+        "pre": "user_uses_cowork",
+        "add": [
+          "claude_code_config_disabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_dynamic_wrapper": {
+        "owner": "agent",
+        "pre": "user_uses_claude_code_cli",
+        "add": [
+          "dynamic_wrapper_installed"
+        ],
+        "del": [
+          "hardcoded_wrapper"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_tmpdir_in_shell_config": {
+        "owner": "agent",
+        "pre": "tmpdir_missing",
+        "add": [
+          "tmpdir_configured"
+        ],
+        "del": [
+          "tmpdir_missing"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clean_native_host_and_sockets": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "native_host_cleaned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "provide_toggle_script": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "toggle_script_provided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_macos_chrome_mcp_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "use_claude_code_cli": [
+              {
+                "act": {
+                  "cap": "disable_claude_app_native_host",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "hardcoded_wrapper": [
+                      {
+                        "act": {
+                          "cap": "install_dynamic_wrapper",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "wrapper_ok": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "tmpdir_missing": [
+                      {
+                        "act": {
+                          "cap": "set_tmpdir_in_shell_config",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "tmpdir_ok": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "clean_native_host_and_sockets",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "restart_chrome",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "restart_claude_code",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "want_toggle_script": [
+                      {
+                        "act": {
+                          "cap": "provide_toggle_script",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_toggle_script": []
+                  }
+                }
+              }
+            ],
+            "use_cowork": [
+              {
+                "act": {
+                  "cap": "disable_claude_code_native_host",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "restart_chrome",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "want_toggle_script": [
+                      {
+                        "act": {
+                          "cap": "provide_toggle_script",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_toggle_script": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "issue_present",
+        "state_inspected",
+        {
+          "or": [
+            {
+              "and": [
+                "user_uses_claude_code_cli",
+                "claude_app_config_disabled",
+                "chrome_restarted",
+                "claude_code_restarted"
+              ]
+            },
+            {
+              "and": [
+                "user_uses_cowork",
+                "claude_code_config_disabled",
+                "chrome_restarted"
+              ]
+            }
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "user_uses_claude_code_cli",
+                "dynamic_wrapper_installed"
+              ]
+            },
+            {
+              "not": "user_uses_claude_code_cli"
+            },
+            {
+              "not": "hardcoded_wrapper"
+            }
+          ]
+        },
+        {
+          "or": [
+            "tmpdir_configured",
+            {
+              "not": "tmpdir_missing"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "issue_present",
+      "macos_user"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "chrome-mcp-troubleshooting",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "inspect_macos_chrome_mcp_state": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "state_inspected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "disable_claude_app_native_host": {
+        "owner": "agent",
+        "pre": "user_uses_claude_code_cli",
+        "add": [
+          "claude_app_config_disabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "disable_claude_code_native_host": {
+        "owner": "agent",
+        "pre": "user_uses_cowork",
+        "add": [
+          "claude_code_config_disabled"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "install_dynamic_wrapper": {
+        "owner": "agent",
+        "pre": "user_uses_claude_code_cli",
+        "add": [
+          "dynamic_wrapper_installed"
+        ],
+        "del": [
+          "hardcoded_wrapper"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "set_tmpdir_in_shell_config": {
+        "owner": "agent",
+        "pre": "tmpdir_missing",
+        "add": [
+          "tmpdir_configured"
+        ],
+        "del": [
+          "tmpdir_missing"
+        ],
+        "assigns": {},
+        "nondet": {}
+      },
+      "clean_native_host_and_sockets": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "native_host_cleaned"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "restart_chrome": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "chrome_restarted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "restart_claude_code": {
+        "owner": "agent",
+        "pre": "user_uses_claude_code_cli",
+        "add": [
+          "claude_code_restarted"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "provide_toggle_script": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "toggle_script_provided"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "inspect_macos_chrome_mcp_state",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "use_claude_code_cli": [
+              {
+                "act": {
+                  "cap": "disable_claude_app_native_host",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "hardcoded_wrapper": [
+                      {
+                        "act": {
+                          "cap": "install_dynamic_wrapper",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "wrapper_ok": []
+                  }
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "tmpdir_missing": [
+                      {
+                        "act": {
+                          "cap": "set_tmpdir_in_shell_config",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "tmpdir_ok": []
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "clean_native_host_and_sockets",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "restart_chrome",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "restart_claude_code",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "want_toggle_script": [
+                      {
+                        "act": {
+                          "cap": "provide_toggle_script",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_toggle_script": []
+                  }
+                }
+              }
+            ],
+            "use_cowork": [
+              {
+                "act": {
+                  "cap": "disable_claude_code_native_host",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "restart_chrome",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "want_toggle_script": [
+                      {
+                        "act": {
+                          "cap": "provide_toggle_script",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "skip_toggle_script": []
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "goal": {
+      "and": [
+        "issue_present",
+        "state_inspected",
+        {
+          "or": [
+            {
+              "and": [
+                "user_uses_claude_code_cli",
+                "claude_app_config_disabled",
+                "chrome_restarted",
+                "claude_code_restarted"
+              ]
+            },
+            {
+              "and": [
+                "user_uses_cowork",
+                "claude_code_config_disabled",
+                "chrome_restarted"
+              ]
+            }
+          ]
+        },
+        {
+          "or": [
+            {
+              "and": [
+                "user_uses_claude_code_cli",
+                "dynamic_wrapper_installed"
+              ]
+            },
+            {
+              "not": "user_uses_claude_code_cli"
+            },
+            {
+              "not": "hardcoded_wrapper"
+            }
+          ]
+        },
+        {
+          "or": [
+            "tmpdir_configured",
+            {
+              "not": "tmpdir_missing"
+            }
+          ]
+        }
+      ]
+    },
+    "init_true": [
+      "issue_present",
+      "macos_user"
+    ],
+    "init_constraints": []
+  },
+  "bindings": {
+    "inspect_macos_chrome_mcp_state": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "disable_claude_app_native_host": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "disable_claude_code_native_host": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "install_dynamic_wrapper": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "set_tmpdir_in_shell_config": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "clean_native_host_and_sockets": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "restart_chrome": {
+      "via": "macos_desktop",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "restart_claude_code": {
+      "via": "macos_desktop",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "provide_toggle_script": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    }
+  },
+  "live_goal": null
+}

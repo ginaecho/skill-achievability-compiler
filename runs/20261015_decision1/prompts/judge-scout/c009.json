@@ -1,0 +1,67 @@
+{
+  "model": "Decision-1",
+  "state": {
+    "document": "---\nname: nav-tieout\ndescription: Tie an LP statement to the fund's NAV pack — recompute the LP's capital account from the NAV components and flag any line that doesn't agree. Use before LP statements are distributed.\n---\n\n# NAV tie-out\n\nGiven a generated LP statement and the period's NAV pack (via the nav MCP), independently recompute the LP's capital account and compare line by line.\n\n> **The generated statement is the thing under test.** The NAV pack is the source of truth.\n\n## Recompute the LP capital account\n\n```\nBeginning capital (prior statement ending)\n  + Contributions (capital calls paid this period)\n  − Distributions (cash + in-kind)\n  + Allocated net income / (loss)\n      = LP% × (realized + unrealized P&L − management fee − fund expenses)\n  − Carried interest allocation (if crystallized this period)\nEnding capital\n```\n\nPull each input from the NAV pack: LP commitment %, fund-level P&L components, fee and expense totals, waterfall outputs.\n\n## Compare\n\nFor each line on the statement, compare to your recomputed value. Tolerance: `0.01`. For each mismatch, note which input drives it (e.g., \"allocated P&L differs — statement used 12.40% ownership, NAV pack shows 12.38% after the Q1 transfer\").\n\n## Additional checks\n\n- Ending capital on this statement = beginning capital on next period's draft (if available).\n- Sum of all LP ending capitals = fund NAV (within rounding).\n- Commitment, unfunded, and recallable figures agree to the commitment register.\n\n## Output\n\nA pass/fail per line, the recomputed values alongside the statement values, and a list of flags. Do not edit the statement — the publisher acts on the flags after review.\n",
+    "runtime": {
+      "name": "scout-desktop",
+      "description": "Microsoft Scout on a Windows PC: a PowerShell shell, the local filesystem, the public web, a browser it can drive, and the signed-in user's own and shared Microsoft 365 work data (what they can access: their mail, calendar, the chats, meetings and channels they are in, files shared with them) through WorkIQ. No accounts or credentials for other external services.",
+      "tools": {
+        "bash": "run PowerShell commands on Windows: scripts, CLIs, git, package installs from public registries",
+        "read": "read files on the local filesystem",
+        "write": "create and overwrite files",
+        "edit": "edit existing files",
+        "web_fetch": "fetch public web pages and unauthenticated public APIs",
+        "web_search": "search the public web",
+        "browser": "drive a Microsoft Edge browser (Playwright): navigate, click, fill forms, take screenshots",
+        "m365": "read the signed-in user's own and shared Microsoft 365 work data (what they can access) through WorkIQ: mail, calendar, meetings, Teams chats and channels they are in, files, people",
+        "teams_message": "send a Teams message as the signed-in user",
+        "azure_devops_mcp": "read and update Azure DevOps work items, repos and pipelines the user can access",
+        "ask_user": "ask the user a question and read the answer in the conversation",
+        "windows_os": "Windows itself: winget, Windows apps and the Windows App SDK"
+      }
+    },
+    "pack": "Skill `nav-tieout`.\nRoles: `agent`.\nTool `read_statement` (owner `agent`): via `read`; adds `statement_loaded`.\nTool `read_next_draft` (owner `agent`): via `read`; adds `next_draft_loaded`.\nTool `fetch_nav_pack` (owner `agent`): via `bash`; requires `statement_loaded`; adds `nav_pack_loaded`.\nTool `compute_tieout` (owner `agent`): via `bash`; requires `statement_loaded` and `nav_pack_loaded`; adds `capital_recomputed`, `lines_compared`, `line_results_ready`, `flags_ready`; picks `line_mismatches` with `line_mismatches` >= 0; picks `ending_capital_diff_cents` with `ending_capital_diff_cents` >= 0; picks `next_period_diff_cents` with `next_period_diff_cents` >= 0; picks `fund_nav_diff_cents` with `fund_nav_diff_cents` >= 0; picks `register_diff_cents` with `register_diff_cents` >= 0.\nTool `compute_tieout_with_next` (owner `agent`): via `bash`; requires `statement_loaded` and `nav_pack_loaded` and `next_draft_loaded`; adds `capital_recomputed`, `lines_compared`, `line_results_ready`, `flags_ready`, `next_period_checked`; picks `line_mismatches` with `line_mismatches` >= 0; picks `ending_capital_diff_cents` with `ending_capital_diff_cents` >= 0; picks `next_period_diff_cents` with `next_period_diff_cents` >= 0; picks `fund_nav_diff_cents` with `fund_nav_diff_cents` >= 0; picks `register_diff_cents` with `register_diff_cents` >= 0.\nInitially: `line_mismatches` == 0.\nInitially: `ending_capital_diff_cents` == 0.\nInitially: `next_period_diff_cents` == 0.\nInitially: `fund_nav_diff_cents` == 0.\nInitially: `register_diff_cents` == 0.\nGoal: `line_results_ready` and `flags_ready` and `capital_recomputed` and `lines_compared` and `ending_capital_diff_cents` <= 1 and `fund_nav_diff_cents` <= 1 and `register_diff_cents` <= 1 and (not `next_draft_loaded` or (`next_period_checked` and `next_period_diff_cents` <= 1)).\nProtocol:\n  - `agent` uses `read_statement`.\n  - `agent` chooses one of (observed):\n    - branch `next_draft_available`:\n      - `agent` uses `read_next_draft`.\n      - `agent` uses `fetch_nav_pack`.\n      - `agent` uses `compute_tieout_with_next`.\n    - branch `no_next_draft`:\n      - `agent` uses `fetch_nav_pack`.\n      - `agent` uses `compute_tieout`.\n"
+  },
+  "questions": {
+    "F1": {
+      "type": "noul",
+      "instructions": "no invented Tool (every Tool corresponds to an instruction)",
+      "criteria": {
+        "true": "Every Tool in the pack corresponds to an operation that some sentence of the document asks for, or the pack declares no Tool.",
+        "false": "At least one Tool in the pack is invented: no sentence of the document asks for that operation."
+      }
+    },
+    "F2": {
+      "type": "noul",
+      "instructions": "no omitted mandatory step",
+      "criteria": {
+        "true": "No mandatory step is omitted: every step without which the document's core deliverable cannot be produced appears in the pack. Optional or follow-up work may be omitted or skippable.",
+        "false": "The pack omits at least one mandatory step, a step without which the document's core deliverable cannot be produced."
+      }
+    },
+    "F3": {
+      "type": "noul",
+      "instructions": "the Goal states the document's deliverable",
+      "criteria": {
+        "true": "The pack's Goal names the deliverable of one representative request of the document.",
+        "false": "The pack's Goal does not name the deliverable of one representative request (for example it is `true`, empty, or names something else)."
+      }
+    },
+    "F4": {
+      "type": "noul",
+      "instructions": "no invented ordering (every protocol order is stated or implied by the document)",
+      "criteria": {
+        "true": "No ordering is invented: every order the protocol puts between two steps is stated or implied by the document (for example by data dependence), or the protocol imposes no order.",
+        "false": "The protocol puts at least two steps in an order the document neither states nor implies."
+      }
+    },
+    "F5": {
+      "type": "noul",
+      "instructions": "bindings plausible (each `via` names a runtime tool that can perform the Tool)",
+      "criteria": {
+        "true": "Bindings are plausible: each `via` names a tool from runtime.tools that can really perform the Tool; a `via` naming something outside that list is plausible only if the runtime indeed cannot perform the operation.",
+        "false": "At least one `via` names a tool that cannot perform the Tool, or names something outside runtime.tools although the runtime can perform the operation."
+      }
+    }
+  }
+}

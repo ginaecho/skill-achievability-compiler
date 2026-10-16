@@ -1,0 +1,75 @@
+```ce
+Skill `cuopt-numerical-optimization-api`.
+Roles: `agent`, `user`.
+
+Tool `choose_interface` (owner `agent`):
+  via `ask_user`;
+  requires `interface_unclear`;
+  picks `interface` with `interface` in {`python`, `c`, `cli`};
+  removes `interface_unclear`.
+
+Tool `write_code` (owner `agent`):
+  via `write`;
+  requires `interface` in {`python`, `c`} and `problem_described`;
+  adds `code_written`.
+
+Tool `run_cli_solve` (owner `agent`):
+  via `bash`;
+  requires `interface` == `cli` and `input_file_exists`;
+  adds `solved`.
+
+Tool `run_model` (owner `agent`):
+  via `bash`;
+  requires `code_written`;
+  adds `solved`.
+
+Tool `check_error` (owner `agent`):
+  via `bash`;
+  requires `solved` and `error_detected`;
+  replaces `error_detected` with `false`;
+  adds `diagnosis_performed`.
+
+Tool `apply_fix` (owner `agent`):
+  via `write` | `edit`;
+  requires `diagnosis_performed`;
+  adds `fix_applied`;
+  removes `code_written`;
+  removes `solved`.
+
+Initially true: none.
+Initially: none.
+Goal: `solved` and (not `error_detected`).
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `interface_clear`:
+      - `agent` chooses one of (observed):
+        - branch `modeling_language`: none.
+        - branch `direct_api`:
+          - `agent` chooses one of (observed):
+            - branch `python`: none.
+            - branch `c`: none.
+            - branch `cli`:
+              - `agent` uses `run_cli_solve`.
+              - checkpoint: `solved` and (not `error_detected`).
+          - `agent` uses `write_code`.
+    - branch `interface_unclear`:
+      - `agent` uses `choose_interface`.
+      - `agent` chooses one of (observed):
+        - branch `modeling_language`: none.
+        - branch `direct_api`:
+          - `agent` chooses one of (observed):
+            - branch `python`: none.
+            - branch `c`: none.
+            - branch `cli`:
+              - `agent` uses `run_cli_solve`.
+          - `agent` uses `write_code`.
+  - loop `solve_loop`:
+    - `agent` uses `run_model`.
+    - `agent` chooses one of (observed):
+      - branch `ok`: none.
+      - branch `error`:
+        - `agent` uses `check_error`.
+        - `agent` uses `apply_fix`.
+        - repeat `solve_loop`.
+  - checkpoint: `solved` and (not `error_detected`).
+```

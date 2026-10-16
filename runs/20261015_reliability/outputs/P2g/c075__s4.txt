@@ -1,0 +1,60 @@
+```ce
+Skill `llm-finetuning-training-engineer`.
+Roles: `agent`, `eval_engineer`.
+Tool `read_brief_and_reports` (owner `agent`): via `read`; adds `brief_read`, `method_known`, `dataset_expectation_known`.
+Tool `build_dataset_and_reports` (owner `agent`): via `bash`; requires `brief_read`; adds `dataset_built`, `dataset_card_committed`, `validation_report_written`, `packed_samples_attached`, `phase2_complete`.
+Tool `confirm_environment` (owner `agent`): via `bash`; requires `phase2_complete`; adds `env_report_present`; picks `env_status` with any of (`env_status` == 1, `env_status` == 2, `env_status` == 3).
+Tool `generate_training_files` (owner `agent`): via `write`; requires `env_report_present` and `env_status` == 1 and `method_known`; adds `train_config_written`, `train_script_written`.
+Tool `commit_training_files` (owner `agent`): via `bash`; requires `train_config_written` and `train_script_written`; adds `train_files_committed`.
+Tool `launch_training` (owner `agent`): via `bash`; requires `train_files_committed` and `env_status` == 1; adds `training_running`.
+Tool `poll_training_logs` (owner `agent`): via `bash`; requires `training_running`; adds `structured_progress_emitted`; picks `run_outcome` with any of (`run_outcome` == 1, `run_outcome` == 2, `run_outcome` == 3, `run_outcome` == 4).
+Tool `halt_run_and_triage` (owner `agent`): via `bash`; requires `run_outcome` == 3; adds `failure_excerpt_reported`; picks `failure_class` with any of (`failure_class` == 1, `failure_class` == 2, `failure_class` == 3).
+Tool `rerun_preflight` (owner `agent`): via `bash`; requires `failure_class` == 1; adds `preflight_rerun`, `failure_excerpt_reported`.
+Tool `apply_divergence_checks` (owner `agent`): via `bash`; requires `failure_class` == 2; adds `divergence_checked_in_order`, `failure_excerpt_reported`.
+Tool `apply_oom_ladder` (owner `agent`): via `bash`; requires `failure_class` == 3; adds `oom_ladder_applied_in_order`, `failure_excerpt_reported`.
+Tool `export_artifact_and_smoke_test` (owner `agent`): via `bash`; requires `promotion_verdict_promote` and `run_outcome` == 1; adds `artifact_exported`, `smoke_test_passed`, `export_done`.
+Initially true: none.
+Initially: `env_status` == 0.
+Initially: `run_outcome` == 0.
+Initially: `failure_class` == 0.
+Goal: any of (`run_outcome` == 2, `run_outcome` == 4, all of (`run_outcome` == 1, `checkpoint_handed_to_eval`, any of (not `promotion_verdict_promote`, `export_done`)), all of (`run_outcome` == 3, `failure_excerpt_reported`, any of (`preflight_rerun`, `divergence_checked_in_order`, `oom_ladder_applied_in_order`))).
+Protocol:
+  - `agent` uses `read_brief_and_reports`.
+  - `agent` uses `build_dataset_and_reports`.
+  - `agent` uses `confirm_environment`.
+  - `agent` chooses one of (external):
+    - branch `blocked`:
+      - `agent` uses `confirm_environment`.
+    - branch `ready_with_warnings`: none.
+    - branch `ready`:
+      - `agent` uses `generate_training_files`.
+      - `agent` uses `commit_training_files`.
+      - `agent` uses `launch_training`.
+      - `agent` uses `poll_training_logs`.
+      - `agent` chooses one of (external):
+        - branch `completed`:
+          - `agent` tells `eval_engineer` `checkpoint_ready`.
+          - `eval_engineer` chooses one of (external):
+            - branch `promote`:
+              - `eval_engineer` tells `agent` `PROMOTE`.
+              - `agent` uses `export_artifact_and_smoke_test`.
+            - branch `reject`:
+              - `eval_engineer` tells `agent` `REJECT`.
+        - branch `failed`:
+          - `agent` uses `halt_run_and_triage`.
+          - `agent` chooses one of (observed):
+            - branch `environment_failure`:
+              - `agent` uses `rerun_preflight`.
+            - branch `divergence`:
+              - `agent` uses `apply_divergence_checks`.
+            - branch `uma_oom`:
+              - `agent` uses `apply_oom_ladder`.
+        - branch `still_running`: none.
+Behaviour of `eval_engineer`:
+  - receive `checkpoint_ready` from `agent`.
+  - select one of:
+    - branch `promote`:
+      - send `PROMOTE` to `agent`.
+    - branch `reject`:
+      - send `REJECT` to `agent`.
+```

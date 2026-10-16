@@ -1,0 +1,32 @@
+```ce
+Skill `requesting-code-review`.
+Roles: `agent`, `reviewer`.
+Tool `get_git_shas` (owner `agent`): via `bash`; requires `git_repo_present`; adds `base_sha_known`, `head_sha_known`.
+Tool `read_review_template` (owner `agent`): via `read`; adds `review_template_read`.
+Tool `spawn_reviewer` (owner `agent`): via `agent`; needs `sub_agents`; requires `base_sha_known` and `head_sha_known` and `review_template_read` and `description_known` and `requirements_known`; adds `review_requested`.
+Tool `review_code` (owner `reviewer`): via `bash`; requires `review_requested` and `base_sha_known` and `head_sha_known`; adds `review_feedback_received`.
+Tool `fix_critical_issues` (owner `agent`): via `bash`; requires `review_feedback_received` and `critical_issues_found`; removes `critical_issues_found`.
+Tool `fix_important_issues` (owner `agent`): via `bash`; requires `review_feedback_received` and `important_issues_found`; removes `important_issues_found`.
+Tool `reply_with_pushback` (owner `agent`): via `reply`; requires `review_feedback_received` and `reviewer_wrong`; adds `pushback_provided`.
+Initially true: `git_repo_present`, `description_known`, `requirements_known`.
+Goal: `review_feedback_received` and ((`critical_issues_found` == `critical_issues_found`) and (`important_issues_found` == `important_issues_found`)).
+Protocol:
+  - `agent` uses `get_git_shas`.
+  - `agent` uses `read_review_template`.
+  - `agent` uses `spawn_reviewer`.
+  - `agent` tells `reviewer` `review_request`.
+  - `reviewer` uses `review_code`.
+  - `agent` chooses one of (observed):
+    - branch `critical_found` (assuming `critical_issues_found`):
+      - `agent` uses `fix_critical_issues`.
+    - branch `no_critical`: none.
+  - `agent` chooses one of (observed):
+    - branch `important_found_and_fix` (assuming `important_issues_found`):
+      - `agent` uses `fix_important_issues`.
+    - branch `important_found_and_push_back` (assuming `important_issues_found` and `reviewer_wrong`):
+      - `agent` uses `reply_with_pushback`.
+    - branch `no_important`: none.
+Behaviour of `reviewer`:
+  - receive `review_request` from `agent`.
+  - use `review_code`.
+```

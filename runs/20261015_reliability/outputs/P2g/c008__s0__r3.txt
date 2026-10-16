@@ -1,0 +1,56 @@
+```ce
+Skill `hf-cloud-serving-image-selection`.
+Roles: `agent`, `user`.
+Tool `read_catalog_page` (owner `agent`): via `web_fetch`; requires `allowlisted_catalog`; adds `catalog_read`, `selection_from_current_source`.
+Tool `read_region_availability` (owner `agent`): via `web_fetch`; requires `region_account_uncertain`; adds `region_account_resolved`, `region_applied`.
+Tool `read_model_config` (owner `agent`): via `web_fetch`; requires `hf_config_public`; adds `model_arch_known`.
+Tool `read_catalog_yaml` (owner `agent`): via `web_fetch`; requires `catalog_page_unusable`; adds `catalog_read`, `selection_from_current_source`.
+Tool `query_ecr_tags` (owner `agent`): via `bash`; requires `catalog_page_unusable` and `ecr_query_possible`; adds `catalog_read`, `selection_from_current_source`.
+Tool `mirror_image` (owner `agent`): via `bash`; needs `aws_account`; requires `mirroring_needed`; adds `image_uri_selected`.
+Tool `ask_user_for_inputs` (owner `agent`): via `ask_user`; adds `deployment_inputs_known`.
+Tool `select_hf_vllm` (owner `agent`): requires `deployment_inputs_known` and `catalog_read`; adds `family_selected`, `image_uri_selected`, `hf_family_preferred_when_compatible`, `no_tgi_used`, `region_applied`, `uses_vllm_family`.
+Tool `select_hf_vllm_omni` (owner `agent`): requires `deployment_inputs_known` and `catalog_read`; adds `family_selected`, `image_uri_selected`, `hf_family_preferred_when_compatible`, `no_tgi_used`, `region_applied`, `uses_vllm_family`.
+Tool `select_non_vllm_family` (owner `agent`): requires `deployment_inputs_known` and `catalog_read`; adds `family_selected`, `image_uri_selected`, `hf_family_preferred_when_compatible`, `no_tgi_used`, `region_applied`.
+Tool `resolve_vllm_ami_requirement` (owner `agent`): requires `uses_vllm_family` and `image_uri_selected`; adds `ami_requirement_resolved`.
+Initially true: `allowlisted_catalog`, `hf_config_public`.
+Goal: all of (`deployment_inputs_known`, `family_selected`, `image_uri_selected`, `selection_from_current_source`, `hf_family_preferred_when_compatible`, `no_tgi_used`, `region_applied`, ((`uses_vllm_family` and `ami_requirement_resolved`) or (not `uses_vllm_family`))).
+Protocol:
+  - `agent` uses `ask_user_for_inputs`.
+  - `agent` chooses one of (observed):
+    - branch `architecture_preflight_needed`:
+      - `agent` uses `read_model_config`.
+    - branch `architecture_already_known`: none.
+  - `agent` chooses one of (observed):
+    - branch `catalog_page_works`:
+      - `agent` uses `read_catalog_page`.
+    - branch `catalog_page_unusable`:
+      - `agent` chooses one of (observed):
+        - branch `use_catalog_yaml`:
+          - `agent` uses `read_catalog_yaml`.
+        - branch `query_ecr`:
+          - `agent` uses `query_ecr_tags`.
+  - `agent` chooses one of (observed):
+    - branch `region_account_clear`: none.
+    - branch `region_account_uncertain`:
+      - `agent` uses `read_region_availability`.
+  - `agent` chooses one of (observed):
+    - branch `select_hf_vllm`:
+      - `agent` uses `select_hf_vllm`.
+      - `agent` uses `resolve_vllm_ami_requirement`.
+    - branch `select_hf_vllm_omni`:
+      - `agent` uses `select_hf_vllm_omni`.
+      - `agent` uses `resolve_vllm_ami_requirement`.
+    - branch `select_tei`:
+      - `agent` uses `select_non_vllm_family`.
+    - branch `select_hf_pytorch_inference_cpu`:
+      - `agent` uses `select_non_vllm_family`.
+    - branch `select_hf_sglang`:
+      - `agent` uses `select_non_vllm_family`.
+    - branch `select_vllm_fallback`:
+      - `agent` uses `select_hf_vllm`.
+      - `agent` uses `resolve_vllm_ami_requirement`.
+    - branch `select_djl_inference`:
+      - `agent` uses `select_non_vllm_family`.
+    - branch `select_byoc`:
+      - `agent` uses `select_non_vllm_family`.
+```

@@ -1,0 +1,39 @@
+```ce
+Skill `entra-agent-id`.
+Roles: `agent`, `user`.
+Tool `search_latest_docs` (owner `agent`): via `web_search`; adds `latest_docs_checked`.
+Tool `ask_for_azure_inputs` (owner `agent`): via `ask_user`; adds `azure_inputs_provided`.
+Tool `install_python_packages` (owner `agent`): via `bash`; requires `azure_inputs_provided`; adds `python_packages_installed`.
+Tool `write_provisioning_script` (owner `agent`): via `write`; requires `azure_inputs_provided`; adds `provisioning_script_written`.
+Tool `run_provisioning_script` (owner `agent`): via `bash`; requires `python_packages_installed` and `provisioning_script_written`; needs `azure_account`; adds `blueprint_created`, `blueprint_principal_created`, `agent_identity_created`, `odata_header_used`, `user_sponsor_used`, `client_credentials_used`.
+Tool `grant_admin_consent` (owner `agent`): via `bash`; requires `azure_inputs_provided`; needs `azure_account`; adds `admin_consent_granted`.
+Tool `wait_and_retry_consent` (owner `agent`): via `bash`; requires `azure_inputs_provided`; needs `azure_account`; adds `admin_consent_granted`.
+Tool `write_cleanup_script` (owner `agent`): via `write`; requires `azure_inputs_provided`; adds `cleanup_script_written`.
+Tool `run_cleanup_script` (owner `agent`): via `bash`; requires `cleanup_script_written`; needs `azure_account`; adds `cleanup_completed`.
+Initially true: none.
+Goal: all of (`latest_docs_checked`, `blueprint_created`, `blueprint_principal_created`, `agent_identity_created`, `odata_header_used`, `user_sponsor_used`, `client_credentials_used`).
+Protocol:
+  - `agent` uses `search_latest_docs`.
+  - `agent` uses `ask_for_azure_inputs`.
+  - `agent` uses `install_python_packages`.
+  - `agent` chooses one of (observed):
+    - branch `consent_already_done`: none.
+    - branch `grant_consent`:
+      - `agent` uses `grant_admin_consent`.
+      - `agent` chooses one of (external):
+        - branch `consent_succeeds`: none.
+        - branch `replication_delay`:
+          - loop `consent_retry`:
+            - `agent` uses `wait_and_retry_consent`.
+            - `agent` chooses one of (external):
+              - branch `consent_now_granted`: none.
+              - branch `still_pending`:
+                - repeat `consent_retry`.
+  - `agent` uses `write_provisioning_script`.
+  - `agent` uses `run_provisioning_script`.
+  - `agent` chooses one of (observed):
+    - branch `skip_cleanup`: none.
+    - branch `cleanup`:
+      - `agent` uses `write_cleanup_script`.
+      - `agent` uses `run_cleanup_script`.
+```

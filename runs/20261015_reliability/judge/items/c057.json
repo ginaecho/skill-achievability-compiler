@@ -1,0 +1,41 @@
+{
+  "case": "c057",
+  "kind": "skill",
+  "source_text": "---\nname: discover-azure-skills\ndescription: \"Searches the Azure skills catalog and recommends installable agent skills by matching an Azure task to skill metadata and plugin installation guidance. WHEN: before starting any task that involves an Azure or Microsoft-cloud service, product, or data source, when no currently loaded skill or tool already covers it.\"\nlicense: MIT\nmetadata:\n  author: Microsoft\n  version: \"1.0.1\"\n---\n\nFollow these steps to discover the available azure skill matching the given task description.\n\n1. List plugins\n\nList Azure plugin directories from the GitHub Contents API: https://api.github.com/repos/microsoft/azure-skills/contents/.github/plugins?ref=main\n\nIn the result, each entry whose `type` is `dir` is a plugin directory. Skills are organized by plugins.\n\n2. List skills\n\nFor each plugin, list their skills from the GitHub Contents API: https://api.github.com/repos/microsoft/azure-skills/contents/.github/plugins/{plugin-dirname}/skills?ref=main\n\nIn the result, each entry whose `type` is `dir` is a skill directory. Each skill has a SKILL.md file that explains what this skill should be used for.\n\n3. Discover relevant skills\n\nEliminate the skills that obviously aren't relevant by their names. Then for each remaining skill, read their description from the API: https://raw.githubusercontent.com/microsoft/azure-skills/main/.github/plugins/{plugin-dirname}/skills/{skill-name}/SKILL.md\n\nUse the descriptions to further eliminate skills that aren't relevant.\n\n4. Discover the plugin name of the relevant skills\n\nFor each relevant skill, discover their plugin name by reading the `plugin.json` from the GitHub Contents API: https://raw.githubusercontent.com/microsoft/azure-skills/main/.github/plugins/{plugin-dirname}/.plugin/plugin.json\n\nThis is important because a plugin's name may be different from its directory name. The installation commands depend on the plugin's name.\n\n5. Report the matched skills\n\nReport the matched skills and offer instructions to install them. Skills can be installed by installing their plugin. Read the installation instructions matching the agent client to offer the installation instructions.\n\n- [Copilot CLI](./references/install/copilot-cli.md)\n- [Claude Code](./references/install/claude-code.md)\n- [Other](./references/install/other.md)",
+  "ce": "Skill `discover-azure-skills`.\nRoles: `agent`, `user`.\nTool `list_plugin_dirs` (owner `agent`): via `web_fetch`; requires `azure_task_described`; adds `plugin_dirs_listed`.\nTool `list_skill_dirs` (owner `agent`): via `web_fetch`; requires `plugin_dirs_listed`; adds `skill_dirs_listed`.\nTool `read_skill_descriptions` (owner `agent`): via `web_fetch`; requires `skill_dirs_listed`; adds `candidate_skills_identified`.\nTool `read_plugin_metadata` (owner `agent`): via `web_fetch`; requires `candidate_skills_identified`; adds `plugin_names_identified`.\nTool `read_claude_code_install_instructions` (owner `agent`): via `web_fetch`; requires `plugin_names_identified`; adds `install_instructions_ready`.\nInitially true: `azure_task_described`.\nGoal: `candidate_skills_identified` and `plugin_names_identified` and `install_instructions_ready`.\nProtocol:\n  - `agent` uses `list_plugin_dirs`.\n  - `agent` uses `list_skill_dirs`.\n  - `agent` uses `read_skill_descriptions`.\n  - `agent` uses `read_plugin_metadata`.\n  - `user` chooses one of (observed):\n    - branch `claude_code`:\n      - `agent` uses `read_claude_code_install_instructions`.\n    - branch `copilot_cli`: none.\n    - branch `other`: none.\n",
+  "runtime": {
+    "name": "claude-code-cloud",
+    "description": "A Claude Code cloud session on Linux x86_64 (no GPU, no Docker daemon) with a shell, the working directory, sub-agents and the connectors listed as tools. Network egress goes through an allow-list proxy: the package registries and hosts pypi (PyPI), npm, GitHub (github.com, api.github.com, raw.githubusercontent.com), Ubuntu (apt archives), NuGet and the Go module proxy are open; other hosts are refused (for example huggingface, Microsoft Learn and Azure, Cloudflare, Expo, Neon and NVIDIA). The user's GitHub account is usable through the github connector and through the gh CLI via the proxy. There are no accounts or credentials for other external services.",
+    "tools": {
+      "bash": "run shell commands on Linux x86_64: install packages from the open registries (pip from PyPI, npm, apt from Ubuntu, go modules, nuget, GitHub release downloads), build, test, run CLIs and scripts, git, gh, start and stop local servers inside the session; network requests reach only the allow-listed hosts",
+      "read": "read files in the working directory; search them by name pattern or content (glob, grep)",
+      "write": "create and overwrite files",
+      "edit": "edit existing files and Jupyter notebooks",
+      "web_fetch": "fetch a web page or unauthenticated API by URL; hosts outside the egress allow-list are refused",
+      "web_search": "search the public web and read result snippets",
+      "ask_user": "ask the user a question (with options) and read the answer in the conversation",
+      "agent": "start sub-agents that work in parallel, send them messages and list them",
+      "skill": "load an installed Claude Code skill, list and search skills and plugins",
+      "tasks": "create, read, update and stop background tasks; schedule, list and delete cron jobs and wake-ups; monitor a condition; read notifications",
+      "artifact": "publish an HTML page as a private claude.ai artifact; read and answer its comments and its small data store",
+      "send_user_file": "send a file from the session to the user",
+      "push_notification": "send a push notification to the user",
+      "mcp_resources": "list and read resources of the connected MCP servers",
+      "github": "GitHub connector (the user's account): get_file_contents, create_pull_request, list_issues, issue_write, search_code, pull_request_read, actions_list, get_job_logs, create_branch, push_files",
+      "notion": "Notion connector (the user's workspace): notion-search, notion-fetch, notion-create-pages, notion-update-page, notion-create-database",
+      "google_drive": "Google Drive connector (the user's drive): search_files, read_file_content, create_file, update_file, share_file",
+      "jam": "Jam connector (bug-report recordings): search, getDetails, getConsoleLogs, getNetworkRequests, analyzeVideo",
+      "mem": "Mem connector (the user's notes): create_note, search_notes, get_note, update_note",
+      "bigdata_com": "Bigdata.com connector (financial data and documents): bigdata_company_tearsheet, bigdata_search, find_securities, bigdata_fetch_document",
+      "etoro": "eToro connector (the user's trading account): get-my-portfolio-summary, get-instruments-overview, prepare-trade",
+      "claude_docs": "Claude Docs connector (living documents on claude.ai): create, read, batch, update, export"
+    }
+  },
+  "rubric": {
+    "F1": "no invented Tool (every Tool corresponds to an instruction)",
+    "F2": "no omitted mandatory step",
+    "F3": "the Goal states the document's deliverable",
+    "F4": "no invented ordering (every protocol order is stated or implied by the document)",
+    "F5": "bindings plausible (each `via` names a runtime tool that can perform the Tool)"
+  }
+}

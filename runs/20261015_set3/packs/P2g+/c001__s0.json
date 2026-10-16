@@ -1,0 +1,623 @@
+{
+  "pack": {
+    "name": "render-deploy",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_source_path": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "source_path_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_infra_scope": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "infra_scope_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_git_remote": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "git_remote_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_blueprint": {
+        "owner": "agent",
+        "pre": "git_remote_present",
+        "add": [
+          "render_yaml_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_render_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "render_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_written",
+            "render_cli_available"
+          ]
+        },
+        "add": [
+          "render_yaml_valid"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_and_push_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_written",
+            "git_remote_present"
+          ]
+        },
+        "add": [
+          "render_yaml_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_deeplink_reply": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_written",
+            "render_yaml_pushed"
+          ]
+        },
+        "add": [
+          "deployment_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "docker_dashboard_guidance_reply": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "deployment_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "no_remote_guidance_reply": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "deployment_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_source_path",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_infra_scope",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "docker_image_path": [
+              {
+                "act": {
+                  "cap": "docker_dashboard_guidance_reply",
+                  "by": "agent"
+                }
+              }
+            ],
+            "git_repo_path": [
+              {
+                "act": {
+                  "cap": "check_git_remote",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "remote_missing": [
+                      {
+                        "act": {
+                          "cap": "no_remote_guidance_reply",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "remote_present": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "blueprint_method": [
+                              {
+                                "act": {
+                                  "cap": "write_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "check_render_cli",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "cli_available": [
+                                      {
+                                        "act": {
+                                          "cap": "validate_blueprint",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "cli_missing": []
+                                  },
+                                  "assumes": {
+                                    "cli_available": [
+                                      "render_cli_available"
+                                    ],
+                                    "cli_missing": [
+                                      "render_cli_missing"
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "commit_and_push_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "create_deeplink_reply",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "direct_creation_method": [
+                              {
+                                "act": {
+                                  "cap": "docker_dashboard_guidance_reply",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "blueprint_method": [
+                              "blueprint_method_chosen"
+                            ],
+                            "direct_creation_method": [
+                              "direct_creation_method_chosen"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "remote_missing": [
+                      "git_remote_missing"
+                    ],
+                    "remote_present": [
+                      "git_remote_present"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "docker_image_path": [
+              "docker_image_chosen"
+            ],
+            "git_repo_path": [
+              "git_repo_chosen"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deployment_guidance_delivered",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "render-deploy",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "ask_source_path": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "source_path_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "ask_infra_scope": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "infra_scope_known"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_git_remote": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "git_remote_present"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "write_blueprint": {
+        "owner": "agent",
+        "pre": "git_remote_present",
+        "add": [
+          "render_yaml_written"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_render_cli": {
+        "owner": "agent",
+        "pre": true,
+        "add": [
+          "render_cli_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "validate_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_written",
+            "render_cli_available"
+          ]
+        },
+        "add": [
+          "render_yaml_valid"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "commit_and_push_blueprint": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_written",
+            "git_remote_present"
+          ]
+        },
+        "add": [
+          "render_yaml_pushed"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "create_deeplink_reply": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "render_yaml_written",
+            "render_yaml_pushed"
+          ]
+        },
+        "add": [
+          "deployment_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "docker_dashboard_guidance_reply": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "deployment_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "no_remote_guidance_reply": {
+        "owner": "agent",
+        "pre": "source_path_known",
+        "add": [
+          "deployment_guidance_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "act": {
+          "cap": "ask_source_path",
+          "by": "agent"
+        }
+      },
+      {
+        "act": {
+          "cap": "ask_infra_scope",
+          "by": "agent"
+        }
+      },
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "docker_image_path": [
+              {
+                "act": {
+                  "cap": "docker_dashboard_guidance_reply",
+                  "by": "agent"
+                }
+              }
+            ],
+            "git_repo_path": [
+              {
+                "act": {
+                  "cap": "check_git_remote",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "user",
+                  "observed": true,
+                  "branches": {
+                    "remote_missing": [
+                      {
+                        "act": {
+                          "cap": "no_remote_guidance_reply",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "remote_present": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "blueprint_method": [
+                              {
+                                "act": {
+                                  "cap": "write_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "check_render_cli",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "user",
+                                  "observed": true,
+                                  "branches": {
+                                    "cli_available": [
+                                      {
+                                        "act": {
+                                          "cap": "validate_blueprint",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "cli_missing": []
+                                  },
+                                  "assumes": {
+                                    "cli_available": [
+                                      "render_cli_available"
+                                    ],
+                                    "cli_missing": [
+                                      "render_cli_missing"
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "commit_and_push_blueprint",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "act": {
+                                  "cap": "create_deeplink_reply",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "direct_creation_method": [
+                              {
+                                "act": {
+                                  "cap": "docker_dashboard_guidance_reply",
+                                  "by": "agent"
+                                }
+                              }
+                            ]
+                          },
+                          "assumes": {
+                            "blueprint_method": [
+                              "blueprint_method_chosen"
+                            ],
+                            "direct_creation_method": [
+                              "direct_creation_method_chosen"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "remote_missing": [
+                      "git_remote_missing"
+                    ],
+                    "remote_present": [
+                      "git_remote_present"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "assumes": {
+            "docker_image_path": [
+              "docker_image_chosen"
+            ],
+            "git_repo_path": [
+              "git_repo_chosen"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "deployment_guidance_delivered",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "ask_source_path": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "ask_infra_scope": {
+      "via": "ask_user",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "check_git_remote": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "write_blueprint": {
+      "via": "write",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "check_render_cli": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "validate_blueprint": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "commit_and_push_blueprint": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "create_deeplink_reply": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "docker_dashboard_guidance_reply": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "no_remote_guidance_reply": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    }
+  },
+  "live_goal": null
+}

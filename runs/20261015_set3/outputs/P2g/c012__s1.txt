@@ -1,0 +1,34 @@
+```ce
+Skill `transcribe`.
+Roles: `agent`, `user`.
+Tool `check_openai_key` (owner `agent`): via `bash`; needs `shell`; picks `openai_key_ready` with any of (`openai_key_ready`, not `openai_key_ready`).
+Tool `install_openai_dependency` (owner `agent`): via `bash`; needs `shell`, `package_registries`; adds `openai_dependency_installed`.
+Tool `run_transcription_default` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `openai_key_ready`; adds `transcription_saved`, `output_validated`; removes `needs_iteration`; sets `iteration_count` to 0.
+Tool `run_transcription_diarized` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `openai_key_ready`; adds `transcription_saved`, `output_validated`, `diarization_done`; removes `needs_iteration`; sets `iteration_count` to 0.
+Tool `rerun_with_targeted_change` (owner `agent`): via `bash`; needs `shell`, `local_filesystem`; requires `openai_key_ready` and `transcription_saved`; adds `output_validated`; removes `needs_iteration`; sets `iteration_count` to 1.
+Initially true: none.
+Initially: `iteration_count` == 0.
+Goal: `transcription_saved` and `output_validated` and ( `wants_diarization` or not `wants_diarization` ) and ( `wants_diarization` implies `diarization_done` ).
+Protocol:
+  - `agent` uses `check_openai_key`.
+  - `agent` chooses one of (observed):
+    - branch `key_missing`:
+      - `user` chooses one of (observed):
+        - branch `set_key`: none.
+        - branch `decline`: none.
+      - `agent` uses `check_openai_key`.
+    - branch `key_present`: none.
+  - `agent` chooses one of (observed):
+    - branch `install_dependency`:
+      - `agent` uses `install_openai_dependency`.
+    - branch `dependency_already_available`: none.
+  - `agent` chooses one of (observed):
+    - branch `diarized_request`:
+      - `agent` uses `run_transcription_diarized`.
+    - branch `default_request`:
+      - `agent` uses `run_transcription_default`.
+  - `agent` chooses one of (observed):
+    - branch `accept_output`: none.
+    - branch `single_targeted_retry`:
+      - `agent` uses `rerun_with_targeted_change`.
+```

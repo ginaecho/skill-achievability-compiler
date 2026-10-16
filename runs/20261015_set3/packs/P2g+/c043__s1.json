@@ -1,0 +1,1133 @@
+{
+  "pack": {
+    "name": "audit-augmentation",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_trailmark_available": {
+        "owner": "agent",
+        "pre": "target_directory_known",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "trailmark_available": {
+            "or": [
+              "trailmark_available",
+              "trailmark_missing"
+            ]
+          }
+        }
+      },
+      "install_trailmark": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "needs:package_registries",
+            "trailmark_missing"
+          ]
+        },
+        "add": [
+          "trailmark_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "locate_inputs": {
+        "owner": "agent",
+        "pre": "target_directory_known",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "sarif_available": {
+            "or": [
+              "sarif_available",
+              "sarif_missing"
+            ]
+          },
+          "weaudit_available": {
+            "or": [
+              "weaudit_available",
+              "weaudit_missing"
+            ]
+          },
+          "binary_input_available": {
+            "or": [
+              "binary_input_available",
+              "binary_input_missing"
+            ]
+          }
+        }
+      },
+      "run_preanalysis": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_directory_known",
+            "trailmark_available"
+          ]
+        },
+        "add": [
+          "preanalysis_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "language_autodetect_ok": {
+            "or": [
+              "language_autodetect_ok",
+              "language_autodetect_wrong"
+            ]
+          }
+        }
+      },
+      "rerun_preanalysis_explicit_language": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_directory_known",
+            "trailmark_available",
+            "explicit_language_known"
+          ]
+        },
+        "add": [
+          "preanalysis_done",
+          "language_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_binary_support": {
+        "owner": "agent",
+        "pre": "binary_input_available",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "binary_supported": {
+            "or": [
+              "binary_supported",
+              "binary_unsupported"
+            ]
+          }
+        }
+      },
+      "augment_sarif": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "sarif_available"
+          ]
+        },
+        "add": [
+          "findings_augmented",
+          "sarif_unmatched_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "augment_weaudit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "weaudit_available"
+          ]
+        },
+        "add": [
+          "findings_augmented",
+          "weaudit_unmatched_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "augment_binary": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "binary_input_available",
+            "binary_supported"
+          ]
+        },
+        "add": [
+          "findings_augmented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_subgraphs_and_cross_reference": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "findings_augmented"
+          ]
+        },
+        "add": [
+          "severity_subgraphs_inspected",
+          "preanalysis_cross_referenced"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "findings_augmented",
+            "severity_subgraphs_inspected",
+            "preanalysis_cross_referenced"
+          ]
+        },
+        "add": [
+          "augmentation_report_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "target_provided": [
+              {
+                "act": {
+                  "cap": "check_trailmark_available",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "already_available": [
+                      {
+                        "act": {
+                          "cap": "locate_inputs",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "install_needed": [
+                      {
+                        "act": {
+                          "cap": "install_trailmark",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "locate_inputs",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "already_available": [
+                      "trailmark_available"
+                    ],
+                    "install_needed": [
+                      "trailmark_missing"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_preanalysis",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "autodetect_ok": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "sarif_present": [
+                              {
+                                "act": {
+                                  "cap": "augment_sarif",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_sarif": []
+                          },
+                          "assumes": {
+                            "no_sarif": [
+                              "sarif_missing"
+                            ],
+                            "sarif_present": [
+                              "sarif_available"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "weaudit_present": [
+                              {
+                                "act": {
+                                  "cap": "augment_weaudit",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_weaudit": []
+                          },
+                          "assumes": {
+                            "no_weaudit": [
+                              "weaudit_missing"
+                            ],
+                            "weaudit_present": [
+                              "weaudit_available"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "binary_present": [
+                              {
+                                "act": {
+                                  "cap": "check_binary_support",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "binary_supported_branch": [
+                                      {
+                                        "act": {
+                                          "cap": "augment_binary",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "binary_not_supported": []
+                                  },
+                                  "assumes": {
+                                    "binary_not_supported": [
+                                      "binary_unsupported"
+                                    ],
+                                    "binary_supported_branch": [
+                                      "binary_supported"
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "no_binary": []
+                          },
+                          "assumes": {
+                            "binary_present": [
+                              "binary_input_available"
+                            ],
+                            "no_binary": [
+                              "binary_input_missing"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "autodetect_wrong": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "explicit_language_provided": [
+                              {
+                                "act": {
+                                  "cap": "rerun_preanalysis_explicit_language",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "sarif_present_after_rerun": [
+                                      {
+                                        "act": {
+                                          "cap": "augment_sarif",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_sarif_after_rerun": []
+                                  },
+                                  "assumes": {
+                                    "no_sarif_after_rerun": [
+                                      "sarif_missing"
+                                    ],
+                                    "sarif_present_after_rerun": [
+                                      "sarif_available"
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "weaudit_present_after_rerun": [
+                                      {
+                                        "act": {
+                                          "cap": "augment_weaudit",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_weaudit_after_rerun": []
+                                  },
+                                  "assumes": {
+                                    "no_weaudit_after_rerun": [
+                                      "weaudit_missing"
+                                    ],
+                                    "weaudit_present_after_rerun": [
+                                      "weaudit_available"
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "binary_present_after_rerun": [
+                                      {
+                                        "act": {
+                                          "cap": "check_binary_support",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "binary_supported_after_rerun": [
+                                              {
+                                                "act": {
+                                                  "cap": "augment_binary",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "binary_not_supported_after_rerun": []
+                                          },
+                                          "assumes": {
+                                            "binary_not_supported_after_rerun": [
+                                              "binary_unsupported"
+                                            ],
+                                            "binary_supported_after_rerun": [
+                                              "binary_supported"
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "no_binary_after_rerun": []
+                                  },
+                                  "assumes": {
+                                    "binary_present_after_rerun": [
+                                      "binary_input_available"
+                                    ],
+                                    "no_binary_after_rerun": [
+                                      "binary_input_missing"
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "explicit_language_not_provided": []
+                          },
+                          "assumes": {
+                            "explicit_language_provided": [
+                              "explicit_language_known"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "autodetect_ok": [
+                      "language_autodetect_ok"
+                    ],
+                    "autodetect_wrong": [
+                      "language_autodetect_wrong"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_subgraphs_and_cross_reference",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "deliver_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "target_missing": []
+          },
+          "assumes": {
+            "target_provided": [
+              "target_directory_known"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "augmentation_report_delivered",
+    "init_true": [
+      "needs:package_registries"
+    ],
+    "init_constraints": []
+  },
+  "pre_binding": {
+    "name": "audit-augmentation",
+    "roles": [
+      "agent",
+      "user"
+    ],
+    "capabilities": {
+      "check_trailmark_available": {
+        "owner": "agent",
+        "pre": "target_directory_known",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "trailmark_available": {
+            "or": [
+              "trailmark_available",
+              "trailmark_missing"
+            ]
+          }
+        }
+      },
+      "install_trailmark": {
+        "owner": "agent",
+        "pre": "trailmark_missing",
+        "add": [
+          "trailmark_available"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "locate_inputs": {
+        "owner": "agent",
+        "pre": "target_directory_known",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "sarif_available": {
+            "or": [
+              "sarif_available",
+              "sarif_missing"
+            ]
+          },
+          "weaudit_available": {
+            "or": [
+              "weaudit_available",
+              "weaudit_missing"
+            ]
+          },
+          "binary_input_available": {
+            "or": [
+              "binary_input_available",
+              "binary_input_missing"
+            ]
+          }
+        }
+      },
+      "run_preanalysis": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_directory_known",
+            "trailmark_available"
+          ]
+        },
+        "add": [
+          "preanalysis_done"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "language_autodetect_ok": {
+            "or": [
+              "language_autodetect_ok",
+              "language_autodetect_wrong"
+            ]
+          }
+        }
+      },
+      "rerun_preanalysis_explicit_language": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "target_directory_known",
+            "trailmark_available",
+            "explicit_language_known"
+          ]
+        },
+        "add": [
+          "preanalysis_done",
+          "language_selected"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "check_binary_support": {
+        "owner": "agent",
+        "pre": "binary_input_available",
+        "add": [],
+        "del": [],
+        "assigns": {},
+        "nondet": {
+          "binary_supported": {
+            "or": [
+              "binary_supported",
+              "binary_unsupported"
+            ]
+          }
+        }
+      },
+      "augment_sarif": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "sarif_available"
+          ]
+        },
+        "add": [
+          "findings_augmented",
+          "sarif_unmatched_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "augment_weaudit": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "weaudit_available"
+          ]
+        },
+        "add": [
+          "findings_augmented",
+          "weaudit_unmatched_reported"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "augment_binary": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "binary_input_available",
+            "binary_supported"
+          ]
+        },
+        "add": [
+          "findings_augmented"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "inspect_subgraphs_and_cross_reference": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "findings_augmented"
+          ]
+        },
+        "add": [
+          "severity_subgraphs_inspected",
+          "preanalysis_cross_referenced"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      },
+      "deliver_report": {
+        "owner": "agent",
+        "pre": {
+          "and": [
+            "preanalysis_done",
+            "findings_augmented",
+            "severity_subgraphs_inspected",
+            "preanalysis_cross_referenced"
+          ]
+        },
+        "add": [
+          "augmentation_report_delivered"
+        ],
+        "del": [],
+        "assigns": {},
+        "nondet": {}
+      }
+    },
+    "protocol": [
+      {
+        "choice": {
+          "by": "user",
+          "observed": true,
+          "branches": {
+            "target_provided": [
+              {
+                "act": {
+                  "cap": "check_trailmark_available",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "already_available": [
+                      {
+                        "act": {
+                          "cap": "locate_inputs",
+                          "by": "agent"
+                        }
+                      }
+                    ],
+                    "install_needed": [
+                      {
+                        "act": {
+                          "cap": "install_trailmark",
+                          "by": "agent"
+                        }
+                      },
+                      {
+                        "act": {
+                          "cap": "locate_inputs",
+                          "by": "agent"
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "already_available": [
+                      "trailmark_available"
+                    ],
+                    "install_needed": [
+                      "trailmark_missing"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "run_preanalysis",
+                  "by": "agent"
+                }
+              },
+              {
+                "choice": {
+                  "by": "agent",
+                  "observed": true,
+                  "branches": {
+                    "autodetect_ok": [
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "sarif_present": [
+                              {
+                                "act": {
+                                  "cap": "augment_sarif",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_sarif": []
+                          },
+                          "assumes": {
+                            "no_sarif": [
+                              "sarif_missing"
+                            ],
+                            "sarif_present": [
+                              "sarif_available"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "weaudit_present": [
+                              {
+                                "act": {
+                                  "cap": "augment_weaudit",
+                                  "by": "agent"
+                                }
+                              }
+                            ],
+                            "no_weaudit": []
+                          },
+                          "assumes": {
+                            "no_weaudit": [
+                              "weaudit_missing"
+                            ],
+                            "weaudit_present": [
+                              "weaudit_available"
+                            ]
+                          }
+                        }
+                      },
+                      {
+                        "choice": {
+                          "by": "agent",
+                          "observed": true,
+                          "branches": {
+                            "binary_present": [
+                              {
+                                "act": {
+                                  "cap": "check_binary_support",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "binary_supported_branch": [
+                                      {
+                                        "act": {
+                                          "cap": "augment_binary",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "binary_not_supported": []
+                                  },
+                                  "assumes": {
+                                    "binary_not_supported": [
+                                      "binary_unsupported"
+                                    ],
+                                    "binary_supported_branch": [
+                                      "binary_supported"
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "no_binary": []
+                          },
+                          "assumes": {
+                            "binary_present": [
+                              "binary_input_available"
+                            ],
+                            "no_binary": [
+                              "binary_input_missing"
+                            ]
+                          }
+                        }
+                      }
+                    ],
+                    "autodetect_wrong": [
+                      {
+                        "choice": {
+                          "by": "user",
+                          "observed": true,
+                          "branches": {
+                            "explicit_language_provided": [
+                              {
+                                "act": {
+                                  "cap": "rerun_preanalysis_explicit_language",
+                                  "by": "agent"
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "sarif_present_after_rerun": [
+                                      {
+                                        "act": {
+                                          "cap": "augment_sarif",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_sarif_after_rerun": []
+                                  },
+                                  "assumes": {
+                                    "no_sarif_after_rerun": [
+                                      "sarif_missing"
+                                    ],
+                                    "sarif_present_after_rerun": [
+                                      "sarif_available"
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "weaudit_present_after_rerun": [
+                                      {
+                                        "act": {
+                                          "cap": "augment_weaudit",
+                                          "by": "agent"
+                                        }
+                                      }
+                                    ],
+                                    "no_weaudit_after_rerun": []
+                                  },
+                                  "assumes": {
+                                    "no_weaudit_after_rerun": [
+                                      "weaudit_missing"
+                                    ],
+                                    "weaudit_present_after_rerun": [
+                                      "weaudit_available"
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "choice": {
+                                  "by": "agent",
+                                  "observed": true,
+                                  "branches": {
+                                    "binary_present_after_rerun": [
+                                      {
+                                        "act": {
+                                          "cap": "check_binary_support",
+                                          "by": "agent"
+                                        }
+                                      },
+                                      {
+                                        "choice": {
+                                          "by": "agent",
+                                          "observed": true,
+                                          "branches": {
+                                            "binary_supported_after_rerun": [
+                                              {
+                                                "act": {
+                                                  "cap": "augment_binary",
+                                                  "by": "agent"
+                                                }
+                                              }
+                                            ],
+                                            "binary_not_supported_after_rerun": []
+                                          },
+                                          "assumes": {
+                                            "binary_not_supported_after_rerun": [
+                                              "binary_unsupported"
+                                            ],
+                                            "binary_supported_after_rerun": [
+                                              "binary_supported"
+                                            ]
+                                          }
+                                        }
+                                      }
+                                    ],
+                                    "no_binary_after_rerun": []
+                                  },
+                                  "assumes": {
+                                    "binary_present_after_rerun": [
+                                      "binary_input_available"
+                                    ],
+                                    "no_binary_after_rerun": [
+                                      "binary_input_missing"
+                                    ]
+                                  }
+                                }
+                              }
+                            ],
+                            "explicit_language_not_provided": []
+                          },
+                          "assumes": {
+                            "explicit_language_provided": [
+                              "explicit_language_known"
+                            ]
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  "assumes": {
+                    "autodetect_ok": [
+                      "language_autodetect_ok"
+                    ],
+                    "autodetect_wrong": [
+                      "language_autodetect_wrong"
+                    ]
+                  }
+                }
+              },
+              {
+                "act": {
+                  "cap": "inspect_subgraphs_and_cross_reference",
+                  "by": "agent"
+                }
+              },
+              {
+                "act": {
+                  "cap": "deliver_report",
+                  "by": "agent"
+                }
+              }
+            ],
+            "target_missing": []
+          },
+          "assumes": {
+            "target_provided": [
+              "target_directory_known"
+            ]
+          }
+        }
+      }
+    ],
+    "goal": "augmentation_report_delivered",
+    "init_true": [],
+    "init_constraints": []
+  },
+  "bindings": {
+    "check_trailmark_available": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 3
+    },
+    "install_trailmark": {
+      "via": "bash",
+      "needs": [
+        "package_registries"
+      ],
+      "runs": [],
+      "effect": null,
+      "line": 4
+    },
+    "locate_inputs": {
+      "via": "read",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 5
+    },
+    "run_preanalysis": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 6
+    },
+    "rerun_preanalysis_explicit_language": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 7
+    },
+    "check_binary_support": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 8
+    },
+    "augment_sarif": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 9
+    },
+    "augment_weaudit": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 10
+    },
+    "augment_binary": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 11
+    },
+    "inspect_subgraphs_and_cross_reference": {
+      "via": "bash",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 12
+    },
+    "deliver_report": {
+      "via": "reply",
+      "needs": [],
+      "runs": [],
+      "effect": null,
+      "line": 13
+    }
+  },
+  "live_goal": null
+}

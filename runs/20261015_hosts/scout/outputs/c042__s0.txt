@@ -1,0 +1,81 @@
+```ce
+Skill `executing-plans`.
+Roles: `agent`, `user`.
+Tool `ensure_isolated_worktree` (owner `agent`): via `bash`; requires `repo_available`; adds `isolated_worktree_ready`; removes `on_main_branch`.
+Tool `prepare_workspace_and_ledger` (owner `agent`): via `bash`; requires `isolated_worktree_ready`; adds `workspace_ready`, `ledger_ready`, `todos_ready`, `plan_read`, `tdd_loaded`, `preflight_scanned`.
+Tool `ask_for_stop_decision` (owner `agent`): via `ask_user`; requires `stop_condition`; adds `user_guidance_received`.
+Tool `start_task` (owner `agent`): via `bash`; requires `workspace_ready` and `plan_read`; adds `task_brief_read`, `task_in_progress`, `base_known`.
+Tool `execute_task_step` (owner `agent`): via `bash`; requires `task_in_progress` and `tdd_loaded`; adds `step_verified`.
+Tool `record_ruling` (owner `agent`): via `bash`; requires `task_in_progress`; adds `ruling_recorded`.
+Tool `commit_task_work` (owner `agent`): via `bash`; requires `task_in_progress`; adds `task_commit_recorded`.
+Tool `complete_task` (owner `agent`): via `bash`; requires `task_in_progress` and `base_known`; adds `task_completed`, `task_tests_passed`, `task_marked_complete`; removes `task_in_progress`.
+Tool `build_review_package` (owner `agent`): via `bash`; requires `workspace_ready`; adds `review_package_ready`, `merge_base_known`.
+Tool `self_review_branch` (owner `agent`): via `bash`; requires `review_package_ready`; adds `final_review_done`, `self_review_recorded`.
+Tool `fix_review_findings` (owner `agent`): via `bash`; requires `final_review_done`; adds `final_findings_addressed`, `final_suite_green`.
+Tool `delete_plan_workspace` (owner `agent`): via `bash`; requires `final_review_clean` and `workspace_ready`; adds `workspace_deleted`; removes `workspace_ready`.
+Initially true: `repo_available`.
+Initially: not `isolated_worktree_ready`.
+Initially: not `workspace_ready`.
+Initially: not `ledger_ready`.
+Initially: not `todos_ready`.
+Initially: not `plan_read`.
+Initially: not `tdd_loaded`.
+Initially: not `preflight_scanned`.
+Initially: not `stop_condition`.
+Initially: not `user_guidance_received`.
+Initially: not `task_brief_read`.
+Initially: not `task_in_progress`.
+Initially: not `base_known`.
+Initially: not `step_verified`.
+Initially: not `ruling_recorded`.
+Initially: not `task_commit_recorded`.
+Initially: not `task_completed`.
+Initially: not `task_tests_passed`.
+Initially: not `task_marked_complete`.
+Initially: not `review_package_ready`.
+Initially: not `merge_base_known`.
+Initially: not `final_review_done`.
+Initially: not `self_review_recorded`.
+Initially: not `final_findings_addressed`.
+Initially: not `final_suite_green`.
+Initially: not `final_review_clean`.
+Initially: not `workspace_deleted`.
+Initially: not `on_main_branch`.
+Goal: `isolated_worktree_ready` and `workspace_ready` and `ledger_ready` and `todos_ready` and `plan_read` and `tdd_loaded` and `preflight_scanned` and `task_completed` and `task_tests_passed` and `task_marked_complete` and `review_package_ready` and `final_review_done` and `self_review_recorded` and `final_review_clean` and `workspace_deleted`.
+Protocol:
+  - `agent` uses `ensure_isolated_worktree`.
+  - `agent` uses `prepare_workspace_and_ledger`.
+  - `agent` chooses one of (observed):
+    - branch `stop_and_ask`:
+      - `agent` uses `ask_for_stop_decision`.
+    - branch `continue_inline`: none.
+  - loop `task_loop`:
+    - `agent` uses `start_task`.
+    - loop `step_loop`:
+      - `agent` uses `execute_task_step`.
+      - `agent` chooses one of (observed):
+        - branch `step_matches_expected`: none.
+        - branch `plan_wrong_rule_it`:
+          - `agent` uses `record_ruling`.
+        - branch `code_wrong_debug_then_continue`:
+          - `agent` uses `execute_task_step`.
+      - `agent` chooses one of (observed):
+        - branch `task_not_yet_complete`:
+          - repeat `step_loop`.
+        - branch `task_ready_for_commit`:
+          - `agent` uses `commit_task_work`.
+    - `agent` uses `complete_task`.
+    - `agent` chooses one of (observed):
+      - branch `more_tasks`:
+        - repeat `task_loop`.
+      - branch `no_more_tasks`: none.
+  - `agent` uses `build_review_package`.
+  - `agent` uses `self_review_branch`.
+  - `agent` chooses one of (observed):
+    - branch `fix_important_or_critical`:
+      - `agent` uses `fix_review_findings`.
+    - branch `only_minors_or_clean`: none.
+  - `agent` chooses one of (observed):
+    - branch `mark_review_clean`: none.
+  - `agent` uses `delete_plan_workspace`.
+```

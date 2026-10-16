@@ -1,0 +1,39 @@
+```ce
+Skill `slack-gif-creator`.
+Roles: `agent`, `user`.
+Tool `ask_spec` (owner `agent`): via `ask_user`; adds `spec_known`.
+Tool `inspect_uploaded_image` (owner `agent`): via `read`; requires `uploaded_image_present`; adds `reference_image_understood`.
+Tool `install_dependencies` (owner `agent`): via `bash`; needs `shell`, `linux`, `package_registries`; adds `dependencies_installed`.
+Tool `create_gif_script` (owner `agent`): via `write`; requires `spec_known`; adds `gif_script_written`.
+Tool `revise_gif_script` (owner `agent`): via `edit`; requires `gif_script_written`; adds `gif_script_written`.
+Tool `run_gif_script` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `gif_script_written` and `dependencies_installed`; adds `gif_created`.
+Tool `validate_gif` (owner `agent`): via `bash`; needs `shell`, `linux`, `local_filesystem`; requires `gif_created`; adds `gif_validated`.
+Tool `send_gif` (owner `agent`): via `send_user_file`; requires `gif_created` and `gif_validated`; adds `gif_delivered`.
+Initially true: none.
+Goal: `gif_delivered`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `spec_already_clear` (assuming `spec_known`):
+      - `user` chooses one of (observed):
+        - branch `with_uploaded_image` (assuming `uploaded_image_present`):
+          - `agent` uses `inspect_uploaded_image`.
+        - branch `without_uploaded_image`: none.
+    - branch `need_clarification`:
+      - `agent` uses `ask_spec`.
+      - `user` chooses one of (observed):
+        - branch `with_uploaded_image` (assuming `uploaded_image_present`):
+          - `agent` uses `inspect_uploaded_image`.
+        - branch `without_uploaded_image`: none.
+  - `agent` uses `install_dependencies`.
+  - `agent` uses `create_gif_script`.
+  - loop `improve_until_valid`:
+    - `agent` uses `run_gif_script`.
+    - `agent` chooses one of (observed):
+      - branch `valid_after_validation` (assuming `gif_validated`):
+        - `agent` uses `validate_gif`.
+        - `agent` uses `send_gif`.
+      - branch `needs_revision`:
+        - `agent` uses `validate_gif`.
+        - `agent` uses `revise_gif_script`.
+        - repeat `improve_until_valid`.
+```

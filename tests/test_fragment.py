@@ -182,9 +182,10 @@ def test_missing_external_choice_is_non_conformant():
     v = check(conformance_pack([
         {"branch": {"from": "router", "branches": {
             "go_a": [{"act": {"cap": "fix_a"}}]}}}]))
-    assert not v.achievable
-    assert v.reason == "NON_CONFORMANT"
-    assert "handler" in v.detail
+    # a typing failure, not a goal refutation: branch a reaches the goal
+    assert v.label == "ACHIEVABLE" and not v.admissible
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
+    assert "handler" in v.protocol_detail
 
 
 def test_selector_dropping_a_branch_is_non_conformant():
@@ -199,15 +200,20 @@ def test_selector_dropping_a_branch_is_non_conformant():
         goal="resolved",
         skills={"router": [{"select": {"branches": {
             "a": [{"send": {"to": "handler", "label": "go_a"}}]}}}]}))
-    assert not v.achievable
-    assert v.reason == "NON_CONFORMANT"
-    assert "router" in v.detail
+    assert v.label == "ACHIEVABLE" and not v.admissible
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
+    assert "router" in v.protocol_detail
 
 
 def test_dropped_selector_branch_cannot_produce_an_impossible_witness():
     """Regression: only branch 'b' reaches the goal, but the declared router
     never selects it.  Admitting the skill under Sub-Int let the checker
-    return a witness through an excluded branch -- an unrealisable plan."""
+    return a witness through an excluded branch -- an unrealisable plan.
+
+    The goal IS reachable in the global semantics of G (through 'b'), so the
+    goal label is ACHIEVABLE; the declared router makes the protocol
+    REJECTED, and the verdict is not admissible, so the witness through the
+    excluded branch is never handed out as a runnable plan."""
     v = check(pack(
         roles=["router", "handler"],
         capabilities={"fix_a": {"add": ["attempted"]},
@@ -216,9 +222,9 @@ def test_dropped_selector_branch_cannot_produce_an_impossible_witness():
         goal="resolved",
         skills={"router": [{"select": {"branches": {
             "a": [{"send": {"to": "handler", "label": "go_a"}}]}}}]}))
-    assert not v.achievable
-    assert v.reason == "NON_CONFORMANT"
-    assert ("choose", "b") not in (v.witness or ())
+    assert v.label == "ACHIEVABLE"
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
+    assert not v.admissible
 
 
 def test_selector_offering_every_contract_branch_is_conformant():
@@ -244,5 +250,5 @@ def test_selector_inventing_a_branch_is_non_conformant():
         goal="resolved",
         skills={"router": [{"select": {"branches": {
             "c": [{"send": {"to": "handler", "label": "go_c"}}]}}}]}))
-    assert not v.achievable
-    assert v.reason == "NON_CONFORMANT"
+    assert v.label == "ACHIEVABLE" and not v.admissible
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"

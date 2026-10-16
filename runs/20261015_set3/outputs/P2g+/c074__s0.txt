@@ -1,0 +1,34 @@
+```ce
+Skill `implement`.
+Roles: `agent`.
+Tool `read_inputs` (owner `agent`): via `read`; adds `agents_read`, `plan_read`, `orchestrator_read`.
+Tool `check_plan_feasibility` (owner `agent`): via `read`; requires `agents_read` and `plan_read`; adds `feasibility_checked`.
+Tool `write_deviation_notice` (owner `agent`): via `reply`; requires `feasibility_checked` and `plan_has_deviation`; adds `deviation_flagged`.
+Tool `implement_changes` (owner `agent`): via `edit`; requires `agents_read` and `plan_read` and `feasibility_checked` and not `security_sensitive_work`; adds `code_implemented`.
+Tool `write_tests` (owner `agent`): via `edit`; requires `agents_read` and `plan_read` and `orchestrator_read` and `code_implemented`; adds `tests_written`.
+Tool `run_validation` (owner `agent`): via `bash`; requires `code_implemented` and `tests_written`; adds `tests_passing`, `self_review_passed`, `coverage_checked`.
+Tool `update_state` (owner `agent`): via `edit`; requires `self_review_passed`; adds `state_updated`, `implement_completed`, `stage_review`.
+Tool `send_completion_message` (owner `agent`): via `reply`; requires `state_updated`; adds `completion_reported`.
+Tool `flag_security_halt` (owner `agent`): via `reply`; requires `security_sensitive_work`; adds `reviewer_flagged`.
+Initially true: none.
+Goal: (`reviewer_flagged`) or (`agents_read` and `plan_read` and `orchestrator_read` and `feasibility_checked` and `code_implemented` and `tests_written` and `tests_passing` and `self_review_passed` and `coverage_checked` and `state_updated` and `implement_completed` and `stage_review` and `completion_reported`).
+Protocol:
+  - `agent` uses `read_inputs`.
+  - `agent` uses `check_plan_feasibility`.
+  - `agent` chooses one of (observed):
+    - branch `security_halt` (assuming `security_sensitive_work`):
+      - `agent` uses `flag_security_halt`.
+    - branch `proceed_no_deviation` (assuming not `security_sensitive_work` and not `plan_has_deviation`):
+      - `agent` uses `implement_changes`.
+      - `agent` uses `write_tests`.
+      - `agent` uses `run_validation`.
+      - `agent` uses `update_state`.
+      - `agent` uses `send_completion_message`.
+    - branch `proceed_with_deviation` (assuming not `security_sensitive_work` and `plan_has_deviation`):
+      - `agent` uses `write_deviation_notice`.
+      - `agent` uses `implement_changes`.
+      - `agent` uses `write_tests`.
+      - `agent` uses `run_validation`.
+      - `agent` uses `update_state`.
+      - `agent` uses `send_completion_message`.
+```
