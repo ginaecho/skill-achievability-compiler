@@ -96,6 +96,7 @@ def _print_summary():
 
 
 # --------------------------------------------------------------- structural / source tests
+@pytest.mark.skipif(not (ROOT / "benchmark").is_dir(), reason="benchmark data not present")
 def test_four_directories_present():
     assert len(CASES) == 52
     assert {d: sum(1 for x, _ in CASES if x == d) for d in DIRS} == {

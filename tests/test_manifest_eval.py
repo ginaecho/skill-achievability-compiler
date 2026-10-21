@@ -2,6 +2,8 @@
 from collections import Counter
 from pathlib import Path
 
+import pytest
+
 from skillc.env.manifest import (REASON, ManifestFacts, evaluate, load_manifest_facts,
                                  refute_text)
 from skillc.env.nl import intent_from_text
@@ -122,6 +124,7 @@ def test_to_dict_shape():
     assert {"requirement", "hard", "status", "basis", "evidence"} <= set(d["requirements"][0])
 
 
+@pytest.mark.skipif(not SET3.is_dir(), reason="benchmark data not present")
 def test_set3_cases_evaluate_without_errors():
     files = sorted(SET3.glob("*.md"))
     assert files
