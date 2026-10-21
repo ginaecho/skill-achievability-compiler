@@ -31,13 +31,24 @@ A toolbox tool counts only if an `azure.ai.agent` references the toolbox; with
 at most one agent declared, that agent owns every toolbox.  A withdrawn tool
 is reported with the azure.yaml edit that would restore it.
 
+With `--compact` the gate first compacts the project's own documents (the skills
+it reads, plus a `COORDINATOR_INSTRUCTIONS` constant in `src/**/main.py`) into
+`protocol/compacted_s<k>.ce` with the P2g+ prompt and the EFFECTIVE runtime
+(`compact_project`, one model call per round), then gates those packs in place of
+the authored `protocol/*.ce` and reports the authored packs' labels next to them.
+Without `--compact` no model is called and `compacted_*.ce` files are ignored.
+
 Declared facts are taken at their word here: the gate refuses only what the
 declaration already rules out, and a probe (`--env`) replaces declarations by
 observations.  Exit codes: 0 every item ACHIEVABLE, 1 something IMPOSSIBLE,
-3 nothing impossible but something rests on an assumption, 2 an error.
+4 nothing impossible but a protocol is REJECTED (the goal is reachable, but
+the coordination can deadlock -- a typing failure, not a goal refutation),
+3 nothing impossible or rejected but something rests on an assumption,
+2 an error.
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 import sys
@@ -50,6 +61,8 @@ import yaml
 from .checker import check
 from .env.azd import AzdError, from_azure_yaml, intent_artifacts
 from .env.facts import tools_matching
+from .env.manifest import REASON as REQUIREMENT_UNAVAILABLE
+from .env.manifest import manifest_facts, refute_text, witness_lines
 from .env.model import Environment, merge
 from .env.nl import intent_from_text
 from .env.reach import reach
@@ -59,14 +72,16 @@ from .frontend.toolpolicy import load_library
 from .pack import PackError
 
 ACHIEVABLE, UNKNOWN, IMPOSSIBLE = "ACHIEVABLE", "UNKNOWN", "IMPOSSIBLE"
-EXIT_CODES = {ACHIEVABLE: 0, IMPOSSIBLE: 1, UNKNOWN: 3}
+# a protocol-typing rejection: does not pass, but is not a goal refutation
+REJECTED = "REJECTED"
+EXIT_CODES = {ACHIEVABLE: 0, IMPOSSIBLE: 1, UNKNOWN: 3, REJECTED: 4}
 REPORT_SCHEMA = "skillc.gate/1"
 
 # runtime tool -> the toolbox tool type that supplies it
 TOOLBOX_TYPES = {"code_interpreter": "code_interpreter", "web_search": "web_search",
                  "search": "azure_ai_search", "mcp": "mcp", "openapi": "openapi", "a2a": "a2a"}
 SANDBOX_TOOLS = ("read", "write")
-EGRESS_TOOLS = ("web_fetch",)
+EGRESS_TOOLS = ("web_fetch", "web_search")   # public egress: unknown under network isolation
 A2A_SUFFIX = "/agents/{agent}/endpoint/protocols/a2a"
 
 HOOK_SNIPPET = """hooks:
@@ -114,6 +129,10 @@ class GateReport:
     skills: list[Entry]
     topology: list[Entry]
     topology_note: str
+    # with --compact: the authored protocol/*.ce packs, reported next to the
+    # compacted ones (which are `packs`); informational, they do not decide the gate
+    authored: list[Entry] = field(default_factory=list)
+    compaction: list[dict] = field(default_factory=list)
 
     @property
     def entries(self) -> list[Entry]:
@@ -127,6 +146,8 @@ class GateReport:
     def verdict(self) -> str:
         if self.impossible:
             return IMPOSSIBLE
+        if any(e.verdict == REJECTED for e in self.entries):
+            return REJECTED
         if any(e.verdict == UNKNOWN for e in self.entries):
             return UNKNOWN
         return ACHIEVABLE
@@ -136,6 +157,13 @@ class GateReport:
         return EXIT_CODES[self.verdict]
 
     def to_dict(self) -> dict:
+        out = self._to_dict()
+        if self.authored or self.compaction:
+            out["authored_packs"] = [e.to_dict() for e in self.authored]
+            out["compaction"] = self.compaction
+        return out
+
+    def _to_dict(self) -> dict:
         return {
             "schema": REPORT_SCHEMA,
             "project": self.project,
@@ -165,6 +193,12 @@ class GateReport:
             lines.append(f"{e.kind} {e.name}: {e.verdict} {e.reason}".rstrip())
             lines += [f"    fix: {f}" for f in e.fixes]
             lines += [f"    assuming: {a}" for a in e.assumptions]
+        if self.compaction:
+            for c in self.compaction:
+                lines.append(f"compacted sample s{c['sample']}: "
+                             + (c.get("label") or f"ERROR {c.get('error')}"))
+            for e in self.authored:
+                lines.append(f"authored {e.name}: {e.verdict} {e.reason}".rstrip())
         if self.topology_note:
             lines.append(f"topology: {self.topology_note}")
         for e in self.topology:
@@ -279,6 +313,18 @@ def _pack_entry(path: Path, eff: EffectiveRuntime, library) -> tuple[Entry, dict
     if pure.refuted:
         reason = f"the pack itself is IMPOSSIBLE ({pure.reason}): {pure.detail}".rstrip(": ")
         fixes = ["repair the protocol before binding it to a runtime"]
+    elif label == ACHIEVABLE and verdict.protocol == "REJECTED":
+        label = REJECTED
+        reason = (f"protocol rejected ({verdict.protocol_reason}): "
+                  f"{verdict.protocol_detail}; goal reachable along witness; "
+                  "this is not a goal-impossibility claim (the goal is not refuted)")
+        if reasons:
+            reason += "; " + "; ".join(reasons)
+        if bound.pruned:
+            reason += "; pruned " + ", ".join(bound.pruned)
+        fixes = fixes + ["rewrite the protocol so every role can observe the branch it "
+                         "must act in, and every declared role behaviour refines its "
+                         "projection"]
     elif label == ACHIEVABLE:
         skipped = sorted(set(bound.withdrawn) | set(bound.blocked))
         reason = "via " + ", ".join(via)
@@ -292,14 +338,17 @@ def _pack_entry(path: Path, eff: EffectiveRuntime, library) -> tuple[Entry, dict
         reason = f"{verdict.reason}: " + ("; ".join(reasons) if reasons else verdict.detail)
         if bound.pruned:
             reason += "; pruned " + ", ".join(bound.pruned)
-        if verdict.reason == "NON_CONFORMANT" and reasons:
-            reason += f"; {verdict.detail}"
+        if verdict.protocol == "REJECTED":
+            reason += (f"; protocol also rejected ({verdict.protocol_reason}): "
+                       f"{verdict.protocol_detail}")
     else:
         reason = f"{verdict.reason}: {verdict.detail}".rstrip(": ")
         assumptions.append(f"the checker could not decide this pack: {verdict.reason}")
     entry = Entry("pack", path.name, label, reason, list(dict.fromkeys(fixes)), assumptions,
                   {"pure_verdict": pure.label, "bound_verdict": verdict.label,
-                   "bound_reason": verdict.reason, "via": via, "withdrawn": bound.withdrawn,
+                   "bound_reason": verdict.reason, "bound_protocol": verdict.protocol,
+                   "bound_protocol_reason": verdict.protocol_reason,
+                   "via": via, "withdrawn": bound.withdrawn,
                    "blocked": bound.blocked, "pruned": bound.pruned})
     return entry, parsed.pack
 
@@ -335,8 +384,40 @@ def _without_tools(intent: dict) -> dict:
     return out
 
 
-def _skill_entry(path: Path, env: Environment, eff: EffectiveRuntime) -> Entry:
-    intent = intent_from_text(path.read_text(encoding="utf-8"), source=str(path))
+# requirement kinds the declaration decides, not the runtime manifest
+DECLARED_KINDS = ("tool", "account", "credential", "mcp")
+
+
+def _reader_entry(path: Path, text: str, facts) -> Entry | None:
+    """The deterministic requirement reader (`env.manifest.refute_text`) on a
+    skill's text: an IMPOSSIBLE entry with the evidence lines when a hard
+    requirement is unavailable in the manifest, else None."""
+    if facts is None:
+        return None
+    ev = refute_text(text, facts)
+    # tools, connections and credentials come from azure.yaml, which the gate
+    # reads itself (frontmatter check, `reach`); the manifest does not decide them
+    witness = [w for w in ev.witness
+               if w["requirement"].split(":", 1)[0] not in DECLARED_KINDS]
+    if not witness:
+        return None
+    return Entry("skill", path.name, IMPOSSIBLE,
+                 f"{REQUIREMENT_UNAVAILABLE} (deterministic requirement reader, runtime "
+                 f"`{facts.name}`): " + "; ".join(witness_lines(witness)),
+                 [], [], {"intent": path.stem, "requirement_eval": ev.to_dict(),
+                          "coverage": "deterministic-reader:manifest"})
+
+
+def _skill_entry(path: Path, env: Environment, eff: EffectiveRuntime,
+                 facts=None) -> Entry:
+    """Gate one natural-language skill.  With `facts` (the runtime manifest Rdet
+    reads), the deterministic requirement reader runs first and its refutation,
+    with the evidence lines, is the entry's reason."""
+    text = path.read_text(encoding="utf-8")
+    refuted = _reader_entry(path, text, facts)
+    if refuted is not None:
+        return refuted
+    intent = intent_from_text(text, source=str(path))
     missing = [cond[5:] for cond in intent["goal"]
                if cond.startswith("tool:") and not _tool_declared(cond[5:], env, eff)]
     result = reach(_without_tools(intent), env)
@@ -401,6 +482,12 @@ def _strings(value: Any) -> list[str]:
     return out
 
 
+def _role_key(name: str) -> str:
+    """Role names compare without case, `_` and `-`: a compacted pack writes
+    `revenue_analyst` for the skill file `RevenueAnalyst.md`."""
+    return re.sub(r"[-_\s]", "", str(name)).lower()
+
+
 class _Topology:
     """The agents, skills, connections and toolboxes of the raw azure.yaml."""
 
@@ -423,13 +510,13 @@ class _Topology:
     def agent_for(self, role: str) -> str | None:
         """The agent key that plays `role`: by agent name, or by an azure.ai.skill
         whose instructions file is named after the role and that the agent uses."""
-        want = role.lower()
+        want = _role_key(role)
         for key in self.agents:
-            if want in (key.lower(), self.agent_name(key).lower()):
+            if want in (_role_key(key), _role_key(self.agent_name(key))):
                 return key
         skills = {k for k, s in self.skills.items()
                   if isinstance(s.get("instructions"), str)
-                  and Path(s["instructions"]).stem.lower() == want}
+                  and _role_key(Path(s["instructions"]).stem) == want}
         for key, spec in self.agents.items():
             refs = set(_strings(spec.get("uses"))) | set(_strings(spec.get("skills")))
             if refs & skills:
@@ -548,13 +635,18 @@ def _edge_entry(topo: _Topology, pack_name: str, sender: str, receiver: str,
 # The gate
 # --------------------------------------------------------------------------
 
-def gate(project_dir: str | Path, declared: str | Path = "azure.yaml",
-         observed: str | Path | None = None,
-         runtime: str | Runtime = "foundry-hosted") -> GateReport:
-    """Gate the azd project under `project_dir` (see the module docstring)."""
-    project = Path(project_dir).resolve()
-    if not project.is_dir():
-        raise GateError(f"{project} is not a directory")
+COMPACTED_PREFIX = "compacted_"
+
+
+def _authored_packs(project: Path) -> list[Path]:
+    """protocol/*.ce written by people: everything but `compacted_*.ce`."""
+    protocol = project / "protocol"
+    return [p for p in (sorted(protocol.glob("*.ce")) if protocol.is_dir() else [])
+            if p.is_file() and not p.name.startswith(COMPACTED_PREFIX)]
+
+
+def _environment(project: Path, declared: str | Path,
+                 observed: str | Path | None) -> tuple[Path, Path | None, Environment]:
     declared_path = Path(declared)
     if not declared_path.is_absolute():
         declared_path = project / declared_path
@@ -567,25 +659,59 @@ def gate(project_dir: str | Path, declared: str | Path = "azure.yaml",
         if not observed_path.is_absolute():
             observed_path = project / observed_path
         env = merge(env, Environment.load(observed_path))
+    return declared_path, observed_path, env
+
+
+def _manifest(runtime: str | Runtime) -> Runtime:
     if isinstance(runtime, Runtime):
-        manifest = runtime
-    else:
-        try:
-            manifest = load_runtime(str(runtime))
-        except (KeyError, RuntimeManifestError, OSError, json.JSONDecodeError) as e:
-            raise GateError(f"runtime {runtime!r}: {e}") from None
+        return runtime
+    try:
+        return load_runtime(str(runtime))
+    except (KeyError, RuntimeManifestError, OSError, json.JSONDecodeError) as e:
+        raise GateError(f"runtime {runtime!r}: {e}") from None
+
+
+def _reader_facts(runtime: str | Runtime, eff: EffectiveRuntime):
+    """The manifest the requirement reader reads, with the tools of the
+    effective runtime (a withdrawn tool decides nothing), or None."""
+    try:
+        facts = manifest_facts(runtime)
+    except (KeyError, ValueError, OSError):
+        return None
+    return None if facts is None else replace(facts, tools=dict(eff.runtime.tools))
+
+
+def gate(project_dir: str | Path, declared: str | Path = "azure.yaml",
+         observed: str | Path | None = None,
+         runtime: str | Runtime = "foundry-hosted",
+         packs: list[str | Path] | None = None) -> GateReport:
+    """Gate the azd project under `project_dir` (see the module docstring).
+
+    `packs` (e.g. the files `compact_project` wrote) are gated in place of the
+    authored `protocol/*.ce`, whose labels are then reported as `authored`."""
+    project = Path(project_dir).resolve()
+    if not project.is_dir():
+        raise GateError(f"{project} is not a directory")
+    declared_path, observed_path, env = _environment(project, declared, observed)
+    manifest = _manifest(runtime)
     eff = effective_runtime(manifest, env)
     library = load_library()
 
-    packs: list[Entry] = []
+    authored: list[Entry] = []
+    pack_paths = _authored_packs(project)
+    if packs is not None:
+        authored = [_pack_entry(path, eff, library)[0] for path in pack_paths]
+        pack_paths = [Path(p) for p in packs]
+    gated: list[Entry] = []
     parsed: list[tuple[str, dict]] = []
-    protocol = project / "protocol"
-    for path in sorted(protocol.glob("*.ce")) if protocol.is_dir() else []:
+    for path in pack_paths:
         if path.is_file():
             entry, pack = _pack_entry(path, eff, library)
-            packs.append(entry)
+            gated.append(entry)
             parsed.append((path.name, pack))
-    skills = [_skill_entry(p, env, eff) for p in intent_artifacts(declared_path) if p.is_file()]
+    facts = _reader_facts(runtime, eff)
+    skills = [_skill_entry(p, env, eff, facts)
+              for p in intent_artifacts(declared_path) if p.is_file()]
     topology, note = _topology(declared_path, parsed)
 
     def rel(p: Path | None) -> str | None:
@@ -597,8 +723,128 @@ def gate(project_dir: str | Path, declared: str | Path = "azure.yaml",
             return str(p)
 
     return GateReport(str(project), rel(declared_path) or "", rel(observed_path), manifest.name,
-                      sorted(eff.runtime.tools), eff.withdrawn, eff.assumptions, packs, skills,
-                      topology, note)
+                      sorted(eff.runtime.tools), eff.withdrawn, eff.assumptions, gated, skills,
+                      topology, note, authored)
+
+
+# --------------------------------------------------------------------------
+# Compaction of the project's own documents (`--compact`, F-d of compaction v2)
+# --------------------------------------------------------------------------
+
+MULTI_ROLE_NOTE = (
+    "\n\nNote: the document describes several roles that exchange messages; "
+    "declare one Role per agent, the messages as `tells`, the approval ordering, "
+    "and the deliverable as the Goal.")
+COORDINATOR_CONSTANT = "COORDINATOR_INSTRUCTIONS"
+
+
+def coordinator_instructions(project: Path) -> str | None:
+    """The string constant `COORDINATOR_INSTRUCTIONS` of `src/**/main.py`, read as
+    text with `ast` (the module is never imported or run)."""
+    for main in sorted((project / "src").glob("**/main.py")) if (project / "src").is_dir() else []:
+        try:
+            tree = ast.parse(main.read_text(encoding="utf-8"))
+        except (OSError, SyntaxError, UnicodeDecodeError):
+            continue
+        for node in tree.body:
+            targets = (node.targets if isinstance(node, ast.Assign)
+                       else [node.target] if isinstance(node, ast.AnnAssign) else [])
+            if any(isinstance(t, ast.Name) and t.id == COORDINATOR_CONSTANT for t in targets) \
+                    and isinstance(node.value, ast.Constant) \
+                    and isinstance(node.value.value, str):
+                return node.value.value
+    return None
+
+
+def project_text(project_dir: str | Path, declared: str | Path = "azure.yaml") -> str:
+    """The project's documents as one text: the coordinator instructions (if
+    any) and every skill the gate reads, each under a `# Role: <name>` heading."""
+    project = Path(project_dir).resolve()
+    declared_path = Path(declared)
+    if not declared_path.is_absolute():
+        declared_path = project / declared_path
+    parts = []
+    coordinator = coordinator_instructions(project)
+    if coordinator:
+        parts.append(f"# Role: Coordinator\n\n{coordinator.strip()}\n")
+    for path in intent_artifacts(declared_path):
+        if path.is_file():
+            parts.append(f"# Role: {path.stem}\n\n{path.read_text(encoding='utf-8').strip()}\n")
+    if not parts:
+        raise GateError(f"{project}: no skills or coordinator instructions to compact")
+    return "\n".join(parts)
+
+
+def declared_runtime(declared_path: Path, default: str = "foundry-hosted") -> str:
+    """The runtime manifest azure.yaml names (`x-skillc: {runtime: NAME}` or
+    `skillc: {runtime: NAME}` at the top level), else `default`."""
+    try:
+        doc = yaml.safe_load(declared_path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return default
+    for key in ("x-skillc", "skillc"):
+        block = doc.get(key) if isinstance(doc, dict) else None
+        if isinstance(block, dict) and isinstance(block.get("runtime"), str) and block["runtime"]:
+            return block["runtime"]
+    return default
+
+
+def compact_project(project_dir: str | Path, declared: str | Path = "azure.yaml",
+                    model: str | None = None, samples: int = 1,
+                    provider: str | None = "azure-openai", version: str = "p2g+",
+                    runtime: str | Runtime | None = None,
+                    observed: str | Path | None = None,
+                    timeout: int = 600) -> list[dict]:
+    """Compact the project's documents into `protocol/compacted_s<k>.ce`.
+
+    The prompt is `ce_runtime_messages(project_text + MULTI_ROLE_NOTE, R,
+    version)` where R is the EFFECTIVE runtime (the manifest reduced by the
+    declaration), so the model can bind only to tools the project supplies.
+    Each sample runs the P2g loop (`frontend.llm.compact_ce_rounds`: two
+    located-error retries, one guarded repair) and writes its CE document (when
+    one parsed) and `protocol/compacted_s<k>.json` with the prompts, replies
+    and usage.  Returns one record per sample: {"sample", "path" (or None),
+    "log", "ok", "error", "label", "reason", "repaired"}."""
+    from .frontend.llm import compact_ce_rounds          # deferred: optional front-end
+    from .frontend.prompts import ce_runtime_messages
+    project = Path(project_dir).resolve()
+    if not project.is_dir():
+        raise GateError(f"{project} is not a directory")
+    declared_path, _, env = _environment(project, declared, observed)
+    manifest = _manifest(runtime if runtime is not None else declared_runtime(declared_path))
+    eff = effective_runtime(manifest, env)
+    text = project_text(project, declared_path)
+    system, user = ce_runtime_messages(text + MULTI_ROLE_NOTE, eff.runtime, version=version)
+    protocol = project / "protocol"
+    protocol.mkdir(exist_ok=True)
+    out = []
+    for k in range(samples):
+        res = compact_ce_rounds(system, user, eff.runtime, model=model, provider=provider,
+                                timeout=timeout, retries=2, repair=True)
+        ce_path = protocol / f"{COMPACTED_PREFIX}s{k}.ce"
+        log_path = protocol / f"{COMPACTED_PREFIX}s{k}.json"
+        if res["ok"]:
+            ce_path.write_text(res["ce_text"], encoding="utf-8")
+        elif ce_path.exists():
+            ce_path.unlink()                  # never gate a stale sample
+        verdict = res["verdict"]
+        record = {"sample": k, "path": str(ce_path) if res["ok"] else None,
+                  "log": str(log_path), "ok": res["ok"], "error": res["error"],
+                  "label": verdict.label if verdict else None,
+                  "reason": verdict.reason if verdict else None,
+                  "repaired": res["repaired"]}
+        log = {"schema": "skillc.compaction-log/1", "project": str(project),
+               "declared": declared_path.name, "runtime": manifest.name,
+               "effective_tools": sorted(eff.runtime.tools),
+               "withdrawn_runtime_tools": eff.withdrawn, "version": version,
+               "model": model, "provider": provider, "sample": k,
+               "system": system, "user": user,
+               "rounds": res["rounds"], "ok": res["ok"], "error": res["error"],
+               "repaired": res["repaired"], "repair_rejected": res["repair_rejected"],
+               "verdict": verdict.to_dict() if verdict else None}
+        log_path.write_text(json.dumps(log, indent=1, ensure_ascii=False), encoding="utf-8")
+        out.append(record)
+    return out
 
 
 # --------------------------------------------------------------------------
@@ -639,6 +885,18 @@ def add_parser(sub) -> None:
     sp.add_argument("--json", action="store_true", help="print the report as JSON")
     sp.add_argument("--install-hook", action="store_true",
                     help="print the azure.yaml hooks.predeploy snippet and exit")
+    sp.add_argument("--compact", action="store_true",
+                    help="compact the project's skills with an LLM (P2g+, effective runtime) "
+                         "into protocol/compacted_s<k>.ce and gate those instead of the "
+                         "authored protocol/*.ce (calls a model)")
+    sp.add_argument("--model", default=None,
+                    help="with --compact: Azure OpenAI deployment or Anthropic model")
+    sp.add_argument("--samples", type=int, default=1,
+                    help="with --compact: number of independent compactions (default 1)")
+    sp.add_argument("--llm-provider", default="azure-openai",
+                    help="with --compact: LLM provider (default azure-openai)")
+    sp.add_argument("--ce-prompt", choices=("p2g", "p2g+"), default="p2g+",
+                    help="with --compact: CE prompt version (default p2g+)")
     sp.set_defaults(fn=cmd_gate)
 
 
@@ -647,9 +905,29 @@ def cmd_gate(args) -> int:
         print(HOOK_SNIPPET, end="")
         return 0
     try:
-        report = gate(getattr(args, "dir", ".") or ".", getattr(args, "declared", "azure.yaml"),
-                      getattr(args, "env", None), getattr(args, "runtime", "foundry-hosted"))
-    except (GateError, AzdError, OSError, ValueError, KeyError) as e:
+        project = getattr(args, "dir", ".") or "."
+        declared = getattr(args, "declared", "azure.yaml")
+        runtime = getattr(args, "runtime", "foundry-hosted")
+        compaction = None
+        if getattr(args, "compact", False):
+            if isinstance(runtime, str) and runtime == "foundry-hosted":
+                # the default: a manifest azure.yaml names wins over it
+                declared_path = Path(declared)
+                if not declared_path.is_absolute():
+                    declared_path = Path(project) / declared_path
+                runtime = declared_runtime(declared_path, runtime)
+            compaction = compact_project(
+                project, declared, model=getattr(args, "model", None),
+                samples=getattr(args, "samples", 1),
+                provider=getattr(args, "llm_provider", "azure-openai"),
+                version=getattr(args, "ce_prompt", "p2g+"), runtime=runtime,
+                observed=getattr(args, "env", None))
+        report = gate(project, declared, getattr(args, "env", None), runtime,
+                      packs=None if compaction is None
+                      else [c["path"] for c in compaction if c["path"]])
+        if compaction is not None:
+            report.compaction = [_sample_label(c, report) for c in compaction]
+    except (GateError, AzdError, OSError, ValueError, KeyError, RuntimeError) as e:
         print(f"skillc gate: error: {e}", file=sys.stderr)
         return 2
     print(json.dumps(report.to_dict(), indent=2) if getattr(args, "json", False)
@@ -658,5 +936,17 @@ def cmd_gate(args) -> int:
     return report.exit_code
 
 
-__all__ = ["gate", "GateReport", "Entry", "EffectiveRuntime", "effective_runtime",
+def _sample_label(record: dict, report: GateReport) -> dict:
+    """A compaction record with the gate's label for the pack it wrote."""
+    out = dict(record)
+    name = Path(record["path"]).name if record.get("path") else None
+    entry = next((e for e in report.packs if e.name == name), None)
+    out["label"] = entry.verdict if entry else None
+    out["gate_reason"] = entry.reason if entry else None
+    out["compaction_label"] = record.get("label")
+    return out
+
+
+__all__ = ["gate", "GateReport", "compact_project", "project_text",
+           "coordinator_instructions", "declared_runtime", "MULTI_ROLE_NOTE", "Entry", "EffectiveRuntime", "effective_runtime",
            "GateError", "add_parser", "cmd_gate", "emit_verdict", "HOOK_SNIPPET"]

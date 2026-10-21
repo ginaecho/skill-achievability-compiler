@@ -5,7 +5,9 @@ here, together with the builders that assemble (system, user) message pairs:
 
     SYSTEM / compact            natural language -> JSON pack
     CE_SYSTEM / ce_messages     natural language -> Controlled English
-    ce_runtime_messages         P2g: CE bound to a runtime manifest (P3: levels)
+    ce_runtime_messages         P2g: CE bound to a runtime manifest (P3: levels);
+                                version="p2g+" is compaction v2 (rules 11-14);
+                                version="p2g++" narrows rule 9 (Addendum E-c)
     ce_grounded_messages        P2g + software grounding and fallbacks
     ce_tpl_messages             P2g + tool-policy library obligations
     ce_index_messages           P2g + policy-index reference facts
@@ -356,20 +358,95 @@ CE_TPL_DOC = (
     "Subagents: spawning a subagent is not a RUNTIME tool here unless listed; "
     "write it as a 'spawn' step.\n")
 
-def ce_runtime_messages(nl: str, runtime, levels: bool = False) -> tuple[str, str]:
+# Compaction v2 ("P2g+", runs/20261015_review_response/PLAN.md, Addendum B and
+# its amendment): an amended rule 9, rules 11-14, the `assuming` branch form, the
+# universal `reply` tool.  Selected with ce_runtime_messages(version="p2g+").
+CE_RULE_9_END = "do not write them as protocol steps.\n"
+CE_PLUS_RULE_9_AMENDMENT = (
+    "do not write them as protocol steps. The exception is a deliverable "
+    "written in the reply (an answer, a plan, a document written inline): "
+    "declare one Tool via `reply` that adds the Goal atom, and use it in the "
+    "Protocol.\n")
+
+CE_PLUS_RULES = (
+    "11. Facts the environment or the user decides (what kind of project this "
+    "is, whether the user gave an input, which case applies) are branch "
+    "assumptions: write them on the observed branch where they hold, "
+    "'- branch `L` (assuming `P`):', and let Tools require them there. Never "
+    "write such a fact as a 'requires' that no Tool adds.\n"
+    "12. 'tells' steps carry no effects: a received message is not a "
+    "predicate. Never write a received-message predicate (e.g. "
+    "`data_received`) as a 'requires'; the order of the Protocol already says "
+    "that the message came first.\n"
+    "13. The Goal names only the deliverable. Never put branch labels, "
+    "notifications, messages or intermediate states in the Goal.\n"
+    "14. When the document names distinct actors (an approver, a reviewer, a "
+    "second agent, a human who confirms), declare one Role per actor and keep "
+    "each Tool's owner as the document states. Never give an approving or "
+    "reviewing action to the role whose action it gates.\n")
+
+CE_PLUS_DOC = (
+    "Branch assumptions (on a branch of a protocol choice):\n"
+    "  - branch `L` (assuming `P`, ...):   -- facts that hold once this branch "
+    "is taken\n"
+    "Example:\n"
+    "    - `user` chooses one of (observed):\n"
+    "      - branch `python_project` (assuming `is_python_project`):\n"
+    "        - `agent` uses `run_pytest`.\n"
+    "      - branch `other_project`: none.\n"
+    "Example: Tool `write_summary` (owner `agent`): via `reply`; requires "
+    "`notes_read`; adds `summary_written`.\n")
+
+# Compaction v3 ("P2g++", PLAN.md Addendum E-c): P2g+ with rule 9's exception
+# narrowed to the one Tool that writes the stated deliverable in the answer.  Its
+# packs also go through pack.prune_dead_reply.  P2g and P2g+ texts are unchanged.
+CE_PLUSPLUS_RULE_9_AMENDMENT = (
+    "do not write them as protocol steps. The one exception is the deliverable "
+    "itself when the document says it is written in the answer (an answer, a "
+    "report, a plan or a document given inline): declare one Tool via `reply` "
+    "that adds that Goal atom, and use it in the Protocol. Analysis, review, "
+    "planning, summarising and intermediate notes are never Tools, even when "
+    "their text appears in the reply; do not bind anything else via `reply`.\n")
+
+CE_PROMPT_VERSIONS = ("p2g", "p2g+", "p2g++")
+
+
+def ce_runtime_messages(nl: str, runtime, levels: bool = False,
+                        version: str = "p2g") -> tuple[str, str]:
     """(system, user) for manifest-bound NL -> CE compaction.
 
     `levels=True` is P3: rule 10 asks for two goal levels (Goal / Live goal)
-    and the CE documentation gains the 'Live goal:' statement."""
+    and the CE documentation gains the 'Live goal:' statement.
+
+    `version="p2g"` (the default) is the frozen P2g text, byte for byte.
+    `version="p2g+"` is compaction v2: rule 9 amended for deliverables written
+    in the reply (Tool via `reply`), rules 11-14 (branch assumptions, no
+    effects on 'tells', a deliverable-only Goal, one Role per actor), the
+    `assuming` form and a `via reply` example, and the universal `reply` tool
+    in the RUNTIME list.  The default stays "p2g" so that callers written
+    before v2 (running experiments) get exactly the prompt they froze.
+    `version="p2g++"` is P2g+ with rule 9's exception narrowed (only the Tool
+    that adds a Goal atom the document says is written in the answer is
+    bound via `reply`; analysis and planning are never Tools)."""
+    if version not in CE_PROMPT_VERSIONS:
+        raise ValueError(f"unknown CE prompt version {version!r}: use one of "
+                         f"{', '.join(CE_PROMPT_VERSIONS)}")
     head, rest = CE_SYSTEM.split("\n1. ", 1)
     rule1, others = rest.split("\n2. ", 1)
     rules, doc = ("2. " + others).split(CE_DOC, 1)
     extra = CE_RUNTIME_EXTRA_RULES
     if levels:
         extra = extra.split("10. ", 1)[0] + CE_LEVELS_RULE_10
+    plus = version in ("p2g+", "p2g++")
+    if plus:
+        assert extra.count(CE_RULE_9_END) == 1
+        amendment = (CE_PLUSPLUS_RULE_9_AMENDMENT if version == "p2g++"
+                     else CE_PLUS_RULE_9_AMENDMENT)
+        extra = extra.replace(CE_RULE_9_END, amendment) + CE_PLUS_RULES
     system = (head + "\n" + CE_RUNTIME_RULE_1 + rules + extra
-              + CE_DOC + CE_RUNTIME_DOC + (CE_LEVELS_DOC if levels else "")
-              + runtime_note(runtime))
+              + CE_DOC + CE_RUNTIME_DOC + (CE_PLUS_DOC if plus else "")
+              + (CE_LEVELS_DOC if levels else "")
+              + runtime_note(runtime, universal=plus))
     user = f"Natural-language skill:\n```\n{nl}\n```\nCE document:"
     return system, user
 
@@ -591,7 +668,7 @@ def ce_messages(nl: str, runtime_abilities: list[str] | None = None
     return system, user
 
 REPAIR_PROMPT = (
-    "The trusted checker refuted the pack you produced, with this "
+    "The trusted checker rejected the protocol of the pack you produced, with this "
     "counterexample:\n\n  {reason}: {detail}\n\n"
     "This is usually a modelling artifact of the communication structure, "
     "not a real fault in the skill. Repair the pack and output ONLY the "

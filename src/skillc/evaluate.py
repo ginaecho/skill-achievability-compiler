@@ -12,6 +12,14 @@ An UNKNOWN verdict is an ABSTENTION: the pack fell outside the decidable
 fragment and the checker made no claim.  Abstentions are counted and named
 separately and never enter the confusion matrix -- scoring one as a false
 negative would report honest silence as a soundness violation.
+
+Ground truth has two orthogonal dimensions.  `ground_truth` is the goal's
+reachability in the global semantics; `protocol_truth` is whether the
+protocol types (WELL_TYPED / REJECTED; UNKNOWN outside the projectable
+fragment).  A deadlocking protocol whose goal is reachable along some branch
+is ACHIEVABLE + REJECTED, never IMPOSSIBLE.  The protocol dimension is scored
+separately: a NOT_CHECKED prediction (the checker decided the goal before
+typing ran) is a protocol abstention, not an error.
 """
 from __future__ import annotations
 
@@ -36,6 +44,8 @@ class EvalRow:
     truth: str
     predicted: str
     reason: str
+    protocol: str = ""              # predicted: WELL_TYPED | REJECTED | NOT_CHECKED
+    protocol_truth: str = ""        # labelled:  WELL_TYPED | REJECTED | UNKNOWN
 
     @property
     def correct(self) -> bool:
@@ -59,6 +69,14 @@ class EvalResult:
     fn_ids: list[str] = field(default_factory=list)
     unknown_ids: list[str] = field(default_factory=list)
     overclaimed_ids: list[str] = field(default_factory=list)
+    # protocol-typing dimension (scored separately from the goal matrix)
+    protocol_correct: int = 0
+    protocol_fp: int = 0             # truth WELL_TYPED, predicted REJECTED
+    protocol_fn: int = 0             # truth REJECTED, predicted WELL_TYPED
+    protocol_not_checked: int = 0    # predicted NOT_CHECKED (abstention)
+    protocol_unlabelled: int = 0     # no WELL_TYPED/REJECTED label
+    protocol_fp_ids: list[str] = field(default_factory=list)
+    protocol_fn_ids: list[str] = field(default_factory=list)
 
     @property
     def n(self) -> int:
@@ -91,7 +109,10 @@ def evaluate(corpus: list[dict] | None = None) -> EvalResult:
         v = check(pack)
         pred = v.label
         truth = c["ground_truth"]
-        res.rows.append(EvalRow(c["id"], c["category"], truth, pred, v.reason))
+        ptruth = c.get("protocol_truth", "")
+        res.rows.append(EvalRow(c["id"], c["category"], truth, pred, v.reason,
+                                v.protocol, ptruth))
+        _score_protocol(res, c["id"], ptruth, v.protocol)
         if pred == "UNKNOWN":
             # abstention: no claim was made, so no cell of the matrix applies
             res.unknown += 1
@@ -112,6 +133,21 @@ def evaluate(corpus: list[dict] | None = None) -> EvalResult:
             res.fn += 1
             res.fn_ids.append(c["id"])
     return res
+
+
+def _score_protocol(res: EvalResult, cid: str, truth: str, pred: str) -> None:
+    if truth not in ("WELL_TYPED", "REJECTED"):
+        res.protocol_unlabelled += 1
+    elif pred == "NOT_CHECKED":
+        res.protocol_not_checked += 1
+    elif pred == truth:
+        res.protocol_correct += 1
+    elif truth == "WELL_TYPED":
+        res.protocol_fp += 1
+        res.protocol_fp_ids.append(cid)
+    else:
+        res.protocol_fn += 1
+        res.protocol_fn_ids.append(cid)
 
 
 def refutation_metrics(res: EvalResult) -> dict:
@@ -142,6 +178,17 @@ def refutation_metrics(res: EvalResult) -> dict:
         "unlabelled": res.n - len(labelled),
         "false_impossible_ids": list(res.fn_ids),
         "missed_impossible_ids": list(res.fp_ids),
+        "protocol": {
+            "positive_class": "REJECTED",
+            "correct": res.protocol_correct,
+            "fp": res.protocol_fp, "fn": res.protocol_fn,
+            "not_checked": res.protocol_not_checked,
+            "unlabelled": res.protocol_unlabelled,
+            "predicted_rejected": sum(r.protocol == "REJECTED" for r in res.rows),
+            "labelled_rejected": sum(r.protocol_truth == "REJECTED" for r in res.rows),
+            "false_rejection_ids": list(res.protocol_fp_ids),
+            "missed_rejection_ids": list(res.protocol_fn_ids),
+        },
     }
 
 
@@ -150,17 +197,25 @@ def format_report(res: EvalResult, corpus: list[dict] | None = None) -> str:
     notes = {c["id"]: c.get("note", "") for c in corpus}
     w = max(len(r.id) for r in res.rows)
     lines = ["=" * 92,
-             f"{'spec':<{w}}  {'category':<22} {'truth':<11} {'verdict':<11} {'reason':<18} ok",
+             f"{'spec':<{w}}  {'category':<22} {'truth':<11} {'verdict':<11} {'reason':<18} ok"
+             f"  protocol (truth/predicted)",
              "-" * 92]
     for r in res.rows:
         lines.append(f"{r.id:<{w}}  {r.category:<22} {r.truth:<11} "
-                     f"{r.predicted:<11} {r.reason:<18} {'Y' if r.correct else 'N'}")
+                     f"{r.predicted:<11} {r.reason:<18} {'Y' if r.correct else 'N'}"
+                     f"   {r.protocol_truth or '-'}/{r.protocol or '-'}")
     lines += ["=" * 92, "",
               f"Confusion matrix (positive = ACHIEVABLE), N={res.n_scored} "
               f"decided of {res.n}",
               "                 predicted ACHIEVABLE   predicted IMPOSSIBLE",
               f"  truly ACHIEVABLE        TP={res.tp:<2}                 FN={res.fn:<2}",
               f"  truly IMPOSSIBLE        FP={res.fp:<2}                 TN={res.tn:<2}",
+              "",
+              "Protocol typing (orthogonal to the goal; a REJECTED protocol is "
+              "not a goal refutation)",
+              f"  correct={res.protocol_correct} false_rejections={res.protocol_fp} "
+              f"missed_rejections={res.protocol_fn} not_checked={res.protocol_not_checked} "
+              f"unlabelled={res.protocol_unlabelled}",
               ""]
     lines.append("--- ABSTENTIONS (UNKNOWN: outside the decidable fragment, "
                  "not refutations) ---")

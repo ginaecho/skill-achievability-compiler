@@ -228,9 +228,9 @@ def test_parenthesised_arithmetic_is_a_comparison_not_a_formula_group():
     ("Skill `s`.\nGoal: `g`\nProtocol: none.\n", 2, "expected '.'"),
     ("Skill `s`.\nGoal: `g`.\nGoal: `h`.\nProtocol: none.\n", 3, "duplicate 'Goal:'"),
     ("Skill `s`.\nTool `t`.\nTool `t`.\nGoal: `g`.\nProtocol: none.\n", 3, "duplicate tool"),
-    ("Skill `s`.\nTool `t`: adds `a`; adds `b`.\nGoal: `g`.\nProtocol: none.\n", 2, "once per tool"),
-    ("Skill `s`.\nTool `t`: requires `a`; requires `b`.\nGoal: `g`.\nProtocol: none.\n", 2, "once per tool"),
     ("Skill `s`.\nTool `t`: grants `a`.\nGoal: `g`.\nProtocol: none.\n", 2, "a tool clause"),
+    # CE 1.4 merges repeated requires/adds (tests/test_compaction_v2.py); via stays single
+    ("Skill `s`.\nTool `t`: via `a`; via `b`.\nGoal: `g`.\nProtocol: none.\n", 2, "once per tool"),
     ("Skill `s`.\nGoal: `x` + `y` + 1 < 3.\nProtocol: none.\n", 2, "one arithmetic operator"),
     ("Skill `s`.\nGoal: `g`.\nProtocol:\n", 3, "needs indented"),
     ("Skill `s`.\nGoal: `g`.\nProtocol:\n   - `a` uses `t`.\n", 4, "multiple of 2"),
@@ -735,19 +735,24 @@ def test_binder_prunes_the_agents_unrunnable_branch():
     assert b.pruned == ["agent:deploy"]
     assert check(b.pack).achievable
     unpruned = bind_runtime(r.pack, r.bindings, RT, prune=False)
-    assert unpruned.pruned == [] and check(unpruned.pack).reason == "NON_CONFORMANT"
+    assert unpruned.pruned == []
+    v = check(unpruned.pack)
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
+    assert not v.admissible
 
 
 def test_binder_keeps_external_choices_and_all_dead_choices():
     ext = LEVELS.replace("chooses one of (observed)", "chooses one of (external)")
     r = parse_ce_detailed(ext)
     b = bind_runtime(r.pack, r.bindings, RT)
-    assert b.pruned == [] and not check(b.pack).achievable
+    # an external choice is kept, and the pack is not admissible: the goal may be
+    # reachable along the agent's branch, but the typing judgment rejects it
+    assert b.pruned == [] and not check(b.pack).admissible
     dead = LEVELS.replace("    - branch `skip`: none.\n",
                           "    - branch `again`:\n      - `agent` uses `deploy`.\n")
     r = parse_ce_detailed(dead)
     b = bind_runtime(r.pack, r.bindings, RT)
-    assert b.pruned == [] and not check(b.pack).achievable
+    assert b.pruned == [] and not check(b.pack).admissible
 
 
 # --------------------------------------------------------------------------
@@ -817,7 +822,9 @@ def test_forbidden_effect_blocks_the_step():
                                    "  - `agent` uses `submit`.\n"))
     b = bind_runtime(r.pack, r.bindings, RT, library=LIB)
     assert "policy:writes_external" in b.blocked["submit"]
-    assert check(b.pack).reason in ("BLOCKED_GUARD", "NON_CONFORMANT")
+    v = check(b.pack)
+    assert v.reason == "BLOCKED_GUARD" or v.protocol_reason == "NON_CONFORMANT"
+    assert not v.admissible
     # without the library the effect is ignored (P1/P2 reproducibility)
     plain = bind_runtime(r.pack, r.bindings, RT)
     assert "submit" not in plain.blocked

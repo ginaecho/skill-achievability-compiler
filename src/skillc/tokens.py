@@ -53,6 +53,13 @@ Honesty about what is measured
 * Token counts from `estimate_tokens` are a character-ratio heuristic, not a
   tokenizer.  `count_tokens_exact` upgrades them to real counts when an API
   key is available.
+* Every `Cost` says which it is: `Cost.basis` is "measured" (API-reported
+  usage), "modelled" (this module's estimate) or "zero by construction" (no
+  model in the loop), and labels and `to_dict` carry the word.  A measured
+  comparison of both sides on 62 real documents (real model calls, simulated
+  tool results grounded in the annotators' verified observations) is in
+  docs/TOKEN_ECONOMICS.md section 1 and scripts/measure_cost.py; the defaults
+  below were not tuned to it.
 """
 from __future__ import annotations
 
@@ -102,6 +109,11 @@ def count_tokens_exact(text: str, model: str = "claude-sonnet-5",
     caller can fall back to `estimate_tokens` deliberately rather than
     silently reporting an estimate as a measurement.
     """
+    from .frontend.providers import require_model_opt_in
+    from .frontend.urlguard import guarded_body
+
+    require_model_opt_in()
+
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set; exact token counting "
@@ -111,7 +123,7 @@ def count_tokens_exact(text: str, model: str = "claude-sonnet-5",
     if system:
         payload["system"] = system
     req = urllib.request.Request(
-        TOKEN_COUNT_URL, data=json.dumps(payload).encode(),
+        TOKEN_COUNT_URL, data=guarded_body(payload)[0],   # no URL in a prompt
         headers={"content-type": "application/json", "x-api-key": key,
                  "anthropic-version": "2023-06-01"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -169,6 +181,16 @@ class Cost:
     def total_tokens(self) -> int:
         return self.input_tokens + self.output_tokens + self.cached_input_tokens
 
+    @property
+    def basis(self) -> str:
+        """"measured" for API-reported usage, "zero by construction" for a
+        cost with no model in the loop, "modelled" for everything else."""
+        if self.measured:
+            return "measured"
+        if self.total_tokens == 0:
+            return "zero by construction"
+        return "modelled"
+
     def usd(self, price: Price | str = DEFAULT_PRICE) -> float:
         p = PRICES[price] if isinstance(price, str) else price
         return p.cost(self.input_tokens, self.output_tokens,
@@ -182,7 +204,8 @@ class Cost:
                     self.label or other.label)
 
     def to_dict(self, price: Price | str = DEFAULT_PRICE) -> dict:
-        return {"label": self.label, "input_tokens": self.input_tokens,
+        return {"label": self.label, "basis": self.basis,
+                "input_tokens": self.input_tokens,
                 "output_tokens": self.output_tokens,
                 "cached_input_tokens": self.cached_input_tokens,
                 "total_tokens": self.total_tokens,
@@ -193,7 +216,7 @@ class Cost:
 ZERO = Cost(label="deterministic (no model in the loop)")
 
 
-def usage_to_cost(usage: dict, label: str = "compaction") -> Cost:
+def usage_to_cost(usage: dict, label: str = "compaction (measured)") -> Cost:
     """Turn an Anthropic-shaped API ``usage`` block into a measured `Cost`.
 
     Cache *reads* are discounted (`CACHE_READ_DISCOUNT`); cache *writes* are
@@ -249,7 +272,7 @@ def compaction_cost(skill_text: str, *, system_text: str | None = None,
         out += pack_tokens
     return Cost(input_tokens=inp, output_tokens=out,
                 label=f"LLM compaction ({repair_rounds} repair round"
-                      f"{'' if repair_rounds == 1 else 's'})")
+                      f"{'' if repair_rounds == 1 else 's'}, modelled)")
 
 
 # A pack for a real consumer skill under the prompt's own size discipline
@@ -269,7 +292,8 @@ def check_cost(skill_text: str = "", *, llm: bool = False,
     front-end's, and the deterministic front-end's is also zero.
     """
     if not llm:
-        return replace(ZERO, label="deterministic front-end + checker")
+        return replace(ZERO, label="deterministic front-end + checker "
+                                   "(zero by construction)")
     return compaction_cost(skill_text, repair_rounds=repair_rounds, **kw)
 
 
@@ -324,7 +348,7 @@ class RuntimeModel:
         cached = int(raw_input * self.cache_hit_rate)
         return Cost(input_tokens=raw_input - cached, output_tokens=output,
                     cached_input_tokens=cached,
-                    label=f"{agents} agent(s) x {turns} turns")
+                    label=f"{agents} agent(s) x {turns} turns (modelled)")
 
 
 @dataclass(frozen=True)
@@ -419,6 +443,8 @@ class Economics:
         return {
             "skill": self.skill,
             "reason": self.reason,
+            "basis": {"verification": self.verification.basis,
+                      "waste_per_run": "modelled", "successful_run": "modelled"},
             "verification": self.verification.to_dict(self.price),
             "waste_per_run": {
                 "low": self.waste_low.to_dict(self.price),
@@ -497,6 +523,9 @@ class CorpusEconomics:
         hi = sum((r.waste_high for r in self.rows), Cost())
         return {
             "skills_refuted": len(self.rows),
+            "verification_basis": ("measured" if self.rows and all(
+                r.verification.measured for r in self.rows) else ver.basis),
+            "waste_avoided_basis": "modelled",
             "verification_tokens": ver.total_tokens,
             "verification_usd": round(ver.usd(self.price), 4),
             "waste_avoided_tokens": {"low": lo.total_tokens,

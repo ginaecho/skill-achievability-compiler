@@ -25,6 +25,10 @@ CORPUS = load_extended()
 EXPECTED_REASONS = {
     "spin_forever": "GOAL_UNSAT",
     "spawn_with_ghost_tool": "MISSING_CAPABILITY",
+}
+# protocol-typing failures are reported in the protocol dimension; the goal
+# of each is reachable in the global semantics
+EXPECTED_PROTOCOL_REASONS = {
     "nonconformant_handler": "NON_CONFORMANT",
 }
 
@@ -44,6 +48,12 @@ def test_extended_verdicts_match_ground_truth(case):
     expected_reason = EXPECTED_REASONS.get(case["id"])
     if expected_reason:
         assert v.reason == expected_reason
+    expected_protocol = EXPECTED_PROTOCOL_REASONS.get(case["id"])
+    if expected_protocol:
+        assert v.protocol == "REJECTED" and v.protocol_reason == expected_protocol
+        assert not v.admissible
+    if case["protocol_truth"] in ("WELL_TYPED", "REJECTED") and v.protocol != "NOT_CHECKED":
+        assert v.protocol == case["protocol_truth"], case["id"]
 
 
 def test_soundness_over_extended_corpus():

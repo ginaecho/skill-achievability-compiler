@@ -229,3 +229,36 @@ class TestCli:
     def test_cost_needs_a_path_or_corpus(self, capsys):
         from skillc.cli import main
         assert main(["cost"]) == 2
+
+
+class TestEveryFigureSaysWhatItIs:
+    """A rendered estimate says "modelled"; an API-reported figure "measured"."""
+
+    def test_runtime_waste_is_labelled_modelled(self):
+        c = RuntimeModel().run_cost(8)
+        assert "modelled" in c.label
+        assert c.basis == "modelled" and c.to_dict()["basis"] == "modelled"
+
+    def test_compaction_estimate_is_labelled_modelled(self):
+        c = compaction_cost("a skill " * 50)
+        assert "modelled" in c.label and c.basis == "modelled"
+
+    def test_api_usage_is_labelled_measured(self):
+        c = usage_to_cost({"input_tokens": 10, "output_tokens": 5})
+        assert "measured" in c.label
+        assert c.to_dict()["basis"] == "measured"
+
+    def test_deterministic_check_is_zero_by_construction(self):
+        assert check_cost("text").basis == "zero by construction"
+
+    def test_economics_and_corpus_totals_name_their_basis(self):
+        e = economics("a skill " * 50, "MISSING_CAPABILITY", llm=True)
+        d = e.to_dict()
+        assert d["basis"]["waste_per_run"] == "modelled"
+        assert all(v["basis"] == "modelled" for v in d["waste_per_run"].values())
+        t = CorpusEconomics(rows=[e]).totals()
+        assert t["waste_avoided_basis"] == "modelled"
+        assert t["verification_basis"] == "modelled"
+        measured = economics("x", "MISSING_CAPABILITY",
+                             verification=usage_to_cost({"input_tokens": 3}))
+        assert CorpusEconomics(rows=[measured]).totals()["verification_basis"] == "measured"

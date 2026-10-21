@@ -217,7 +217,10 @@ def test_an_unannounced_choice_that_strands_a_role_is_refuted():
         The monitor does not tell the oncall which way it went.
         """), NONE)
     v = check(res.pack)
-    assert not v.achievable and v.reason == "NON_PROJECTABLE"
+    # the 'urgent' branch reaches the goal; the stranded role rejects the
+    # protocol (a deadlock risk), which is not a goal refutation
+    assert v.label == "ACHIEVABLE" and not v.admissible
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_PROJECTABLE"
 
 
 def test_announcing_the_choice_makes_it_projectable():
@@ -296,7 +299,8 @@ def test_declared_role_behaviour_must_cover_the_contract():
         behaviour="The handler waits for `go_fast`, then resolves the ticket "
                   "with `fix_fast`."), NONE)
     v = check(partial.pack)
-    assert not v.achievable and v.reason == "NON_CONFORMANT"
+    assert v.label == "ACHIEVABLE" and not v.admissible
+    assert v.protocol == "REJECTED" and v.protocol_reason == "NON_CONFORMANT"
 
     tolerant = compile_markdown(doc.format(behaviour=md("""
         The handler acts on whichever label arrives:

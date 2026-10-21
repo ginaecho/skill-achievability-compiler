@@ -33,7 +33,19 @@ def _without_actions(steps: list[dict], names: set[str]) -> list[dict]:
     return kept
 
 
+def role_separation(pack: dict, gated: str, gate: str) -> dict:
+    """Separation of duty: the gating (approving or second-stage) action and the action it
+    gates both exist and are owned by different roles."""
+    caps = pack.get("capabilities", {})
+    owners = {name: caps[name].get("owner") if name in caps else None for name in (gated, gate)}
+    separated = None not in owners.values() and owners[gated] != owners[gate]
+    return {"separated": separated, "owners": owners}
+
+
 def static_check(intent: dict, environment: dict, scenario: dict) -> dict:
+    if "role_separation" in scenario:
+        spec = scenario["role_separation"]
+        return role_separation(intent, spec["gated"], spec["gate"])
     pack, env = deepcopy(intent), deepcopy(environment)
     grants = set(env["grants"]) - set(scenario.get("remove_grants", []))
     env["contracts"].update(scenario.get("replace_contracts", {}))

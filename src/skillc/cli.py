@@ -108,6 +108,8 @@ def _compact_with_llm(path: Path, args) -> dict:
         front, kwargs = compact_ce, {"runtime": load_runtime(args.runtime)}
     else:
         front = compact_ce if getattr(args, "via_ce", False) else compact
+    if front is compact_ce and getattr(args, "ce_prompt", None):
+        kwargs["version"] = args.ce_prompt
     if getattr(args, "vocabulary", None):
         if front is not compact:
             raise ValueError("--vocabulary applies to JSON compaction, not --runtime or --via-ce")
@@ -115,6 +117,54 @@ def _compact_with_llm(path: Path, args) -> dict:
     return front(path.read_text(encoding="utf-8"), model=args.model,
                  provider=args.llm_provider,
                  runtime_abilities=abilities or None, **kwargs)
+
+
+def _uses_reader(path: Path, args) -> bool:
+    """Whether `check`/`scan` decide `path` with `frontend.llm.decide_text`:
+    a natural-language file, --llm (or --rdet-only) and a --runtime manifest."""
+    rdet_only, no_rdet = getattr(args, "rdet_only", False), getattr(args, "no_rdet", False)
+    if rdet_only and no_rdet:
+        raise ValueError("--rdet-only and --no-rdet exclude each other")
+    if rdet_only and not getattr(args, "runtime", None):
+        raise ValueError("--rdet-only needs --runtime: the reader reads a runtime manifest")
+    return bool(getattr(args, "runtime", None)
+                and (getattr(args, "llm", False) or rdet_only)
+                and path.suffix not in (".json", ".ce")
+                and not getattr(args, "contract", None)
+                and not getattr(args, "compaction_provenance", None))
+
+
+def _decide_text_file(path: Path, args) -> dict:
+    """The default `check --llm --runtime` path: the deterministic markdown
+    front-end first when --llm-when needed (as before), then the deterministic
+    requirement reader against the manifest, then P2g+ compaction and the
+    checker (`frontend.llm.decide_text`).  Returns {"pack", "res",
+    "front_end", "verdict", "evaluation"}."""
+    from .frontend.contracts import abstain_ungrounded
+    from .frontend.llm import DEFAULT_CE_VERSION, decide_text_detailed
+    if getattr(args, "llm", False) and getattr(args, "llm_when", "always") == "needed":
+        hit = _deterministic_refutes(path, args)
+        if hit is not None:
+            pack, res = hit
+            return {"pack": pack, "res": res, "front_end": "deterministic",
+                    "verdict": _check_loaded(pack, res, args), "evaluation": None}
+    text = path.read_text(encoding="utf-8")
+    out = decide_text_detailed(
+        text, args.runtime, model=getattr(args, "model", None),
+        provider=getattr(args, "llm_provider", None),
+        version=getattr(args, "ce_prompt", None) or DEFAULT_CE_VERSION,
+        rdet=not getattr(args, "no_rdet", False),
+        llm=not getattr(args, "rdet_only", False))
+    v = out["verdict"]
+    if out["front_end"] == "llm":
+        pack = out["compaction"]["bound"].pack
+        # as for every LLM compaction: a refutation must be grounded in the text
+        v = abstain_ungrounded(v, source_text=text, extracted=set(), pack=pack)
+    else:
+        from .env.nl import intent_from_text
+        pack = {"name": intent_from_text(text).get("name") or path.stem}
+    return {"pack": pack, "res": None, "front_end": out["front_end"], "verdict": v,
+            "evaluation": out["evaluation"]}
 
 
 def _check_loaded(pack, res, args):
@@ -176,7 +226,8 @@ def _decide(pack: dict, res: CompileResult | None, scope: str, semantics: str) -
             False, "INCOMPLETE_COMPACTION",
             "deterministic extraction captured tool usage, not the task goal; "
             "supply a reviewed --contract, an embedded pack, or semantic compaction",
-            unknown=True, decision_scope=scope, pack_digest=digest)
+            unknown=True, decision_scope=scope, pack_digest=digest,
+            protocol="NOT_CHECKED")
     return check(pack, semantics=semantics, scope=scope)
 
 
@@ -223,9 +274,20 @@ def _print_provenance(res: CompileResult, file=sys.stdout) -> None:
 _SKIP_NOTE = "LLM not called: deterministic front-end refuted"
 
 
+_READER_SKIP_NOTE = "LLM not called: deterministic requirement reader refuted"
+
+
 def cmd_check(args) -> int:
-    pack, res, front_end = _load_front(Path(args.file), args)
-    v = _check_loaded(pack, res, args)
+    path = Path(args.file)
+    evaluation = None
+    if _uses_reader(path, args):
+        d = _decide_text_file(path, args)
+        pack, res, front_end, v = d["pack"], d["res"], d["front_end"], d["verdict"]
+        evaluation = d["evaluation"]
+    else:
+        pack, res, front_end = _load_front(path, args)
+        v = _check_loaded(pack, res, args)
+    reader_refuted = front_end == "deterministic-reader" and v.refuted
     trace_artifact("verdict", v.to_dict())
     if args.json:
         out = v.to_dict()
@@ -234,9 +296,22 @@ def cmd_check(args) -> int:
             out["front_end"] = front_end
             if front_end == "deterministic" and getattr(args, "llm_when", "always") == "needed":
                 out["note"] = _SKIP_NOTE
+            if reader_refuted:
+                out["note"] = _READER_SKIP_NOTE
+        if evaluation is not None:
+            out["requirement_eval"] = evaluation.to_dict()
         if res is not None:
             out["compaction_goal_source"] = res.goal_source
         print(json.dumps(out, indent=2))
+    elif reader_refuted:
+        from .env.manifest import witness_lines
+        print(f"{pack.get('name', '?')}: {v.label} [{v.reason}]")
+        print(f"  deterministic requirement reader, runtime `{evaluation.runtime}`:")
+        for line in witness_lines(evaluation):
+            print(f"  witness: {line}")
+        print(f"  coverage: {v.coverage}")
+        print(f"  front_end: {front_end}")
+        print(f"  {_READER_SKIP_NOTE}")
     else:
         _print_verdict(pack, res, v, verbose=args.verbose)
         if front_end:
@@ -245,7 +320,8 @@ def cmd_check(args) -> int:
                 print(f"  {_SKIP_NOTE}")
     if v.unknown:
         return 3
-    return 0 if v.achievable else 1
+    # a rejected protocol is not a passing check, although it is no refutation
+    return 0 if v.admissible else 1
 
 
 def _print_verdict(pack: dict, res: CompileResult | None, v: Verdict,
@@ -254,6 +330,15 @@ def _print_verdict(pack: dict, res: CompileResult | None, v: Verdict,
           + (f" [{v.reason}]" if not v.achievable else ""))
     if v.detail and not v.achievable:
         print(f"  {v.detail}")
+    elif v.achievable and v.protocol == "REJECTED":
+        print(f"  ACHIEVABLE  {v.detail}")
+    if v.protocol == "REJECTED":
+        print(f"  PROTOCOL REJECTED ({v.protocol_reason}): {v.protocol_detail}")
+        if v.achievable:
+            print("  the goal is not refuted; the coordination can deadlock, "
+                  "so this is not a passing check")
+    if v.refuted or v.achievable:
+        print(f"  coverage: {v.coverage}")
     if v.unknown:
         print("  UNKNOWN is an abstention, not a refutation or permission to run.")
     if res is not None and v.refuted and v.reason == "MISSING_CAPABILITY":
@@ -278,35 +363,51 @@ def cmd_scan(args) -> int:
     for f in files:
         rel = f.relative_to(root)
         try:
-            pack, res, front_end = _load_front(f, args)
-            v = _check_loaded(pack, res, args)
+            if _uses_reader(f, args):
+                d = _decide_text_file(f, args)
+                front_end, v = d["front_end"], d["verdict"]
+            else:
+                pack, res, front_end = _load_front(f, args)
+                v = _check_loaded(pack, res, args)
             rows.append({"skill": rel.as_posix(), "verdict": v.label,
                          **({"front_end": front_end} if front_end else {}),
                          "reason": v.reason if not v.achievable else "",
                          "frontier": list(v.frontier),
                          "unknown": v.unknown, "refuted": v.refuted,
+                         "protocol": v.protocol,
+                         "protocol_reason": v.protocol_reason,
+                         "admissible": v.admissible,
                          "decision_scope": v.decision_scope,
                          "refutation_scope": v.refutation_scope})
         except (PackError, ValueError) as e:
             rows.append({"skill": rel.as_posix(), "verdict": "ERROR",
                          "reason": type(e).__name__, "frontier": [str(e)],
-                         "unknown": False, "refuted": False})
+                         "unknown": False, "refuted": False,
+                         "protocol": "NOT_CHECKED", "protocol_reason": "",
+                         "admissible": False})
     if args.json:
         print(json.dumps(rows, indent=2))
     else:
         w = max(len(r["skill"]) for r in rows)
         for r in rows:
             extra = f"  {r['reason']} {r['frontier']}" if r["reason"] else ""
+            if r.get("protocol") == "REJECTED":
+                extra += f"  PROTOCOL REJECTED ({r['protocol_reason']})"
             print(f"{r['skill']:<{w}}  {r['verdict']}{extra}")
         n_ok = sum(r["verdict"] == "ACHIEVABLE" for r in rows)
         n_unknown = sum(r["unknown"] for r in rows)
         n_refuted = sum(r["refuted"] for r in rows)
+        n_rejected = sum(r.get("protocol") == "REJECTED" for r in rows)
         print(f"\n{n_ok}/{len(rows)} achievable under profile "
-              f"'{args.profile}'; {n_refuted} refuted, {n_unknown} unknown "
+              f"'{args.profile}'; {n_refuted} refuted, {n_rejected} protocol "
+              f"rejected, {n_unknown} unknown "
               f"(abstentions -- not refutations or permission to run)")
         if args.llm:
             n_llm = sum(r.get("front_end") == "llm" for r in rows)
             print(f"LLM calls: {n_llm} of {len(rows)} (saved {len(rows) - n_llm})")
+            n_reader = sum(r.get("front_end") == "deterministic-reader" for r in rows)
+            if n_reader:
+                print(f"decided by the deterministic requirement reader: {n_reader}")
     return 0
 
 
@@ -399,9 +500,13 @@ def cmd_cost(args) -> int:
                              repair_rounds=args.repair_rounds)
         if priced_llm and not no_llm:
             measured.append(ver.measured)
-        if v.refuted and v.reason in FAILURE_PROFILES:
+        # a deadlocking protocol still wastes a run, so a protocol rejection
+        # is priced with its own failure profile (it is not a goal refutation)
+        failure = (v.reason if v.refuted else
+                   v.protocol_reason if v.protocol == "REJECTED" else "")
+        if failure in FAILURE_PROFILES:
             corpus.rows.append(economics(
-                src, v.reason, name=name, model=model,
+                src, failure, name=name, model=model,
                 verification=ver, price=args.price))
         else:
             run = replace(model, skill_tokens=estimate_tokens(src)).run_cost(
@@ -440,7 +545,15 @@ def _print_cost_report(corpus, achievable: list[tuple[str, int, int]],
                   f"{e.verification.total_tokens:>7,} "
                   f"{_fmt(lo) + '-' + _fmt(ty) + '-' + _fmt(hi):>28} {lev:>7}")
         t = corpus.totals()
-        print(f"\nrefuted {t['skills_refuted']} skill(s) before execution")
+        n_proto = sum(e.reason in ("NON_PROJECTABLE", "NON_CONFORMANT")
+                      for e in corpus.rows)
+        if n_proto:
+            print(f"\nstopped {t['skills_refuted']} skill(s) before execution: "
+                  f"{t['skills_refuted'] - n_proto} goal refutation(s), {n_proto} "
+                  "protocol rejection(s) (goal not refuted; the coordination can "
+                  "deadlock)")
+        else:
+            print(f"\nrefuted {t['skills_refuted']} skill(s) before execution")
         print(f"  tokens spent checking : {t['verification_tokens']:,} "
               f"(${t['verification_usd']:.4f})")
         w = t["waste_avoided_tokens"]
@@ -705,6 +818,38 @@ def cmd_reach(args) -> int:
     return 0 if result.complete else 3
 
 
+def cmd_twin(args) -> int:
+    """What a verifier can establish from an uploaded building graph."""
+    from .env.twin import (TwinError, as_json, load_twin, scenarios_text, text_report,
+                           verify_all, verify_target)
+    if args.twin_cmd == "scenarios":
+        print(scenarios_text(), end="")
+        return 0
+    declared = {}
+    for item in args.source or []:
+        key, sep, desc = item.partition("=")
+        if not sep or not key or not desc:
+            raise ValueError(f"--source {item!r}: write NEED=WHERE, "
+                             "e.g. operating_policy=policy-service")
+        declared[key.strip()] = desc.strip()
+    try:
+        twin = load_twin(args.graph, tenant=args.tenant, ontologies=args.ontology or ())
+        if args.target:
+            results = [verify_target(twin, args.scenario, t, declared) for t in args.target]
+        else:
+            results = verify_all(twin, args.scenario, declared)
+    except TwinError as e:
+        raise ValueError(str(e)) from e
+    if not results:
+        print(f"no {args.scenario} targets in the graph; name one with --target", file=sys.stderr)
+        return 2
+    out = as_json(twin, results) + "\n" if args.json else text_report(results, not args.brief)
+    print(out, end="")
+    if any(r.verdict != "ACHIEVABLE" for r in results):
+        return 1
+    return 3 if any(r.assumed for r in results) else 0
+
+
 def cmd_intent(args) -> int:
     """What a SKILL.md / agent.md needs from its runtime, as a skillc.intent/1."""
     from .env.nl import intent_from_text
@@ -807,11 +952,23 @@ def _add_compile_opts(sp) -> None:
     sp.add_argument("--via-ce", action="store_true",
                     help="with --llm: the model writes Controlled English, "
                          "which is parsed into the pack deterministically")
+    sp.add_argument("--ce-prompt", choices=("p2g", "p2g+"), default=None,
+                    help="with --llm --runtime: the CE prompt version (default p2g+, "
+                         "compaction v2; p2g is the frozen earlier prompt)")
     sp.add_argument("--vocabulary", metavar="JSON",
                     help="environment manifest: with --llm the compacted pack reuses "
                          "its tool and state names (contracts are not shown); a "
                          "refutation resting only on conditions outside its states "
                          "becomes UNKNOWN")
+
+
+def _add_reader_opts(sp) -> None:
+    sp.add_argument("--no-rdet", action="store_true",
+                    help="with --llm --runtime: skip the deterministic requirement reader "
+                         "and always call the model")
+    sp.add_argument("--rdet-only", action="store_true",
+                    help="with --runtime: run only the deterministic requirement reader "
+                         "(no model call); a text it does not refute is UNKNOWN")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -846,6 +1003,7 @@ def main(argv: list[str] | None = None) -> int:
                            help="refute only with a protocol-independent goal certificate; "
                                 "otherwise abstain on protocol rejection")
     _add_compile_opts(sp)
+    _add_reader_opts(sp)
     sp.set_defaults(fn=cmd_check)
 
     sp = sub.add_parser("scan", help="batch-check every skill under a directory")
@@ -855,6 +1013,7 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--goal-only", action="store_true",
                     help="use conservative goal-impossibility scope instead of protocol admission")
     _add_compile_opts(sp)
+    _add_reader_opts(sp)
     sp.set_defaults(fn=cmd_scan)
 
     sp = sub.add_parser("audit",
@@ -975,6 +1134,26 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--plan", metavar="FILE", help="write the English + CE plan (Markdown)")
     sp.add_argument("--html", metavar="FILE", help="write the visual report")
     sp.set_defaults(fn=cmd_reach)
+
+    sp = sub.add_parser("twin", help="building digital twin: which verifier evidence an "
+                                     "uploaded building graph provides, and what is missing")
+    twin_sub = sp.add_subparsers(dest="twin_cmd", required=True)
+    t = twin_sub.add_parser("check", help="check a scenario against a building graph file")
+    t.add_argument("graph", help="building graph (.ttl, .trig, .nt, .nq, .rdf)")
+    t.add_argument("--scenario", required=True, choices=["setpoint", "schedule"])
+    t.add_argument("--target", action="append",
+                   help="entity to verify (IRI, prefixed name or unique local name); "
+                        "repeatable; default: every candidate in the graph")
+    t.add_argument("--tenant", help="tenant graph to read, for files with several named graphs")
+    t.add_argument("--ontology", action="append",
+                   help="ontology file, used only for class hierarchies (repeatable)")
+    t.add_argument("--source", action="append", metavar="NEED=WHERE",
+                   help="evidence supplied outside the graph (counted as an assumption)")
+    t.add_argument("--brief", action="store_true", help="one line per target")
+    t.add_argument("--json", action="store_true")
+    t.set_defaults(fn=cmd_twin)
+    t = twin_sub.add_parser("scenarios", help="list the scenarios and their evidence needs")
+    t.set_defaults(fn=cmd_twin)
 
     sp = sub.add_parser("intent", help="what a SKILL.md / agent.md needs from its runtime "
                                        "(natural-language front-end)")

@@ -357,9 +357,54 @@ class Monitor:
         return ctx
 
     # ------------------------------------------------------------------ plan
-    def check_plan(self, text: str) -> tuple[Decision, dict]:
-        """Decide a CE plan without changing state: ALLOW only on ACHIEVABLE."""
+    def _reader_facts(self):
+        """The runtime manifest the requirement reader reads: the configured file
+        (with its additive fields) when it is the monitor's runtime, else the
+        runtime's own fields; None when neither can be read."""
+        from .env.manifest import manifest_facts
+        try:
+            if load_runtime(self.cfg.runtime) == self.runtime:
+                return manifest_facts(self.cfg.runtime)
+        except (KeyError, ValueError, OSError):
+            pass
+        try:
+            return manifest_facts(self.runtime)
+        except (KeyError, ValueError, OSError):
+            return None
+
+    def _reader_denial(self, skill_text: str) -> tuple[Decision, dict] | None:
+        """DENY when the deterministic requirement reader (`env.manifest.refute_text`)
+        finds a hard requirement of the natural-language skill that the runtime
+        manifest marks unavailable; the reason carries the evidence lines."""
+        from .env.manifest import REASON, refute_text, witness_lines
+        facts = self._reader_facts()
+        if facts is None:
+            return None
+        ev = refute_text(skill_text, facts)
+        if not ev.blocking:
+            return None
+        lines = [f"skillc: plan IMPOSSIBLE ({REASON}) in runtime `{facts.name}`: the "
+                 "deterministic requirement reader found a hard requirement of the skill "
+                 "that the runtime does not provide."]
+        lines += [f"witness: {line}" for line in witness_lines(ev)]
+        lines.append("Do not implement this plan. Tell the user what skillc found and ask "
+                     "how to proceed; a different plan cannot supply the requirement.")
+        info = {"verdict": "IMPOSSIBLE", "reason": REASON, "protocol": "NOT_CHECKED",
+                "coverage": "deterministic-reader:manifest", "blocking": list(ev.blocking)}
+        return Decision(DENY, "\n".join(lines), list(ev.blocking), ASK_USER,
+                        list(ev.blocking)), info
+
+    def check_plan(self, text: str, skill_text: str | None = None) -> tuple[Decision, dict]:
+        """Decide a CE plan without changing state: ALLOW only on ACHIEVABLE.
+
+        With `skill_text` (the natural-language skill the plan implements), the
+        deterministic requirement reader runs first against the runtime manifest;
+        its refutation denies the plan before the plan is parsed."""
         info: dict[str, Any] = {}
+        if skill_text:
+            denied = self._reader_denial(skill_text)
+            if denied is not None:
+                return denied
         try:
             parsed = parse_ce_detailed(text)
         except CEError as e:
@@ -394,10 +439,19 @@ class Monitor:
             v = check(b.pack)
         except (CEError, PackError, ValueError) as e:
             return Decision(DENY, f"the plan is not a valid pack: {e}"), info
-        info = {"verdict": v.label, "reason": v.reason, "withdrawn": b.withdrawn,
+        info = {"verdict": v.label, "reason": v.reason, "protocol": v.protocol,
+                "protocol_reason": v.protocol_reason, "withdrawn": b.withdrawn,
                 "blocked": b.blocked, "pruned": b.pruned, "via": sorted({x.get("via") for x in
                                                       parsed.bindings.values() if x.get("via")})}
-        if v.label == "ACHIEVABLE":
+        if v.label == "ACHIEVABLE" and v.protocol == "REJECTED":
+            # the goal is reachable, but the coordination is not well typed:
+            # not a refutation, and not admissible either
+            return Decision(DENY, f"skillc: plan protocol REJECTED ({v.protocol_reason}) in "
+                                  f"runtime `{rt.name}`: {v.protocol_detail}. The goal is "
+                                  "reachable but the coordination can deadlock; rewrite the "
+                                  "plan so every role can observe the branch it must act in.",
+                            sorted(set(b.withdrawn) | set(b.blocked)), REPLAN), info
+        if v.admissible:
             skipped = sorted(set(b.withdrawn) | set(b.blocked))
             return Decision(ALLOW, "skillc: plan ACHIEVABLE in runtime "
                                    f"`{rt.name}`; implementation may proceed."
@@ -450,8 +504,8 @@ class Monitor:
         needs = sorted({o.value for o in open_})
         return Decision(DENY, "\n".join(lines), needs, ASK_USER, needs)
 
-    def submit_plan(self, text: str) -> Decision:
-        d, info = self.check_plan(text)
+    def submit_plan(self, text: str, skill_text: str | None = None) -> Decision:
+        d, info = self.check_plan(text, skill_text)
         if d.action == ALLOW:
             self.state.plan = text
             self.state.plan_sha = hashlib.sha256(text.encode()).hexdigest()[:16]

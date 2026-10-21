@@ -12,6 +12,16 @@ python scripts/compaction_tiering.py --data-root <gc/data_train_test checkout> -
 
 `--data-root` is only used to read the source text lengths for the token estimate.
 
+**Where the requirement reader sits.** With a runtime manifest (`--runtime`), the default
+`check --llm` path has one more deterministic tier between the rule-based front-end and the
+LLM: the requirement reader `env.manifest.refute_text`. The order is: the rule-based front-end
+(only with `--llm-when needed`, as measured below), then the reader against the manifest,
+then the LLM. Each deterministic tier only keeps a refutation, so it can only remove LLM
+calls, never add one. A `scan` row says which tier decided in `front_end`: `deterministic`,
+`deterministic-reader` or `llm`. The numbers on this page were computed before the reader
+existed and do not include it. Its own numbers on set3 are in
+`docs/COMPACTION_RELIABILITY.md`.
+
 ## Method
 
 **Inputs.**
@@ -177,6 +187,11 @@ The 3 gpt-5.4 false alarms, and what the rule mode said:
 | topic:n1-itinerary-routing:agent (Route an itinerary booking) | agent | UNKNOWN (INCOMPLETE_COMPACTION) | IMPOSSIBLE (NON_CONFORMANT) |
 | topic:n2-card-dispute-triage:skill (Card dispute triage) | skill | ACHIEVABLE (OK) | IMPOSSIBLE (NON_CONFORMANT) |
 | topic:n6-return-label-retry:prompt (named "Return label detail loop" in the file; "Return label retry" in the report) | prompt | ACHIEVABLE (OK) | IMPOSSIBLE (NON_PROJECTABLE) |
+
+These verdicts were recorded under verdict schema v1. Schema v2 reports
+`NON_CONFORMANT` and `NON_PROJECTABLE` as protocol rejections
+(`protocol: REJECTED`), not as `IMPOSSIBLE`; see
+[verdict coverage](VERDICT_COVERAGE.md).
 
 On two of the three the rule mode was right (ACHIEVABLE), but only by default: it gave the
 same answer on 96 impossible inputs, so a tier cannot use its ACHIEVABLE as a veto against the

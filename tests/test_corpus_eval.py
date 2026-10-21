@@ -13,22 +13,47 @@ EXPECTED_REASONS = {
     "two_goals_one_missing": "GOAL_UNSAT",
     "over_budget": "GOAL_UNSAT",
     "blocked_precondition": "BLOCKED_GUARD",
+}
+# protocol-typing failures: reported in the protocol dimension, not as goal
+# reasons (the goal of each is reachable in the global semantics)
+EXPECTED_PROTOCOL_REASONS = {
     "deadlock_unobserved": "NON_PROJECTABLE",
 }
 
 
 def test_confusion_matrix_matches_paper():
+    # goal dimension: deadlock_unobserved's goal is reachable along the
+    # 'direct' branch, so it is a true ACHIEVABLE (with a REJECTED protocol)
     res = evaluate()
-    assert (res.tp, res.fn, res.fp, res.tn) == (6, 0, 2, 7)
+    assert (res.tp, res.fn, res.fp, res.tn) == (7, 0, 2, 6)
 
 
 def test_refutation_metrics_use_impossible_as_positive():
     metrics = refutation_metrics(evaluate())
-    assert (metrics["tp"], metrics["fp"], metrics["fn"], metrics["tn"]) == (7, 0, 2, 6)
+    assert (metrics["tp"], metrics["fp"], metrics["fn"], metrics["tn"]) == (6, 0, 2, 7)
     assert metrics["precision"] == 1
-    assert metrics["recall_decided"] == 7 / 9
+    assert metrics["recall_decided"] == 6 / 8
     assert metrics["false_positive_rate"] == 0
     assert metrics["false_impossible_ids"] == []
+
+
+def test_corpus_protocol_dimension_is_scored_separately():
+    res = evaluate()
+    assert res.protocol_fp == 0 and res.protocol_fn == 0
+    m = refutation_metrics(res)["protocol"]
+    assert m["fp"] == 0 and m["fn"] == 0
+    assert m["labelled_rejected"] == m["predicted_rejected"] == 1
+    rows = {r.id: r for r in res.rows}
+    assert rows["deadlock_unobserved"].protocol == "REJECTED"
+    assert rows["deadlock_unobserved"].protocol_truth == "REJECTED"
+    assert rows["deadlock_unobserved"].predicted == "ACHIEVABLE"
+    ext = evaluate(load_extended())
+    assert ext.protocol_fp == 0 and ext.protocol_fn == 0
+
+
+def test_every_corpus_case_has_a_protocol_label():
+    for c in load_corpus() + load_extended():
+        assert c["protocol_truth"] in ("WELL_TYPED", "REJECTED", "UNKNOWN"), c["id"]
 
 
 def test_refutation_metrics_do_not_turn_abstentions_into_true_negatives():
@@ -65,6 +90,10 @@ def test_each_failure_mode_fires_its_matching_reason():
         assert not v.achievable, cid
         assert v.reason == expected, (
             f"{cid}: expected {expected}, got {v.reason}")
+    for cid, expected in EXPECTED_PROTOCOL_REASONS.items():
+        v = check(packs[cid])
+        assert v.achievable and not v.admissible, cid
+        assert v.protocol == "REJECTED" and v.protocol_reason == expected, cid
 
 
 def test_achievable_specs_have_witness_paths():

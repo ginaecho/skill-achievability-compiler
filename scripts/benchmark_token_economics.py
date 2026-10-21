@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,12 @@ from skillc import check  # noqa: E402
 from skillc.frontend.prompts import SYSTEM  # noqa: E402
 from skillc.frontend.providers import extract_json_object  # noqa: E402
 from skillc.pack import PackError  # noqa: E402
+
+try:
+    from skillc.frontend.urlguard import guarded_body as _guarded_body
+except ImportError:  # run from the repo root without installing
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+    from skillc.frontend.urlguard import guarded_body as _guarded_body
 
 DEFAULT_ENDPOINT = "https://foundary-tzuc06.openai.azure.com/openai/v1"
 DEFAULT_MODEL = "gpt-5.4"
@@ -138,7 +145,7 @@ def call_chat(
     }
     request = urllib.request.Request(
         endpoint.rstrip("/") + "/chat/completions",
-        data=json.dumps(payload).encode(),
+        data=_guarded_body(payload)[0],  # no URL in a prompt
         headers={
             "authorization": "Bearer " + token,
             "content-type": "application/json",

@@ -13,6 +13,11 @@ context deterministically, so the model no longer decides whether a tool
     initially only if the manifest grants R, otherwise the step is reported as
     BLOCKED_GUARD naming R.
 
+Every manifest also has the universal tool `reply` (UNIVERSAL_TOOLS): the
+agent's own answer in the conversation.  A Tool `via reply` is always granted:
+it is never withdrawn, needs no grant, runs no software and has effect
+`local`.  The manifest files do not list it; the binder adds it.
+
 A tool with no `via` is an error, not a guess: the caller retries with the
 located message.  Nothing here reads the skill; like every front-end step,
 the result is only as faithful as the bindings the model wrote.
@@ -29,6 +34,14 @@ from ..checker import check
 from ..pack import validate_pack
 from .ce import CEError
 from .toolpolicy import resolve_program
+
+
+# Runtime tools every manifest has, whatever its file lists (F-b, compaction v2).
+UNIVERSAL_TOOLS = {
+    "reply": ("the agent's own answer in the conversation: text, a plan, a document "
+              "written inline"),
+}
+UNIVERSAL_EFFECTS = {"reply": "local"}
 
 
 @dataclass(frozen=True)
@@ -48,6 +61,15 @@ class Runtime:
                        tuple(d.get("grants", [])), tuple(d.get("lacks", [])),
                        tuple(d.get("forbid_effects", [])),
                        d.get("software", "installable"))
+
+    @property
+    def all_tools(self) -> dict:
+        """The manifest's tools plus the universal ones (UNIVERSAL_TOOLS)."""
+        return {**self.tools, **{t: d for t, d in UNIVERSAL_TOOLS.items()
+                                 if t not in self.tools}}
+
+    def has_tool(self, name: str) -> bool:
+        return name in self.tools or name in UNIVERSAL_TOOLS
 
 
 SOFTWARE_MODES = ("installable", "preinstalled", "none", "session-installable")
@@ -165,7 +187,11 @@ def _prune(steps: list, dead: set, pruned: list) -> bool:
             elif any(live.values()):
                 for lbl in [lbl for lbl, run in live.items() if not run]:
                     del body["branches"][lbl]
+                    if lbl in (body.get("assumes") or {}):
+                        del body["assumes"][lbl]
                     pruned.append(f"{body['by']}:{lbl}")
+                if "assumes" in body and not body["assumes"]:
+                    del body["assumes"]
             else:
                 ok = False
     return ok
@@ -224,7 +250,7 @@ def bind_runtime(pack: dict, bindings: dict, runtime: Runtime,
             raise CEError(f"Tool `{name}` has no 'via' clause: say which runtime "
                           f"tool performs it ({', '.join(sorted(runtime.tools))}), "
                           "or name what it would need", b.get("line") if b else None)
-        if b["via"] not in runtime.tools:
+        if not runtime.has_tool(b["via"]):     # `reply` is never withdrawn
             withdraw(name, b["via"])
             continue
         needs = list(b.get("needs") or [])
@@ -324,9 +350,13 @@ def check_levels(pack: dict, live_goal=None, scope: str = "protocol") -> dict:
     return {"core": core, "live": check(both, scope=scope)}
 
 
-def runtime_note(runtime: Runtime) -> str:
-    """The prompt section that tells the compactor what the runtime is."""
-    tools = "\n".join(f"  - `{t}`: {d}" for t, d in runtime.tools.items())
+def runtime_note(runtime: Runtime, universal: bool = False) -> str:
+    """The prompt section that tells the compactor what the runtime is.
+
+    With `universal` (prompt P2g+) the tool list also shows UNIVERSAL_TOOLS
+    (`reply`); without it the text is exactly P2g's."""
+    listed = runtime.all_tools if universal else runtime.tools
+    tools = "\n".join(f"  - `{t}`: {d}" for t, d in listed.items())
     lacks = "\n".join(f"  - {x}" for x in runtime.lacks)
     grants = ", ".join(f"`{g}`" for g in runtime.grants)
     return (

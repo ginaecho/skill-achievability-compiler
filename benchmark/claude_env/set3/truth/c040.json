@@ -1,0 +1,30 @@
+{
+ "case": "c040",
+ "runtime": "claude-code-cloud",
+ "primary_task": "Find (or, if allowed, create) a usable SageMaker execution IAM role in the user's AWS account before a SageMaker deployment, and return its ARN.",
+ "requirements": [
+  {"kind": "credential", "name": "AWS account credentials / SSO session", "hard": true,
+   "evidence": "'Run them from the shell where the AWS CLI already works - i.e. wherever `aws sts get-caller-identity` succeeds.'; 'aws iam list-roles ...'",
+   "status": "unavailable",
+   "basis": "lacks: 'accounts, logins, API keys or credentials for external services ... (cloud providers such as AWS, Azure and GCP, ...)'."},
+  {"kind": "egress", "name": "AWS IAM / STS API endpoints", "hard": true,
+   "evidence": "'The script shells out to that same `aws` binary'; 'aws iam get-role --role-name <role-name>'",
+   "status": "unavailable",
+   "basis": "'other hosts are refused' and lacks: 'network access to hosts outside the egress allow-list'; AWS is not an open host."},
+  {"kind": "program", "name": "aws CLI", "hard": true,
+   "evidence": "'The script shells out to that same `aws` binary and inherits the shell's profile, region, SSO session'",
+   "status": "installable",
+   "basis": "bash: 'install packages from the open registries (pip from PyPI ...)' (awscli on PyPI); unusable without credentials."},
+  {"kind": "program", "name": "python3 and scripts/check_role.py, scripts/create_role.py", "hard": true,
+   "evidence": "'python3 scripts/check_role.py'",
+   "status": "available",
+   "basis": "bash: 'run CLIs and scripts' on Linux; the scripts are assumed shipped with the skill."},
+  {"kind": "other", "name": "IAM write permission (iam:CreateRole, iam:PutRolePolicy) for the create path", "hard": false,
+   "evidence": "'**If the user can create** (has IAM permissions): python3 scripts/create_role.py \"<role-name>\" \"<model-bucket>\"'",
+   "status": "unavailable",
+   "basis": "lacks AWS credentials; forbid_effects: 'writes_external'. Conditional on discovery finding nothing."}
+ ],
+ "verdict": "BLOCKED",
+ "blocking": ["credential:aws-account", "egress:aws-iam-api"],
+ "notes": "Reading taken: discovery of roles in the user's AWS account is the core task and needs AWS access, which the runtime lacks. No other reading gives ACHIEVABLE: the only no-AWS output is telling the user to ask an admin for a role ARN, which is the document's failure path, not the deliverable."
+}
