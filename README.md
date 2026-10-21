@@ -243,12 +243,54 @@ Anything that could not be read becomes an assumption, never a refusal.
 `skillc env watch` re-probes on a schedule. See
 [`docs/ENVIRONMENT.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/ENVIRONMENT.md).
 
-## Building digital twin: what can a verifier establish? (`skillc twin`)
+## Graphs and ontologies: what can be established from this data? (`skillc twin`)
 
-Given an uploaded building graph (Brick, RealEstateCore or BOT, as Turtle or TriG),
-`skillc twin` decides for each set point or zone whether a DEIM verifier's evidence is
-in the graph. It reports ACHIEVABLE, or IMPOSSIBLE with the missing evidence and what
-was looked for. It reads the file offline and calls no model:
+Some agents answer from a knowledge graph: a digital twin, a CMDB or a product graph,
+read with the help of an ontology. Before such an agent explores the graph, skillc can
+decide whether the answer is reachable from the data, and if not, what is missing.
+This takes no model call and no query generation.
+
+**The mapping.** The graph plays the role of the environment, and each evidence need
+becomes a condition:
+
+| your application | skillc |
+|---|---|
+| the instance graph (one tenant, one building) | the environment: the only source of evidence |
+| the ontology | class hierarchy only; it never proves that a fact exists |
+| an evidence need ("the places this set point controls") | a condition |
+| a need found in the graph, with its path | a read step that establishes the condition |
+| evidence held outside the graph (policy service, live values) | a declared source, counted as an assumption |
+| the decision ("verify this change") | a `verify` step that requires every critical condition |
+
+**Recipe for a new application**
+
+1. **Write the evidence contract.** List each need and mark whether it is critical.
+   This is a scenario in `SCENARIOS` in `src/skillc/env/twin.py`.
+2. **Say how each need is found.** Write a probe in `PROBES`. A probe follows relations
+   by local name in both directions (`hasPoint`/`isPointOf`) and allows a bounded number
+   of hops. It reads blank-node structures through their anchor. For every need it
+   returns the path that proves it, or what it looked for.
+3. **Keep instance and vocabulary apart.** Pass the tenant graph as data. Pass ontologies
+   as named graphs whose names contain "ontology", or with `--ontology`.
+4. **Let the checker decide.** Each target becomes a pack, and the checker gives
+   `ACHIEVABLE`, or `IMPOSSIBLE [BLOCKED_GUARD]` naming the missing condition. Missing
+   evidence is never read as approval.
+5. **Test with a small illustrative graph** that covers one variant per case: inverse
+   relationships, extra hops, vendor classes and a missing fact. Then run it on real
+   exports.
+
+For example, the pack generated for a set point whose graph has no limits:
+
+```text
+Tool `read_equipment` (owner `deim`): adds `equipment`.             # graph
+Tool `read_priority_state` (owner `deim`): adds `priority_state`.   # graph
+Tool `verify` (owner `deim`): requires `equipment` and `min_max_units` and `priority_state` ...
+Goal: `verdict`.                     -> IMPOSSIBLE: nothing establishes `min_max_units`
+```
+
+**Built in:** a set-point verifier and a schedule-update verifier for building digital
+twins (Brick, RealEstateCore, BOT). Install with `pip install -e ".[twin]"`; it reads
+Turtle, TriG, N-Triples, N-Quads or RDF/XML files offline.
 
 ```console
 $ skillc twin check examples/building-twin/demo-building.trig --scenario setpoint --brief
@@ -256,9 +298,12 @@ ex:sp1: ACHIEVABLE
 ex:sp2: IMPOSSIBLE  missing: min_max_units
 ex:sp3: IMPOSSIBLE  missing: external_reference
 ex:sp4: IMPOSSIBLE  missing: equipment, controlled_places, min_max_units, priority_state, external_reference
+$ skillc twin check building.trig --tenant demo --scenario schedule --target zone1 \
+      --source operating_policy=policy-service      # evidence held outside the graph
 ```
 
-See [`docs/TWIN.md`](docs/TWIN.md).
+skillc checks that the evidence exists, not that its values are right; the verifier
+still judges the values. See [`docs/TWIN.md`](docs/TWIN.md).
 
 ## Protocol checks versus goal-only checks
 
