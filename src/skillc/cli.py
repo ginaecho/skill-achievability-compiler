@@ -818,6 +818,38 @@ def cmd_reach(args) -> int:
     return 0 if result.complete else 3
 
 
+def cmd_twin(args) -> int:
+    """What a verifier can establish from an uploaded building graph."""
+    from .env.twin import (TwinError, as_json, load_twin, scenarios_text, text_report,
+                           verify_all, verify_target)
+    if args.twin_cmd == "scenarios":
+        print(scenarios_text(), end="")
+        return 0
+    declared = {}
+    for item in args.source or []:
+        key, sep, desc = item.partition("=")
+        if not sep or not key or not desc:
+            raise ValueError(f"--source {item!r}: write NEED=WHERE, "
+                             "e.g. operating_policy=policy-service")
+        declared[key.strip()] = desc.strip()
+    try:
+        twin = load_twin(args.graph, tenant=args.tenant, ontologies=args.ontology or ())
+        if args.target:
+            results = [verify_target(twin, args.scenario, t, declared) for t in args.target]
+        else:
+            results = verify_all(twin, args.scenario, declared)
+    except TwinError as e:
+        raise ValueError(str(e)) from e
+    if not results:
+        print(f"no {args.scenario} targets in the graph; name one with --target", file=sys.stderr)
+        return 2
+    out = as_json(twin, results) + "\n" if args.json else text_report(results, not args.brief)
+    print(out, end="")
+    if any(r.verdict != "ACHIEVABLE" for r in results):
+        return 1
+    return 3 if any(r.assumed for r in results) else 0
+
+
 def cmd_intent(args) -> int:
     """What a SKILL.md / agent.md needs from its runtime, as a skillc.intent/1."""
     from .env.nl import intent_from_text
@@ -1102,6 +1134,26 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--plan", metavar="FILE", help="write the English + CE plan (Markdown)")
     sp.add_argument("--html", metavar="FILE", help="write the visual report")
     sp.set_defaults(fn=cmd_reach)
+
+    sp = sub.add_parser("twin", help="building digital twin: which verifier evidence an "
+                                     "uploaded building graph provides, and what is missing")
+    twin_sub = sp.add_subparsers(dest="twin_cmd", required=True)
+    t = twin_sub.add_parser("check", help="check a scenario against a building graph file")
+    t.add_argument("graph", help="building graph (.ttl, .trig, .nt, .nq, .rdf)")
+    t.add_argument("--scenario", required=True, choices=["setpoint", "schedule"])
+    t.add_argument("--target", action="append",
+                   help="entity to verify (IRI, prefixed name or unique local name); "
+                        "repeatable; default: every candidate in the graph")
+    t.add_argument("--tenant", help="tenant graph to read, for files with several named graphs")
+    t.add_argument("--ontology", action="append",
+                   help="ontology file, used only for class hierarchies (repeatable)")
+    t.add_argument("--source", action="append", metavar="NEED=WHERE",
+                   help="evidence supplied outside the graph (counted as an assumption)")
+    t.add_argument("--brief", action="store_true", help="one line per target")
+    t.add_argument("--json", action="store_true")
+    t.set_defaults(fn=cmd_twin)
+    t = twin_sub.add_parser("scenarios", help="list the scenarios and their evidence needs")
+    t.set_defaults(fn=cmd_twin)
 
     sp = sub.add_parser("intent", help="what a SKILL.md / agent.md needs from its runtime "
                                        "(natural-language front-end)")

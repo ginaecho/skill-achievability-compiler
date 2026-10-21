@@ -1,0 +1,60 @@
+# A small illustrative building graph for `skillc twin`. It mixes the patterns
+# the BDT brief mentions: Brick and RealEstateCore terms, inverse relationships,
+# an extra equipment hop, a vendor class defined only in an ontology graph, and
+# blank-node priority arrays and external references. It is made up; no real
+# tenant data.
+@prefix brick: <https://brickschema.org/schema/Brick#> .
+@prefix rec:   <https://w3id.org/rec#> .
+@prefix ref:   <https://brickschema.org/schema/Brick/ref#> .
+@prefix bacnet: <http://data.ashrae.org/bacnet/2020#> .
+@prefix unit:  <http://qudt.org/vocab/unit/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix ex:    <urn:bdt:demo:> .
+
+# The ontology graph: vocabulary only. It never counts as building evidence.
+<bdt:ontology:vendor> {
+  ex:VendorTempSP rdfs:subClassOf brick:Zone_Air_Temperature_Setpoint .
+  ex:WeeklySchedule rdfs:subClassOf ex:Schedule .
+}
+
+# The tenant instance graph.
+<bdt:tenant:demo> {
+  ex:bldg1 a brick:Building ; brick:timezone "Europe/Berlin" .
+  ex:floor1 a brick:Floor ; brick:isPartOf ex:bldg1 .
+
+  # Zone 1: VAV feeds the zone (stated from the VAV), the zone has a room.
+  ex:zone1 a brick:HVAC_Zone ; brick:isPartOf ex:floor1 ; brick:hasPart ex:room101 .
+  ex:room101 a brick:Room .
+  ex:vav1 a brick:VAV ; brick:feeds ex:zone1 ; brick:hasPoint ex:sp1, ex:occ1 .
+  ex:occ1 a brick:Occupancy_Status .
+  ex:sp1 a ex:VendorTempSP ;
+      brick:minPresentValue 16.0 ; brick:maxPresentValue 26.0 ; brick:hasUnit unit:DEG_C ;
+      ex:priorityArray [ ex:activePriority 8 ; ex:relinquishDefault 21.0 ] ;
+      ref:hasExternalReference
+          [ a ref:BACnetReference ; bacnet:object-identifier "analog-value,12" ] ,
+          [ a ref:TimeseriesReference ; ref:hasTimeseriesId "ts-sp1" ] .
+  ex:sched1 a ex:WeeklySchedule ; ex:appliesTo ex:vav1 ;
+      ex:weeklySchedule [ ex:monday "07:00-19:00" ; ex:friday "07:00-19:00" ] ;
+      ex:exceptionSchedule [ ex:date "2026-12-25" ] .
+
+  # Room 202: RealEstateCore style, the point names its equipment (inverse
+  # of hasPoint) and the equipment is located in the room. No limits.
+  ex:room202 a rec:Room ; brick:isPartOf ex:floor1 .
+  ex:fcu2 a brick:FCU ; rec:locatedIn ex:room202 .
+  ex:sp2 a brick:Zone_Air_Temperature_Setpoint ; rec:isPointOf ex:fcu2 ; brick:hasUnit unit:DEG_C ;
+      ex:priorityArray [ ex:activePriority 16 ] ;
+      ref:hasExternalReference [ a ref:BACnetReference ; bacnet:object-identifier "analog-value,3" ] .
+
+  # Zone 3: an extra hop (AHU feeds VAV feeds zone); limits are separate limit
+  # points; there is no BACnet reference.
+  ex:ahu3 a brick:AHU ; brick:feeds ex:vav3 ; brick:hasPoint ex:sp3max, ex:sp3min .
+  ex:vav3 a brick:VAV ; brick:feeds ex:zone3 .
+  ex:zone3 a brick:HVAC_Zone .
+  ex:sp3 a brick:Supply_Air_Temperature_Setpoint ; brick:isPointOf ex:ahu3 ;
+      ex:priorityArray [ ex:activePriority 10 ] .
+  ex:sp3max a brick:Max_Supply_Air_Temperature_Setpoint_Limit ; brick:hasUnit unit:DEG_C .
+  ex:sp3min a brick:Min_Supply_Air_Temperature_Setpoint_Limit ; brick:hasUnit unit:DEG_C .
+
+  # An orphan set point: no equipment, place, limits or references.
+  ex:sp4 a brick:Room_Air_Temperature_Setpoint .
+}

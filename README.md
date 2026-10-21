@@ -243,6 +243,23 @@ Anything that could not be read becomes an assumption, never a refusal.
 `skillc env watch` re-probes on a schedule. See
 [`docs/ENVIRONMENT.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/ENVIRONMENT.md).
 
+## Building digital twin: what can a verifier establish? (`skillc twin`)
+
+Given an uploaded building graph (Brick, RealEstateCore or BOT, as Turtle or TriG),
+`skillc twin` decides for each set point or zone whether a DEIM verifier's evidence is
+in the graph. It reports ACHIEVABLE, or IMPOSSIBLE with the missing evidence and what
+was looked for. It reads the file offline and calls no model:
+
+```console
+$ skillc twin check examples/building-twin/demo-building.trig --scenario setpoint --brief
+ex:sp1: ACHIEVABLE
+ex:sp2: IMPOSSIBLE  missing: min_max_units
+ex:sp3: IMPOSSIBLE  missing: external_reference
+ex:sp4: IMPOSSIBLE  missing: equipment, controlled_places, min_max_units, priority_state, external_reference
+```
+
+See [`docs/TWIN.md`](docs/TWIN.md).
+
 ## Protocol checks versus goal-only checks
 
 The default check judges the **declared protocol**, not every alternative plan.
