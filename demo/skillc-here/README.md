@@ -2,7 +2,8 @@
 
 **Shows:** skillc reading this machine by itself (tools, permissions, MCP servers) and deciding what a
 skill can do here, next to claude.ai and Claude Code; and, for an uploaded graph, what a workflow can
-establish from it and what is missing. **Audience:** first-time viewers. **Time:** 3 minutes.
+establish from it and what is missing; and **why** skillc, next to an LLM alone and an LLM with a guiding
+skill. **Audience:** first-time viewers. **Time:** 3 to 6 minutes.
 
 ## Run it
 
@@ -24,9 +25,13 @@ and answers only requests addressed to `127.0.0.1` or `localhost`.
    **Undo my changes**.
 5. Click **post-release-note**: IMPOSSIBLE everywhere, no Slack tool. Type `slack_send_message` in
    *add a tool* and press **Add**: it becomes ACHIEVABLE here, as if a Slack server were connected.
-6. Open **2 · A graph**. Press **Use the example building**: what the graph holds and how it connects.
-7. Press **Use the example workflow**, then **Check it against the graph**: one set point can be
-   verified; the others list exactly which evidence is missing.
+6. Open **2 · A graph** and press **Load example** (`campus-building.trig`). The building is
+   drawn: floors on top, then AHUs and VAVs, schedules and the policy, zones and rooms, points.
+   skillc runs the built-in set-point and schedule-update verifiers at once.
+7. Click `ex:sp13` in the list: its evidence path lights up in green (VAV, zone, rooms) and the
+   panel shows what is missing (a BACnet reference). Click `ex:sp11` (verifiable) and `ex:zone31`
+   (no schedule, no policy) to compare.
+8. Open **3 · Why skillc**. Pick a tool setup, then a case, and compare the three columns (below).
 
 ## 1 · My environment: what can an agent do here?
 
@@ -56,16 +61,55 @@ means and list their tools and steps, which the deterministic reader needs.
 
 ## 2 · A graph: what can it answer?
 
-1. Upload a building graph (Turtle, TriG, N-Triples, N-Quads or RDF/XML), or use the example
-   building, and press **What is in it?**. You get its entities by kind, how they connect, nested
-   structures and which built-in verifier it can already serve.
-2. Paste the workflow as you have it: a brief with "Evidence needed", a bullet list or a table.
-3. Press **Check it against the graph**. Each target gets `ACHIEVABLE` (every critical piece of
-   evidence is in the graph) or `IMPOSSIBLE` with the evidence that is missing. **How skillc read
-   your workflow** shows how each line was mapped, and the full report shows the graph path behind
-   each piece of evidence.
+1. **Load a graph.** Pick an example and press **Load example**, or upload a building graph (Turtle,
+   TriG, N-Triples, N-Quads or RDF/XML; JSON-LD is refused). The graph is drawn in rows: building and
+   floors, equipment, schedules and policies, places, points, each coloured by kind. Classes, units,
+   values and nested structures such as priority arrays are not drawn; they appear in a node's
+   details when you click it.
+2. **Check it.** Press **Check what the graph can establish**. With no workflow, skillc runs the
+   built-in set-point and schedule-update verifiers. To check your own workflow, open **Your
+   workflow** and paste it as you have it: a brief with "Evidence needed", a bullet list or a table.
+3. **Read the result.** Each target gets `ACHIEVABLE` (every critical piece of evidence is in the
+   graph) or `IMPOSSIBLE` with the evidence that is missing. Click a target, in the list or in the
+   graph: the entities and links that prove its evidence light up in green, the target gets a green
+   or red ring, and the side panel lists each piece of evidence with its graph path, or why it is
+   missing. **How skillc read the workflow** shows how each line was mapped.
 
-This is `skillc twin explore` and `skillc twin check --workflow` (see [`docs/TWIN.md`](../../docs/TWIN.md)).
+| Example | What it has |
+|---|---|
+| `campus-building.trig` (default) | 3 floors, 3 AHUs, 9 VAVs, 9 zones, 18 rooms, 10 set points; 3 of 10 set points and 2 of 9 zones can be verified, and each other one misses something specific (limits, a BACnet reference, a schedule or an operating policy). Made by `examples/building-twin/make_campus.py`. |
+| `demo-building.trig` | The small example from [`docs/TWIN.md`](../../docs/TWIN.md): Brick and RealEstateCore styles, an extra equipment hop, a vendor class defined only in an ontology graph. |
+
+This is `skillc twin explore` and `skillc twin check` (see [`docs/TWIN.md`](../../docs/TWIN.md)). Both
+examples are made up; no tenant data.
+
+## 3 · Why skillc: an LLM alone, an LLM with a guiding skill, and skillc
+
+Choose **Tools the agent has** (a coding agent with Claude Code tools, a chat assistant with claude.ai
+tools, or a finance agent of six role agents on Foundry), then a **Case**. Each case shows the same
+prompt three ways:
+
+1. **LLM alone**: the model gets the prompt and acts.
+2. **LLM + a guiding skill**: the model is also told to check its tools and permissions first and
+   to follow the rules, which is the best a prompt can do.
+3. **skillc**: the real checker or monitor, run live on the page. For runtime cases it receives the
+   same actions column 1 attempted, and every call after a refusal never runs.
+
+| Setup | Case | What it shows |
+|---|---|---|
+| Coding agent | Post the release note to Slack | A guiding skill can stop honestly too; skillc decides before any run, without a model |
+| Coding agent | Fix the failing test, then deploy to Vercel | A tool check passes (Bash exists), but a precondition (the account) fails late; skillc refuses the plan |
+| Coding agent | A file tells the agent to force-push | A rule in the prompt can be overridden; skillc's refusal sits outside the model |
+| Chat assistant | Fix a failing test from a chat window | The same skill belongs to one runtime and not another |
+| Finance agent | Approval is skipped when the rule isn't in the prompt | **Measured** (126 runs on Foundry): without the policy sentence the bare agent delivered unapproved reports in 2 of 3 runs, with it 0 violations; skillc held the rule either way |
+| Finance agent | Email the report to the CFO | The deliverable is refused before deployment; column 2 is measured |
+
+Columns 1 and 2 are **replays**. "Measured" ones come from recorded runs
+([`docs/HOSTED_AGENT_COMPARISON.md`](../../docs/HOSTED_AGENT_COMPARISON.md)); "illustrative" ones show
+typical behaviour and are labelled as not being recordings. No model is called. The honest takeaway is
+in the finance case: with the rule in the prompt, a strong model obeyed and skillc had nothing to do;
+skillc matters when the prompt, a tool's check or the model is weaker than the rule. Cases are data in
+`why_cases.json`.
 
 ## What it reads, and what it does not
 
@@ -83,6 +127,11 @@ This is `skillc twin explore` and `skillc twin check --workflow` (see [`docs/TWI
 * `GET /api/samples`: the example skills, graph and workflow.
 * `POST /api/check` `{"text", "machine": [tool, ...]?}`: `name`, `needs`, and `rows` with
   `setting`, `verdict`, `reason`, `detail`, `missing`.
+* `GET /api/why`: the arms, setups and cases. `POST /api/why/run` `{"id"}`: the live skillc column
+  (`mode` static: `verdict`, `missing`; `mode` runtime: `plan_decision`, `plan_reason`, `steps`).
+* `POST /api/twin/graph` `{"graph", "filename", "tenant"?}`: `nodes` (`id`, `kind`, `types`,
+  `details`), `edges` (`s`, `t`, `p`), `facts`, `truncated` (at most 800 entities are drawn).
 * `POST /api/twin/explore` `{"graph", "filename", "tenant"?}`: `text`.
 * `POST /api/twin/check` `{"graph", "filename", "workflow", "tenant"?}`: `workflows`, each with
-  `title`, `reading`, `results` (`target`, `verdict`, `missing`, `found`) and `report`.
+  `title`, `reading`, `results` (`target`, `verdict`, `missing`, `found`, `evidence` with each
+  piece's `found` path lines or `note`) and `report`. An empty `workflow` runs the built-in verifiers.

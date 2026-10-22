@@ -6,7 +6,7 @@ offline with no model call unless the table says so.
 
 | Demo | What it shows | Run | Time |
 |---|---|---|---|
-| [**skillc here**](skillc-here/README.md) (start here) | skillc reads this machine's tools and permissions by itself and says what a skill can do here, next to claude.ai and Claude Code. Upload a graph to see what a workflow can establish from it. | `python demo/skillc-here/app.py` | 3 min |
+| [**skillc here**](skillc-here/README.md) (start here) | skillc reads this machine's tools and permissions by itself and says what a skill can do here, next to claude.ai and Claude Code. Upload a graph to see what a workflow can establish from it. Compare an LLM alone, an LLM with a guiding skill, and skillc, case by case. | `python demo/skillc-here/app.py` | 3 min |
 | [**With skillc. Without skillc.**](skillc-a365-demo/README.md) | An Agent 365 agent replaying a published incident, side by side with and without skillc as middleware. | `python demo/skillc-a365-demo/app.py` | 5 min |
 | [**Execution Atlas**](skillc-architecture-app/README.md) | One skill moving through the real compiler, stage by stage, with the Python behind each stage. | `python demo/skillc-architecture-app/app.py` | 5 min |
 | [**Real skills, end to end**](real-skill-cases/README.md) | A recording: five public `SKILL.md` files compiled by a model and decided by the checker. Re-recording calls a model. | play the `.mp4` | 2 min |

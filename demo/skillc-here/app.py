@@ -24,7 +24,7 @@ import tempfile
 import threading
 import webbrowser
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -33,9 +33,11 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from skillc.cli import main as skillc  # noqa: E402
 from skillc.frontend.contracts import bind_environment  # noqa: E402
+from skillc.monitor import Config, Monitor  # noqa: E402
 from skillc.profiles import load_profile, normalize_tool  # noqa: E402
 
-GRAPH_EXAMPLE = ROOT / "examples" / "building-twin" / "demo-building.trig"
+GRAPH_EXAMPLE = ROOT / "examples" / "building-twin" / "campus-building.trig"
+GRAPH_SMALL = ROOT / "examples" / "building-twin" / "demo-building.trig"
 WORKFLOW_EXAMPLE = ROOT / "examples" / "building-twin" / "workflow.md"
 GRAPH_SUFFIXES = (".ttl", ".trig", ".nt", ".nq", ".rdf", ".owl", ".xml", ".n3")
 MAX_SKILL = 100_000
@@ -131,6 +133,74 @@ def samples() -> list[dict]:
             for p in sorted((HERE / "skills").glob("*.md"))]
 
 
+# --- tab 3: why skillc ----------------------------------------------------------------------
+
+WHY = json.loads((HERE / "why_cases.json").read_text(encoding="utf-8"))
+SETUP_PROFILE = {"coding": "claude-code", "chat": "claude-ai"}
+_FIX = """Skill `fix-tests`.
+Roles: `agent`.
+Tool `run_tests` (owner `agent`): via `bash`; adds `tests_run`.
+Tool `edit_code` (owner `agent`): via `edit`; requires `tests_run`; adds `fixed`.
+Goal: `fixed`.
+Protocol:
+  - `agent` uses `run_tests`.
+  - `agent` uses `edit_code`.
+"""
+_FINANCE = (ROOT / "examples" / "hosted-agent-finance" / "protocol"
+            / "quarterly_finance_report.ce").read_text(encoding="utf-8")
+PLANS = {
+    "fix-tests": _FIX,
+    "deploy": _FIX.replace(
+        "Goal: `fixed`.",
+        "Tool `deploy` (owner `agent`): via `bash`; needs `vercel_account`; requires `fixed`; "
+        "adds `deployed`.\nGoal: `fixed` and `deployed`.").replace(
+        "  - `agent` uses `edit_code`.\n",
+        "  - `agent` uses `edit_code`.\n  - `agent` uses `deploy`.\n"),
+    "finance": _FINANCE,
+    "finance+email": _FINANCE.replace(
+        "Initially true: none.",
+        "Tool `send_email` (owner `Writer`): via `email`; requires `report_written`; "
+        "adds `emailed`; effect `writes_external`.\nInitially true: none.").replace(
+        "Goal: `report_delivered` and `approved`.",
+        "Goal: `report_delivered` and `approved` and `emailed`.").replace(
+        "      - `Writer` uses `deliver_report`.\n",
+        "      - `Writer` uses `deliver_report`.\n      - `Writer` uses `send_email`.\n"),
+}
+
+
+def why_run(case_id: str) -> dict:
+    """The skillc column of one case, decided live: a static check of the skill against the
+    setup's tools, or the monitor over the plan and the actions the plain LLM attempted."""
+    case = next((c for c in WHY["cases"] if c["id"] == case_id), None)
+    if case is None:
+        raise ValueError(f"unknown case {case_id!r}")
+    spec = case["skillc"]
+    if spec["mode"] == "static":
+        name = SETUP_PROFILE[case["setup"]]
+        grants = sorted({normalize_tool(t) for t in load_profile(name).tools})
+        text = (HERE / "skills" / f"{spec['skill']}.md").read_text(encoding="utf-8")
+        row = check_skill(text, {name: grants})["rows"][0]
+        return {"mode": "static", "skill": text, "profile": name, **row}
+    plan = PLANS[spec["plan"]]
+    with _LOCK, tempfile.TemporaryDirectory(prefix="skillc-here-") as tmp:
+        mon = Monitor(Config(**spec.get("config", {})), tmp)
+        d = mon.submit_plan(plan)
+        out = {"mode": "runtime", "plan": plan, "plan_decision": d.action,
+               "plan_reason": d.reason, "steps": [], "stopped": d.action == "deny"}
+        if d.action == "deny":
+            return out
+        for tool, inp, role, result in spec["trace"]:
+            kw = {"role": role} if role else {}
+            d = mon.pre_action(tool, inp, **kw)
+            out["steps"].append({"tool": tool, "input": inp, "role": role,
+                                 "decision": d.action, "reason": d.reason})
+            if d.action == "deny":
+                out["stopped"] = True
+                break
+            mon.post_action(tool, inp, result, **kw)
+        return out
+
+
 # --- tab 2: a graph -----------------------------------------------------------------------
 
 def _graph_file(tmp: Path, filename: str, data: bytes) -> Path:
@@ -154,24 +224,89 @@ def twin_explore(filename: str, data: bytes, tenant: str | None = None) -> dict:
         return {"text": text.replace(str(path), Path(filename).name or path.name)}
 
 
+def _result(r) -> dict:
+    return {"target": r.target, "verdict": r.verdict,
+            "missing": [e.key for e in r.missing],
+            "found": [e.key for e in r.evidence if e.status == "found"],
+            "evidence": [{"key": e.key, "need": e.need, "status": e.status,
+                          "critical": e.critical, "found": e.found, "note": e.note}
+                         for e in r.evidence]}
+
+
 def twin_check(filename: str, data: bytes, workflow: str, tenant: str | None = None) -> dict:
-    from skillc.env.twin import load_twin, text_report
+    """Check a pasted workflow against the graph; with no workflow, run the built-in
+    set-point and schedule-update verifiers."""
+    from skillc.env.twin import SCENARIOS, load_twin, text_report, verify_all
     from skillc.env.twin_workflow import read_workflows, verify_workflow, workflow_targets
-    if not workflow.strip():
-        raise ValueError("paste the workflow: its list of evidence needed")
     with _LOCK, tempfile.TemporaryDirectory(prefix="skillc-here-") as tmp:
         twin = load_twin(_graph_file(Path(tmp), filename, data), tenant=tenant or None)
         out = []
+        if not workflow.strip():
+            for name, sc in SCENARIOS.items():
+                results = verify_all(twin, name)
+                reading = (f"built-in {sc['title']}: "
+                           + ", ".join(k for k, *_ in sc["evidence"]))
+                out.append({"title": sc["title"], "reading": reading,
+                            "results": [_result(r) for r in results],
+                            "report": text_report(results, True)})
+            return {"workflows": out}
         for wf in read_workflows(workflow):
             results = [verify_workflow(twin, wf, t) for t in workflow_targets(twin, wf)]
-            out.append({
-                "title": wf.title, "reading": wf.describe(),
-                "results": [{"target": r.target, "verdict": r.verdict,
-                             "missing": [e.key for e in r.missing],
-                             "found": [e.key for e in r.evidence if e.status == "found"]}
-                            for r in results],
-                "report": text_report(results, True)})
+            out.append({"title": wf.title, "reading": wf.describe(),
+                        "results": [_result(r) for r in results],
+                        "report": text_report(results, True)})
         return {"workflows": out}
+
+
+def twin_graph(filename: str, data: bytes, tenant: str | None = None,
+               max_nodes: int = 800) -> dict:
+    """The tenant graph as nodes and links for drawing. Entities are nodes; a link is a fact
+    between two entities. Classes, units, literals and blank-node structures become node
+    details, read through the entity that owns them."""
+    from rdflib import RDF, BNode, Literal
+    from skillc.env.twin import EQUIP_WORDS, _is_place, _is_point, load_twin, local
+    with _LOCK, tempfile.TemporaryDirectory(prefix="skillc-here-") as tmp:
+        twin = load_twin(_graph_file(Path(tmp), filename, data), tenant=tenant or None)
+        g = twin.graph
+        entities = [s for s in dict.fromkeys(g.subjects()) if not isinstance(s, BNode)]
+        keep = set(entities[:max_nodes])
+
+        def kind(n):
+            if _is_point(twin, n):
+                return "point"
+            if twin.is_a(n, ("schedule",)):
+                return "schedule"
+            if twin.is_a(n, ("policy",)):
+                return "policy"
+            if twin.is_a(n, ("building", "floor", "storey", "site")):
+                return "structure"
+            if _is_place(twin, n):
+                return "place"
+            if twin.is_a(n, EQUIP_WORDS):
+                return "equipment"
+            return "other"
+
+        nodes, edges = [], []
+        for n in keep:
+            types = sorted(local(c) for c in g.objects(n, RDF.type))
+            details = []
+            for p, o in g.predicate_objects(n):
+                if p == RDF.type or o in keep:
+                    continue
+                if isinstance(o, BNode):
+                    inner = sorted({local(q) for q in g.predicates(o) if q != RDF.type})
+                    kinds = sorted({local(c) for c in g.objects(o, RDF.type)})
+                    details.append([local(p), "{" + ", ".join(kinds + inner) + "}"])
+                else:
+                    details.append([local(p), str(o) if isinstance(o, Literal)
+                                    else twin.label(o)])
+            nodes.append({"id": twin.label(n), "kind": kind(n), "types": types,
+                          "details": sorted(details)})
+            for p, o in g.predicate_objects(n):
+                if o in keep and p != RDF.type:
+                    edges.append({"s": twin.label(n), "t": twin.label(o), "p": local(p)})
+        return {"nodes": nodes, "edges": edges, "facts": len(g),
+                "truncated": len(entities) > max_nodes}
 
 
 # --- server -------------------------------------------------------------------------------
@@ -195,11 +330,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/environment":
             env = read_environment(refresh="refresh=1" in query)
             return self._json(HTTPStatus.OK, {**env, "settings": settings(env)})
+        if path == "/api/why":
+            return self._json(HTTPStatus.OK, WHY)
         if path == "/api/samples":
             return self._json(HTTPStatus.OK, {
                 "skills": samples(),
                 "graph": {"name": GRAPH_EXAMPLE.name,
                           "text": GRAPH_EXAMPLE.read_text(encoding="utf-8")},
+                "graphs": [{"name": g.name, "text": g.read_text(encoding="utf-8")}
+                           for g in (GRAPH_EXAMPLE, GRAPH_SMALL)],
                 "workflow": WORKFLOW_EXAMPLE.read_text(encoding="utf-8")})
         return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -217,7 +356,12 @@ class Handler(BaseHTTPRequestHandler):
                     where["this machine"] = sorted({normalize_tool(str(t))
                                                     for t in body["machine"] if str(t).strip()})
                 return self._json(HTTPStatus.OK, check_skill(str(body.get("text", "")), where))
+            if self.path == "/api/why/run":
+                return self._json(HTTPStatus.OK, why_run(str(body.get("id", ""))))
             graph = str(body.get("graph", "")).encode("utf-8")
+            if self.path == "/api/twin/graph":
+                return self._json(HTTPStatus.OK, twin_graph(body.get("filename", ""), graph,
+                                                            body.get("tenant")))
             if self.path == "/api/twin/explore":
                 return self._json(HTTPStatus.OK, twin_explore(body.get("filename", ""), graph,
                                                               body.get("tenant")))
@@ -251,7 +395,7 @@ def main(argv=None) -> int:
     ap.add_argument("--port", type=int, default=8770)
     ap.add_argument("--no-browser", action="store_true", help="do not open a browser tab")
     args = ap.parse_args(argv)
-    server = HTTPServer(("127.0.0.1", args.port), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     url = f"http://127.0.0.1:{args.port}/"
     print(f"skillc here: {url}  (offline, no model call; Ctrl+C to stop)", flush=True)
     if not args.no_browser:

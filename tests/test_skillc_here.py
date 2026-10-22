@@ -69,15 +69,68 @@ def test_graph_tab_explores_and_checks():
     pytest.importorskip("rdflib")
     data = app.GRAPH_EXAMPLE.read_bytes()
     text = app.twin_explore(app.GRAPH_EXAMPLE.name, data)["text"]
-    assert "demo-building.trig" in text and "Temp" not in text.split("\n", 1)[0]
-    out = app.twin_check(app.GRAPH_EXAMPLE.name, data, app.WORKFLOW_EXAMPLE.read_text("utf-8"))
+    assert "campus-building.trig" in text and "Temp" not in text.split("\n", 1)[0]
+    out = app.twin_check(app.GRAPH_SMALL.name, app.GRAPH_SMALL.read_bytes(),
+                         app.WORKFLOW_EXAMPLE.read_text("utf-8"))
     rows = {r["target"]: r for r in out["workflows"][0]["results"]}
     assert rows["ex:sp1"]["verdict"] == "ACHIEVABLE"
     assert "min_max_units" in rows["ex:sp2"]["missing"]
 
 
-def test_graph_tab_refuses_jsonld_and_empty_workflow():
+def test_graph_tab_refuses_jsonld():
     with pytest.raises(ValueError, match="JSON-LD"):
         app.twin_explore("graph.jsonld", b"{}")
+    with pytest.raises(ValueError, match="JSON-LD"):
+        app.twin_graph("graph.jsonld", b"{}")
+
+
+def test_why_cases_are_decided_live():
+    """Tab 3: every case's skillc column comes from the real checker or monitor."""
+    got = {c["id"]: app.why_run(c["id"]) for c in app.WHY["cases"]}
+    assert got["slack-note"]["verdict"] == "IMPOSSIBLE"
+    assert got["slack-note"]["missing"] == ["slack_send_message"]
+    assert got["chat-repo"]["missing"] == ["edit", "grep", "read"]
+    assert got["deploy"]["plan_decision"] == "deny" and "BLOCKED_GUARD" in got["deploy"]["plan_reason"]
+    assert got["email-cfo"]["plan_decision"] == "deny" and "send_email" in got["email-cfo"]["plan_reason"]
+    push = got["force-push"]["steps"]
+    assert [s["decision"] for s in push] == ["allow", "allow", "deny"]
+    approve = got["self-approve"]["steps"]
+    assert approve[-1]["tool"] == "write_revenue_analysis" and approve[-1]["decision"] == "deny"
+    assert all(r["stopped"] for r in got.values() if r["mode"] == "runtime")
+
+
+def test_why_cases_say_where_columns_come_from():
+    for c in app.WHY["cases"]:
+        assert c["provenance"] in ("measured", "illustrative", "mixed")
+        assert c["provenance"] == "illustrative" or c.get("source")
+        assert c["setup"] in {s["id"] for s in app.WHY["setups"]}
     with pytest.raises(ValueError):
-        app.twin_check(app.GRAPH_EXAMPLE.name, app.GRAPH_EXAMPLE.read_bytes(), " ")
+        app.why_run("no-such-case")
+
+
+def test_graph_tab_draws_entities_and_links():
+    pytest.importorskip("rdflib")
+    g = app.twin_graph(app.GRAPH_EXAMPLE.name, app.GRAPH_EXAMPLE.read_bytes())
+    ids = {n["id"]: n for n in g["nodes"]}
+    assert ids["ex:sp11"]["kind"] == "point" and ids["ex:vav11"]["kind"] == "equipment"
+    assert ids["ex:zone11"]["kind"] == "place" and ids["ex:hq"]["kind"] == "structure"
+    assert {"s": "ex:vav11", "t": "ex:zone11", "p": "feeds"} in g["edges"]
+    # classes, units, literals and blank nodes are details, never drawn as entities
+    assert "unit:DEG_C" not in ids and all(not i.startswith("_:") for i in ids)
+    assert ["minPresentValue", "16.0"] in ids["ex:sp11"]["details"]
+
+
+def test_graph_tab_runs_the_built_in_verifiers_without_a_workflow():
+    pytest.importorskip("rdflib")
+    out = app.twin_check(app.GRAPH_EXAMPLE.name, app.GRAPH_EXAMPLE.read_bytes(), "")
+    by = {w["title"]: {r["target"]: r for r in w["results"]} for w in out["workflows"]}
+    sp = by["Set-point verifier"]
+    assert sp["ex:sp11"]["verdict"] == "ACHIEVABLE"
+    assert sp["ex:sp12"]["missing"] == ["min_max_units"]
+    assert sp["ex:sp13"]["missing"] == ["external_reference"]
+    zone = by["Schedule-update verifier"]
+    assert zone["ex:zone11"]["verdict"] == "ACHIEVABLE"
+    assert "operating_policy" in zone["ex:zone21"]["missing"]
+    # each piece of evidence carries the graph path that proves it
+    places = next(e for e in sp["ex:sp11"]["evidence"] if e["key"] == "controlled_places")
+    assert any("ex:vav11 ->feeds ex:zone11" in line for line in places["found"])

@@ -62,6 +62,48 @@ pre { font: 12px/1.45 var(--mono); background: var(--bg); border: 1px solid var(
   padding: 10px; overflow-x: auto; white-space: pre; margin: 8px 0; }
 .err { color: var(--no); font-size: 14px; }
 code { font: 12.5px var(--mono); }
+select { font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 8px; max-width: 100%; }
+.arms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+@media (max-width: 960px) { .arms { grid-template-columns: minmax(0, 1fr); } }
+.arm h2 { margin-bottom: 2px; }
+.trace { font: 12.5px/1.5 var(--mono); margin: 10px 0; }
+.trace div { padding: 2px 0 2px 8px; border-left: 2px solid var(--line); margin: 2px 0; overflow-wrap: anywhere; }
+.trace .think { color: var(--muted); font-style: italic; }
+.trace .tool::before { content: "▸ "; }
+.trace .out { color: var(--muted); }
+.trace .say { border-color: var(--accent); }
+.trace .allow { border-color: var(--ok); }
+.trace .deny { border-color: var(--no); color: var(--no); }
+.trace .skipped { color: var(--muted); text-decoration: line-through; }
+.outcome { border-radius: 8px; padding: 8px 10px; font-size: 14px; font-weight: 500; }
+.outcome.bad { color: var(--no); background: var(--no-bg); }
+.outcome.waste { color: var(--unk); background: var(--unk-bg); }
+.outcome.ok { color: var(--ok); background: var(--ok-bg); }
+.gwrap { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; margin-top: 16px; align-items: start; }
+@media (max-width: 960px) { .gwrap { grid-template-columns: minmax(0, 1fr); } }
+#gsvg { width: 100%; height: auto; min-height: 260px; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 5px; margin-right: 4px; vertical-align: -1px; }
+.legend i.ring { background: none; border: 2px solid; }
+.ring { fill: none; stroke-width: 3; }
+.ring.ok, i.ring.ok { stroke: var(--ok); border-color: var(--ok); }
+.ring.no, i.ring.no { stroke: var(--no); border-color: var(--no); }
+.edge { stroke: var(--muted); stroke-opacity: .45; stroke-width: 1.2; }
+.edge.on { stroke: var(--ok); stroke-opacity: 1; stroke-width: 3; }
+.elabel { font: 10px var(--mono); fill: var(--ok); text-anchor: middle; }
+.nlabel { font: 11px var(--mono); fill: var(--ink); text-anchor: middle; }
+.node { cursor: pointer; }
+.side { max-height: 640px; overflow-y: auto; }
+table.pick tr { cursor: pointer; }
+table.pick tr.sel td { background: var(--chip); }
+ul.ev { list-style: none; padding: 0; margin: 6px 0; }
+ul.ev li { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+ul.ev li.found b { color: var(--ok); }
+ul.ev li.missing b { color: var(--no); }
+ul.ev li.declared b { color: var(--unk); }
+.mono { font: 11.5px/1.5 var(--mono); overflow-wrap: anywhere; }
+.tag { font-size: 12px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
 </style>
 </head>
 <body>
@@ -71,6 +113,7 @@ code { font: 12.5px var(--mono); }
   <nav>
     <button class="on" data-tab="env">1 · My environment</button>
     <button data-tab="graph">2 · A graph</button>
+    <button data-tab="why">3 · Why skillc</button>
   </nav>
 </header>
 <main>
@@ -102,33 +145,48 @@ code { font: 12.5px var(--mono); }
 </section>
 
 <section id="graph" class="tab">
-  <div class="grid">
-    <div class="panel">
-      <h2><span class="step">1</span>Upload a graph</h2>
-      <div class="muted">Turtle, TriG, N-Triples, N-Quads or RDF/XML. Ontology graphs only name classes; they never count as evidence.</div>
-      <div class="row"><input type="file" id="file" accept=".ttl,.trig,.nt,.nq,.rdf,.owl,.xml,.n3"></div>
-      <div class="row"><button class="ghost" id="exGraph">Use the example building</button></div>
-      <div class="row"><input type="text" id="tenant" placeholder="tenant (only if the file holds several)"></div>
-      <div id="graphName" class="muted"></div>
-      <div class="row"><button class="act" id="explore">What is in it?</button></div>
+  <div class="panel">
+    <div class="row">
+      <select id="exPick"></select>
+      <button class="ghost" id="exGraph">Load example</button>
+      <span class="muted">or</span>
+      <input type="file" id="file" accept=".ttl,.trig,.nt,.nq,.rdf,.owl,.xml,.n3">
+      <input type="text" id="tenant" placeholder="tenant (only if the file holds several)" style="max-width:260px">
     </div>
-    <div class="panel">
-      <h2>What the graph holds</h2>
-      <div id="exploreOut" class="muted">Upload a graph, then press <b>What is in it?</b></div>
+    <div id="graphName" class="muted">Turtle, TriG, N-Triples, N-Quads or RDF/XML. Ontology graphs only name classes; they never count as evidence.</div>
+    <details id="wfBox"><summary>Your workflow (optional): leave empty to run the built-in set-point and schedule-update verifiers</summary>
+      <textarea id="workflow" placeholder="# Comfort complaint check&#10;Evidence needed:&#10;- Set-point identity and type&#10;- Configured minimum/maximum and units&#10;- Occupancy sensor"></textarea>
+      <div class="row"><button class="ghost" id="exWf">Use the example workflow</button></div>
+    </details>
+    <div class="row"><button class="act" id="twinCheck">Check what the graph can establish</button><span class="muted" id="twinStatus"></span></div>
+  </div>
+  <div class="gwrap">
+    <div class="panel gpanel">
+      <div class="legend" id="legend"></div>
+      <svg id="gsvg" role="img" aria-label="The building graph"></svg>
+      <div class="muted" id="gHint">Load a graph to draw it. Then click a target on the right, or a node here.</div>
+    </div>
+    <div class="panel side">
+      <div id="twinOut" class="muted">Results appear here: one row per target. Click one to light up its evidence in the graph.</div>
+      <div id="nodeInfo"></div>
     </div>
   </div>
-  <div class="grid" style="margin-top:16px">
-    <div class="panel">
-      <h2><span class="step">2</span>Paste the workflow</h2>
-      <div class="muted">As you have it: a brief with "Evidence needed", a bullet list or a table. Write "when required" or "optional" on a line that is not critical.</div>
-      <textarea id="workflow" placeholder="# Comfort complaint check&#10;Evidence needed:&#10;- Set-point identity and type&#10;- Configured minimum/maximum and units"></textarea>
-      <div class="row"><button class="ghost" id="exWf">Use the example workflow</button><button class="act" id="twinCheck">Check it against the graph</button></div>
+  <details class="panel" style="margin-top:16px"><summary>What the graph holds (skillc twin explore)</summary><div id="exploreOut" class="muted">Load a graph first.</div></details>
+</section>
+
+<section id="why" class="tab">
+  <div class="panel">
+    <div class="row">
+      <label class="muted" for="whySetup">Tools the agent has</label>
+      <select id="whySetup"></select>
+      <label class="muted" for="whyCase">Case</label>
+      <select id="whyCase"></select>
     </div>
-    <div class="panel">
-      <h2><span class="step">3</span>What can be established, and what is missing</h2>
-      <div id="twinOut" class="muted">The result appears here: one row per target in the graph.</div>
-    </div>
+    <div id="whyTools" class="chips"></div>
+    <div id="whyHead"></div>
   </div>
+  <div class="arms" id="whyArms"></div>
+  <div class="panel" id="whyWhy" style="margin-top:16px"></div>
 </section>
 </main>
 
@@ -213,49 +271,216 @@ $("addBtn").onclick = () => { const t = $("addTool").value.trim(); if (t) { stat
 $("addTool").onkeydown = (e) => { if (e.key === "Enter") $("addBtn").click(); };
 
 // --- graph tab ---
-$("file").onchange = async () => {
-  const f = $("file").files[0]; if (!f) return;
-  state.graph = await f.text(); state.graphName = f.name;
-  $("graphName").textContent = `${f.name} · ${(f.size / 1024).toFixed(1)} KB`;
-};
-$("exGraph").onclick = () => {
-  state.graph = state.samples.graph.text; state.graphName = state.samples.graph.name;
-  $("graphName").textContent = `${state.graphName} (example)`; $("explore").click();
+const G = { data: null, pos: {}, results: [], sel: null };
+const KINDS = [["structure", "building / floor", "#7a6ff0"], ["equipment", "equipment", "#2f8fd3"],
+  ["place", "zone / room", "#2aa198"], ["point", "point", "#d08a2a"], ["schedule", "schedule", "#9c6bc7"],
+  ["policy", "policy", "#c74f7a"], ["other", "other", "#8b8b85"]];
+const KCOLOR = Object.fromEntries(KINDS.map(([k, , c]) => [k, c]));
+const LAYER = {structure: 0, equipment: 1, schedule: 1, policy: 1, place: 2, point: 3, other: 3};
+const short = (id) => id.includes(":") ? id.split(":").slice(1).join(":") : id;
+
+$("legend").innerHTML = KINDS.map(([, label, c]) => `<span><i style="background:${c}"></i>${esc(label)}</span>`).join("")
+  + '<span><i class="ring ok"></i>evidence found</span><span><i class="ring no"></i>target cannot be verified</span>';
+
+function layout(nodes, edges) {
+  // rows by kind (building and floors, equipment, schedules and policies, places, points);
+  // a kind with many nodes wraps onto several rows of at most PER; inside a row each node
+  // sits under the neighbours placed above it, so a VAV's zone and set point line up
+  const PER = 12, W = 1000, ROW = 74;
+  const order = ["structure", "equipment", "schedule", "policy", "place", "point", "other"];
+  const nb = {};
+  edges.forEach((e) => { (nb[e.s] = nb[e.s] || []).push(e.t); (nb[e.t] = nb[e.t] || []).push(e.s); });
+  const pos = {}, rows = [];
+  const groups = order.map((k) => nodes.filter((n) => n.kind === k)).filter((g) => g.length);
+  const merged = [];      // schedules and policies share a row when both are small
+  groups.forEach((g) => {
+    const last = merged[merged.length - 1];
+    if (last && ["schedule", "policy"].includes(g[0].kind) && ["schedule", "policy"].includes(last[0].kind)
+        && last.length + g.length <= PER) last.push(...g);
+    else merged.push([...g]);
+  });
+  merged.forEach((group) => {
+    const anchor = (n) => {
+      const above = (nb[n.id] || []).map((m) => pos[m]).filter(Boolean);
+      return above.length ? above.reduce((a, p) => a + p.x, 0) / above.length : 1e9;
+    };
+    group.sort((a, b) => anchor(a) - anchor(b) || a.id.localeCompare(b.id));
+    for (let i = 0; i < group.length; i += PER) {
+      const row = group.slice(i, i + PER), y = 36 + rows.length * ROW;
+      row.forEach((n, j) => { pos[n.id] = {x: 40 + (j + 0.5) * (W - 80) / row.length, y}; });
+      rows.push(row);
+    }
+  });
+  return {pos, W, H: 36 + rows.length * ROW};
+}
+
+function pathPairs(lines) {
+  // consecutive entity names in a proof line, e.g. "ex:vav1 ->feeds ex:zone1 ->hasPart ex:room101"
+  const ids = new Set(G.data.nodes.map((n) => n.id)), nodes = new Set(), pairs = [];
+  lines.forEach((line) => {
+    const hits = (line.match(/[A-Za-z][\w-]*:[\w.-]+/g) || []).filter((t) => ids.has(t));
+    hits.forEach((h) => nodes.add(h));
+    for (let i = 1; i < hits.length; i++) pairs.push([hits[i - 1], hits[i]]);
+  });
+  return {nodes, pairs};
+}
+
+function draw() {
+  const d = G.data; if (!d) return;
+  const {pos, W, H} = layout(d.nodes, d.edges); G.pos = pos;
+  const sel = G.sel, r = sel && G.results.find((x) => x.target === sel);
+  const lit = r ? pathPairs(r.evidence.flatMap((e) => e.found)) : {nodes: new Set(), pairs: []};
+  if (sel) lit.nodes.add(sel);
+  const onPair = (e) => lit.pairs.some(([a, b]) => (a === e.s && b === e.t) || (a === e.t && b === e.s));
+  const dim = sel ? 0.18 : 1;
+  const edges = d.edges.map((e) => {
+    const a = pos[e.s], b = pos[e.t]; if (!a || !b) return "";
+    const on = onPair(e);
+    return `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" class="edge${on ? " on" : ""}" style="opacity:${on ? 1 : dim}"><title>${esc(e.s)} ${esc(e.p)} ${esc(e.t)}</title></line>`
+      + (on ? `<text x="${(a.x + b.x) / 2}" y="${(a.y + b.y) / 2 - 3}" class="elabel">${esc(e.p)}</text>` : "");
+  }).join("");
+  const verdictOf = Object.fromEntries(G.results.map((x) => [x.target, x.verdict]));
+  const nodes = d.nodes.map((n) => {
+    const p = pos[n.id], on = lit.nodes.has(n.id), v = verdictOf[n.id];
+    const ring = n.id === sel ? (v === "ACHIEVABLE" ? "ok" : v ? "no" : "") : (on ? "ok" : "");
+    return `<g class="node" data-id="${esc(n.id)}" style="opacity:${!sel || on ? 1 : dim}" transform="translate(${p.x},${p.y})">`
+      + (ring ? `<circle r="13" class="ring ${ring}"/>` : "")
+      + `<circle r="${v ? 9 : 7}" fill="${KCOLOR[n.kind]}"${v ? ' stroke="var(--ink)" stroke-width="1.5"' : ""}/>`
+      + `<text y="22" class="nlabel">${esc(short(n.id))}</text><title>${esc(n.id)} (${esc(n.types.join(", ") || "untyped")})</title></g>`;
+  }).join("");
+  const svg = $("gsvg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.innerHTML = edges + nodes;
+  svg.querySelectorAll(".node").forEach((g) => g.onclick = () => pick(g.dataset.id));
+  $("gHint").textContent = `${d.nodes.length} entities, ${d.edges.length} links, ${d.facts} facts`
+    + (d.truncated ? " (the first 800 entities are drawn)" : "") + ". Targets have a dark outline: click one.";
+}
+
+function pick(id) {
+  G.sel = G.sel === id ? null : id; draw();
+  document.querySelectorAll("#twinOut tr[data-t]").forEach((tr) => tr.classList.toggle("sel", tr.dataset.t === G.sel));
+  const n = G.data.nodes.find((x) => x.id === id), r = G.results.find((x) => x.target === id);
+  if (!G.sel || !n) { $("nodeInfo").innerHTML = ""; return; }
+  const ev = r ? `<h2>${esc(id)}: ${verdictCell(r.verdict)}</h2><ul class="ev">` + r.evidence.map((e) =>
+      `<li class="${esc(e.status)}"><b>${e.status === "found" ? "✓" : e.status === "declared" ? "~" : "✗"} ${esc(e.need)}</b>${e.critical ? "" : ' <span class="tag">optional</span>'}`
+      + (e.found.length ? `<div class="mono">${e.found.map(esc).join("<br>")}</div>` : "")
+      + (e.note ? `<div class="muted">${esc(e.note)}</div>` : "") + "</li>").join("") + "</ul>"
+    : `<h2>${esc(id)}</h2><p class="muted">Not a target of these checks.</p>`;
+  $("nodeInfo").innerHTML = ev + `<details${r ? "" : " open"}><summary>What the graph says about it</summary><div class="mono">${esc(n.types.join(", ") || "untyped")}<br>`
+    + n.details.map(([p, v]) => `${esc(p)}: ${esc(v)}`).join("<br>") + "</div></details>";
+}
+
+async function loadGraph(text, name) {
+  state.graph = text; state.graphName = name; G.sel = null; G.results = [];
+  $("graphName").textContent = `${name} · ${(text.length / 1024).toFixed(1)} KB`;
+  $("twinOut").innerHTML = '<span class="muted">Press <b>Check what the graph can establish</b>.</span>';
+  $("nodeInfo").innerHTML = "";
+  const body = {graph: text, filename: name, tenant: $("tenant").value.trim()};
+  try {
+    G.data = await api("/api/twin/graph", body); draw();
+    const ex = await api("/api/twin/explore", body);
+    $("exploreOut").innerHTML = `<pre>${esc(ex.text)}</pre>`;
+  } catch (err) {
+    $("gHint").innerHTML = `<span class="err">${esc(err.message)}</span>`; G.data = null; $("gsvg").innerHTML = "";
+  }
+}
+$("file").onchange = async () => { const f = $("file").files[0]; if (f) loadGraph(await f.text(), f.name); };
+$("exGraph").onclick = async () => {
+  const g = state.samples.graphs[$("exPick").selectedIndex]; await loadGraph(g.text, g.name); $("twinCheck").click();
 };
 $("exWf").onclick = () => { $("workflow").value = state.samples.workflow; };
 
-function needGraph() {
-  if (state.graph) return true;
-  $("exploreOut").innerHTML = '<span class="err">Upload a graph first, or use the example building.</span>'; return false;
-}
-$("explore").onclick = async () => {
-  if (!needGraph()) return;
-  $("exploreOut").textContent = "Reading the graph…";
-  try {
-    const r = await api("/api/twin/explore", {graph: state.graph, filename: state.graphName, tenant: $("tenant").value.trim()});
-    $("exploreOut").innerHTML = `<pre>${esc(r.text)}</pre>`;
-  } catch (err) { $("exploreOut").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
-};
 $("twinCheck").onclick = async () => {
-  if (!needGraph()) { $("twinOut").innerHTML = '<span class="err">Upload a graph first (step 1).</span>'; return; }
-  $("twinOut").textContent = "Checking…";
+  if (!state.graph) { $("twinOut").innerHTML = '<span class="err">Load a graph first.</span>'; return; }
+  $("twinStatus").textContent = "Checking…";
   try {
     const r = await api("/api/twin/check", {graph: state.graph, filename: state.graphName,
       workflow: $("workflow").value, tenant: $("tenant").value.trim()});
+    G.results = r.workflows.flatMap((w) => w.results);
     $("twinOut").innerHTML = r.workflows.map((w) => {
       const ok = w.results.filter((x) => x.verdict === "ACHIEVABLE").length;
-      const rows = w.results.map((x) => `<tr><td><code>${esc(x.target)}</code></td><td>${verdictCell(x.verdict)}</td>
-        <td>${x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>" : "all critical evidence is in the graph"}</td></tr>`).join("");
-      return `<h2>${esc(w.title)}: ${ok} of ${w.results.length} targets can be verified</h2>
-        <details><summary>How skillc read your workflow</summary><pre>${esc(w.reading)}</pre></details>
-        <table><tr><th>target</th><th>verdict</th><th>evidence</th></tr>${rows || '<tr><td colspan="3" class="muted">no targets of this kind in the graph</td></tr>'}</table>
-        <details><summary>Full report: the graph path behind each piece of evidence</summary><pre>${esc(w.report)}</pre></details>`;
+      const rows = w.results.map((x) => `<tr data-t="${esc(x.target)}"><td><code>${esc(x.target)}</code></td><td>${verdictCell(x.verdict)}</td>`
+        + `<td>${x.missing.length ? "missing: " + x.missing.map(esc).join(", ") : "all critical evidence found"}</td></tr>`).join("");
+      return `<h2>${esc(w.title)}: ${ok} of ${w.results.length} can be verified</h2>`
+        + `<details><summary>How skillc read the workflow</summary><pre>${esc(w.reading)}</pre></details>`
+        + `<table class="pick">${rows || '<tr><td class="muted">no targets of this kind in the graph</td></tr>'}</table>`;
     }).join("") + '<p class="muted">Missing evidence is never read as approval. Add the facts to the graph, or declare where they live, to change a verdict.</p>';
-  } catch (err) { $("twinOut").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+    $("twinOut").querySelectorAll("tr[data-t]").forEach((tr) => tr.onclick = () => pick(tr.dataset.t));
+    $("twinStatus").textContent = ""; draw();
+  } catch (err) { $("twinStatus").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
 };
 
+// --- why skillc tab ---
+const why = { data: null };
+const PROV = { measured: "measured", illustrative: "illustrative replay", mixed: "measured and illustrative" };
+
+function traceHtml(steps) {
+  return '<div class="trace">' + steps.map(([k, t]) => `<div class="${esc(k)}">${esc(t)}</div>`).join("") + "</div>";
+}
+function armHtml(key, arm, prov, extraLabel) {
+  const meta = why.data.arms[key];
+  const turns = arm.turns ? ` · ~${arm.turns} turns` : "";
+  return `<div class="panel arm"><h2>${esc(meta.label)}</h2>
+    <div class="muted">${esc(arm.label || meta.note)} <span class="tag">${esc(PROV[prov] || prov)}</span></div>
+    ${traceHtml(arm.steps)}
+    <div class="outcome ${esc(arm.tone)}">${esc(arm.outcome)}${esc(turns)}</div></div>`;
+}
+function skillcHtml(c, r) {
+  const meta = why.data.arms.skillc;
+  let body = "", outcome = "", tone = "ok";
+  if (r.mode === "static") {
+    body = `<div class="trace"><div class="tool">skillc check SKILL.md --profile ${esc(r.profile)}</div>
+      <div class="${r.verdict === "ACHIEVABLE" ? "allow" : "deny"}">${esc(r.verdict)} [${esc(r.reason)}]${r.missing.length ? " missing: " + esc(r.missing.join(", ")) : ""}</div></div>`;
+    outcome = r.verdict === "IMPOSSIBLE" ? "Decided before any run: 0 model tokens, 0 turns." : "Nothing blocks it here.";
+  } else {
+    const lines = [`<div class="tool">submit plan (${esc(c.setup === "finance" ? "the finance protocol" : "the agent's plan")})</div>`,
+      `<div class="${r.plan_decision === "deny" ? "deny" : "allow"}">${esc(r.plan_decision === "deny" ? "REFUSED" : "ACHIEVABLE")}: ${esc(r.plan_reason.split("\n").slice(0, 3).join(" "))}</div>`];
+    r.steps.forEach((s) => {
+      lines.push(`<div class="tool">${esc(s.tool)}${s.role ? " (" + esc(s.role) + ")" : ""} ${s.input && Object.keys(s.input).length ? esc(JSON.stringify(s.input)) : ""}</div>`);
+      lines.push(`<div class="${s.decision === "deny" ? "deny" : "allow"}">${esc(s.decision)}${s.reason ? ": " + esc(s.reason.split("\n")[0]) : ""}</div>`);
+    });
+    const ran = r.steps.length, total = (c.skillc.trace || []).length;
+    (c.skillc.trace || []).slice(ran).forEach((t) => lines.push(`<div class="skipped">${esc(t[0])}: never runs</div>`));
+    body = `<div class="trace">${lines.join("")}</div>`;
+    outcome = r.plan_decision === "deny" ? "Refused before the run: 0 turns, nothing executed."
+      : `Stopped at step ${ran} of ${total}: the refused call never runs.`;
+    if (c.skillc.measured) outcome += " " + c.skillc.measured;
+  }
+  return `<div class="panel arm"><h2>${esc(meta.label)}</h2><div class="muted">${esc(meta.note)} <span class="tag">live</span></div>
+    ${body}<div class="outcome ${tone}">${esc(outcome)}</div></div>`;
+}
+function whyCases() { return why.data.cases.filter((c) => c.setup === $("whySetup").value); }
+async function whyShow() {
+  const c = why.data.cases.find((x) => x.id === $("whyCase").value);
+  const setup = why.data.setups.find((s) => s.id === c.setup);
+  $("whyTools").innerHTML = setup.tools.map((t) => `<span class="chip static">${esc(t)}</span>`).join("") + `<span class="muted">${esc(setup.lacks)}</span>`;
+  $("whyHead").innerHTML = `<p><b>Prompt:</b> ${esc(c.prompt)}</p><p class="muted"><b>Guiding skill (arm 2):</b> ${esc(c.guidance)}</p>`
+    + (c.source ? `<p class="muted">Source: ${esc(c.source)}</p>` : "");
+  $("whyArms").innerHTML = armHtml("plain", c.plain, c.provenance === "mixed" ? "illustrative" : c.provenance)
+    + armHtml("guided", c.guided, c.provenance === "mixed" ? "measured" : c.provenance)
+    + '<div class="panel arm muted">skillc is deciding…</div>';
+  $("whyWhy").innerHTML = `<h2>Why it matters</h2><p>${esc(c.why)}</p><p class="muted">Columns 1 and 2 are replays: "measured" ones come from recorded runs, "illustrative" ones show typical behaviour and are not recordings. Column 3 is computed now by the real skillc code; for runtime cases it receives the same actions column 1 attempted.</p>`;
+  try {
+    const r = await api("/api/why/run", {id: c.id});
+    $("whyArms").lastElementChild.outerHTML = skillcHtml(c, r);
+  } catch (err) { $("whyArms").lastElementChild.innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+}
+function whyFillCases() {
+  $("whyCase").innerHTML = whyCases().map((c) => `<option value="${esc(c.id)}">${esc(c.title)}</option>`).join("");
+  whyShow();
+}
+async function whyInit() {
+  why.data = await api("/api/why");
+  $("whySetup").innerHTML = why.data.setups.map((s) => `<option value="${esc(s.id)}">${esc(s.label)}</option>`).join("");
+  $("whySetup").onchange = whyFillCases;
+  $("whyCase").onchange = whyShow;
+  whyFillCases();
+}
+
 (async () => {
+  whyInit();
   state.samples = await api("/api/samples");
+  $("exPick").innerHTML = state.samples.graphs.map((g) => `<option>${esc(g.name)}</option>`).join("");
   $("samples").innerHTML = '<span class="muted">Examples:</span>' + state.samples.skills.map((s, i) =>
     `<button class="ghost" data-i="${i}">${esc(s.name)}</button>`).join("");
   $("samples").querySelectorAll("button").forEach((b) => b.onclick = () => {
