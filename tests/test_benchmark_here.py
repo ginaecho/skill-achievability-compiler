@@ -186,3 +186,19 @@ def test_partial_report_does_not_require_future_oracles():
     text = bench.report({"created_at": "now", "model": "stub", "repeats": 1,
                          "summary": {}, "cases": bench.CASES, "oracle": {}})
     assert text.count("| pending |") == len(bench.CASES)
+
+
+def test_report_defines_metrics_and_shows_token_totals(tmp_path, monkeypatch):
+    row = _agent(tmp_path, monkeypatch, [{"action": "finish", "verdict": "IMPOSSIBLE"}])
+    text = bench.report({
+        "created_at": "now", "model": "stub", "repeats": 1,
+        "summary": bench.summarize([bench.score(row, {"feasible": False})]),
+        "cases": [bench.CASES[0]],
+        "oracle": {bench.CASES[0]["id"]: {"feasible": False, "trace": [],
+                                          "goal_status": {"report_ready": False}}}})
+    assert "| plain | 1/1 | 0 | 1/1 | 0/0 | 15 |" in text
+    assert "UNKNOWN is not a definite answer" in text
+    assert "Read-only environment inspection is allowed" in text
+    assert "across all trials" in text
+    assert "report: blocked" in text
+    assert "before any task operation" in text

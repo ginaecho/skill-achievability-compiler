@@ -380,31 +380,74 @@ def summarize(rows: list[dict]) -> dict:
 
 
 def report(result: dict) -> str:
-    lines = ["# Local environment benchmark", "",
-             f"Created: {result['created_at']}. Model: {result['model']}. "
-             f"Repetitions per case and arm: {result['repeats']}.", "",
-             "## Measured comparison", "",
-             "| Arm | Correct / trials | Unknown | False stops | False go | Early correct stops / "
-             "blocked | Runtime successes / feasible | Input + output tokens | Median ms |",
-             "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    lines = ["# Can this workflow finish in this environment?", "",
+             f"Snapshot: {result['created_at']}. Requested deployment: {result['model']}. "
+             f"{len(result['cases'])} workflows, {result['repeats']} repetitions per method.", "",
+             "## What is being compared?", "",
+             "| Method | What it receives and does |",
+             "|---|---|",
+             "| Plain LLM | The task, operation contracts and access to an environment "
+             "discovery tool; chooses operations or a final verdict. |",
+             "| Guided LLM | The same inputs, plus skill/agent-style instructions to inspect "
+             "the environment and check every branch before working. |",
+             "| SkillC | The same authored workflow graph and automatically observed "
+             "prerequisites; performs static validation without a model. |", "",
+             "The question is whether the **whole requested deliverable** is feasible, and "
+             "how early the method detects a blocker. This is not a writing-quality test.", "",
+             "## Results: decisions, early stopping and completion", "",
+             "| Method | Correct definite verdicts | Unknown | Early stops / blocked trials | "
+             "Completed / feasible trials | Total model tokens |",
+             "|---|---:|---:|---:|---:|---:|"]
     for arm, s in result["summary"].items():
         lines.append(
-            f"| {arm} | {s['correct']}/{s['trials']} | {s['unknown']} | {s['false_stops']} | "
-            f"{s['false_go']} | {s['early_correct_stops']}/{s['blocked_trials']} | "
+            f"| {arm} | {s['correct']}/{s['trials']} | {s['unknown']} | "
+            f"{s['early_correct_stops']}/{s['blocked_trials']} | "
             f"{s['runtime_successes']}/{s['feasible_trials']} | "
-            f"{s['input_tokens']} + {s['output_tokens']} | {s['median_ms']} |")
-    lines += ["", "## Independently executed cases", "",
-              "| Case | Runtime feasible | Observed failing operations |",
-              "|---|---|---|"]
+            f"{s['input_tokens'] + s['output_tokens']:,}"
+            f"{'' if s['usage_complete'] else ' (incomplete usage)'} |")
+    lines += ["", "**How to read the numbers:**", "",
+              "- Correct definite verdict: an ACHIEVABLE or IMPOSSIBLE answer that agrees "
+              "with independent runtime verification. UNKNOWN is not a definite answer.",
+              "- Early stop: a correct IMPOSSIBLE verdict before any task operation. "
+              "Read-only environment inspection is allowed and is not counted as task work.",
+              "- Completed: the requested artifacts actually passed runtime verification; "
+              "a model's success claim alone never counts.",
+              "- Model tokens: provider-reported input plus output tokens across all trials "
+              "for that method, not per task. SkillC's figure excludes optional prose compaction.",
+              "- The independent runtime verification runner attempts each fixed workflow "
+              "even when SkillC refuses it, so SkillC does not supply its own ground truth.", "",
+              "A lower correct-verdict count need not mean a wrong definitive claim. "
+              "The following table separates wrong decisions from abstentions and errors.", "",
+              "| Method | False stop: feasible task called impossible | False go: blocked "
+              "task called achievable | Trial errors | Model calls | Median wall time (ms) |",
+              "|---|---:|---:|---:|---:|---:|"]
+    for arm, s in result["summary"].items():
+        lines.append(f"| {arm} | {s['false_stops']} | {s['false_go']} | {s['errors']} | "
+                     f"{s['model_calls']} | {s['median_ms']:,.3f} |")
+    lines += ["", "Wall time includes authentication, network and local scheduling; it is "
+              "not isolated model inference throughput. Shared discovery time: "
+              f"{result.get('discovery_ms', 0):,.3f} ms, recorded separately.", "",
+              "## What actually ran?", "",
+              "| Requested task | Whole task feasible? | Deliverables | Independently observed blocker |",
+              "|---|---|---|---|"]
     for case in result["cases"]:
         truth = result["oracle"].get(case["id"])
         if truth is None:
-            lines.append(f"| {case['id']} | pending | - |")
+            lines.append(f"| {case['task']} | pending | - | - |")
             continue
         failures = "; ".join(f"{t['operation']}: {t['error']}"
                              for t in truth["trace"] if not t["ok"])
-        lines.append(f"| {case['id']} | {truth['feasible']} | {failures or '-'} |")
-    lines += ["", "## Interpretation and limits", "",
+        deliverables = "; ".join(
+            f"{goal.removesuffix('_ready').replace('_', ' ')}: {'verified' if ok else 'blocked'}"
+            for goal, ok in truth.get("goal_status", {}).items())
+        lines.append(f"| {case['task']} | {'yes' if truth['feasible'] else 'no'} | "
+                     f"{deliverables or '-'} | "
+                     f"{failures or 'All requested artifacts passed runtime verification.'} |")
+    lines += ["", "For a branching workflow, a blocked whole task does not mean every branch "
+              "is blocked. The SkillC preflight artifact records each deliverable as achievable, "
+              "blocked or assumed, plus its checked partial plan and blocker certificates. "
+              "This run's policy stops the whole task rather than executing its feasible branches.",
+              "", "## What this does and does not establish", "",
               "- Real local artifact execution, not LLM response grading. The oracle attempts "
               "the fixed workflow independently even when SkillC stops.",
               "- These are newly authored practical workflows over real repository artifacts, "

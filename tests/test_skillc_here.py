@@ -152,12 +152,15 @@ def test_measured_benchmark_exposes_aggregates_not_raw_settings(tmp_path):
     data = {"schema": "skillc.here-benchmark/1", "cases": [
         {"id": "local", "source": "repository"}], "repeats": 1, "live": True,
         "model": "stub", "rows": [{}, {}, {}], "summary": {"skillc": {"trials": 1}},
-        "oracle": {"local": {"feasible": True}}, "discovery_ms": 1,
+        "oracle": {"local": {"feasible": True, "goal_status": {"report_ready": True}}},
+        "discovery_ms": 1,
         "environment": {"do_not_expose": True}, "transcript": "do not expose"}
     (run / "results.json").write_text(json.dumps(data), encoding="utf-8")
     out = app.measured_benchmark(tmp_path)
     assert out["available"] and out["completed"]
     assert out["cases"][0]["feasible"] is True
+    assert out["cases"][0]["task"] == "local"
+    assert out["cases"][0]["deliverables"] == {"report_ready": True}
     assert "environment" not in out and "transcript" not in out and "rows" not in out
     data["rows"] = [{}]
     (run / "results.json").write_text(json.dumps(data), encoding="utf-8")
@@ -182,6 +185,14 @@ def test_benchmark_http_endpoint_and_demo_page(monkeypatch):
         with urllib.request.urlopen(base, timeout=5) as response:
             page = response.read().decode("utf-8")
         assert 'id="benchOut"' in page and 'api("/api/benchmark")' in page
+        assert 'id="benchReference"' in page
+        assert page.index('id="benchReference"') < page.index('id="whySetup"')
+        assert "published comparison above is still available" in page
+        with urllib.request.urlopen(base + "/benchmark-report", timeout=5) as response:
+            report = response.read().decode("utf-8")
+            assert response.headers["Content-Type"] == "text/plain; charset=utf-8"
+        assert "33,047" in report and "44,724" in report
+        assert "not universal superiority" in report
     finally:
         server.shutdown()
         server.server_close()

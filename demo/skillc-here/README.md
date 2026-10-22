@@ -113,10 +113,20 @@ skillc matters when the prompt, a tool's check or the model is weaker than the r
 
 ### Fresh measurements, separate from the replays
 
-The bottom of **3 · Why skillc** reads the newest local `runs/*_here_benchmark/results.json`.
+**3 · Why skillc** now separates three sources: the illustrative/recorded case
+replays, a **dated published comparison** from 22 October 2026, and **your latest
+local measurements**. The published findings remain visible in a fresh checkout,
+even without local run files. They explain the metric denominators, the difference
+between abstention and false refusal, and the branching workflow's feasible parts.
+Read the [full explanatory report](../../docs/LOCAL_ENVIRONMENT_BENCHMARK.md),
+also linked directly from the app.
+
+The local-measurements panel reads the newest `runs/*_here_benchmark/results.json`.
 It displays plain LLM, environment-first guided LLM and SkillC accuracy, false stops,
 false go decisions, early stops, independently verified runtime successes and provider
-token usage. Partial runs and inference errors remain visible. Viewing results never calls a model.
+token usage, plus per-deliverable outcomes. Partial runs and inference errors remain
+visible. These are not automatically the same run as the published reference.
+Viewing either source never calls a model.
 
 Run the offline checker and runtime oracle first:
 
@@ -184,6 +194,7 @@ the benchmark must report that rather than assume SkillC wins.
   (`mode` static: `verdict`, `missing`; `mode` runtime: `plan_decision`, `plan_reason`, `steps`).
 * `GET /api/benchmark`: latest local benchmark aggregates and case outcomes, or an explicit
   unavailable/error reason; never raw settings, credentials or model transcripts.
+* `GET /benchmark-report`: the curated published report as readable plain-text Markdown.
 * `POST /api/twin/graph` `{"graph", "filename", "tenant"?}`: `nodes` (`id`, `kind`, `types`,
   `details`), `edges` (`s`, `t`, `p`), `facts`, `truncated` (at most 800 entities are drawn).
 * `POST /api/twin/explore` `{"graph", "filename", "tenant"?}`: `text`.

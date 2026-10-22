@@ -111,7 +111,42 @@ call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
 
 ## Benchmark: performance and cost
 
-**Performance**
+### Measured local comparison: plain LLM, guided LLM and SkillC
+
+**On seven bounded workflows, SkillC detected every blocked full request before
+task execution, using no model tokens.** Both LLM baselines also avoided false
+definite claims, but sometimes worked before stopping or returned `UNKNOWN`.
+The 22 October 2026 run used `gpt-5.4`, three repetitions per method: 63 trials,
+not 63 independent cases.
+
+| Method | Correct definite verdicts | Unknown | Early stops / blocked | Completed / feasible | Total model tokens |
+|---|---:|---:|---:|---:|---:|
+| Plain LLM | 20/21 | 1 | 7/12 | 9/9 | 33,047 |
+| Environment-first guided LLM | 19/21 | 2 | 9/12 | 8/9 | 44,724 |
+| SkillC | 21/21 | 0 | 12/12 | 9/9 | 0 |
+
+An **early stop** is a correct refusal before any task operation; read-only
+environment discovery is allowed first. **Completed** means artifacts passed
+independent runtime verification. All arms had zero false `IMPOSSIBLE` and
+`ACHIEVABLE` claims: the lower LLM verdict counts are abstentions, not wrong
+definite answers. Token totals cover all 21 trials per method.
+
+The cases cover release reports, ZIP packaging, Word and Excel export, graph
+inventory, a branching handoff, and a sandbox output restriction. In the
+branching case, SkillC identifies that the ZIP and inventory are feasible even
+though the full request is blocked by the missing Word converter.
+
+**Scope:** prerequisites were probed automatically, but the operation graph was
+authored. Zero tokens exclude optional prose compaction. The building graph is
+synthetic; the permission denial is sandbox policy, not a measured cloud role
+or OS ACL. Live MCP tools and authentication were not verified. This small
+sample supports predictable, low-cost preflight, not universal superiority.
+
+Read the [clearer report, case outcomes and metric definitions](docs/LOCAL_ENVIRONMENT_BENCHMARK.md),
+or open **3 · Why skillc** in `python demo\skillc-here\app.py`. The demo separates
+the dated published findings, fresh local measurements and illustrative replays.
+
+### Other performance evidence
 
 | Benchmark | Result |
 |---|---|
@@ -125,7 +160,7 @@ call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
 The blind numbers are the honest ones. Static refutation is strong when the skill states its tools
 and goal. Catching risky intent from free-form reasoning, with no model, generalises only partly.
 
-**Cost**
+### Checker cost and modeled savings
 
 * **The checker spends zero model tokens.** The only token cost is optional model compaction of
   prose, paid once per skill version.

@@ -218,7 +218,9 @@ def measured_benchmark(runs: Path | None = None) -> dict:
                 "trials": len(data["rows"]), "expected_trials": expected,
                 "summary": data["summary"], "discovery_ms": data["discovery_ms"],
                 "cases": [{"id": c["id"], "source": c["source"],
-                           "feasible": data["oracle"].get(c["id"], {}).get("feasible")}
+                           "task": c.get("task", c["id"]),
+                           "feasible": data["oracle"].get(c["id"], {}).get("feasible"),
+                           "deliverables": data["oracle"].get(c["id"], {}).get("goal_status", {})}
                           for c in data["cases"]]}
     except (OSError, ValueError, KeyError, TypeError) as error:
         return {"available": False, "reason": f"Cannot read benchmark: {error}"}
@@ -350,6 +352,10 @@ class Handler(BaseHTTPRequestHandler):
                               "text/html; charset=utf-8")
         if not self._local_host():
             return self._json(HTTPStatus.FORBIDDEN, {"error": "answers 127.0.0.1 only"})
+        if path == "/benchmark-report":
+            return self._send(
+                HTTPStatus.OK, (ROOT / "docs" / "LOCAL_ENVIRONMENT_BENCHMARK.md").read_bytes(),
+                "text/plain; charset=utf-8")
         if path == "/api/environment":
             env = read_environment(refresh="refresh=1" in query)
             return self._json(HTTPStatus.OK, {**env, "settings": settings(env)})

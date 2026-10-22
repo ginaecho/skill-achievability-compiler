@@ -175,7 +175,49 @@ ul.ev li.declared b { color: var(--unk); }
 </section>
 
 <section id="why" class="tab">
-  <div class="panel">
+  <div class="panel" id="benchReference" style="margin-top:16px">
+    <h2>What the measured comparison found</h2>
+    <p><b>Skillc stopped every blocked full request before task execution, with no model tokens.</b>
+      Both LLM methods avoided false definite claims too, but sometimes worked before stopping
+      or answered UNKNOWN. This is evidence for predictable preflight, not a claim that an LLM cannot check its environment.</p>
+    <p class="muted"><b>Published measurement: 22 October 2026.</b> Requested deployment: gpt-5.4.
+      Seven workflows, three repetitions per method: 63 trials, not 63 independent cases.
+      This dated reference remains available without local run files; it is not recomputed by opening this page.</p>
+    <div style="overflow-x:auto"><table>
+      <tr><th>Method</th><th>Correct definite verdicts</th><th>Unknown</th><th>Early stops / blocked</th><th>Completed / feasible</th><th>Total model tokens</th></tr>
+      <tr><td>Plain LLM</td><td>20/21</td><td>1</td><td>7/12</td><td>9/9</td><td>33,047</td></tr>
+      <tr><td>Environment-first guided LLM</td><td>19/21</td><td>2</td><td>9/12</td><td>8/9</td><td>44,724</td></tr>
+      <tr><td>SkillC</td><td>21/21</td><td>0</td><td>12/12</td><td>9/9</td><td>0</td></tr>
+    </table></div>
+    <p><b>How to read this:</b> an early stop is a correct refusal before any task operation;
+      read-only discovery is allowed first. Completed means artifacts passed independent runtime verification.
+      Tokens are totals across 21 trials per method, not per task.</p>
+    <p><b>No false definite verdicts in any method.</b> The LLM shortfalls were abstentions:
+      UNKNOWN is neither a correct definite answer nor a false claim. Of the guided LLM's two
+      abstentions, one left a feasible ZIP task unfinished.</p>
+    <details><summary>The useful graph result: blocked request, feasible branches</summary>
+      <pre>Git history -> Markdown report -> ZIP archive       feasible
+                               \-> Word via pandoc  blocked: pandoc absent
+Building graph -> inventory                         feasible
+
+Full request: blocked; partial plan: report + ZIP + inventory.</pre>
+      <p>Skillc records the partial plan and blocker certificates. The measured policy stops
+        the full task instead of executing its feasible branches. A separate runtime verification
+        runner still attempts every case, including Skillc refusals.</p>
+    </details>
+    <p class="muted"><b>Scope:</b> automatically probed local prerequisites, but an authored operation graph.
+      Zero model tokens exclude optional prose compaction. The building graph is synthetic;
+      the write restriction is sandbox policy, not an OS ACL or cloud role. No live MCP or
+      authentication verification. Seven workflows on one machine do not establish general superiority.</p>
+    <p><a href="/benchmark-report" target="_blank" rel="noopener">Read the full report: cases, definitions, evidence and limits</a></p>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <h2>Your latest local measurements</h2>
+    <div class="row"><button class="ghost" id="benchRefresh">Refresh measurements</button></div>
+    <div id="benchOut" class="muted">Loading local measurements...</div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <h2>Case replays (separate from the benchmark)</h2>
     <div class="row">
       <label class="muted" for="whySetup">Tools the agent has</label>
       <select id="whySetup"></select>
@@ -187,11 +229,6 @@ ul.ev li.declared b { color: var(--unk); }
   </div>
   <div class="arms" id="whyArms"></div>
   <div class="panel" id="whyWhy" style="margin-top:16px"></div>
-  <div class="panel" style="margin-top:16px">
-    <h2>Measured local benchmark (not the replays above)</h2>
-    <div class="row"><button class="ghost" id="benchRefresh">Refresh measurements</button></div>
-    <div id="benchOut" class="muted">Loading local measurements...</div>
-  </div>
 </section>
 </main>
 
@@ -486,27 +523,37 @@ async function whyInit() {
 async function benchmarkShow() {
   try {
     const r = await api("/api/benchmark");
-    if (!r.available) { $("benchOut").textContent = r.reason; return; }
+    if (!r.available) {
+      $("benchOut").textContent = r.reason + " The dated published comparison above is still available.";
+      return;
+    }
     const rows = Object.entries(r.summary).map(([arm, s]) => `<tr><td>${esc(arm)}</td>`
       + `<td>${s.correct}/${s.trials}</td><td>${s.unknown}</td><td>${s.false_stops}</td><td>${s.false_go}</td>`
       + `<td>${s.early_correct_stops}/${s.blocked_trials}</td>`
       + `<td>${s.runtime_successes}/${s.feasible_trials}</td>`
-      + `<td>${s.usage_complete ? s.input_tokens + s.output_tokens : "incomplete usage"}</td>`
+      + `<td>${s.usage_complete ? (s.input_tokens + s.output_tokens).toLocaleString("en-US") : "incomplete usage"}</td>`
       + `<td>${s.errors}</td></tr>`).join("");
     $("benchOut").innerHTML = `<p><code>${esc(r.run)}</code> · requested model ${esc(r.model)} · `
       + `${r.completed ? "complete" : "in progress"} (${r.trials}/${r.expected_trials} trials)`
       + `${r.live ? "" : " · OFFLINE ONLY: no LLM comparison"}</p>`
-      + `<div style="overflow-x:auto"><table><tr><th>Arm</th><th>Correct</th><th>Unknown</th><th>False stops</th>`
-      + `<th>False go</th><th>Early stops / blocked</th><th>Runtime success / feasible</th>`
-      + `<th>Model tokens</th><th>Errors</th></tr>${rows}</table></div>`
-      + `<p>Shared discovery: ${r.discovery_ms} ms. Oracle attempts each fixed workflow independently, even after a stop.</p>`
+      + `<div style="overflow-x:auto"><table><tr><th>Method</th><th>Correct definite verdicts</th><th>Unknown</th><th>False stops</th>`
+      + `<th>False go</th><th>Early stops / blocked</th><th>Completed / feasible</th>`
+      + `<th>Total model tokens</th><th>Trial errors</th></tr>${rows}</table></div>`
+      + `<p>A false stop calls a feasible task impossible; a false go calls a blocked task achievable. `
+      + `UNKNOWN counts against definite-answer accuracy but is not a false definite verdict. `
+      + `Early stops allow read-only discovery first; completion requires verified artifacts. Tokens are totals for the displayed trials.</p>`
+      + `<p>Shared discovery: ${r.discovery_ms} ms, recorded separately. Independent runtime verification attempts every fixed workflow, even after a stop.</p>`
       + `<p class="muted">Newly authored practical workflows over repository artifacts; the building graph is synthetic. `
       + `The output-boundary denial is benchmark policy, not an OS or cloud permission. Skillc uses a hand-authored `
       + `operation graph; its zero model tokens exclude natural-language compaction. No live MCP enumeration. `
       + `A guided LLM can match detection accuracy. Small-sample results do not prove universal superiority.</p>`
-      + `<details><summary>Cases and runtime outcomes</summary><ul>`
-      + r.cases.map((c) => `<li><b>${esc(c.id)}</b>: ${c.feasible === null ? "pending" : c.feasible ? "feasible" : "blocked"}`
-        + ` — ${esc(c.source)}</li>`).join("") + `</ul></details>`;
+      + `<details><summary>Cases and independently verified deliverables</summary>`
+      + `<table><tr><th>Task</th><th>Whole task</th><th>Deliverables</th></tr>`
+      + r.cases.map((c) => `<tr><td>${esc(c.task)}<br><span class="muted">${esc(c.source)}</span></td>`
+        + `<td>${c.feasible === null ? "pending" : c.feasible ? "feasible" : "blocked"}</td>`
+        + `<td>${Object.entries(c.deliverables).map(([goal, ok]) =>
+          `${esc(goal.replace(/_ready$/, "").replace(/_/g, " "))}: ${ok ? "verified" : "blocked"}`).join("<br>") || "pending"}</td></tr>`
+      ).join("") + `</table></details>`;
   } catch (err) { $("benchOut").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
 }
 $("benchRefresh").onclick = benchmarkShow;
