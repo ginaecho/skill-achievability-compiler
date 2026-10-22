@@ -1,507 +1,162 @@
-# skill-achievability-compiler
+# skillc: the skill achievability compiler
 
-**`skillc`** checks, **before an agent spends a single token**, whether the goal
-of an agent skill (a `SKILL.md`, an agent markdown file, a prompt, or a formal
-achievability pack) can be reached with the tools and permissions the agent
-actually has, and then keeps checking while the agent acts.
+**skillc decides, before an agent runs, whether its goal can be reached with the tools, permissions
+and data it actually has. While the agent runs, it can also stop actions that leave the approved plan.**
+The decision is made by a z3-based checker with no model in it. `IMPOSSIBLE` is a proof relative to what
+was declared; `ACHIEVABLE` means nothing blocks the goal, not that the run will succeed.
 
-* **Static validation (before the run).** A z3-based checker with **no LLM in
-  the trusted decision path** decides achievability. It is **sound for
-  refutation**: `IMPOSSIBLE` is a proof, relative to the declared capabilities
-  and frame assumption, that no run of the declared pack reaches its goal. It is
-  deliberately **incomplete for achievement**: `ACHIEVABLE` means "structurally
-  admissible", not "guaranteed".
-* **Runtime verification (during the run).** A monitor holds the agent to its
-  approved plan, refuses actions whose preconditions or permissions are missing,
-  and can require a user's single-use approval for sensitive operations.
+## Contents
+
+1. [What skillc is](#what-skillc-is)
+2. [The problem it solves](#the-problem-it-solves)
+3. [Tools](#tools)
+4. [Benchmark: performance and cost](#benchmark-performance-and-cost)
+5. [Limitations](#limitations)
+6. [Learn more](#learn-more)
+
+## What skillc is
 
 ```
- natural-language skill ──► [ front-end compaction ] ──► pack ──► [ checker ] ──► verdict
-      (SKILL.md)              UNTRUSTED                           TRUSTED
-                              deterministic or LLM                sound for refutation
-                                                                      │
-                     agent runtime ◄── [ runtime monitor: plan, actions, approvals ]
+ skill / agent file / prompt / graph workflow
+        │  read deterministically (or by a model: untrusted)
+        ▼
+      pack ──► [ checker: no model, sound for refutation ] ──► ACHIEVABLE | IMPOSSIBLE | UNKNOWN
+        ▲                                                         │
+ environment: tools, permissions, MCP servers, tenant data         ▼
+                                       [ runtime monitor: plan, actions, approvals ]
 ```
 
-## Where skillc runs today
+* **Static check (before the run).** It reads a `SKILL.md`, an agent file, a prompt or a formal
+  pack, binds it to an environment and decides whether the goal is reachable. `IMPOSSIBLE` always
+  names its reason:
+  * `MISSING_CAPABILITY`: a tool that isn't granted;
+  * `GOAL_UNSAT`: a goal nothing can establish;
+  * `BLOCKED_GUARD`: a precondition that can never hold.
+* **Runtime monitor (during the run).** It holds the agent to its approved plan, refuses actions
+  whose preconditions or permissions are missing, and can require a single-use user approval.
+* **Same answer every time.** For the same input, skillc always gives the same verdict and the same
+  reason.
 
-| Where | What skillc does there | Activate | Read |
-|---|---|---|---|
-| **CLI and CI** | Static validation of skills, agents, prompts and packs | `skillc check SKILL.md --profile claude-code` | [Quick start](#quick-start) |
-| **Claude Code** | Runtime monitor through Claude Code hooks | `skillc monitor init --runtime developer-sandbox` | [Runtime monitor](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md) |
-| **GitHub Copilot** (CLI and cloud agent) | Runtime monitor through Copilot hooks | `skillc monitor init --copilot --runtime developer-sandbox` | [Copilot hooks](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md#github-copilot-hooks-copilot-cli-and-the-copilot-cloud-agent) |
-| **Microsoft Agent 365** (agents built with Microsoft Agent Framework, incl. Foundry hosted agents) | **Enforced** runtime gate as Agent Framework middleware; evidence-bound approvals; ten source-backed cases | `pip install -e ".[agent-framework]"`, then `skillc_monitor(..., strict=True, fail_open=False)` | [Agent 365 security](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/AGENT365_SECURITY.md) · [cases](https://github.com/ginaecho/skill-achievability-compiler/blob/main/examples/agent365-cases/README.md) |
-| **Microsoft Scout** | Same checks and approvals as MCP tools the agent calls (**cooperative**, not enforced) | `skillc monitor scout-install`, then restart Scout | [Scout parity](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/SCOUT_PARITY.md) |
-| **Demos** | See skillc read this machine and decide what a skill can do here; replay incidents with and without skillc; watch a skill go through the compiler | `python demo/skillc-here/app.py` | [All demos](demo/README.md) |
+## The problem it solves
 
-The decisions are the same everywhere; the guarantee depends on **where skillc
-sits**. In Agent 365 (Agent Framework) skillc is inside the tool-call path, so a
-denied tool cannot run. In Scout skillc is a tool beside the agent, so a
-compliant agent follows the same verdicts, but nothing forces it to.
+**Agents find out too late that a task cannot be done.** They spend tokens, retry forever, believe
+they succeeded, or take an action they shouldn't. skillc moves that discovery to before the run, and
+puts a gate outside the model during it.
 
-## Quick start
+**When you don't need skillc.** For a one-off, read-only task, the agent should just try. Take "summarise
+the tables in this Databricks workspace and suggest KPIs":
+* The agent looks for a Databricks CLI profile, token or connector.
+* If there is none, it says so at once. If there is one, it runs `DESCRIBE` and `COUNT(*)` and
+  profiles the columns.
+
+Failure is cheap and visible, so trying is the best check. A SKILL.md that says "check your tools
+and permissions first" covers most of the rest.
+
+**Where an agent's own check falls short:**
+
+| | the agent checks itself | skillc |
+|---|---|---|
+| Guarantee | Best effort: it can skip the check, invent a tool or misread a permission | `IMPOSSIBLE` is a proof; the same input always gives the same verdict |
+| When | During the run, after tokens and maybe side effects | Before any run, with zero model tokens |
+| What it sees | "Is the tool there?" | Also ordering and preconditions (send needs approval first), handoffs between agents, deadlocks |
+| Against prompt injection | Its instructions can be overridden | As middleware outside the model, a refused call cannot run |
+
+**Best applications**, strongest first:
+
+1. **A runtime guard for agents that act.** A delete, payment or send cannot happen outside the
+   approved plan, whatever the model was told. Example: Microsoft Agent 365 agents built with Agent
+   Framework.
+2. **A pre-deployment gate for skill and agent catalogs.** Many skills across many runtimes
+   (claude.ai, Claude Code, Copilot, one tenant or another) are checked in CI without running an
+   agent. The same skill can be `ACHIEVABLE` in one runtime and `IMPOSSIBLE` in another.
+3. **Data-readiness checks.** Can this workflow's evidence come from this tenant's graph or schema,
+   for each of many tenants, before anyone builds it? Missing evidence is never read as approval.
+
+Not a fit: ad-hoc interactive tasks, and free-form prompts. The deterministic reader needs authored
+text that says what "done" means; otherwise it answers `UNKNOWN`, which never counts as permission.
+
+## Tools
 
 ```bash
-pip install -e ".[dev]"        # installs the `skillc` CLI
+pip install -e .                       # the skillc CLI (Python 3.10+)
+pip install -e ".[twin]"               # + rdflib, for graphs (skillc twin)
+pip install -e ".[agent-framework]"    # + Microsoft Agent Framework middleware (Agent 365)
+pip install -e ".[mcp]"                # + MCP server, for hosts without hooks (Scout)
+pip install -e ".[dev]"                # + tests and lint
 ```
 
-Check a real skill against the runtime that will execute it:
+| Tool | What it does | Use it when |
+|---|---|---|
+| `skillc check SKILL.md --profile claude-code` | Verdict for one skill, agent file, prompt or pack in a runtime | Before publishing or installing a skill; exit codes `0` ok, `1` impossible, `3` unknown, `2` error gate CI |
+| `skillc scan DIR` | `check` for every skill under a folder | CI for a skill repository |
+| `skillc reach SKILL.md --claude` or `--env FILE` | What the skill can achieve in *this* environment, a checked plan, and the fix for what is blocked | Before running in a real workspace or subscription |
+| `skillc env probe` | Read the environment read-only into a graph: Azure roles and policies, MCP servers, tools | To snapshot, `diff` or `watch` what an agent may do |
+| `skillc twin explore GRAPH` · `skillc twin check GRAPH --workflow FILE` | What a graph holds, and per target which workflow evidence it has and which is missing | Before building a verifier or report on tenant data |
+| `skillc monitor init` | Runtime monitor through Claude Code or Copilot hooks: plan first, every action checked | Coding agents with write or shell access |
+| `skillc_monitor(..., strict=True, fail_open=False)` | Enforced gate as Agent Framework middleware, with evidence-bound approvals | Agent 365 and Foundry hosted agents that send, pay or delete |
+| `skillc monitor scout-install` | The same checks as MCP tools (cooperative, not enforced) | Microsoft Scout |
+| `skillc gate` | Packs, skills and topology against an azd project's `azure.yaml` | Before `azd deploy` |
+| `skillc compile` · `skillc ce` · `skillc audit` · `skillc cost` | The formal pack; Controlled English; a risky-pattern pre-pass; token economics | Reviewing or explaining a verdict |
+
+**Try it in two minutes:** `python demo/skillc-here/app.py`. It reads your machine by itself and shows
+one skill's verdict in claude.ai, Claude Code and here. See [all demos](demo/README.md).
 
 ```console
 $ skillc check call-to-book/SKILL.md --profile claude-ai
 call-to-book: ACHIEVABLE
-
 $ skillc check call-to-book/SKILL.md --profile claude-code
 call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
-  protocol invokes undeclared capabilities: ['ask_user_input_v0']
   missing: ask_user_input_v0 (line 7)
 ```
 
-The same skill, two verdicts: achievability is **relative to the declared
-environment**. Profiles and self-declared `allowed-tools`/`tools` metadata are
-distinct trust inputs; the frontend combines them but does not discover or
-verify actual runtime grants.
+## Benchmark: performance and cost
 
-```console
-$ skillc scan /mnt/skills --profile claude-ai      # every skill achievable (42/42)
-$ skillc compile SKILL.md -o pack.json             # inspect the formal object
-$ skillc check pack.json --json                    # machine-readable verdict
-$ skillc eval                                      # corpus + soundness audit
-$ skillc cost --corpus                             # token economics of checking
-$ skillc profiles                                  # claude-ai, claude-code, none
-```
+**Performance**
 
-Exit codes: `0` admissible (achievable, and the protocol is not rejected),
-`1` impossible or protocol rejected, `2` error, `3` unknown (an abstention,
-including outside the decidable fragment), so `skillc check` can gate CI for
-skill repositories.
-
-## skillc in Microsoft Agent 365
-
-Agent 365 governs agents (identity, observability, policy); it does not run
-their tool loop. skillc therefore attaches to the agent's own runtime, Microsoft
-Agent Framework, as middleware, and adds what Agent 365 does not provide: a
-proof before execution that the plan can succeed, and an enforced gate on each
-action.
-
-**What is implemented**
-
-* **Strict, fail-closed runtime gate.** `strict=True, fail_open=False` with a
-  host-owned plan: raw tool aliases, unknown owners and unknown preconditions are
-  denied; restrictions pruned at plan time are re-checked on every call; re-reading
-  a source invalidates approvals and artifacts derived from it.
-* **Evidence-bound approvals** (`skillc.security.ApprovalGate`): approval is bound
-  to the exact document version, content, operation, destinations and amount; it
-  is single-use, expiring and revocable, and is consumed before the send runs.
-* **Environment-authoritative facts.** An intent can no longer claim prior approval
-  or completed work that the environment does not declare.
-* **Ten source-backed cases** (KPMG, Genspark, Zendesk, Rox, Gloat, Kasisto,
-  Egnyte, Celonis, Sophos, Adobe), each a folder with its published workflow,
-  primary-source links, formal model, checks, results and limitations:
-  **123/123** expectations met.
-
-**Activate**
-
-```bash
-pip install -e ".[agent-framework]"
-```
-
-```python
-from skillc.integrations.agent_framework import skillc_monitor
-
-monitor = skillc_monitor(runtime="foundry-hosted", root=state_dir,
-                         plan_path=reviewed_plan, strict=True, fail_open=False)
-agent = Agent(client=client, tools=tools, middleware=monitor.middleware_for("Writer"))
-```
-
-**Reproduce the evidence (offline, no tenant, no model)**
-
-```bash
-python examples/agent365-cases/run_cases.py --write
-python examples/agent365-finance/security_demo.py --state-dir runs/agent365-security-offline
-python -m pytest tests/test_agent365_cases.py tests/test_security.py tests/test_finance_security.py -q
-```
-
-**See it:** `python demo/skillc-a365-demo/app.py` replays published incidents side by side, with and without skillc ([demo](demo/skillc-a365-demo/README.md); [all demos](demo/README.md)).
-
-**Read:**
-[Agent 365 security](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/AGENT365_SECURITY.md) ·
-[ten cases](https://github.com/ginaecho/skill-achievability-compiler/blob/main/examples/agent365-cases/README.md) ·
-[case report](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/AGENT365_CASE_REPORT.md) ·
-[integration research](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/archive/MICROSOFT_AGENT_365_INTEGRATION_RESEARCH.md) ·
-[hosted agents](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/HOSTED_AGENT.md) ·
-[hosted-agent comparison](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/HOSTED_AGENT_COMPARISON.md)
-
-*Scope:* these are local models of published workflows and an offline security
-demo, not a deployed tenant integration; they do not claim the named
-organizations use skillc. Live Entra permissions, authenticated cross-agent
-receipts and actual Microsoft 365 delivery need a host adapter.
-
-## skillc in Microsoft Scout
-
-Scout gives plugins no hook before a tool runs, so skillc is served as MCP tools
-that the `skillc-check` skill tells the agent to call. Scout now has the same
-capabilities as the Agent 365 adapter: plan checking, strict host-owned plans,
-runtime restriction checks, and single-use approvals that **the user** grants
-through MCP elicitation (the agent cannot approve itself).
-
-**Activate** (with the Python that Scout should run, with skillc installed):
-
-```bash
-pip install -e ".[mcp]"
-skillc monitor scout-install                                  # advisory (default)
-skillc monitor scout-install --strict --host-plan plan.ce     # host-owned plan
-skillc monitor scout-install --approval-policy policy.json    # protected operations
-```
-
-Then **restart Scout**. The installer updates only the `skillc` entry in
-`~/.scout/m-mcp-servers.json` and the `skillc-check` skill, keeping
-`.bak-skillc-<time>` backups. An approval policy names the protected runtime
-tools and the allowed destinations:
-
-```json
-{"protected_tools": ["teams_message"], "destinations": ["teams:<chat-or-channel-id>"],
- "ttl_seconds": 900, "audit_above": "50000.00"}
-```
-
-**Why weaker than Agent 365:** checks are voluntary (no pre-tool hook), skillc
-approves but does not perform the send, the approval prompt depends on Scout
-rendering MCP elicitation, the agent shares the user's account and machine, and
-there is no fail-closed mode. Same verdicts, cooperative checking rather than
-enforcement.
-
-**Read:**
-[Scout parity and enforcement differences](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/SCOUT_PARITY.md) ·
-[runtime monitor](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md)
-
-## Runtime monitor in coding agents
-
-The same monitor attaches to Claude Code and GitHub Copilot through their hooks:
-the agent first writes its plan in Controlled English, only an `ACHIEVABLE` plan
-unlocks implementation, and every action is checked before it runs.
-
-```bash
-skillc monitor init --runtime developer-sandbox             # Claude Code hooks
-skillc monitor init --copilot --runtime developer-sandbox   # writes .github/hooks/skillc.json
-```
-
-See [`docs/RUNTIME_MONITOR.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md).
-The monitor is active only in a project that runs `skillc monitor init`.
-
-## Controlled English (CE)
-
-A pack can also be written, reviewed or generated in SkillC Controlled English,
-a small formal language that reads as English. Every sentence form denotes
-exactly one pack construct, so parsing is deterministic and errors name the line
-and column:
-
-```text
-Skill `book-flight`.
-Tool `book_flight` (owner `agent`): requires `flight_selected`; adds `booked`.
-Goal: `booked` and `confirmation_sent`.
-Protocol:
-  - `agent` uses `book_flight`.
-  - `agent` uses `send_email`.
-```
-
-`skillc check skill.ce` checks a CE file, `skillc ce pack.json` renders any pack
-as CE for review, and `skillc check SKILL.md --llm --via-ce` has the model write
-CE instead of JSON. See
-[`docs/CONTROLLED_ENGLISH.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/CONTROLLED_ENGLISH.md),
-[`docs/P2G_RUNTIME_BINDING.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/P2G_RUNTIME_BINDING.md)
-(runtime-bound compaction, tested on 200 blindly executed skills) and
-[`docs/LIBRARY_TEST.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/LIBRARY_TEST.md).
-
-All of this is **optional**: the default `skillc check` / `compile` path and the
-original JSON LLM front-end (`--llm`) are unchanged. The experiment data behind
-these documents (`runs/`, `benchmark/` corpora) lives on the branch
-`gc/data_train_test`; the scripts under `scripts/` that reproduce the
-experiments expect that branch.
-
-## What can I achieve in *my* environment? (`skillc reach`)
-
-`skillc env probe` reads, read-only, the environment you work in: Azure role
-assignments and scopes, deny assignments, policies, registered services,
-resources, and configured MCP servers and tools. It saves this as a
-provider-neutral graph (`skillc.env/1`). `skillc reach` then answers, for an
-intent such as *"model a building's topology in Azure Digital Twins"*, which goal
-conditions you can achieve, a checked plan for them, and which are blocked, why,
-and the exact fix.
-
-```console
-$ skillc reach building-topology --env examples/environment/contoso-contributor.env.json
-conditions (OK = achievable, OK* = achievable under assumptions, NO = blocked):
-  OK  dt_instance
-  OK  building_data
-  NO  dt_models
-  NO  topology_twins
-...
-2/6 conditions achievable; blocked conditions are certified unreachable with the operations this environment allows (checker: GOAL_UNSAT)
-```
-
-Anything that could not be read becomes an assumption, never a refusal.
-`skillc env watch` re-probes on a schedule. See
-[`docs/ENVIRONMENT.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/ENVIRONMENT.md).
-
-## Graphs and ontologies: what can be established from this data? (`skillc twin`)
-
-Some agents answer from a knowledge graph, such as a building digital twin, read with the help of an
-ontology. skillc tells you, before the agent runs, which questions the graph can answer and what is
-missing for the rest. You need only two things: **the graph file** and **your workflow written as
-text**. You do not have to describe the graph. Everything runs offline, with no model call.
-
-```console
-$ pip install -e ".[twin]"            # adds rdflib, to read Turtle, TriG, N-Triples, N-Quads, RDF/XML
-```
-
-**Step 1: let skillc look at the graph.**
-
-```console
-$ skillc twin explore building.trig          # output trimmed
-what is in it (entities by kind):       2 VAV, 2 HVAC_Zone, 1 AHU, ...
-how it connects (kind --relation--> kind):
-  VAV --feeds--> HVAC_Zone  x2
-  Supply_Air_Temperature_Setpoint --isPointOf--> AHU  x1
-nested structures (read through their owner):
-  VendorTempSP --priorityArray--> {activePriority, relinquishDefault}
-what it can answer (built-in verifiers):
-  Set-point verifier: 1 of 4 targets have all critical evidence; most often missing: min_max_units (2)
-```
-
-**Step 2: paste your workflow.** Save the text as you have it, in a file such as `workflow.md`. It can
-be a brief with "Evidence needed" tables (several scenarios are fine), a bullet list or a Markdown
-table. Only the list of evidence matters:
-
-```markdown
-# Comfort complaint check
-Evidence needed:
-- Set-point identity and type
-- Controlled places and associated equipment
-- Configured minimum/maximum and units
-- Occupancy sensor
-- Historical series, when required
-```
-
-**Step 3: check, and read the result.**
-
-```console
-$ skillc twin check building.trig --workflow workflow.md
-workflow 'Comfort complaint check': checks set points; 5 evidence needs
-  'Configured minimum/maximum and units' -> min_max_units
-  'Occupancy sensor' -> search the graph for 'occupancy', 'sensor'
-  'Historical series' -> history  (when required)
-
-ex:sp1: ACHIEVABLE
-ex:sp2: IMPOSSIBLE  missing: min_max_units, occupancy_sensor
-...
-```
-
-The first block shows how skillc understood each line, so check it first. Then, for each target:
-
-* `ACHIEVABLE`: every critical piece of evidence is in the graph. Without `--brief`, each one shows
-  the graph path that proves it, for example `ex:vav1 ->feeds ex:zone1 ->hasPart ex:room101`.
-* `IMPOSSIBLE`: the evidence that is missing, and what was looked for. To fix it, add the facts to
-  the graph. If the evidence lives elsewhere, declare it with `--source NEED=WHERE`; the result then
-  reads "achievable under assumptions". Missing evidence never counts as approval.
-
-| you want to | add |
+| Benchmark | Result |
 |---|---|
-| check one entity, not all of them | `--target sp1` |
-| mark a need as optional | write "when required", "where required", "optional" or "if available" in its line |
-| pick one tenant from a multi-tenant file | `--tenant demo` |
-| use an ontology file for class names | `--ontology brick.ttl` (it never counts as evidence) |
-| get machine-readable output | `--json` |
+| Public skills: 42 `SKILL.md` from Anthropic's skills repository | 42/42 `ACHIEVABLE` in their home runtime; 18/42 `IMPOSSIBLE` in Claude Code, each naming the missing tool and line, and every one flips back when that tool is granted |
+| Ground-truth corpus (`skillc eval`) | 0 false negatives; the only false `ACHIEVABLE`s are two planted residues |
+| Agent 365: ten source-backed workflows | 123/123 expectations met (63 static, 60 runtime); no denied call reached a transport |
+| Hosted agents (Foundry, Agent Framework) | With the policy removed from the prompt, the bare agent sent unapproved reports; skillc refused every one |
+| Natural-language skills, blind set (model reader + deterministic reader) | Found 44% of blocked skills, with 9% false refutations |
+| Runtime guard for wrong actions, blind incident traces | 27% recall (90–100% on development sets); 1 false hit per 1,000 reasoning units and no false denials of legitimate actions |
 
-skillc recognises common needs: identity, equipment, places and scope, limits and units, BACnet
-priority and references, history, schedules, timezone, calendar rules, policies and operational
-state. For each one it follows relations in both directions and across extra hops. It also reads
-Brick, RealEstateCore, BOT and vendor names. Any other line, such as "Occupancy sensor" above, is
-searched for by name around the target. Each verdict comes from the checker. See
-[`docs/TWIN.md`](docs/TWIN.md), which also explains how to add a recognised need.
+The blind numbers are the honest ones. Static refutation is strong when the skill states its tools
+and goal. Catching risky intent from free-form reasoning, with no model, generalises only partly.
 
-## Protocol checks versus goal-only checks
+**Cost**
 
-The default check judges the **declared protocol**, not every alternative plan.
-Use a reviewed environment contract and `--goal-only` when rejection must mean
-the goal is unreachable across the available capabilities:
+* **The checker spends zero model tokens.** The only token cost is optional model compaction of
+  prose, paid once per skill version.
+* **Modeled savings for a median real skill** (tokens wasted by a prevented run ÷ tokens spent
+  checking):
 
-```bash
-skillc check SKILL.md --contract task-contract.json --goal-only --json
-```
-
-Without a protocol-independent refutation, protocol errors become `UNKNOWN`,
-not a rejection of all alternative plans. `UNKNOWN` is neither rejection nor
-permission to execute. For a trusted single-role Boolean contract,
-`skillc plan task-contract.json -o generated-pack.json` constructs a checked
-alternative protocol without an LLM. Details:
-[compaction and goal-only policy](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/archive/COMPACTION_PRECISION_ASSESSMENT_20260921.md).
-
-## What the checker decides
-
-A **pack** declares capabilities (STRIPS pre/effects, numeric assignments,
-constrained non-determinism), a goal-marked global protocol (`act` / `msg` /
-`choice` / tail-recursive `rec`/`continue` loops / `spawn`), a goal formula, the
-initial state, and optionally per-role declared behaviours (`skills`):
-
-```
-   Γ ⊇ caps(G)          capability soundness   — no hallucinated tools
-   G ⇓ {T_p}            realizability          — projection defined for every role
-   ∀p. S_p ⊑ G↾p        direct conformance     — exact sender labels;
-                                                  receivers may offer more
-   Γ; G ⊨ ◇goal         liveness               — goal may-reachable (z3)
-   ─────────────────────
-   Γ ⊢ {S_p} : G ▷ ◇goal
-```
-
-A verdict reports two separate results (verdict schema `skillc.verdict/2`):
-**goal reachability** (`ACHIEVABLE` / `IMPOSSIBLE` / `UNKNOWN`) and
-**protocol typing** (`protocol`: `WELL_TYPED` / `REJECTED` / `NOT_CHECKED`).
-Only goal refutations are `IMPOSSIBLE`. These are the results the refutation
-soundness theorem covers.
-
-| goal reason (`IMPOSSIBLE`) | failure mode it catches |
-|---|---|
-| `MISSING_CAPABILITY` | hallucinated planning — the protocol invokes a tool that is not granted |
-| `GOAL_UNSAT` | no establisher for a goal conjunct, or a numeric refinement (e.g. *under $500*) unsatisfiable on every run |
-| `BLOCKED_GUARD` | a mandatory action's precondition can never be satisfied (the retry-forever cause) |
-
-| protocol reason (`protocol: REJECTED`) | failure mode it catches |
-|---|---|
-| `NON_PROJECTABLE` | a role must act inside a branch it is never told about (unobserved choice → deadlock/handoff freeze) |
-| `NON_CONFORMANT` | a declared role behaviour does not refine its projected contract |
-
-A protocol rejection is not a goal refutation. T-Comm requires every branch to
-conform, so one bad branch rejects the protocol even when another branch
-reaches the goal. Such a verdict reads `ACHIEVABLE` with `protocol: REJECTED`,
-and `admissible` is false. Gates and monitors allow only admissible verdicts.
-Each verdict also carries a `coverage` tag that names the formal result behind
-it. See [`docs/VERDICT_COVERAGE.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/VERDICT_COVERAGE.md).
-
-### How a verdict is produced for a natural-language skill
-
-With `skillc check SKILL.md --llm --runtime M`, three stages run in this order. A stage that
-refutes ends the check, so later stages (and the model call) do not run.
-
-1. **Deterministic markdown front-end** (only with `--llm-when needed`). It compiles the
-   skill without a model and keeps an `IMPOSSIBLE` verdict. Covered by the checker's
-   theorems, relative to the pack the front-end extracted (`front_end: deterministic`).
-2. **Deterministic requirement reader** (`env.manifest.refute_text`) against the manifest
-   `M`. It refutes when a hard requirement is unavailable in `M`, with reason
-   `REQUIREMENT_UNAVAILABLE` and the evidence line. Not covered by Theorem 1; `coverage` is
-   `deterministic-reader:manifest` (`front_end: deterministic-reader`). `--no-rdet` skips
-   it; `--rdet-only` runs only it.
-3. **LLM compaction (P2g+) and the checker**. The model writes Controlled English, which is
-   bound to `M` and checked. A refutation is covered by Theorem 1 relative to that pack
-   (`front_end: llm`).
-
-On the blind set3 (100 documents, 18 BLOCKED, judgement labels against the manifest text;
-three samples pooled), P2g+ alone found 4 of 54 BLOCKED (recall 0.07) with 2 false
-refutations of 246. The reader alone found 8 of 18 (0.44) with 7 false refutations of 82
-(0.085). Their union found 24 of 54 (0.44) with 23 of 246 (0.093), against 0.41 and 50 of 246
-(0.20) for the earlier P2g prompt. See
-[`docs/COMPACTION_RELIABILITY.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/COMPACTION_RELIABILITY.md),
-section "set3: P2g against P2g+".
-
-## More than tool checking: stop impossible agent coordination
-
-Suppose a main agent privately chooses a security or a performance review; a
-reviewer performs it, and an editor must publish the matching report. Every
-capability may exist, but if the editor is never told which branch was chosen,
-it cannot know what to publish. Each branch reaches the goal on its own, so
-the goal is not refuted. The coordination is still not realizable, and
-`skillc` rejects the protocol before any agent starts:
-
-```text
-private-review-routing: ACHIEVABLE
-  ACHIEVABLE  goal reachable along witness path
-  PROTOCOL REJECTED (NON_PROJECTABLE): role 'editor' must act in a branch of
-    the main agent's choice but receives no message distinguishing the branches
-  coverage: none:witness-only
-```
-
-The repair is a protocol change: tell the editor the branch label. Compaction
-has three paths, none of which puts an LLM in the trusted decision:
-
-| Input path | Use |
-|---|---|
-| Deterministic frontend | Supported markdown/prose patterns; zero LLM tokens |
-| `skillc compile --llm` | Unrestricted prose via Anthropic or Azure OpenAI |
-| `skillc check --llm --llm-when needed` | Deterministic front-end first; the LLM is called only if it does not already refute (default `always`) |
-| Embedded `skillc-pack` | Author-reviewed formal capabilities and protocol |
-
-For the `deadlock_unobserved` corpus case, the published token model estimates
-**1,888 tokens** of one-time compaction versus **231,870 tokens** for a typical
-two-agent deadlock run (modeled, not measured). See
-[Impossible agent coordination](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/IMPOSSIBLE_AGENT_COORDINATION.md).
-
-## Results
-
-* **Public skills** ([anthropics/skills](https://github.com/anthropics/skills),
-  42 `SKILL.md`): **42/42 achievable** in their home runtime (`claude-ai`), and
-  **18/42 refuted** under `claude-code`, each naming the missing tool and source
-  line; granting the named tools flips every one back.
-  [Real-skills report](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/REAL_SKILLS_REPORT.md) ·
-  [benchmark report](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/BENCHMARK_REPORT.md).
-* **Semantic level** (recorded with `skillc 0.2.0`): 4/4 LLM-compacted consumer
-  skills `ACHIEVABLE`, 6/6 seeded faults refuted.
-  [Semantic validation](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/SEMANTIC_VALIDATION.md).
-* **Ground-truth corpus** (`skillc eval`): **FN = 0**; the only false
-  `ACHIEVABLE`s are the two planted payload/intent residues.
-* **Hosted agents** (Foundry, Agent Framework): with the policy removed from the
-  prompt, the bare agent delivered unapproved reports and skillc refused them
-  every time. [Comparison](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/HOSTED_AGENT_COMPARISON.md).
-* **Agent 365 cases**: 10 source-backed workflows, **123/123** expectations met
-  (63 static, 60 runtime; every denied runtime attempt invoked no transport).
-* **Scout parity**: 31 parity and MCP tests pass under Scout's own interpreter.
-
-These are snapshot results, not a guarantee of concrete success. Watch the
-[107-second demo](https://github.com/ginaecho/skill-achievability-compiler/blob/main/demo/real-skill-cases/skillc-real-skills-demo.mp4).
-
-## What checking costs (`skillc cost`)
-
-The trusted core spends **zero tokens**; the only token cost is the optional
-LLM compaction, paid once per skill version. Modeled leverage (wasted tokens per
-prevented run ÷ tokens spent checking) for a median real skill:
-
-| reason | turns before it stops the agent | leverage |
+| Reason | How long the agent runs before it stops | Leverage |
 |---|---|---|
-| `MISSING_CAPABILITY` | 3–8–14, one agent | 17× |
-| `GOAL_UNSAT` | 8–18–30, and the run may *believe it succeeded* | 61× |
-| `NON_PROJECTABLE` / `NON_CONFORMANT` (protocol rejection, not a goal refutation) | 6–15–30, **two** agents billed | 91× |
-| `BLOCKED_GUARD` | 12–25–50 — retry-forever runs to the turn cap | 106× |
+| `MISSING_CAPABILITY` | 3–8–14 turns | 17× |
+| `GOAL_UNSAT` | 8–18–30 turns, and it may *believe it succeeded* | 61× |
+| Protocol rejected (deadlocked hand-off) | 6–15–30 turns, two agents billed | 91× |
+| `BLOCKED_GUARD` | 12–25–50 turns, retrying until the turn cap | 106× |
 
-`UNKNOWN` claims no savings. Runtime waste is a **model**, not a measurement.
-See [`docs/TOKEN_ECONOMICS.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/TOKEN_ECONOMICS.md).
+Runtime waste is a model, not a measurement. `UNKNOWN` claims no savings. Run `skillc cost`, and see
+[`docs/TOKEN_ECONOMICS.md`](docs/TOKEN_ECONOMICS.md).
 
-## Honest limitations
+## Limitations
 
-**Declarations, not reality.** Static validation judges the declared pack;
-human review must establish intent fidelity, and runtime verification must
-establish actual tool effects. `ACHIEVABLE` is an abstract witness, not a
-guarantee. Protocol rejection does not rule out an alternative plan.
+* **Declarations, not reality.** skillc judges what was declared. Whether the declaration matches the
+  intent needs review, and whether tools do what they claim needs the runtime monitor.
+* **Placement decides enforcement.** In a tool-call path (Agent Framework middleware, Claude Code and
+  Copilot hooks) a refusal stops the call. As MCP tools (Scout), the agent must cooperate.
+* **Free-form text abstains.** It gives `UNKNOWN` unless a model or a reviewed contract supplies the
+  goal.
+* **Proof boundary.** The refutation theorem is mechanized in Coq with no axioms
+  ([`proof/`](proof/SkillAchievability.v)); the Python implementation is not itself proved.
 
-**Enforcement depends on placement.** Inside a tool-call path (Agent Framework
-middleware, Claude Code and Copilot hooks) a denial stops the tool. As MCP tools
-(Scout) skillc is cooperative. Approvals are only as trustworthy as the host
-channel that issues them and the identities it supplies.
+## Learn more
 
-**Coordination assumptions.** Roles without declared behaviours are assumed
-conformant; dynamic spawning yields `UNKNOWN` unless a refutation already applies.
-
-**Proof boundary.** The [refutation-sound abstraction theorem](https://github.com/ginaecho/skill-achievability-compiler/blob/main/proof/SkillAchievability.v)
-is mechanized in Coq with zero axioms, but the Python transition system is not
-instantiated in Coq, and the conformance adapter's equivalence to the
-declarative judgment remains an open proof obligation.
-
-## Development and resources
-
-Run `python -m pytest` for the full suite. `skillc audit ./my-skill` is a
-deterministic pre-pass for manifest inconsistencies and risky patterns; it is
-not a security guarantee.
-
-[Source](https://github.com/ginaecho/skill-achievability-compiler/tree/main/src/skillc) ·
-[Examples](https://github.com/ginaecho/skill-achievability-compiler/tree/main/examples) ·
-[Context and terms](https://github.com/ginaecho/skill-achievability-compiler/blob/main/CONTEXT.md) ·
-[Compaction prompt](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/COMPACTION_PROMPT.md) ·
-[Citation](https://github.com/ginaecho/skill-achievability-compiler/blob/main/CITATION.cff) ·
-[MIT License](https://github.com/ginaecho/skill-achievability-compiler/blob/main/LICENSE)
+* [Full reference](docs/REFERENCE.md): every integration, the checker's judgments and the full results.
+* [Demos](demo/README.md) · [Agent 365 security](docs/AGENT365_SECURITY.md) · [Scout](docs/SCOUT_PARITY.md) · [Runtime monitor](docs/RUNTIME_MONITOR.md)
+* [Environment and `reach`](docs/ENVIRONMENT.md) · [Graphs and `twin`](docs/TWIN.md) · [Controlled English](docs/CONTROLLED_ENGLISH.md) · [Verdict coverage](docs/VERDICT_COVERAGE.md)
+* [Benchmark report](docs/BENCHMARK_REPORT.md) · [Real skills](docs/REAL_SKILLS_REPORT.md) · [Compaction reliability](docs/COMPACTION_RELIABILITY.md) · [Interaction benchmark](docs/INTERACTION_BENCHMARK_REPORT.md)
+* [Context and terms](CONTEXT.md) · [Citation](CITATION.cff) · [MIT License](LICENSE)
