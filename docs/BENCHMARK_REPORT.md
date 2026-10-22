@@ -167,8 +167,8 @@ The data lives on the `gc/data_train_test` branch.
 
 ```
 # Labelled topics (omit --llm for rule-based)
-python demo/skillc-architecture-app/benchmark_catalog.py --catalog-root <data checkout> --llm gpt-5.4
+python demo/skillc-architecture-app/benchmark/benchmark_catalog.py --catalog-root <data checkout> --llm gpt-5.4
 
 # Real files (omit --llm for rule-based)
-python demo/skillc-architecture-app/benchmark_real_artifacts.py --data-root <data checkout> --balanced-only --per-kind 143 --llm gpt-5.4
+python demo/skillc-architecture-app/benchmark/benchmark_real_artifacts.py --data-root <data checkout> --balanced-only --per-kind 143 --llm gpt-5.4
 ```

@@ -391,10 +391,10 @@ def md_disagree_real(r):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--labelled-rule", type=Path, default=APP / "benchmark-results.json")
-    ap.add_argument("--labelled-llm", type=Path, default=APP / "benchmark-results-llm.json")
-    ap.add_argument("--real-rule", type=Path, default=APP / "real-benchmark-results.json")
-    ap.add_argument("--real-llm", type=Path, default=APP / "real-benchmark-results-llm.json")
+    ap.add_argument("--labelled-rule", type=Path, default=APP / "benchmark" / "benchmark-results.json")
+    ap.add_argument("--labelled-llm", type=Path, default=APP / "benchmark" / "benchmark-results-llm.json")
+    ap.add_argument("--real-rule", type=Path, default=APP / "benchmark" / "real-benchmark-results.json")
+    ap.add_argument("--real-llm", type=Path, default=APP / "benchmark" / "real-benchmark-results-llm.json")
     ap.add_argument("--data-root", type=Path, default=None,
                     help="checkout of gc/data_train_test (for source text lengths); without it every "
                          "input is priced at the typical pack size + system prompt only")

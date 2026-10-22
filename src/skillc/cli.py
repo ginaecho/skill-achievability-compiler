@@ -822,29 +822,55 @@ def cmd_twin(args) -> int:
     """What a verifier can establish from an uploaded building graph."""
     from .env.twin import (TwinError, as_json, load_twin, scenarios_text, text_report,
                            verify_all, verify_target)
+    from .env.twin_workflow import explore, read_workflows, verify_workflow, workflow_targets
     if args.twin_cmd == "scenarios":
         print(scenarios_text(), end="")
         return 0
-    declared = {}
-    for item in args.source or []:
-        key, sep, desc = item.partition("=")
-        if not sep or not key or not desc:
-            raise ValueError(f"--source {item!r}: write NEED=WHERE, "
-                             "e.g. operating_policy=policy-service")
-        declared[key.strip()] = desc.strip()
     try:
         twin = load_twin(args.graph, tenant=args.tenant, ontologies=args.ontology or ())
-        if args.target:
-            results = [verify_target(twin, args.scenario, t, declared) for t in args.target]
+        if args.twin_cmd == "explore":
+            print(explore(twin), end="")
+            return 0
+        if bool(args.scenario) == bool(args.workflow):
+            raise ValueError("say what to check: --workflow FILE (your workflow text) "
+                             "or --scenario setpoint|schedule")
+        declared = {}
+        for item in args.source or []:
+            key, sep, desc = item.partition("=")
+            if not sep or not key or not desc:
+                raise ValueError(f"--source {item!r}: write NEED=WHERE, "
+                                 "e.g. operating_policy=policy-service")
+            declared[key.strip()] = desc.strip()
+        if args.workflow:
+            workflows = read_workflows(Path(args.workflow).read_text(encoding="utf-8"))
+            runs = []
+            for wf in workflows:
+                targets = args.target or workflow_targets(twin, wf)
+                runs.append((wf, [verify_workflow(twin, wf, t, declared) for t in targets]))
         else:
-            results = verify_all(twin, args.scenario, declared)
+            if args.target:
+                res = [verify_target(twin, args.scenario, t, declared) for t in args.target]
+            else:
+                res = verify_all(twin, args.scenario, declared)
+            runs = [(None, res)]
     except TwinError as e:
         raise ValueError(str(e)) from e
+    results = [r for _wf, rs in runs for r in rs]
     if not results:
-        print(f"no {args.scenario} targets in the graph; name one with --target", file=sys.stderr)
+        print("no targets in the graph for this check; name one with --target", file=sys.stderr)
         return 2
-    out = as_json(twin, results) + "\n" if args.json else text_report(results, not args.brief)
-    print(out, end="")
+    if args.json:
+        doc = json.loads(as_json(twin, results))
+        doc["workflows"] = [{"title": wf.title, "kind": wf.kind,
+                             "needs": [{"text": n.text, "maps_to": n.keys, "search": n.words,
+                                        "critical": n.critical} for n in wf.needs]}
+                            for wf, _rs in runs if wf is not None]
+        print(json.dumps(doc, indent=1))
+    else:
+        for wf, rs in runs:
+            if wf is not None:
+                print(wf.describe(), end=chr(10) * 2)
+            print(text_report(rs, not args.brief))
     if any(r.verdict != "ACHIEVABLE" for r in results):
         return 1
     return 3 if any(r.assumed for r in results) else 0
@@ -1138,9 +1164,19 @@ def main(argv: list[str] | None = None) -> int:
     sp = sub.add_parser("twin", help="building digital twin: which verifier evidence an "
                                      "uploaded building graph provides, and what is missing")
     twin_sub = sp.add_subparsers(dest="twin_cmd", required=True)
-    t = twin_sub.add_parser("check", help="check a scenario against a building graph file")
+    t = twin_sub.add_parser("explore", help="what a building graph holds, how it connects, "
+                                            "and what it can answer")
     t.add_argument("graph", help="building graph (.ttl, .trig, .nt, .nq, .rdf)")
-    t.add_argument("--scenario", required=True, choices=["setpoint", "schedule"])
+    t.add_argument("--tenant", help="tenant graph to read, for files with several named graphs")
+    t.add_argument("--ontology", action="append",
+                   help="ontology file, used only for class hierarchies (repeatable)")
+    t.set_defaults(fn=cmd_twin)
+    t = twin_sub.add_parser("check", help="check a workflow or scenario against a building graph")
+    t.add_argument("graph", help="building graph (.ttl, .trig, .nt, .nq, .rdf)")
+    t.add_argument("--workflow", metavar="FILE",
+                   help="your workflow as text: the evidence each step needs, pasted as written")
+    t.add_argument("--scenario", choices=["setpoint", "schedule"],
+                   help="a built-in scenario instead of --workflow")
     t.add_argument("--target", action="append",
                    help="entity to verify (IRI, prefixed name or unique local name); "
                         "repeatable; default: every candidate in the graph")
