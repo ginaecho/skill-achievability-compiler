@@ -111,10 +111,63 @@ in the finance case: with the rule in the prompt, a strong model obeyed and skil
 skillc matters when the prompt, a tool's check or the model is weaker than the rule. Cases are data in
 `why_cases.json`.
 
+### Fresh measurements, separate from the replays
+
+The bottom of **3 · Why skillc** reads the newest local `runs/*_here_benchmark/results.json`.
+It displays plain LLM, environment-first guided LLM and SkillC accuracy, false stops,
+false go decisions, early stops, independently verified runtime successes and provider
+token usage. Partial runs and inference errors remain visible. Viewing results never calls a model.
+
+Run the offline checker and runtime oracle first:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\benchmark_here.py --repeats 1
+```
+
+For a deliberate live comparison, configure the existing guarded provider with your own
+endpoint and deployment, then opt in for this process:
+
+```powershell
+$env:AZURE_OPENAI_ENDPOINT = '<your Azure OpenAI endpoint>'
+$env:SKILLC_ALLOW_MODEL_CALLS = '1'
+try {
+    .\.venv\Scripts\python.exe scripts\benchmark_here.py --live --provider azure-openai --model '<deployment>' --repeats 3
+} finally {
+    Remove-Item Env:SKILLC_ALLOW_MODEL_CALLS
+}
+```
+
+Azure CLI sign-in or `AZURE_OPENAI_API_KEY` supplies authentication. Run
+`.\.venv\Scripts\python.exe -m pytest tests\test_urlguard.py -q` before model inference.
+Only fixed, allowlisted operations execute: local Git history, report generation, ZIP,
+pandoc Word conversion, openpyxl export and parsing the repository's building graph.
+No model-generated shell command, installation, deployment, email or cloud write can run.
+Each case gets its own runtime oracle, which attempts the workflow even if preflight
+stops, so an erroneous refusal is not counted as a correct stop.
+
+These are seven newly authored practical workflows over real repository artifacts,
+not recordings of production incidents. The building graph is synthetic. Programs and
+modules are discovered automatically, but the operation contracts and workflow graph
+are authored, not inferred from arbitrary prose. All arms have the same contracts and
+access to the same discovery tool. The permission-denial case exercises an explicit
+benchmark output-directory policy, not an observed OS ACL or cloud role. MCP configuration
+is read without contacting servers; no live tool-list or authentication claim follows.
+
+SkillC's intermediate-condition results, blockers and checker certificates are saved
+beside the model transcripts, provider usage and output artifacts. The combined-handoff
+case reports independently feasible branches even when the full goal is blocked. The
+measured early-stop policy does not execute those branches. Zero model tokens apply to
+this authored-graph preflight; they do not include general natural-language compaction.
+The generated `REPORT.md` states these limits. A guided LLM may tie detection accuracy;
+the benchmark must report that rather than assume SkillC wins.
+
 ## What it reads, and what it does not
 
 * Claude Code's built-in tool list comes from skillc's `claude-code` profile. The permission rules
   come from your settings files. A running session's tools are not visible to a separate process.
+  This is not discovery of the active Copilot session. The first tab includes "asks first" tools
+  as possible grants: its positive result is conditional on user approval, not a verified grant.
+  Credential-variable presence likewise does not establish valid authentication or authorization.
 * A claude.ai connector shows as a server with its tools not listed, so its tools do not count.
   Add a tool by hand to try the what-if.
 * Uploaded graphs are written to a temporary directory for parsing and deleted afterwards. JSON-LD
@@ -129,6 +182,8 @@ skillc matters when the prompt, a tool's check or the model is weaker than the r
   `setting`, `verdict`, `reason`, `detail`, `missing`.
 * `GET /api/why`: the arms, setups and cases. `POST /api/why/run` `{"id"}`: the live skillc column
   (`mode` static: `verdict`, `missing`; `mode` runtime: `plan_decision`, `plan_reason`, `steps`).
+* `GET /api/benchmark`: latest local benchmark aggregates and case outcomes, or an explicit
+  unavailable/error reason; never raw settings, credentials or model transcripts.
 * `POST /api/twin/graph` `{"graph", "filename", "tenant"?}`: `nodes` (`id`, `kind`, `types`,
   `details`), `edges` (`s`, `t`, `p`), `facts`, `truncated` (at most 800 entities are drawn).
 * `POST /api/twin/explore` `{"graph", "filename", "tenant"?}`: `text`.

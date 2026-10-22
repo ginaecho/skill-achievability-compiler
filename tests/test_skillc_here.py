@@ -134,3 +134,55 @@ def test_graph_tab_runs_the_built_in_verifiers_without_a_workflow():
     # each piece of evidence carries the graph path that proves it
     places = next(e for e in sp["ex:sp11"]["evidence"] if e["key"] == "controlled_places")
     assert any("ex:vav11 ->feeds ex:zone11" in line for line in places["found"])
+
+
+def test_measured_benchmark_reports_absence_and_corruption(tmp_path):
+    assert not app.measured_benchmark(tmp_path)["available"]
+    run = tmp_path / "20261022_here_benchmark"
+    run.mkdir()
+    (run / "results.json").write_text("not JSON", encoding="utf-8")
+    result = app.measured_benchmark(tmp_path)
+    assert not result["available"] and "Cannot read benchmark" in result["reason"]
+
+
+def test_measured_benchmark_exposes_aggregates_not_raw_settings(tmp_path):
+    import json
+    run = tmp_path / "20261022_here_benchmark"
+    run.mkdir()
+    data = {"schema": "skillc.here-benchmark/1", "cases": [
+        {"id": "local", "source": "repository"}], "repeats": 1, "live": True,
+        "model": "stub", "rows": [{}, {}, {}], "summary": {"skillc": {"trials": 1}},
+        "oracle": {"local": {"feasible": True}}, "discovery_ms": 1,
+        "environment": {"do_not_expose": True}, "transcript": "do not expose"}
+    (run / "results.json").write_text(json.dumps(data), encoding="utf-8")
+    out = app.measured_benchmark(tmp_path)
+    assert out["available"] and out["completed"]
+    assert out["cases"][0]["feasible"] is True
+    assert "environment" not in out and "transcript" not in out and "rows" not in out
+    data["rows"] = [{}]
+    (run / "results.json").write_text(json.dumps(data), encoding="utf-8")
+    assert not app.measured_benchmark(tmp_path)["completed"]
+
+
+def test_benchmark_http_endpoint_and_demo_page(monkeypatch):
+    import json
+    import threading
+    import urllib.request
+
+    monkeypatch.setattr(app, "measured_benchmark",
+                        lambda: {"available": False, "reason": "No local benchmark yet."})
+    server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+        with urllib.request.urlopen(base + "/api/benchmark", timeout=5) as response:
+            result = json.load(response)
+        assert result == {"available": False, "reason": "No local benchmark yet."}
+        with urllib.request.urlopen(base, timeout=5) as response:
+            page = response.read().decode("utf-8")
+        assert 'id="benchOut"' in page and 'api("/api/benchmark")' in page
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)

@@ -187,6 +187,11 @@ ul.ev li.declared b { color: var(--unk); }
   </div>
   <div class="arms" id="whyArms"></div>
   <div class="panel" id="whyWhy" style="margin-top:16px"></div>
+  <div class="panel" style="margin-top:16px">
+    <h2>Measured local benchmark (not the replays above)</h2>
+    <div class="row"><button class="ghost" id="benchRefresh">Refresh measurements</button></div>
+    <div id="benchOut" class="muted">Loading local measurements...</div>
+  </div>
 </section>
 </main>
 
@@ -259,7 +264,8 @@ async function check() {
            : x.verdict === "UNKNOWN" ? esc(x.detail) : x.verdict === "ACHIEVABLE" ? "every tool it needs is here" : esc(x.detail)}</td></tr>`).join("");
     $("result").innerHTML = `<p><b>${esc(r.name)}</b> needs ${r.needs.length ? "<code>" + r.needs.map(esc).join("</code>, <code>") + "</code>" : "no tool skillc could read"}.</p>
       <table><tr><th>where it runs</th><th>verdict</th><th>why</th></tr>${rows}</table>
-      <p class="muted">IMPOSSIBLE is a proof: no run reaches the goal with these tools. ACHIEVABLE means nothing blocks it, not that it will succeed. UNKNOWN means skillc could not read a goal from the text; it never counts as permission.</p>`;
+      <p class="muted">IMPOSSIBLE is relative to the compiled workflow and selected tool inventory. ACHIEVABLE is not runtime success or permission to act. UNKNOWN means the text could not be compacted sufficiently; it never counts as permission.</p>
+      <p class="muted">This tab reads Claude Code configuration, not the active Copilot session. Tools marked "asks first" count as possible here, conditional on approval. Credential presence is not authentication, and configured MCP servers are not verified live connections. Use the measured benchmark below for independently executed outcomes.</p>`;
   } catch (err) { $("result").innerHTML = `<p class="err">${esc(err.message)}</p>`; }
 }
 function recheck() { if ($("skill").value.trim() && $("result").innerHTML) check(); }
@@ -477,8 +483,37 @@ async function whyInit() {
   whyFillCases();
 }
 
+async function benchmarkShow() {
+  try {
+    const r = await api("/api/benchmark");
+    if (!r.available) { $("benchOut").textContent = r.reason; return; }
+    const rows = Object.entries(r.summary).map(([arm, s]) => `<tr><td>${esc(arm)}</td>`
+      + `<td>${s.correct}/${s.trials}</td><td>${s.unknown}</td><td>${s.false_stops}</td><td>${s.false_go}</td>`
+      + `<td>${s.early_correct_stops}/${s.blocked_trials}</td>`
+      + `<td>${s.runtime_successes}/${s.feasible_trials}</td>`
+      + `<td>${s.usage_complete ? s.input_tokens + s.output_tokens : "incomplete usage"}</td>`
+      + `<td>${s.errors}</td></tr>`).join("");
+    $("benchOut").innerHTML = `<p><code>${esc(r.run)}</code> · requested model ${esc(r.model)} · `
+      + `${r.completed ? "complete" : "in progress"} (${r.trials}/${r.expected_trials} trials)`
+      + `${r.live ? "" : " · OFFLINE ONLY: no LLM comparison"}</p>`
+      + `<div style="overflow-x:auto"><table><tr><th>Arm</th><th>Correct</th><th>Unknown</th><th>False stops</th>`
+      + `<th>False go</th><th>Early stops / blocked</th><th>Runtime success / feasible</th>`
+      + `<th>Model tokens</th><th>Errors</th></tr>${rows}</table></div>`
+      + `<p>Shared discovery: ${r.discovery_ms} ms. Oracle attempts each fixed workflow independently, even after a stop.</p>`
+      + `<p class="muted">Newly authored practical workflows over repository artifacts; the building graph is synthetic. `
+      + `The output-boundary denial is benchmark policy, not an OS or cloud permission. Skillc uses a hand-authored `
+      + `operation graph; its zero model tokens exclude natural-language compaction. No live MCP enumeration. `
+      + `A guided LLM can match detection accuracy. Small-sample results do not prove universal superiority.</p>`
+      + `<details><summary>Cases and runtime outcomes</summary><ul>`
+      + r.cases.map((c) => `<li><b>${esc(c.id)}</b>: ${c.feasible === null ? "pending" : c.feasible ? "feasible" : "blocked"}`
+        + ` — ${esc(c.source)}</li>`).join("") + `</ul></details>`;
+  } catch (err) { $("benchOut").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+}
+$("benchRefresh").onclick = benchmarkShow;
+
 (async () => {
   whyInit();
+  benchmarkShow();
   state.samples = await api("/api/samples");
   $("exPick").innerHTML = state.samples.graphs.map((g) => `<option>${esc(g.name)}</option>`).join("");
   $("samples").innerHTML = '<span class="muted">Examples:</span>' + state.samples.skills.map((s, i) =>

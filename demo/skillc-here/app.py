@@ -201,6 +201,29 @@ def why_run(case_id: str) -> dict:
         return out
 
 
+def measured_benchmark(runs: Path | None = None) -> dict:
+    """Expose only measured aggregate data, never raw local settings or transcripts."""
+    paths = sorted((runs or ROOT / "runs").glob("*_here_benchmark/results.json"),
+                   key=lambda p: p.parent.name, reverse=True)
+    if not paths:
+        return {"available": False, "reason": "No local benchmark has been run yet."}
+    path = paths[0]
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("schema") != "skillc.here-benchmark/1":
+            raise ValueError("unrecognized benchmark schema")
+        expected = len(data["cases"]) * data["repeats"] * (3 if data["live"] else 1)
+        return {"available": True, "run": path.parent.name, "model": data["model"],
+                "live": data["live"], "completed": len(data["rows"]) == expected,
+                "trials": len(data["rows"]), "expected_trials": expected,
+                "summary": data["summary"], "discovery_ms": data["discovery_ms"],
+                "cases": [{"id": c["id"], "source": c["source"],
+                           "feasible": data["oracle"].get(c["id"], {}).get("feasible")}
+                          for c in data["cases"]]}
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return {"available": False, "reason": f"Cannot read benchmark: {error}"}
+
+
 # --- tab 2: a graph -----------------------------------------------------------------------
 
 def _graph_file(tmp: Path, filename: str, data: bytes) -> Path:
@@ -332,6 +355,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(HTTPStatus.OK, {**env, "settings": settings(env)})
         if path == "/api/why":
             return self._json(HTTPStatus.OK, WHY)
+        if path == "/api/benchmark":
+            return self._json(HTTPStatus.OK, measured_benchmark())
         if path == "/api/samples":
             return self._json(HTTPStatus.OK, {
                 "skills": samples(),
