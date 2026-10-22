@@ -1,4 +1,36 @@
-# SkillC Execution Atlas
+# Execution Atlas
+
+**Shows:** one skill, agent file or prompt moving through the real skillc compiler, stage by stage,
+and why the same intent is `ACHIEVABLE` in one environment and `IMPOSSIBLE` in another.
+**Audience:** engineers who want to see inside the checker. **Time:** 5 minutes.
+
+## Run it
+
+```bash
+pip install -e ".[dev]"
+python demo/skillc-architecture-app/app.py      # opens 127.0.0.1:8765
+```
+
+Offline by default (deterministic compaction). The catalog of tested intents is read through git
+from the `gc/data_train_test` branch, so fetch it once (`git fetch origin gc/data_train_test`);
+without it you can still paste your own text.
+
+## Present it
+
+1. Under **Tested intent library**, pick a topic. Its `SKILL.md`, `agent.md` and prompt load together;
+   tick which ones to include.
+2. Set **Environment snapshot** to **Selected case** and press **Run**. Walk the **Intermediate
+   evidence graph** left to right: received source, compaction, environment, binding, schema,
+   capability, reachability, verdict. Click a node to show its input, its output and the Python
+   functions that produced it.
+3. Switch **Environment snapshot** to **Current environment · automatically observed** (this machine;
+   **Refresh now** reads it again) and run the same intent. Point at the binding node: the tools the
+   intent needs that this machine lacks are why the verdict changes.
+4. Paste a free-form prompt. Show `UNKNOWN [INCOMPLETE_COMPACTION]`: skillc abstains instead of
+   guessing, and an abstention never permits the run.
+
+## Reference
+
 
 A local browser app that illustrates SkillC's real execution structure. It accepts
 `SKILL.md`, `agent.md`, or prompt text and streams:
@@ -99,72 +131,6 @@ intent.md` reports it as `UNKNOWN [UNALIGNED_CONDITION]` or
 `UNKNOWN [UNGROUNDED_TOOL]` instead of `IMPOSSIBLE`. A reviewed `--contract`
 also counts as an input.
 
-### Catalog benchmark
-
-Run every topic form through the same deterministic compile, environment
-binding, and check sequence used by the app:
-
-```powershell
-.\.venv\Scripts\python.exe demo\skillc-architecture-app\benchmark_catalog.py `
-  --catalog-root PATH_TO_DATA_TRAIN_TEST_WORKTREE
-```
-
-The command updates `benchmark-results.json` with per-case requirements,
-grants, unavailable operations, verdicts, and comparison categories.
-`expected_incompleteness` identifies the corpus's deliberate false-admission
-examples; `frontend_abstention` identifies prose that deterministic compaction
-cannot yet formalize; `mismatch` is an unexpected labeled disagreement. The
-report also records any topic whose verdict differs across its three forms.
-Compilation uses the environment's tools as the capability context, and
-binding then removes any capability the environment does not grant and applies
-the environment's contracts. Add `--llm DEPLOYMENT` (with
-`AZURE_OPENAI_ENDPOINT` and `AZURE_SUBSCRIPTION_ID` set) to compact with Azure
-OpenAI instead; results go to `benchmark-results-llm.json`, including each
-compacted and bound pack. Only the LLM calls run in parallel: z3 is not
-thread-safe, so every check runs on one thread. `--reuse FILE` re-checks the
-packs stored in an earlier LLM results file without calling the LLM again, so a
-binding or checker change can be measured on identical compactions.
-
-### Real artifact benchmark
-
-`benchmark_real_artifacts.py` checks every real, externally published artifact
-on `gc/data_train_test` (588 `SKILL.md` files from 5 pinned public pools) plus
-168 agents and 143 prompts pinned from `github/awesome-copilot@e13e02be`
-(MIT) by `scripts\fetch_copilot_sources.py`. Authored fixtures are excluded,
-duplicates are removed by SHA-256, and any file whose bytes differ from its
-manifest is excluded and listed under `integrity_exclusions`.
-
-```powershell
-.\.venv\Scripts\python.exe scripts\fetch_copilot_sources.py `
-  PATH_TO_DATA_TRAIN_TEST_WORKTREE\benchmark\copilot_sources
-.\.venv\Scripts\python.exe demo\skillc-architecture-app\benchmark_real_artifacts.py `
-  --data-root PATH_TO_DATA_TRAIN_TEST_WORKTREE
-```
-
-Each artifact is checked in two environments: its home runtime
-(`claude-code` for skills, the documented `vscode-copilot` profile for agents
-and prompts) and the cached observed environment. The report is written to
-`real-benchmark-results.json` and `real-benchmark-results.md`, with a balanced
-headline subset of equal size per kind.
-
-Every `MISSING_CAPABILITY` refutation is audited against
-`real-refutation-labels.json`, hand labels that classify each frontier name as
-a real absent tool (MCP server, extension, or another runtime's tool), a
-deterministic- or LLM-frontend misextraction, or a `runtime_name_variant` (an
-undocumented spelling of a VS Code built-in, counted as non-confirming). The
-labels describe the benchmark; they are not used to tune the frontend.
-
-`--llm DEPLOYMENT` compacts each artifact once with Azure OpenAI and checks
-that pack in both environments; `--balanced-only` limits the run to the
-balanced subset, `--per-kind N` runs a pilot, and `--reuse FILE` re-checks the
-stored packs without calling the LLM again. Topic benchmark results include a
-refutation confusion matrix (positive = `IMPOSSIBLE`) with Wilson 95%
-intervals per form.
-
-When multiple input types are selected, their tool metadata is combined and their
-bodies become labeled sections in one temporary `COMPOSITE.md`. SkillC compiles
-and checks that composite once; it does not aggregate separate verdicts.
-
 ### Azure Foundry semantic compaction
 
 Select **Azure Foundry LLM** to use SkillC's existing opt-in Azure OpenAI
@@ -210,3 +176,6 @@ Use `--catalog-root PATH` to preview uncommitted benchmark fixtures from a
 
 The server binds to localhost by default, limits input to 100 KB, writes each input
 to a temporary directory, and removes it when the run completes.
+
+
+The catalog and real-artifact benchmarks are in [`benchmark/`](benchmark/README.md).

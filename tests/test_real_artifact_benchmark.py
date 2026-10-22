@@ -9,10 +9,12 @@ from skillc.profiles import Profile
 
 APP = Path(__file__).resolve().parents[1] / "demo" / "skillc-architecture-app"
 sys.path.insert(0, str(APP))
+sys.path.insert(0, str(APP / "benchmark"))
 
 
 def _load(name: str):
-    spec = importlib.util.spec_from_file_location(name, APP / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        name, next(p for p in (APP / f"{name}.py", APP / "benchmark" / f"{name}.py") if p.exists()))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

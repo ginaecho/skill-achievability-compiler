@@ -647,10 +647,15 @@ def verify_target(twin: Twin, scenario: str, target, declared: dict | None = Non
     if scenario not in PROBES:
         raise TwinError(f"unknown scenario {scenario!r}; known: {', '.join(SCENARIOS)}")
     node = twin.resolve(target) if isinstance(target, str) else target
-    ev = PROBES[scenario](twin, node)
+    return decide(twin, scenario, node, PROBES[scenario](twin, node), declared)
+
+
+def decide(twin: Twin, scenario: str, node, ev: dict[str, Evidence],
+           declared: dict | None = None) -> TwinResult:
+    """Apply declared sources, build the verifier pack and let the checker decide."""
     for key, src in (declared or {}).items():
         if key not in ev:
-            raise TwinError(f"--source {key}: not an evidence need of {scenario} "
+            raise TwinError(f"--source {key}: not an evidence need here "
                             f"({', '.join(ev)})")
         if ev[key].status == "missing":
             ev[key].status = "declared"

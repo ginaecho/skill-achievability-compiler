@@ -1,5 +1,26 @@
-# End-to-end real-skill compiler demo
+# Real skills, end to end (recording)
 
+**Shows:** five natural-language `SKILL.md` files from Anthropic's public skills repository compiled by
+a model into packs, gated by the schema, and decided by the checker. **Audience:** anyone asking
+"does it work on real skills?". **Time:** 2 minutes (the video).
+
+## Watch it
+
+Play `skillc-real-skills-demo.mp4`, or read `transcript.txt`. `results.json` and `generated-packs/` are
+the recorded outputs, so you can show them without calling a model.
+
+## Record it again
+
+This calls a model, so it needs `SKILLC_ALLOW_MODEL_CALLS=1`, set on purpose for one run you agreed to.
+Requests go through the URL guard (see `CLAUDE.md`).
+
+```powershell
+$env:SKILLC_ALLOW_MODEL_CALLS = "1"
+$env:AZURE_OPENAI_ENDPOINT = "<your Azure OpenAI endpoint>"
+python scripts\make_real_skill_demo.py --provider azure-openai --model YOUR_DEPLOYMENT
+```
+
+## Reference
 This demo starts from five **natural-language** `SKILL.md` files in Anthropic's
 official skills repository. It does not contain embedded or hand-written JSON
 packs. For each case the runner:
@@ -17,13 +38,6 @@ packs. For each case the runner:
 | `skills/frontend-design/SKILL.md` | Apache-2.0 |
 | `skills/slack-gif-creator/SKILL.md` | Apache-2.0 |
 | `skills/algorithmic-art/SKILL.md` | Apache-2.0 |
-
-Run and record the complete demo from the repository root:
-
-```powershell
-$env:AZURE_OPENAI_ENDPOINT = "https://YOUR-RESOURCE.openai.azure.com/openai/v1"
-python scripts\make_real_skill_demo.py --provider azure-openai --model YOUR_DEPLOYMENT
-```
 
 Azure OpenAI authentication uses `AZURE_OPENAI_API_KEY` when set; otherwise it
 uses the current `az login` identity. Anthropic remains available with

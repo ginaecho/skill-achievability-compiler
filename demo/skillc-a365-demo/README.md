@@ -1,5 +1,33 @@
-# With skillc. Without skillc.
+# With skillc. Without skillc. (Agent 365)
 
+**Shows:** the same Agent 365 agent in the same situation, run twice side by side: once with no guard,
+once with skillc as Agent Framework middleware. The agent's steps replay published incidents; every
+skillc decision is live. **Audience:** security and platform owners. **Time:** 5 minutes.
+
+## Run it
+
+```bash
+pip install -e ".[dev]"
+python demo/skillc-a365-demo/app.py            # opens 127.0.0.1:8765
+python demo/skillc-a365-demo/app.py run replit-production-db-deletion --guard   # the same log in a terminal
+```
+
+Standard library only; offline: no model calls, no network, no tenant. A hosted copy runs on Azure
+Container Apps ([`deploy/README.md`](deploy/README.md)).
+
+## Present it
+
+1. Pick **replit-production-db-deletion**. Read the situation aloud: the user's request, what the agent
+   could see, its runtime and tools.
+2. Press run. Without skillc, the agent drops the production table. With skillc, the plan is checked
+   first and the destructive call is refused; the agent gets the refusal as its tool result.
+3. Read the verdict panel: hazard steps caught, false positives, decision latency, 0 model tokens.
+4. Tick **benign twin** and run again: the legitimate version of the task goes through with no question
+   or refusal.
+5. Optional: choose **✎ Write your own case** and press **Fill from this machine**. It loads what a Claude
+   Code agent here sees (CLAUDE.md, git state, tools and permissions) instead of you typing it.
+
+## Reference
 ![With skillc. Without skillc.](../../docs/images/a365_demo.jpg)
 
 ![How skillc + Agent 365 works](../../docs/images/a365_demo_architecture.jpg)

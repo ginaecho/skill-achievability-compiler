@@ -112,3 +112,99 @@ def test_cli_exit_codes_and_json(capsys):
     assert doc["schema"] == "skillc.twin/1"
     assert doc["results"][0]["missing"] == ["min_max_units"]
     assert main(["twin", "check", str(DEMO), "--scenario", "setpoint", "--target", "nope"]) == 2
+
+
+# ---------------------------------------------------------------- explore and workflows
+
+from skillc.env.twin_workflow import explore, map_need, read_workflows, verify_workflow  # noqa: E402
+
+FLAT_BRIEF = """Scenario 1: Set-Point Verifier
+Illustrative request: "Change this set point to 22 degrees."
+Evidence needed
+Why it matters
+Set-point identity and type
+Verify that the requested entity is the intended control point
+Controlled place(s) and associated equipment
+Derive the affected scope from the graph
+BACnet priority state and external reference
+Assess priority masking and whether a commandable
+object is bounded
+Relevant historical series, when required by the evaluation
+Add time series context
+The verifier returns a verdict, findings, and supporting evidence and never treats missing evidence as approval.
+Scenario 2: Schedule-Update Verifier
+Evidence needed
+Why it matters
+Target scope, affected spaces, and equipment
+Determine which systems the change affects
+Authoritative operating policies and constraints
+Check permitted hours and approval requirements
+Current operational state, where required
+Identify applicable overrides or interlocks
+Shared architectural problems
+Both verifiers need reliable graph evidence but their evidence contracts differ in several important ways today.
+"""
+
+
+def test_a_pasted_two_column_brief_is_read_line_by_line():
+    sp, sch = read_workflows(FLAT_BRIEF)
+    assert (sp.title, sp.kind) == ("Set-Point Verifier", "setpoint")
+    assert [(n.text, n.keys, n.critical) for n in sp.needs] == [
+        ("Set-point identity and type", ["setpoint_identity"], True),
+        ("Controlled place(s) and associated equipment", ["equipment", "controlled_places"], True),
+        ("BACnet priority state and external reference",
+         ["priority_state", "external_reference"], True),
+        ("Relevant historical series", ["history"], False),
+    ]
+    assert sch.kind == "schedule"
+    assert [n.keys for n in sch.needs] == [["target_scope"], ["operating_policy"],
+                                           ["operational_state"]]
+    assert sch.needs[-1].critical is False        # "where required"; the heading is not a need
+
+
+def test_bullets_and_markdown_tables():
+    (wf,) = read_workflows("# Check\nEvidence needed:\n- Configured minimum/maximum and units\n"
+                           "- Occupancy sensor, if available\n")
+    assert [n.keys for n in wf.needs] == [["min_max_units"], []]
+    assert wf.needs[1].words == ["occupancy", "sensor"] and not wf.needs[1].critical
+    (wf,) = read_workflows("Evidence needed\n| Evidence | Why |\n|---|---|\n"
+                           "| Current schedule | delta |\n| Timezone | DST |\n")
+    assert [n.keys for n in wf.needs] == [["current_schedule"], ["timezone"]]
+    assert wf.kind == "schedule"
+
+
+def test_no_needs_is_an_error():
+    with pytest.raises(TwinError, match="Evidence needed"):
+        read_workflows("just some prose about buildings")
+
+
+def test_a_custom_need_is_searched_by_name(twin):
+    (wf,) = read_workflows("Evidence needed:\n- Set-point identity and type\n- Occupancy sensor\n")
+    ok = verify_workflow(twin, wf, "sp1")
+    assert ok.verdict == "ACHIEVABLE"
+    occ = next(e for e in ok.evidence if e.key == "occupancy_sensor")
+    assert occ.found[0].startswith("name match 'occupancy'")
+    bad = verify_workflow(twin, wf, "sp2")
+    assert [e.key for e in bad.missing] == ["occupancy_sensor"]
+
+
+def test_map_need_keeps_scope_lines_whole():
+    assert map_need("Target scope, affected spaces, and equipment").keys == ["target_scope"]
+
+
+def test_explore_describes_the_graph(twin):
+    text = explore(twin)
+    assert "VAV --feeds--> HVAC_Zone  x2" in text
+    assert "VendorTempSP --priorityArray--> {activePriority, relinquishDefault}" in text
+    assert "Set-point verifier: 1 of 4 targets" in text
+
+
+def test_cli_workflow_and_explore(capsys):
+    wf = DEMO.parent / "workflow.md"
+    assert main(["twin", "explore", str(DEMO)]) == 0
+    assert main(["twin", "check", str(DEMO), "--workflow", str(wf), "--target", "sp1"]) == 0
+    capsys.readouterr()
+    assert main(["twin", "check", str(DEMO), "--workflow", str(wf), "--json"]) == 1
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["workflows"][0]["title"] == "Comfort complaint check"
+    assert main(["twin", "check", str(DEMO)]) == 2          # neither --workflow nor --scenario

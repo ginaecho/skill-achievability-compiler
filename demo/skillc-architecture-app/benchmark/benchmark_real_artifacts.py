@@ -19,9 +19,11 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-APP_ROOT = Path(__file__).resolve().parent
+BENCH_ROOT = Path(__file__).resolve().parent
+APP_ROOT = BENCH_ROOT.parent
 REPO_ROOT = APP_ROOT.parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
+sys.path.insert(0, str(APP_ROOT))  # the app's modules
 
 import refutation_audit
 from environment_inventory import EnvironmentInventory
@@ -240,7 +242,7 @@ def main() -> int:
         reuse = {(row["kind"], row["id"]): row.get("compacted_pack") for row in stored["rows"]}
         args.llm = args.llm or stored.get("frontend", "").removeprefix("llm:")
     suffix = "-llm" if args.llm else ""
-    output = args.output or APP_ROOT / f"real-benchmark-results{suffix}.json"
+    output = args.output or BENCH_ROOT / f"real-benchmark-results{suffix}.json"
     report = run(args.data_root, args.environment_state_dir, args.llm,
                  args.balanced_only, args.workers, args.per_kind, reuse)
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

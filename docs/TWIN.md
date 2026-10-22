@@ -20,6 +20,45 @@ $ skillc twin check building.trig --scenario setpoint --json    # skillc.twin/1
 Exit codes: `0` every target is achievable from the graph; `3` achievable, but only
 with evidence declared by `--source`; `1` at least one target is impossible; `2` error.
 
+## Explore a graph, then paste a workflow
+
+You need no description of the graph:
+
+```console
+$ skillc twin explore building.trig                       # what it holds and can answer
+$ skillc twin check building.trig --workflow workflow.md  # your workflow, pasted as written
+```
+
+`explore` lists:
+* the kinds of entity in the graph;
+* how those kinds connect (for example `VAV --feeds--> HVAC_Zone`);
+* the nested structures, such as priority arrays and references;
+* the properties that carry values;
+* how many targets each built-in verifier can already handle.
+
+`--workflow` reads the evidence needs from any of these:
+* a brief with "Evidence needed" / "Why it matters" tables, even when pasting has flattened the
+  table into alternating lines;
+* bullets under an "Evidence needed:" line;
+* a Markdown table.
+
+A heading such as "Scenario 2: Schedule-Update Verifier" starts a new workflow. Each line is mapped
+to a recognised need, or, if none fits, searched for by name around the target. The mapping is
+printed before the results. A line containing "when required", "where required", "optional" or "if
+available" is not critical. Reading the workflow is deterministic, so the same text always gives
+the same needs.
+
+## Adding a recognised need (for developers)
+
+1. Add the need to a scenario in `SCENARIOS`. Then teach the scenario's probe in `PROBES` how to
+   find it, in `src/skillc/env/twin.py`. The probe follows relations by local name, in both
+   directions, with a bounded number of hops. It reads blank-node structures through their anchor.
+   It returns the graph path that proves the need, or what it looked for.
+2. Add a pattern to `NEED_PATTERNS` in `src/skillc/env/twin_workflow.py`, so that workflow lines
+   map to the new need.
+3. Cover the new need in the sample graph, `examples/building-twin/demo-building.trig`, and add a
+   test.
+
 ## How it decides
 
 1. **Read the graph offline.** The tool reads Turtle, TriG, N-Triples, N-Quads or

@@ -32,7 +32,7 @@ actually has, and then keeps checking while the agent acts.
 | **GitHub Copilot** (CLI and cloud agent) | Runtime monitor through Copilot hooks | `skillc monitor init --copilot --runtime developer-sandbox` | [Copilot hooks](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md#github-copilot-hooks-copilot-cli-and-the-copilot-cloud-agent) |
 | **Microsoft Agent 365** (agents built with Microsoft Agent Framework, incl. Foundry hosted agents) | **Enforced** runtime gate as Agent Framework middleware; evidence-bound approvals; ten source-backed cases | `pip install -e ".[agent-framework]"`, then `skillc_monitor(..., strict=True, fail_open=False)` | [Agent 365 security](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/AGENT365_SECURITY.md) · [cases](https://github.com/ginaecho/skill-achievability-compiler/blob/main/examples/agent365-cases/README.md) |
 | **Microsoft Scout** | Same checks and approvals as MCP tools the agent calls (**cooperative**, not enforced) | `skillc monitor scout-install`, then restart Scout | [Scout parity](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/SCOUT_PARITY.md) |
-| **Browser demo** | Watch a skill move through the real compiler | `python demo/skillc-architecture-app/app.py` | [Execution Atlas](https://github.com/ginaecho/skill-achievability-compiler/blob/main/demo/skillc-architecture-app/README.md) |
+| **Demos** | See skillc read this machine and decide what a skill can do here; replay incidents with and without skillc; watch a skill go through the compiler | `python demo/skillc-here/app.py` | [All demos](demo/README.md) |
 
 The decisions are the same everywhere; the guarantee depends on **where skillc
 sits**. In Agent 365 (Agent Framework) skillc is inside the tool-call path, so a
@@ -122,7 +122,7 @@ python examples/agent365-finance/security_demo.py --state-dir runs/agent365-secu
 python -m pytest tests/test_agent365_cases.py tests/test_security.py tests/test_finance_security.py -q
 ```
 
-**See it:** `python demo/skillc-a365-demo/app.py` replays published incidents side by side, with and without skillc ([demo](demo/skillc-a365-demo/README.md)).
+**See it:** `python demo/skillc-a365-demo/app.py` replays published incidents side by side, with and without skillc ([demo](demo/skillc-a365-demo/README.md); [all demos](demo/README.md)).
 
 **Read:**
 [Agent 365 security](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/AGENT365_SECURITY.md) ·
@@ -245,65 +245,79 @@ Anything that could not be read becomes an assumption, never a refusal.
 
 ## Graphs and ontologies: what can be established from this data? (`skillc twin`)
 
-Some agents answer from a knowledge graph: a digital twin, a CMDB or a product graph,
-read with the help of an ontology. Before such an agent explores the graph, skillc can
-decide whether the answer is reachable from the data, and if not, what is missing.
-This takes no model call and no query generation.
-
-**The mapping.** The graph plays the role of the environment, and each evidence need
-becomes a condition:
-
-| your application | skillc |
-|---|---|
-| the instance graph (one tenant, one building) | the environment: the only source of evidence |
-| the ontology | class hierarchy only; it never proves that a fact exists |
-| an evidence need ("the places this set point controls") | a condition |
-| a need found in the graph, with its path | a read step that establishes the condition |
-| evidence held outside the graph (policy service, live values) | a declared source, counted as an assumption |
-| the decision ("verify this change") | a `verify` step that requires every critical condition |
-
-**Recipe for a new application**
-
-1. **Write the evidence contract.** List each need and mark whether it is critical.
-   This is a scenario in `SCENARIOS` in `src/skillc/env/twin.py`.
-2. **Say how each need is found.** Write a probe in `PROBES`. A probe follows relations
-   by local name in both directions (`hasPoint`/`isPointOf`) and allows a bounded number
-   of hops. It reads blank-node structures through their anchor. For every need it
-   returns the path that proves it, or what it looked for.
-3. **Keep instance and vocabulary apart.** Pass the tenant graph as data. Pass ontologies
-   as named graphs whose names contain "ontology", or with `--ontology`.
-4. **Let the checker decide.** Each target becomes a pack, and the checker gives
-   `ACHIEVABLE`, or `IMPOSSIBLE [BLOCKED_GUARD]` naming the missing condition. Missing
-   evidence is never read as approval.
-5. **Test with a small illustrative graph** that covers one variant per case: inverse
-   relationships, extra hops, vendor classes and a missing fact. Then run it on real
-   exports.
-
-For example, the pack generated for a set point whose graph has no limits:
-
-```text
-Tool `read_equipment` (owner `deim`): adds `equipment`.             # graph
-Tool `read_priority_state` (owner `deim`): adds `priority_state`.   # graph
-Tool `verify` (owner `deim`): requires `equipment` and `min_max_units` and `priority_state` ...
-Goal: `verdict`.                     -> IMPOSSIBLE: nothing establishes `min_max_units`
-```
-
-**Built in:** a set-point verifier and a schedule-update verifier for building digital
-twins (Brick, RealEstateCore, BOT). Install with `pip install -e ".[twin]"`; it reads
-Turtle, TriG, N-Triples, N-Quads or RDF/XML files offline.
+Some agents answer from a knowledge graph, such as a building digital twin, read with the help of an
+ontology. skillc tells you, before the agent runs, which questions the graph can answer and what is
+missing for the rest. You need only two things: **the graph file** and **your workflow written as
+text**. You do not have to describe the graph. Everything runs offline, with no model call.
 
 ```console
-$ skillc twin check examples/building-twin/demo-building.trig --scenario setpoint --brief
-ex:sp1: ACHIEVABLE
-ex:sp2: IMPOSSIBLE  missing: min_max_units
-ex:sp3: IMPOSSIBLE  missing: external_reference
-ex:sp4: IMPOSSIBLE  missing: equipment, controlled_places, min_max_units, priority_state, external_reference
-$ skillc twin check building.trig --tenant demo --scenario schedule --target zone1 \
-      --source operating_policy=policy-service      # evidence held outside the graph
+$ pip install -e ".[twin]"            # adds rdflib, to read Turtle, TriG, N-Triples, N-Quads, RDF/XML
 ```
 
-skillc checks that the evidence exists, not that its values are right; the verifier
-still judges the values. See [`docs/TWIN.md`](docs/TWIN.md).
+**Step 1: let skillc look at the graph.**
+
+```console
+$ skillc twin explore building.trig          # output trimmed
+what is in it (entities by kind):       2 VAV, 2 HVAC_Zone, 1 AHU, ...
+how it connects (kind --relation--> kind):
+  VAV --feeds--> HVAC_Zone  x2
+  Supply_Air_Temperature_Setpoint --isPointOf--> AHU  x1
+nested structures (read through their owner):
+  VendorTempSP --priorityArray--> {activePriority, relinquishDefault}
+what it can answer (built-in verifiers):
+  Set-point verifier: 1 of 4 targets have all critical evidence; most often missing: min_max_units (2)
+```
+
+**Step 2: paste your workflow.** Save the text as you have it, in a file such as `workflow.md`. It can
+be a brief with "Evidence needed" tables (several scenarios are fine), a bullet list or a Markdown
+table. Only the list of evidence matters:
+
+```markdown
+# Comfort complaint check
+Evidence needed:
+- Set-point identity and type
+- Controlled places and associated equipment
+- Configured minimum/maximum and units
+- Occupancy sensor
+- Historical series, when required
+```
+
+**Step 3: check, and read the result.**
+
+```console
+$ skillc twin check building.trig --workflow workflow.md
+workflow 'Comfort complaint check': checks set points; 5 evidence needs
+  'Configured minimum/maximum and units' -> min_max_units
+  'Occupancy sensor' -> search the graph for 'occupancy', 'sensor'
+  'Historical series' -> history  (when required)
+
+ex:sp1: ACHIEVABLE
+ex:sp2: IMPOSSIBLE  missing: min_max_units, occupancy_sensor
+...
+```
+
+The first block shows how skillc understood each line, so check it first. Then, for each target:
+
+* `ACHIEVABLE`: every critical piece of evidence is in the graph. Without `--brief`, each one shows
+  the graph path that proves it, for example `ex:vav1 ->feeds ex:zone1 ->hasPart ex:room101`.
+* `IMPOSSIBLE`: the evidence that is missing, and what was looked for. To fix it, add the facts to
+  the graph. If the evidence lives elsewhere, declare it with `--source NEED=WHERE`; the result then
+  reads "achievable under assumptions". Missing evidence never counts as approval.
+
+| you want to | add |
+|---|---|
+| check one entity, not all of them | `--target sp1` |
+| mark a need as optional | write "when required", "where required", "optional" or "if available" in its line |
+| pick one tenant from a multi-tenant file | `--tenant demo` |
+| use an ontology file for class names | `--ontology brick.ttl` (it never counts as evidence) |
+| get machine-readable output | `--json` |
+
+skillc recognises common needs: identity, equipment, places and scope, limits and units, BACnet
+priority and references, history, schedules, timezone, calendar rules, policies and operational
+state. For each one it follows relations in both directions and across extra hops. It also reads
+Brick, RealEstateCore, BOT and vendor names. Any other line, such as "Occupancy sensor" above, is
+searched for by name around the target. Each verdict comes from the checker. See
+[`docs/TWIN.md`](docs/TWIN.md), which also explains how to add a recognised need.
 
 ## Protocol checks versus goal-only checks
 

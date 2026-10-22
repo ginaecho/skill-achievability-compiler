@@ -4,7 +4,8 @@ from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "demo" / "skillc-architecture-app"
 sys.path.insert(0, str(APP))
-SPEC = importlib.util.spec_from_file_location("benchmark_catalog", APP / "benchmark_catalog.py")
+sys.path.insert(0, str(APP / "benchmark"))
+SPEC = importlib.util.spec_from_file_location("benchmark_catalog", APP / "benchmark" / "benchmark_catalog.py")
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
