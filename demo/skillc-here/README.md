@@ -91,9 +91,12 @@ CLI in this folder, read automatically (it is not skillc). Each column is a chec
 | **LLM + guiding skill** | the same model | the same facts, plus a guiding skill: start with what "finished" means, **look at the tools first**, match each step to a tool by name, then see **how the agent may interact** (asks first, denied, MCP servers, credentials), and answer UNKNOWN rather than guess |
 
 The guiding skill is shown on the page under the table. Neither LLM sees skillc's answer. A cell
-outlined in amber differs from skillc; the footer gives each LLM's tokens and time (skillc: 0
-tokens). A what-if edit re-runs only skillc; press **Check it here** to ask the LLMs again. Tab 3
-has the measured comparison, with each task really executed.
+outlined in amber differs from skillc. **Every cell shows its own tokens and time**: each LLM cell
+is a separate model call for that one row (input plus output tokens as the provider reports them,
+and that call's time; the calls run side by side), and each skillc cell is 0 tokens and the time of
+its check, after skillc has read the skill once. A what-if edit re-runs only skillc; press
+**Check it here** to ask the LLMs again. Tab 3 has the measured comparison, with each task really
+executed.
 
 **Use it in your own Copilot sessions** (the panel's last section):
 

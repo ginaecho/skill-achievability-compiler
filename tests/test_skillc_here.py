@@ -99,25 +99,32 @@ def test_both_llms_get_the_same_facts_and_only_guided_gets_the_guide(env, llm_on
     seen = []
     out = app.llm_checks(_skill("fix-failing-test"), app.settings(env), env,
                          complete=_stub(_all("ACHIEVABLE"), seen))
-    (s1, u1), (s2, u2) = sorted(seen, key=lambda x: len(x[0]))
-    assert u1 == u2
-    assert s2 == s1 + "\n\n" + app.llm_check.GUIDE
+    names = list(app.settings(env))
+    assert len(seen) == 2 * len(names)                       # one call per cell
+    plain = [(s, u) for s, u in seen if app.llm_check.GUIDE not in s]
+    guided = [(s, u) for s, u in seen if app.llm_check.GUIDE in s]
+    assert sorted(json.dumps(u) for _s, u in plain) == sorted(json.dumps(u) for _s, u in guided)
+    assert guided[0][0] == plain[0][0] + "\n\n" + app.llm_check.GUIDE
     assert "look at the tools first" in app.llm_check.GUIDE.lower()
     rows = out["arms"]["plain"]["rows"]
-    assert [r["setting"] for r in rows] == list(app.settings(env))
-    assert out["arms"]["guided"]["input_tokens"] == 100
+    assert [r["setting"] for r in rows] == names
+    assert all(r["input_tokens"] == 100 and r["output_tokens"] == 20 for r in rows)
+    assert all(isinstance(r["ms"], int) for r in rows)
+    assert out["arms"]["guided"]["input_tokens"] == 100 * len(names)
 
 
 def test_llm_request_uses_neutral_ids_and_no_paths_or_domains(env, llm_on, tmp_path):
     seen = []
     app.llm_checks(_skill("fix-failing-test"), app.settings(env), env,
                    complete=_stub(_all("UNKNOWN"), seen))
-    sent = json.dumps(seen[0][1])
-    assert [r["id"] for r in seen[0][1]["runtimes"]] == ["s1", "s2", "s3", "s4", "s5"]
+    sent = json.dumps([u for _s, u in seen])
+    assert all([r["id"] for r in u["runtimes"]] == ["s1"] for _s, u in seen)
     assert "claude.ai" not in sent and str(tmp_path) not in sent
-    machine = seen[0][1]["runtimes"][0]
+    machine = next(u["runtimes"][0] for _s, u in seen
+                   if "tools_that_ask_first" in u["runtimes"][0])
     assert machine["mcp_servers_tools_not_listed"] == ["github"]
     assert "edit" in machine["tools_that_ask_first"]
+    assert sum("tools_that_ask_first" in u["runtimes"][0] for _s, u in seen) == 2
 
 
 def test_a_failed_or_partial_llm_answer_is_unknown(env, llm_on):
@@ -126,11 +133,17 @@ def test_a_failed_or_partial_llm_answer_is_unknown(env, llm_on):
     out = app.llm_checks(_skill("fix-failing-test"), app.settings(env), env, complete=boom)
     assert {r["verdict"] for r in out["arms"]["plain"]["rows"]} == {"UNKNOWN"}
     assert "no deployment" in out["arms"]["plain"]["error"]
-    partial = lambda req: json.dumps({"settings": {"s1": {"verdict": "maybe"}}})
+    partial = lambda req: json.dumps({"settings": {"s9": {"verdict": "maybe"}}})
     out = app.llm_checks(_skill("fix-failing-test"), app.settings(env), env,
                          complete=_stub(partial, []))
     rows = out["arms"]["guided"]["rows"]
     assert rows[0]["verdict"] == "UNKNOWN" and rows[1]["reason"] == "no answer for this setting"
+
+
+def test_skillc_cells_report_zero_tokens_and_their_time(env):
+    r = app.check_skill(_skill("fix-failing-test"), app.settings(env))
+    assert r["compile_ms"] > 0
+    assert all(x["tokens"] == 0 and x["ms"] >= 0 for x in r["rows"])
 
 
 # --- tab 2's other forms: a sketch or description, and a picture -------------------------

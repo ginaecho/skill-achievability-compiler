@@ -23,6 +23,7 @@ import json
 import sys
 import tempfile
 import threading
+import time
 import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -127,13 +128,16 @@ def check_skill(text: str, where: dict[str, list[str]]) -> dict:
         tmp = Path(tmp)
         src, pack_file, prov = tmp / "SKILL.md", tmp / "pack.json", tmp / "provenance.json"
         src.write_text(text, encoding="utf-8")
+        started = time.perf_counter()
         code, out = _run(["compile", str(src), "--profile", "none", "--quiet",
                           "--output", str(pack_file), "--provenance-output", str(prov)])
         if code != 0 or not pack_file.exists():
             raise ValueError("skillc could not read this text: " + out.strip()[:300])
         pack = json.loads(pack_file.read_text(encoding="utf-8"))
+        compile_ms = (time.perf_counter() - started) * 1000
         rows = []
         for name, grants in where.items():
+            started = time.perf_counter()
             bound = bind_environment(pack, grants)
             bound_file = tmp / "bound.json"
             bound_file.write_text(json.dumps(bound.pack), encoding="utf-8")
@@ -142,8 +146,10 @@ def check_skill(text: str, where: dict[str, list[str]]) -> dict:
             v = json.loads(out)
             rows.append({"setting": name, "verdict": v.get("verdict"), "reason": v.get("reason"),
                          "detail": v.get("detail", ""), "missing": list(bound.unavailable),
-                         "frontier": v.get("frontier", [])})
-        return {"name": pack.get("name") or "skill", "needs": list(bound.required), "rows": rows}
+                         "frontier": v.get("frontier", []), "tokens": 0,
+                         "ms": round((time.perf_counter() - started) * 1000, 1)})
+        return {"name": pack.get("name") or "skill", "needs": list(bound.required),
+                "compile_ms": round(compile_ms, 1), "rows": rows}
 
 
 def samples() -> list[dict]:
@@ -178,7 +184,8 @@ def machine_facts(env: dict, grants: list[str]) -> dict:
 
 
 def llm_checks(text: str, where: dict[str, list[str]], env: dict, complete=None) -> dict:
-    """The plain and the guided LLM check, run side by side."""
+    """The plain and the guided LLM check, one model call per cell (row x checker), so each
+    cell's tokens and time are its own; the calls run side by side."""
     from concurrent.futures import ThreadPoolExecutor
 
     if not LLM["enabled"]:
@@ -188,14 +195,30 @@ def llm_checks(text: str, where: dict[str, list[str]], env: dict, complete=None)
     if len(text) > MAX_SKILL:
         raise ValueError(f"the text is over {MAX_SKILL // 1000} KB")
     facts = machine_facts(env, where["this machine"])
-    with ThreadPoolExecutor(max_workers=len(llm_check.ARMS)) as pool:
-        runs = {arm: pool.submit(llm_check.llm_check, text, where, facts, arm=arm,
-                                 provider=LLM["provider"], model=LLM["model"],
-                                 complete=complete)
-                for arm in llm_check.ARMS}
-        arms = {arm: run.result() for arm, run in runs.items()}
+    cells = [(arm, name) for arm in llm_check.ARMS for name in where]
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=len(cells)) as pool:
+        runs = {cell: pool.submit(llm_check.llm_check, text, {cell[1]: where[cell[1]]},
+                                  facts, arm=cell[0], provider=LLM["provider"],
+                                  model=LLM["model"], complete=complete)
+                for cell in cells}
+        done = {cell: run.result() for cell, run in runs.items()}
+    wall_ms = round((time.perf_counter() - started) * 1000)
+    arms = {}
+    for arm in llm_check.ARMS:
+        rows = []
+        for name in where:
+            r = done[(arm, name)]
+            rows.append({**r["rows"][0], "input_tokens": r["input_tokens"],
+                         "output_tokens": r["output_tokens"], "ms": r["ms"],
+                         "error": r["error"]})
+        arms[arm] = {"rows": rows,
+                     "input_tokens": sum(r["input_tokens"] for r in rows),
+                     "output_tokens": sum(r["output_tokens"] for r in rows),
+                     "ms": sum(r["ms"] for r in rows),
+                     "error": next((r["error"] for r in rows if r["error"]), None)}
     return {"provider": LLM["provider"], "model": LLM["model"] or "provider default",
-            "guide": llm_check.GUIDE, "arms": arms}
+            "guide": llm_check.GUIDE, "arms": arms, "wall_ms": wall_ms}
 
 
 # --- tab 3: why skillc ----------------------------------------------------------------------

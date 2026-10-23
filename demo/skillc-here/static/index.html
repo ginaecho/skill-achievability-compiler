@@ -105,6 +105,7 @@ ul.ev li.declared b { color: var(--unk); }
 .mono { font: 11.5px/1.5 var(--mono); overflow-wrap: anywhere; }
 .tag { font-size: 12px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
 td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
+.cost { font: 11.5px var(--mono); color: var(--muted); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -324,9 +325,10 @@ async function check(askLlm = true) {
     const label = (s) => s === "this machine" ? "this machine <span class='muted'>(your Copilot CLI here, read automatically)</span>"
       + (edited() ? " <span class='muted'>(what-if)</span>" : "") : esc(s);
     const llmCell = (i) => `<td class="llm" data-i="${i}">${llm ? '<span class="muted">asking…</span>' : '<span class="muted">off</span>'}</td>`;
+    const cost = (tokens, ms) => `<div class="cost">${tokens.toLocaleString("en-US")} tokens · ${ms < 1000 ? Math.round(ms) + " ms" : (ms / 1000).toFixed(1) + " s"}</div>`;
     const rows = r.rows.map((x, i) => `<tr><td>${label(x.setting)}</td>
       <td>${verdictCell(x.verdict)}<div class="muted">${x.verdict === "IMPOSSIBLE" && x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>"
-           : x.verdict === "UNKNOWN" ? esc(x.detail) : x.verdict === "ACHIEVABLE" ? "every tool it needs is here" : esc(x.detail)}</div></td>
+           : x.verdict === "UNKNOWN" ? esc(x.detail) : x.verdict === "ACHIEVABLE" ? "every tool it needs is here" : esc(x.detail)}</div>${cost(0, x.ms)}</td>
       ${llmCell(`plain-${i}`)}${llmCell(`guided-${i}`)}</tr>`).join("");
     $("result").innerHTML = `<p><b>${esc(r.name)}</b> needs ${r.needs.length ? "<code>" + r.needs.map(esc).join("</code>, <code>") + "</code>" : "no tool skillc could read"}.</p>
       <p class="muted">Each <b>row</b> is a place the skill could run. Each <b>column</b> is a checker: skillc (no model), an LLM asked directly, and an LLM given a guiding skill.</p>
@@ -352,12 +354,13 @@ async function check(askLlm = true) {
         if (!cell) return;
         cell.classList.toggle("differs", x.verdict !== sk[i]);
         cell.title = x.reason;
-        cell.innerHTML = verdictCell(x.verdict) + `<div class="muted">${x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>" : esc(x.reason)}</div>`;
+        cell.innerHTML = verdictCell(x.verdict) + `<div class="muted">${x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>" : esc(x.reason)}</div>`
+          + cost(x.input_tokens + x.output_tokens, x.ms) + (x.error ? `<div class="err">${esc(x.error)}</div>` : "");
       });
-      foot.push(`${arm === "plain" ? "LLM" : "LLM + guiding skill"}: ${(a.input_tokens + a.output_tokens).toLocaleString("en-US")} tokens, ${(a.ms / 1000).toFixed(1)} s`
-        + (a.error ? ` · <span class="err">${esc(a.error)}</span>` : ""));
+      foot.push(`${arm === "plain" ? "LLM" : "LLM + guiding skill"}: ${(a.input_tokens + a.output_tokens).toLocaleString("en-US")} tokens in all`);
     }
-    $("llmFoot").innerHTML = `${esc(l.provider)} · ${esc(l.model)} · ${foot.join(" · ")} · skillc: 0 tokens. A cell outlined in amber differs from skillc.`;
+    const skMs = r.rows.reduce((t, x) => t + x.ms, 0);
+    $("llmFoot").innerHTML = `${esc(l.provider)} · ${esc(l.model)} · each LLM cell is its own model call (input + output tokens, and its time); the ${r.rows.length * 2} calls ran side by side in ${(l.wall_ms / 1000).toFixed(1)} s · ${foot.join(" · ")} · skillc: 0 tokens, ${Math.round(skMs)} ms for all rows after reading the skill once (${Math.round(r.compile_ms)} ms). A cell outlined in amber differs from skillc.`;
   } catch (err) { $("result").innerHTML += `<p class="err">${esc(err.message)}</p>`; }
 }
 function recheck() { if ($("skill").value.trim() && $("result").innerHTML) check(false); }
