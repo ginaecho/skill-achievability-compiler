@@ -221,23 +221,28 @@ class EnvironmentBinding:
     unavailable: tuple[str, ...]
     contracts_applied: tuple[str, ...]
     unaligned: tuple[str, ...]
+    matched: tuple[tuple[str, str], ...] = ()
 
 
 def bind_environment(pack: dict, grants: Iterable[str],
-                     manifest: dict | None = None, align: bool = False) -> EnvironmentBinding:
+                     manifest: dict | None = None, align: bool = False,
+                     equivalents: bool = False) -> EnvironmentBinding:
     """Bind an intent pack to an environment: tool existence, then tool contracts.
     `align=True` first aligns the pack's names through its bindings
-    (`align_to_contracts`); off by default."""
+    (`align_to_contracts`); off by default. `equivalents=True` also counts a granted
+    tool that does the same job under another name (`skillc.equivalents`); off by
+    default, so verdicts published against exact names are unchanged."""
     from .grants import bind_grants
 
-    existence = bind_grants(pack, grants)
+    existence = bind_grants(pack, grants, equivalents=equivalents)
     contracts = (manifest or {}).get("contracts") or {}
     bound = apply_contracts(
         existence.pack, contracts, (manifest or {}).get("states", {}),
         (manifest or {}).get("init_true", []), align=align,
     ) if contracts else ContractBinding(existence.pack, (), ())
     return EnvironmentBinding(bound.pack, existence.required, existence.granted,
-                              existence.unavailable, bound.applied, bound.unaligned)
+                              existence.unavailable, bound.applied, bound.unaligned,
+                              existence.matched)
 
 
 def apply_contracts(pack: dict, contracts: dict, states: Iterable[str],

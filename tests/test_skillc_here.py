@@ -44,11 +44,20 @@ def test_same_skill_differs_by_setting(env):
                        "claude.ai"]
     assert v["this machine"][0] == "ACHIEVABLE"
     assert v["Copilot CLI"][0] == "ACHIEVABLE"
-    assert v["Claude Code"] == ("IMPOSSIBLE", ["view"])
-    assert v["claude.ai"] == ("IMPOSSIBLE", ["edit", "grep"])
+    assert v["Claude Code"][0] == "ACHIEVABLE"              # `view` is Claude Code's `Read`
+    assert v["claude.ai"] == ("IMPOSSIBLE", ["grep"])
     v = _verdicts(app.check_skill(_skill("book-a-table"), app.settings(env)))
     assert v["claude.ai"][0] == "ACHIEVABLE"
-    assert v["this machine"] == ("IMPOSSIBLE", ["ask_user_input_v0", "web_search"])
+    assert v["this machine"][0] == "ACHIEVABLE"             # ask_user + web_search
+    assert v["VS Code Copilot"] == ("IMPOSSIBLE", ["web_search"])
+
+
+def test_cells_say_which_equivalent_tool_was_counted(env):
+    r = app.check_skill(_skill("book-a-table"), app.settings(env))
+    rows = {x["setting"]: x for x in r["rows"]}
+    assert rows["Copilot CLI"]["matched"] == [["ask_user_input_v0", "ask_user"]]
+    assert ["web_search", "websearch"] in rows["Claude Code"]["matched"]
+    assert rows["claude.ai"]["matched"] == []
 
 
 def test_what_if_changes_only_this_machine(env):
@@ -222,7 +231,7 @@ def test_why_cases_are_decided_live():
     got = {c["id"]: app.why_run(c["id"]) for c in app.WHY["cases"]}
     assert got["slack-note"]["verdict"] == "IMPOSSIBLE"
     assert got["slack-note"]["missing"] == ["slack_send_message"]
-    assert got["chat-repo"]["missing"] == ["edit", "grep"]
+    assert got["chat-repo"]["missing"] == ["grep"]
     assert got["deploy"]["plan_decision"] == "deny" and "BLOCKED_GUARD" in got["deploy"]["plan_reason"]
     assert got["email-cfo"]["plan_decision"] == "deny" and "send_email" in got["email-cfo"]["plan_reason"]
     push = got["force-push"]["steps"]

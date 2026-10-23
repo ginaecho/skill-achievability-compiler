@@ -40,8 +40,10 @@ Answer for every id you are given."""
 GUIDE = """Guiding skill: check the environment before you decide.
 1. Start with the skill: what does "finished" mean, and which steps lead there?
 2. Look at the tools first: list the tools each runtime has, exactly as named.
-3. Match every step to a tool by its exact name. A step whose tool is not in the list makes
-   the skill IMPOSSIBLE there; name that tool under "missing".
+3. Match every step to a tool. The same tool can have another name in another runtime (a
+   question to the user may be ask_user_input_v0, ask_user or AskUserQuestion); count it only
+   when it clearly does the same job, and say which tool you matched. A step no tool can do
+   makes the skill IMPOSSIBLE there; name the missing tool under "missing".
 4. See how the agent may interact: a tool that "asks first" needs the user's approval, which
    is allowed; a denied tool is missing. MCP servers count only for tools they list.
    A credential name being set does not prove the account works.

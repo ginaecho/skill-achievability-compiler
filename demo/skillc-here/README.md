@@ -33,9 +33,11 @@ Azure CLI sign-in or `AZURE_OPENAI_API_KEY` authenticates; `--llm-provider anthr
 1. Open the page. Point at the left panel: skillc has already read this folder as Copilot CLI sees
    it. Nobody typed a tool list.
 2. Click the example **fix-failing-test**, written with Copilot CLI's tool names (`grep`, `view`,
-   `edit`, `bash`). ACHIEVABLE here and in Copilot CLI; IMPOSSIBLE in Claude Code (no `view`) and
-   claude.ai (no `edit`, `grep`): profiles match tool names.
-3. Click **book-a-table**: the opposite. It needs claude.ai's `ask_user_input_v0`.
+   `edit`, `bash`). ACHIEVABLE here, in Copilot CLI, and in Claude Code and VS Code Copilot, where
+   the cell shows which equivalent tool it counted (`view` = `read`); IMPOSSIBLE on claude.ai, which
+   has no `grep` tool.
+3. Click **book-a-table**, written for claude.ai: ACHIEVABLE here too (`ask_user_input_v0` =
+   Copilot's `ask_user`), but not in VS Code Copilot, which has no web search.
 4. Click the **edit** tool to switch it off. Only "this machine" flips to IMPOSSIBLE: settings decide.
    **Undo my changes**.
 5. Click **post-release-note**: IMPOSSIBLE everywhere, no Slack tool. Type `slack_send_message` in
@@ -73,13 +75,17 @@ Pick an example skill or paste your own, and press **Check it here**. skillc com
 
 | skill | this machine | Copilot CLI | VS Code Copilot | Claude Code | claude.ai |
 |---|---|---|---|---|---|
-| `fix-failing-test` | ACHIEVABLE | ACHIEVABLE | IMPOSSIBLE: missing `grep`, `view` | IMPOSSIBLE: missing `view` | IMPOSSIBLE: missing `edit`, `grep` |
-| `book-a-table` | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE | ACHIEVABLE |
+| `fix-failing-test` | ACHIEVABLE | ACHIEVABLE | ACHIEVABLE (`grep` = `grep_search`, `view` = `read`) | ACHIEVABLE (`view` = `read`) | IMPOSSIBLE: missing `grep` |
+| `book-a-table` | ACHIEVABLE (`ask_user_input_v0` = `ask_user`) | ACHIEVABLE | IMPOSSIBLE: missing `web_search` | ACHIEVABLE (`AskUserQuestion`, `WebSearch`) | ACHIEVABLE |
 | `post-release-note` | IMPOSSIBLE: missing `slack_send_message` | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE |
 
-Profiles match tool **names**, so a skill written with one runtime's names is IMPOSSIBLE where the
-names differ (VS Code Copilot calls them `grep_search` and `read_file`). Any runtime with a shell
-grants `bash`, so Windows' `powershell` serves a skill that runs commands through Bash.
+Each runtime names its tools differently: claude.ai asks the user with `ask_user_input_v0`, Copilot
+CLI with `ask_user`, Claude Code with `AskUserQuestion`. The demo counts a tool that does the same
+job under another name, from the reviewed groups in
+[`src/skillc/data/tool_equivalents.json`](../../src/skillc/data/tool_equivalents.json), and the cell
+says which name it counted ("same tool, other name"). A tool with no equivalent stays missing: VS
+Code Copilot has no web search. Any runtime with a shell grants `bash`, so Windows' `powershell`
+serves a skill that runs commands through Bash.
 
 **Rows and columns.** Each row is a place the skill could run; "this machine" is your own Copilot
 CLI in this folder, read automatically (it is not skillc). Each column is a checker:
@@ -88,7 +94,7 @@ CLI in this folder, read automatically (it is not skillc). Each column is a chec
 |---|---|---|
 | **skillc** | the checker, no model | the compiled skill and the row's tools |
 | **LLM** | a model, asked directly | the skill and, per row, the tool names; for this machine also which tools ask first, the MCP servers and the credential names set |
-| **LLM + guiding skill** | the same model | the same facts, plus a guiding skill: start with what "finished" means, **look at the tools first**, match each step to a tool by name, then see **how the agent may interact** (asks first, denied, MCP servers, credentials), and answer UNKNOWN rather than guess |
+| **LLM + guiding skill** | the same model | the same facts, plus a guiding skill: start with what "finished" means, **look at the tools first**, match each step to a tool (the same tool may have another name in another runtime), then see **how the agent may interact** (asks first, denied, MCP servers, credentials), and answer UNKNOWN rather than guess |
 
 The guiding skill is shown on the page under the table. Neither LLM sees skillc's answer. A cell
 outlined in amber differs from skillc. **Every cell shows its own tokens and time**: each LLM cell

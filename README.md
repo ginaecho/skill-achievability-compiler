@@ -117,7 +117,10 @@ call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
 
 Profiles match tool **names**: a skill that calls `web_fetch` is ACHIEVABLE in Copilot CLI and
 IMPOSSIBLE in Claude Code, which names that tool `WebFetch`. Any runtime with a shell
-(`powershell` on Windows) grants `bash`.
+(`powershell` on Windows) grants `bash`. Environment binding can also count a tool that does the
+same job under another name (`bind_environment(..., equivalents=True)`, from the reviewed groups in
+[`src/skillc/data/tool_equivalents.json`](src/skillc/data/tool_equivalents.json)); the demo does,
+and shows which name it counted. It is off by default, so published results stay exact-name.
 
 ### Using skillc with GitHub Copilot
 
