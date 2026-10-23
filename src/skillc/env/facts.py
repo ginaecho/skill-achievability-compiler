@@ -128,6 +128,21 @@ def tools_matching(env: Environment, patterns: list[str]) -> list[dict]:
     return [t for t in env.of_kind("tool") if any(r.search(t["name"]) for r in rx)]
 
 
+SHELL_TOOLS = frozenset({"bash", "powershell", "pwsh", "sh", "zsh"})
+
+
+def possible_tools(env: Environment) -> set[str]:
+    """Normalized names of the built-in tools the runtime may use, allowed or asked for.
+
+    Any shell also grants `bash`, the shell capability packs are written against
+    (`frontend.markdown.SHELL_CAP`), so Copilot's `powershell` on Windows serves a skill
+    that runs commands through Bash, as a profile with `shell: true` does."""
+    from ..profiles import normalize_tool
+    names = {normalize_tool(t["name"]) for t in env.of_kind("tool")
+             if t["id"].startswith("tool/") and need(env, {"tool": t["name"]}).possible}
+    return names | ({"bash"} if names & SHELL_TOOLS else set())
+
+
 # --------------------------------------------------------------------------
 # Runtime needs: what an operation requires of the agent's runtime
 # --------------------------------------------------------------------------

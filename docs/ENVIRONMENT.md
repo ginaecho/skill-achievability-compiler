@@ -65,26 +65,40 @@ Outputs:
 Runnable examples: `examples/environment/` (a Contributor and an Owner over the
 same simulated subscription).
 
-## The Claude runtime: what can a SKILL.md or agent.md achieve here?
+## The agent's own runtime: what can a SKILL.md or agent.md achieve here?
 
-The same question applies to an agent's own runtime. For Claude, the
-environment is the session itself: its tools, its permission rules, the hosts
-its network policy lets it reach, the programs and Python modules installed,
-which credential variables are set (names only, never values), which paths it
-can write, and which MCP connectors are connected or still waiting for sign-in.
+The same question applies to an agent's own runtime: its tools, its permission
+rules, the hosts its network policy lets it reach, the programs and Python modules
+installed, which credential variables are set (names only, never values), which
+paths it can write, and which MCP servers are connected or still waiting for sign-in.
+
+**GitHub Copilot CLI is the default** (`env/copilot.py`). An agent started in this
+folder would have Copilot CLI's built-in tools (the `copilot-cli` profile, with
+`powershell` on Windows and `bash` elsewhere); it runs reads, search and questions
+without asking; it runs the shell commands and file writes you saved approvals for
+in `~/.copilot/permissions-config.json` (keyed by the Git root) and the URLs saved
+in `settings.json`; everything else asks first, which counts as possible under your
+approval. MCP servers come from the built-in GitHub server, `~/.copilot/mcp-config.json`,
+`.mcp.json` and `.github/mcp.json`; their tools are not listed, so they are unknown,
+never absent. Deny rules and tool filters are launch options no file records
+(`--deny-tool`, `--available-tools`, `--excluded-tools`), so they are reported as
+unknown. `$COPILOT_HOME` moves the configuration directory. Pass `--claude` to read
+the Claude Code runtime instead (`env/claude.py`: its settings files, rules and
+connectors).
 
 ```console
 # What does this skill need from its runtime? (each need cites its line)
 $ skillc intent path/to/SKILL.md
 
 # Probe exactly those needs here, read-only, and decide what is achievable
-$ skillc reach path/to/SKILL.md --claude [--save-env env.json] [--plan plan.md]
+$ skillc reach path/to/SKILL.md [--save-env env.json] [--plan plan.md]
+$ skillc reach path/to/SKILL.md --claude              # the Claude Code runtime instead
 
-# A cloud session's connectors and tools are not in a config file; name them
-$ skillc reach agent.md --claude --tools-file tools.json --connectors-file connectors.json
+# A session's MCP tools are not in a config file; name them
+$ skillc reach agent.md --tools-file tools.json --connectors-file connectors.json
 
 # Or probe once and reuse the snapshot
-$ skillc env probe --claude --needs-from SKILL.md -o env.json
+$ skillc env probe --needs-from SKILL.md -o env.json
 $ skillc reach SKILL.md --env env.json
 ```
 

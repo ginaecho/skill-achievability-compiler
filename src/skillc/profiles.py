@@ -7,7 +7,8 @@ grants `ask_user_input_v0`) and IMPOSSIBLE under `claude-code` (which does
 not) -- an operational illustration of relativity to Gamma and the
 contrapositive of Coq T3 (`cap_monotone`).
 
-Built-in profiles live in skillc/data/profiles/*.json:
+Built-in profiles live in skillc/data/profiles/*.json; `copilot-cli` (GitHub Copilot CLI) is
+the CLI's default, and `vscode-copilot`, `claude-code`, `claude-ai` and `none` are the others:
 
     {
       "name": "claude-code",

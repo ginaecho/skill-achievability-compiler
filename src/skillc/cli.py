@@ -9,6 +9,10 @@
   skillc eval                                            corpus evaluation
   skillc profiles                                        list capability profiles
 
+GitHub Copilot is the default runtime: `--profile` defaults to `copilot-cli`, `reach` and
+`env probe` read the Copilot CLI runtime unless told otherwise (`--claude`, `--env`), and
+`monitor init` installs Copilot hooks (`--claude` for Claude Code hooks).
+
 Exit codes: 0 achievable / all pass, 1 impossible / soundness violation,
 2 usage or input error, 3 unknown (an abstention, never a refutation).
 """
@@ -630,15 +634,15 @@ def cmd_monitor(args) -> int:
     root = Path(args.root)
     cfg_path = root / ".skillc" / "monitor.json"
     if args.action == "init":
-        if args.copilot:
+        if args.claude:
+            cfg = Config(runtime=args.runtime, thinking=args.thinking)
+        else:
             from .monitor_copilot import HOOKS_FILE, copilot_config, copilot_hooks
             cfg = copilot_config(args.runtime, args.thinking)
-        else:
-            cfg = Config(runtime=args.runtime, thinking=args.thinking)
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text(json.dumps(cfg.dump(), indent=1) + "\n", encoding="utf-8")
         print(f"wrote {cfg_path}")
-        if args.copilot:
+        if not args.claude:
             hooks_path = root / HOOKS_FILE
             hooks_path.parent.mkdir(parents=True, exist_ok=True)
             hooks_path.write_text(json.dumps(copilot_hooks(), indent=1) + "\n",
@@ -708,19 +712,20 @@ def _probe_env(args):
     if args.mcp_config:
         envs.append(mcp.probe(args.mcp_config, list_tools=args.list_tools))
     if args.claude:
-        envs.append(_probe_claude(args, args.needs_from or []))
+        envs.append(_probe_runtime(args, args.needs_from or [], "claude"))
     if getattr(args, "self", False):
         from .env import selfprobe
         envs.append(selfprobe.self_probe_from_args(args))
-    if not envs:
-        raise ValueError("say what to probe: --azure, --from-raw DIR, --claude, --foundry, "
-                         "--self and/or --mcp-config FILE")
+    if args.copilot or not envs:
+        # the default: the Copilot CLI runtime an agent started here would have
+        envs.append(_probe_runtime(args, args.needs_from or [], "copilot"))
     return merge(*envs)
 
 
-def _probe_claude(args, intents):
-    """The Claude runtime, asking about everything the given intents need."""
-    from .env import claude
+def _probe_runtime(args, intents, adapter: str = "copilot"):
+    """The local agent runtime (`copilot` or `claude`), asking about everything the given
+    intents need."""
+    from .env import claude, copilot
     from .env.reach import intent_needs, load_intent
     wanted = {"egress": list(args.host or []), "program": list(args.program or []),
               "pymodule": list(args.module or []), "path": list(args.path or []),
@@ -733,9 +738,11 @@ def _probe_claude(args, intents):
              if args.tools_file else None)
     connectors = (json.loads(Path(args.connectors_file).read_text(encoding="utf-8"))
                   if args.connectors_file else None)
-    return claude.probe(hosts=wanted["egress"], programs=wanted["program"],
+    module = claude if adapter == "claude" else copilot
+    names = claude.CREDENTIALS if adapter == "claude" else copilot.CREDENTIAL_NAMES
+    return module.probe(hosts=wanted["egress"], programs=wanted["program"],
                         modules=wanted["pymodule"], paths=wanted["path"],
-                        credentials=[*claude.CREDENTIALS, *wanted["credential"]],
+                        credentials=[*names, *wanted["credential"]],
                         tools=tools, connectors=connectors,
                         check_egress=not args.no_egress)
 
@@ -798,13 +805,11 @@ def cmd_reach(args) -> int:
     intent = load_intent(args.intent)
     if args.env:
         env = Environment.load(args.env)
-    elif args.claude:
-        env = _probe_claude(args, [intent])
+    else:
+        env = _probe_runtime(args, [intent], "claude" if args.claude else "copilot")
         if args.save_env:
             env.save(args.save_env)
             print(f"wrote {args.save_env}", file=sys.stderr)
-    else:
-        raise ValueError("say where to look: --env FILE, or --claude to probe this runtime")
     result = reach(intent, env, load_catalog(args.catalog) if args.catalog else None)
     print(as_json(result) if args.json else text_report(result))
     if args.plan:
@@ -910,8 +915,8 @@ def _add_probe_opts(sp) -> None:
     sp.add_argument("--list-tools", action="store_true",
                     help="start the configured stdio MCP servers to list their tools")
     sp.add_argument("--needs-from", action="append", metavar="INTENT",
-                    help="with --claude: probe what these intents' operations need")
-    _add_claude_opts(sp)
+                    help="probe what these intents' operations need")
+    _add_runtime_opts(sp)
     # hosted-agent probes (docs/HOSTED_AGENT.md): the Foundry control plane and the sandbox
     try:
         from .env import foundry
@@ -925,21 +930,28 @@ def _add_probe_opts(sp) -> None:
         pass
 
 
-def _add_claude_opts(sp) -> None:
-    sp.add_argument("--claude", action="store_true",
-                    help="probe the Claude runtime: tools, permission rules, egress, "
-                         "programs, modules, credentials (names only), paths, connectors")
-    sp.add_argument("--host", action="append", help="with --claude: check egress to HOST")
-    sp.add_argument("--program", action="append", help="with --claude: look for PROGRAM")
-    sp.add_argument("--module", action="append", help="with --claude: look for a Python module")
-    sp.add_argument("--path", action="append", help="with --claude: check PATH is writable")
+def _add_runtime_opts(sp) -> None:
+    runtime = sp.add_mutually_exclusive_group()
+    runtime.add_argument("--copilot", action="store_true",
+                         help="probe the GitHub Copilot CLI runtime (the default): built-in "
+                              "tools, saved approvals, MCP servers, trust, programs, modules, "
+                              "credentials (names only), paths, egress")
+    runtime.add_argument("--claude", action="store_true",
+                         help="probe the Claude Code runtime instead: tools, permission "
+                              "rules, egress, programs, modules, credentials, paths, "
+                              "connectors")
+    sp.add_argument("--host", action="append", help="check egress to HOST")
+    sp.add_argument("--program", action="append", help="look for PROGRAM")
+    sp.add_argument("--module", action="append", help="look for a Python module")
+    sp.add_argument("--path", action="append", help="check PATH is writable")
     sp.add_argument("--tools-file", metavar="JSON",
-                    help="with --claude: the session's tool names (default: claude-code profile)")
+                    help="the session's tool names (default: the copilot-cli profile, or "
+                         "claude-code with --claude)")
     sp.add_argument("--connectors-file", metavar="JSON",
-                    help="with --claude: {connector: [tool, ...]} for connected MCP servers "
+                    help="{connector: [tool, ...]} for connected MCP servers "
                          "not in any config file")
     sp.add_argument("--no-egress", action="store_true",
-                    help="with --claude: do not send the egress requests")
+                    help="do not send the egress requests")
 
 
 def cmd_profiles(args) -> int:
@@ -950,8 +962,9 @@ def cmd_profiles(args) -> int:
 
 
 def _add_compile_opts(sp) -> None:
-    sp.add_argument("--profile", default="claude-ai",
-                    help="capability profile (built-in name or JSON path)")
+    sp.add_argument("--profile", default="copilot-cli",
+                    help="capability profile (built-in name or JSON path; default: "
+                         "copilot-cli, see `skillc profiles`)")
     sp.add_argument("--tool", action="append", metavar="NAME",
                     help="grant an extra tool capability (repeatable)")
     sp.add_argument("--contract", metavar="JSON",
@@ -1093,14 +1106,17 @@ def main(argv: list[str] | None = None) -> int:
                          "without hooks (state under --root, default ~/.skillc-mcp); "
                          "scout-install: register that server and the skillc-check skill "
                          "with Microsoft Scout (backs up what it replaces)")
-    sp.add_argument("arg", nargs="?", help="hook kind (prompt|pre|post for Claude Code, "
-                                           "copilot for GitHub Copilot) or plan file")
+    sp.add_argument("arg", nargs="?", help="hook kind (copilot for GitHub Copilot; "
+                                           "prompt|pre|post for Claude Code) or plan file")
     sp.add_argument("event", nargs="?", help="with `hook copilot`: the Copilot hook event "
                                              "(sessionStart, userPromptSubmitted, preToolUse, "
                                              "postToolUse, postToolUseFailure, agentStop)")
-    sp.add_argument("--copilot", action="store_true",
-                    help="init: configure for GitHub Copilot hooks (CLI and cloud agent) and "
-                         "write .github/hooks/skillc.json instead of Claude Code hooks")
+    hosts = sp.add_mutually_exclusive_group()
+    hosts.add_argument("--copilot", action="store_true",
+                       help="init: GitHub Copilot hooks (CLI and cloud agent), written to "
+                            ".github/hooks/skillc.json; the default")
+    hosts.add_argument("--claude", action="store_true",
+                       help="init: Claude Code hooks instead (prints the settings snippet)")
     sp.add_argument("--root", default=".", help="project directory (default: .)")
     sp.add_argument("--runtime", default="developer-sandbox",
                     help="init: runtime manifest name or JSON path")
@@ -1153,8 +1169,8 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("intent", help="skillc.intent/1 file, a built-in intent name, "
                                    "or a SKILL.md / agent.md")
     sp.add_argument("--env", help="skillc.env/1 file (from `skillc env probe`)")
-    sp.add_argument("--save-env", metavar="FILE", help="with --claude: keep the probe")
-    _add_claude_opts(sp)
+    sp.add_argument("--save-env", metavar="FILE", help="keep the runtime probe")
+    _add_runtime_opts(sp)
     sp.add_argument("--catalog", help="operation catalogue name or skillc.ops/1 file")
     sp.add_argument("--json", action="store_true")
     sp.add_argument("--plan", metavar="FILE", help="write the English + CE plan (Markdown)")

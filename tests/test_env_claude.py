@@ -212,7 +212,7 @@ def test_cli_intent_and_reach(tmp_path, env, capsys):
     env.save(env_file)
     assert main(["reach", str(path), "--env", str(env_file)]) == 1
     assert "egress:blocked.example.org" in capsys.readouterr().out
-    assert main(["reach", str(path)]) == 2
+    assert main(["reach", str(path), "--env", str(tmp_path / "missing.json")]) == 2
 
 
 # --------------------------------------------------------------------------

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from skillc.env import claude
+from skillc.env import copilot
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "demo" / "skillc-here" / "app.py"
 SPEC = importlib.util.spec_from_file_location("skillc_here_app", MODULE_PATH)
@@ -14,9 +14,9 @@ SPEC.loader.exec_module(app)
 
 @pytest.fixture
 def env(tmp_path):
-    # no settings, MCP configs or credentials from this machine: the bundled tool list only
-    return app.read_environment(refresh=True, probe=lambda: claude.probe(
-        root=tmp_path, settings=(), mcp_configs=(), credentials=(), check_egress=False))
+    # no Copilot settings, approvals, MCP configs or credentials: the built-in tools only
+    return app.read_environment(refresh=True, probe=lambda: copilot.probe(
+        root=tmp_path, home=tmp_path / "copilot-home", credentials=(), check_egress=False))
 
 
 def _skill(name):
@@ -27,18 +27,24 @@ def _verdicts(result):
     return {r["setting"]: (r["verdict"], r["missing"]) for r in result["rows"]}
 
 
-def test_environment_lists_tools_and_grants(env):
+def test_environment_lists_copilot_tools_and_grants(env):
     names = {t["name"] for t in env["tools"]}
-    assert {"bash", "read", "edit"} <= names
-    assert "bash" in env["grants"]
+    assert {"view", "edit", "grep"} <= names
+    assert names & {"bash", "powershell"}
+    assert {"bash", "view", "edit"} <= set(env["grants"])     # any shell grants `bash`
     assert env["credentials"] == []
+    assert env["runtime"] == "GitHub Copilot CLI"
+    assert [m["name"] for m in env["mcp"]] == ["github"]
 
 
 def test_same_skill_differs_by_setting(env):
     v = _verdicts(app.check_skill(_skill("fix-failing-test"), app.settings(env)))
-    assert v["claude.ai"] == ("IMPOSSIBLE", ["edit", "grep", "read"])
-    assert v["Claude Code"][0] == "ACHIEVABLE"
+    assert list(v) == ["this machine", "Copilot CLI", "VS Code Copilot", "Claude Code",
+                       "claude.ai"]
     assert v["this machine"][0] == "ACHIEVABLE"
+    assert v["Copilot CLI"][0] == "ACHIEVABLE"
+    assert v["Claude Code"] == ("IMPOSSIBLE", ["view"])
+    assert v["claude.ai"] == ("IMPOSSIBLE", ["edit", "grep"])
     v = _verdicts(app.check_skill(_skill("book-a-table"), app.settings(env)))
     assert v["claude.ai"][0] == "ACHIEVABLE"
     assert v["this machine"] == ("IMPOSSIBLE", ["ask_user_input_v0", "web_search"])
@@ -48,8 +54,13 @@ def test_what_if_changes_only_this_machine(env):
     where = app.settings(env)
     where["this machine"] = [*env["grants"], "slack_send_message"]
     v = _verdicts(app.check_skill(_skill("post-release-note"), where))
-    assert v["Claude Code"] == ("IMPOSSIBLE", ["slack_send_message"])
+    assert v["Copilot CLI"] == ("IMPOSSIBLE", ["slack_send_message"])
     assert v["this machine"][0] == "ACHIEVABLE"
+
+
+def test_profiles_with_a_shell_grant_bash():
+    assert "bash" in app.profile_grants("vscode-copilot")
+    assert "bash" in app.profile_grants("copilot-cli")
 
 
 def test_free_prompt_abstains_rather_than_approves(env):
@@ -89,7 +100,7 @@ def test_why_cases_are_decided_live():
     got = {c["id"]: app.why_run(c["id"]) for c in app.WHY["cases"]}
     assert got["slack-note"]["verdict"] == "IMPOSSIBLE"
     assert got["slack-note"]["missing"] == ["slack_send_message"]
-    assert got["chat-repo"]["missing"] == ["edit", "grep", "read"]
+    assert got["chat-repo"]["missing"] == ["edit", "grep"]
     assert got["deploy"]["plan_decision"] == "deny" and "BLOCKED_GUARD" in got["deploy"]["plan_reason"]
     assert got["email-cfo"]["plan_decision"] == "deny" and "send_email" in got["email-cfo"]["plan_reason"]
     push = got["force-push"]["steps"]

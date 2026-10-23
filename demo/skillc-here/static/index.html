@@ -123,14 +123,20 @@ ul.ev li.declared b { color: var(--unk); }
       <h2><span class="step">1</span>What skillc found here</h2>
       <div id="envStatus" class="muted">Reading this machine…</div>
       <div id="envBody" hidden>
-        <div class="muted">Tools an agent started here can use. <b>?</b> = asks you first. Click a tool to switch it off (or on) and see what changes.</div>
+        <div class="muted">Tools a GitHub Copilot CLI agent started here can use. <b>?</b> = asks you first. Click a tool to switch it off (or on) and see what changes.</div>
         <div id="tools" class="chips"></div>
         <div class="row"><input type="text" id="addTool" placeholder="add a tool, e.g. slack_send_message" style="flex:1"><button class="ghost" id="addBtn">Add</button></div>
         <details><summary id="mcpSum">MCP servers</summary><div id="mcp" class="chips"></div>
           <div class="muted">A server's tools count only when its configuration lists them.</div></details>
         <details><summary id="credSum">Credentials set</summary><div id="creds" class="chips"></div>
           <div class="muted">Names only; values are never read into the page.</div></details>
-        <details><summary>Read from</summary><div id="sources" class="muted"></div></details>
+        <div id="sources" class="muted"></div>
+        <details><summary>Use skillc in your own Copilot sessions</summary>
+          <div class="muted">
+            <p><b>Check a skill before you use it:</b><br><code>skillc check SKILL.md</code> (Copilot CLI is the default; <code>--profile vscode-copilot</code> for VS Code)</p>
+            <p><b>See what this folder allows, and what is blocked:</b><br><code>skillc reach SKILL.md</code></p>
+            <p><b>Let skillc stop disallowed actions during a session:</b><br><code>skillc monitor init</code> writes <code>.github/hooks/skillc.json</code>; Copilot CLI and the Copilot cloud agent then ask skillc before every tool call.</p>
+          </div></details>
         <div class="row"><button class="ghost" id="refresh">Read again</button><button class="ghost" id="reset">Undo my changes</button></div>
       </div>
     </div>
@@ -276,7 +282,8 @@ function drawEnv() {
   const set = e.credentials.filter((c) => c.set);
   $("credSum").textContent = `Credentials set: ${set.length} of ${e.credentials.length} checked`;
   $("creds").innerHTML = set.map((c) => `<span class="chip static">${esc(c.name)}</span>`).join("") || '<span class="muted">none</span>';
-  $("sources").innerHTML = e.sources.map(esc).join("<br>") + `<br>captured ${esc(e.captured)}`;
+  $("sources").textContent = `Read as ${e.runtime} sees this folder · captured ${new Date(e.captured).toLocaleString()}`;
+  $("sources").title = e.sources.join("\n");
   $("envStatus").textContent = `${e.tools.length} tools, ${e.mcp.length} MCP servers` + (edited() ? " · edited by you (what-if)" : "");
   $("envBody").hidden = false;
 }
@@ -302,7 +309,7 @@ async function check() {
     $("result").innerHTML = `<p><b>${esc(r.name)}</b> needs ${r.needs.length ? "<code>" + r.needs.map(esc).join("</code>, <code>") + "</code>" : "no tool skillc could read"}.</p>
       <table><tr><th>where it runs</th><th>verdict</th><th>why</th></tr>${rows}</table>
       <p class="muted">IMPOSSIBLE is relative to the compiled workflow and selected tool inventory. ACHIEVABLE is not runtime success or permission to act. UNKNOWN means the text could not be compacted sufficiently; it never counts as permission.</p>
-      <p class="muted">This tab reads Claude Code configuration, not the active Copilot session. Tools marked "asks first" count as possible here, conditional on approval. Credential presence is not authentication, and configured MCP servers are not verified live connections. Use the measured benchmark below for independently executed outcomes.</p>`;
+      <p class="muted">"This machine" is what a Copilot CLI agent started in this folder would have: its built-in tools, the approvals you saved for this repository, and its MCP servers. It cannot see options a running session was started with (<code>--deny-tool</code>, <code>--excluded-tools</code>), and MCP servers' tools are not listed. Tools marked "asks first" count as possible, conditional on your approval. Credential presence is not authentication. Profiles match tool names: a skill written for one runtime's names can be IMPOSSIBLE in another. Use the measured benchmark in tab 3 for independently executed outcomes.</p>`;
   } catch (err) { $("result").innerHTML = `<p class="err">${esc(err.message)}</p>`; }
 }
 function recheck() { if ($("skill").value.trim() && $("result").innerHTML) check(); }

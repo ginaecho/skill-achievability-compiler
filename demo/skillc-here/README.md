@@ -1,9 +1,10 @@
 # skillc here
 
-**Shows:** skillc reading this machine by itself (tools, permissions, MCP servers) and deciding what a
-skill can do here, next to claude.ai and Claude Code; and, for an uploaded graph, what a workflow can
-establish from it and what is missing; and **why** skillc, next to an LLM alone and an LLM with a guiding
-skill. **Audience:** first-time viewers. **Time:** 3 to 6 minutes.
+**Shows:** skillc reading this folder by itself the way GitHub Copilot CLI sees it (tools, saved
+approvals, MCP servers) and deciding what a skill can do here, next to Copilot CLI, VS Code Copilot,
+Claude Code and claude.ai; and, for an uploaded graph, what a workflow can establish from it and what
+is missing; and **why** skillc, next to an LLM alone and an LLM with a guiding skill. **Audience:**
+first-time viewers. **Time:** 3 to 6 minutes.
 
 ## Run it
 
@@ -17,9 +18,11 @@ and answers only requests addressed to `127.0.0.1` or `localhost`.
 
 ## Present it
 
-1. Open the page. Point at the left panel: skillc has already read this machine. Nobody typed a tool list.
-2. Click the example **fix-failing-test**. Same skill, three settings: IMPOSSIBLE on claude.ai (no
-   Edit, Grep or Read), ACHIEVABLE in Claude Code and here.
+1. Open the page. Point at the left panel: skillc has already read this folder as Copilot CLI sees
+   it. Nobody typed a tool list.
+2. Click the example **fix-failing-test**, written with Copilot CLI's tool names (`grep`, `view`,
+   `edit`, `bash`). ACHIEVABLE here and in Copilot CLI; IMPOSSIBLE in Claude Code (no `view`) and
+   claude.ai (no `edit`, `grep`): profiles match tool names.
 3. Click **book-a-table**: the opposite. It needs claude.ai's `ask_user_input_v0`.
 4. Click the **edit** tool to switch it off. Only "this machine" flips to IMPOSSIBLE: settings decide.
    **Undo my changes**.
@@ -35,21 +38,39 @@ and answers only requests addressed to `127.0.0.1` or `localhost`.
 
 ## 1 · My environment: what can an agent do here?
 
-On load the page reads this machine as a Claude Code agent started in this repository sees it
-(`skillc.env.claude.probe`):
+On load the page reads this folder as a GitHub Copilot CLI agent started here would see it
+(`skillc.env.copilot.probe`):
 
-* **Tools**, with their permission status from your settings (allowed, asks first, denied).
-* **MCP servers** from the configuration files, and the tools each one lists.
+* **Tools**: Copilot CLI's built-in tools, with this platform's shell (`powershell` on Windows,
+  `bash` elsewhere). Reads, search and questions run without asking; shell commands and file
+  writes ask first unless you saved an approval for this repository
+  (`~/.copilot/permissions-config.json`).
+* **MCP servers**: the built-in GitHub server and those in `~/.copilot/mcp-config.json`,
+  `.mcp.json` and `.github/mcp.json`.
 * **Credentials:** which of the usual names are set. Values are never read into the page.
 
-Pick an example skill or paste your own, and press **Check it here**. skillc compiles the text once
-(no tool is assumed) and checks it against three settings side by side:
+One line under the panel says what was read and when (hover it for the files).
 
-| skill | claude.ai | Claude Code | this machine |
-|---|---|---|---|
-| `fix-failing-test` | IMPOSSIBLE: missing `edit`, `grep`, `read` | ACHIEVABLE | ACHIEVABLE |
-| `book-a-table` | ACHIEVABLE | IMPOSSIBLE: missing `ask_user_input_v0`, `web_search` | IMPOSSIBLE |
-| `post-release-note` | IMPOSSIBLE: missing `slack_send_message` | IMPOSSIBLE | IMPOSSIBLE |
+Pick an example skill or paste your own, and press **Check it here**. skillc compiles the text once
+(no tool is assumed) and checks it against this machine and four published profiles side by side:
+
+| skill | this machine | Copilot CLI | VS Code Copilot | Claude Code | claude.ai |
+|---|---|---|---|---|---|
+| `fix-failing-test` | ACHIEVABLE | ACHIEVABLE | IMPOSSIBLE: missing `grep`, `view` | IMPOSSIBLE: missing `view` | IMPOSSIBLE: missing `edit`, `grep` |
+| `book-a-table` | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE | ACHIEVABLE |
+| `post-release-note` | IMPOSSIBLE: missing `slack_send_message` | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE | IMPOSSIBLE |
+
+Profiles match tool **names**, so a skill written with one runtime's names is IMPOSSIBLE where the
+names differ (VS Code Copilot calls them `grep_search` and `read_file`). Any runtime with a shell
+grants `bash`, so Windows' `powershell` serves a skill that runs commands through Bash.
+
+**Use it in your own Copilot sessions** (the panel's last section):
+
+```bash
+skillc check SKILL.md        # before you install a skill (Copilot CLI; --profile vscode-copilot for VS Code)
+skillc reach SKILL.md        # what this folder allows, what is blocked, and how to unblock it
+skillc monitor init          # writes .github/hooks/skillc.json: Copilot asks skillc before every tool call
+```
 
 **What-if.** Click a tool to switch it off, or add one (for example `slack_send_message`, as if a
 Slack server were connected). Only the "this machine" row is re-checked. **Undo my changes**
@@ -85,9 +106,9 @@ examples are made up; no tenant data.
 
 ## 3 · Why skillc: an LLM alone, an LLM with a guiding skill, and skillc
 
-Choose **Tools the agent has** (a coding agent with Claude Code tools, a chat assistant with claude.ai
-tools, or a finance agent of six role agents on Foundry), then a **Case**. Each case shows the same
-prompt three ways:
+Choose **Tools the agent has** (a coding agent with GitHub Copilot CLI tools, a chat assistant with
+claude.ai tools, or a finance agent of six role agents on Foundry), then a **Case**. Each case shows
+the same prompt three ways:
 
 1. **LLM alone**: the model gets the prompt and acts.
 2. **LLM + a guiding skill**: the model is also told to check its tools and permissions first and
@@ -98,8 +119,8 @@ prompt three ways:
 | Setup | Case | What it shows |
 |---|---|---|
 | Coding agent | Post the release note to Slack | A guiding skill can stop honestly too; skillc decides before any run, without a model |
-| Coding agent | Fix the failing test, then deploy to Vercel | A tool check passes (Bash exists), but a precondition (the account) fails late; skillc refuses the plan |
-| Coding agent | A file tells the agent to force-push | A rule in the prompt can be overridden; skillc's refusal sits outside the model |
+| Coding agent | Fix the failing test, then deploy to Vercel | A tool check passes (a shell exists), but a precondition (the account) fails late; skillc refuses the plan |
+| Coding agent | A file tells the agent to force-push | A rule in the prompt can be overridden; skillc's refusal, as a Copilot hook, sits outside the model |
 | Chat assistant | Fix a failing test from a chat window | The same skill belongs to one runtime and not another |
 | Finance agent | Approval is skipped when the rule isn't in the prompt | **Measured** (126 runs on Foundry): without the policy sentence the bare agent delivered unapproved reports in 2 of 3 runs, with it 0 violations; skillc held the rule either way |
 | Finance agent | Email the report to the CFO | The deliverable is refused before deployment; column 2 is measured |
@@ -173,20 +194,20 @@ the benchmark must report that rather than assume SkillC wins.
 
 ## What it reads, and what it does not
 
-* Claude Code's built-in tool list comes from skillc's `claude-code` profile. The permission rules
-  come from your settings files. A running session's tools are not visible to a separate process.
-  This is not discovery of the active Copilot session. The first tab includes "asks first" tools
-  as possible grants: its positive result is conditional on user approval, not a verified grant.
-  Credential-variable presence likewise does not establish valid authentication or authorization.
-* A claude.ai connector shows as a server with its tools not listed, so its tools do not count.
-  Add a tool by hand to try the what-if.
+* The first tab reads Copilot CLI's saved configuration, not a running session. A session's launch
+  options (`--deny-tool`, `--available-tools`, `--excluded-tools`, `--allow-all`) are not recorded
+  in any file, so they are reported as unknown. "Asks first" tools count as possible grants: a
+  positive result is conditional on your approval, not a verified grant. Credential-variable
+  presence likewise does not establish valid authentication or authorization.
+* MCP servers' tools are not listed (no server is started), so they do not count. Add a tool by
+  hand to try the what-if.
 * Uploaded graphs are written to a temporary directory for parsing and deleted afterwards. JSON-LD
   is refused, because it can fetch remote contexts.
 
 ## API
 
-* `GET /api/environment` (`?refresh=1` reads again): `tools`, `mcp`, `credentials`, `grants`,
-  `settings` (the grants of each setting).
+* `GET /api/environment` (`?refresh=1` reads again): `runtime`, `captured`, `sources`, `tools`,
+  `mcp`, `credentials`, `grants`, `settings` (the grants of each setting).
 * `GET /api/samples`: the example skills, graph and workflow.
 * `POST /api/check` `{"text", "machine": [tool, ...]?}`: `name`, `needs`, and `rows` with
   `setting`, `verdict`, `reason`, `detail`, `missing`.

@@ -555,7 +555,7 @@ def _hook(kind, event, cwd):
 
 
 def test_claude_code_hook_protocol_end_to_end(tmp_path):
-    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--root",
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--claude", "--root",
                     str(tmp_path)], check=True, capture_output=True)
     ev = {"session_id": "s1", "cwd": str(tmp_path)}
     out = _hook("prompt", {**ev, "prompt": "deploy it with eas build"}, tmp_path)
@@ -586,7 +586,7 @@ def test_inactive_without_config(tmp_path):
 
 
 def test_post_tool_hook_reports_observed_runtime_facts(tmp_path):
-    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--root",
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--claude", "--root",
                     str(tmp_path)], check=True, capture_output=True)
     ev = {"session_id": "s1", "cwd": str(tmp_path)}
     plan = str(tmp_path / ".skillc" / "plan.ce")

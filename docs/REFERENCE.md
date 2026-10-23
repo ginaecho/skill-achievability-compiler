@@ -7,9 +7,9 @@ results. Start with the [README](../README.md) for the short version.
 
 | Where | What skillc does there | Activate | Read |
 |---|---|---|---|
-| **CLI and CI** | Static validation of skills, agents, prompts and packs | `skillc check SKILL.md --profile claude-code` | [Quick start](../README.md#tools) |
-| **Claude Code** | Runtime monitor through Claude Code hooks | `skillc monitor init --runtime developer-sandbox` | [Runtime monitor](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md) |
-| **GitHub Copilot** (CLI and cloud agent) | Runtime monitor through Copilot hooks | `skillc monitor init --copilot --runtime developer-sandbox` | [Copilot hooks](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md#github-copilot-hooks-copilot-cli-and-the-copilot-cloud-agent) |
+| **CLI and CI** | Static validation of skills, agents, prompts and packs (GitHub Copilot CLI by default) | `skillc check SKILL.md` | [Quick start](../README.md#tools) |
+| **GitHub Copilot** (CLI and cloud agent), the default | Runtime monitor through Copilot hooks | `skillc monitor init --runtime developer-sandbox` | [Copilot hooks](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md#github-copilot-hooks-copilot-cli-and-the-copilot-cloud-agent) |
+| **Claude Code** | Runtime monitor through Claude Code hooks | `skillc monitor init --claude --runtime developer-sandbox` | [Runtime monitor](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md) |
 | **Microsoft Agent 365** (agents built with Microsoft Agent Framework, incl. Foundry hosted agents) | **Enforced** runtime gate as Agent Framework middleware; evidence-bound approvals; ten source-backed cases | `pip install -e ".[agent-framework]"`, then `skillc_monitor(..., strict=True, fail_open=False)` | [Agent 365 security](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/AGENT365_SECURITY.md) · [cases](https://github.com/ginaecho/skill-achievability-compiler/blob/main/examples/agent365-cases/README.md) |
 | **Microsoft Scout** | Same checks and approvals as MCP tools the agent calls (**cooperative**, not enforced) | `skillc monitor scout-install`, then restart Scout | [Scout parity](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/SCOUT_PARITY.md) |
 | **Demos** | See skillc read this machine and decide what a skill can do here; replay incidents with and without skillc; watch a skill go through the compiler | `python demo/skillc-here/app.py` | [All demos](../demo/README.md) |
@@ -38,9 +38,11 @@ call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
 ```
 
 The same skill, two verdicts: achievability is **relative to the declared
-environment**. Profiles and self-declared `allowed-tools`/`tools` metadata are
-distinct trust inputs; the frontend combines them but does not discover or
-verify actual runtime grants.
+environment**. Without `--profile`, skillc checks against GitHub Copilot CLI
+(`copilot-cli`); `skillc profiles` lists the others (`vscode-copilot`,
+`claude-code`, `claude-ai`, `none`). Profiles and self-declared
+`allowed-tools`/`tools` metadata are distinct trust inputs; the frontend combines
+them but does not discover or verify actual runtime grants (`skillc reach` does).
 
 ```console
 $ skillc scan /mnt/skills --profile claude-ai      # every skill achievable (42/42)
@@ -161,8 +163,8 @@ the agent first writes its plan in Controlled English, only an `ACHIEVABLE` plan
 unlocks implementation, and every action is checked before it runs.
 
 ```bash
-skillc monitor init --runtime developer-sandbox             # Claude Code hooks
-skillc monitor init --copilot --runtime developer-sandbox   # writes .github/hooks/skillc.json
+skillc monitor init --runtime developer-sandbox             # GitHub Copilot (default): writes .github/hooks/skillc.json
+skillc monitor init --claude --runtime developer-sandbox    # Claude Code hooks
 ```
 
 See [`docs/RUNTIME_MONITOR.md`](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/RUNTIME_MONITOR.md).

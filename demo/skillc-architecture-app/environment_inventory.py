@@ -114,20 +114,21 @@ class EnvironmentInventory:
 
 
 def probe_local_environment(repo_root: Path, source: str):
-    """Use the existing needs-driven runtime adapter without fabricating grants."""
+    """Use the existing needs-driven runtime adapter without fabricating grants: the
+    GitHub Copilot CLI runtime an agent started in the repository would have."""
     _add_source_path(repo_root)
-    from skillc.env import claude
+    from skillc.env import copilot
     from skillc.env.nl import intent_from_text
     from skillc.env.reach import intent_needs
 
     needs = intent_needs(intent_from_text(source)) if source.strip() else {}
-    return claude.probe(
+    return copilot.probe(
         root=repo_root,
         hosts=needs.get("egress", ()),
         programs=needs.get("program", ()),
         modules=needs.get("pymodule", ()),
         paths=needs.get("path", ()),
-        credentials=[*claude.CREDENTIALS, *needs.get("credential", ())],
+        credentials=[*copilot.CREDENTIAL_NAMES, *needs.get("credential", ())],
     )
 
 
@@ -135,11 +136,11 @@ def _capability_summary(environment) -> dict:
     if environment is None:
         return {"grants": [], "capabilities": [], "services": []}
 
-    from skillc.env.facts import need
+    from skillc.env.facts import need, possible_tools
     from skillc.profiles import normalize_tool
 
     capabilities = []
-    grants = set()
+    grants = possible_tools(environment)
     for tool in sorted(environment.of_kind("tool"), key=lambda node: node["name"]):
         fact = need(environment, {"tool": tool["name"]})
         status = "granted" if fact.value is True else (
@@ -151,8 +152,6 @@ def _capability_summary(environment) -> dict:
             "status": status,
             "reasons": list(fact.reasons),
         })
-        if fact.possible:
-            grants.add(normalize_tool(tool["name"]))
 
     services = []
     for node in sorted(environment.of_kind("service"), key=lambda item: item["name"]):

@@ -88,13 +88,26 @@ def probe(*, root: str | Path = ".", hosts: Iterable[str] = (),
                              type="agent",
                              remote=os.environ.get("CLAUDE_CODE_REMOTE") == "true")
     env.add_node("/", "scope", "session", level="root")
+    _tools(env, list(tools) if tools is not None else default_tools())
+    _permissions(env, principal, root, settings)
+    add_machine(env, root, hosts=hosts, programs=programs, modules=modules, paths=paths,
+                credentials=credentials, check_egress=check_egress, timeout=timeout)
+    _connectors(env, connectors or {}, [str(Path(c).expanduser() if c.startswith("~")
+                                            else root / c) for c in mcp_configs])
+    return env
+
+
+def add_machine(env: Environment, root: Path, *, hosts: Iterable[str] = (),
+                programs: Iterable[str] = (), modules: Iterable[str] = (),
+                paths: Iterable[str] = (), credentials: Iterable[str] = CREDENTIALS,
+                check_egress: bool = True, timeout: float = 8.0) -> None:
+    """Facts about the machine any local agent runtime shares: platform, writable paths,
+    programs, a running Docker daemon, Python modules, credential names and egress."""
     system = _platform.system().lower()
     for name in ("linux", "windows", "macos", "mobile_device", "gpu"):
         env.add_node(f"platform/{name}", "service", name, type="platform",
                      available=name == {"darwin": "macos"}.get(system, system)
                      or (name == "gpu" and shutil.which("nvidia-smi") is not None))
-    _tools(env, list(tools) if tools is not None else default_tools())
-    _permissions(env, principal, root, settings)
     _paths(env, [str(root), *paths])
     for name in programs:
         env.add_node(f"program/{name}", "service", name, available=shutil.which(name) is not None,
@@ -116,9 +129,6 @@ def probe(*, root: str | Path = ".", hosts: Iterable[str] = (),
                          type="egress")
     if not check_egress and hosts:
         env.mark_unknown("egress", "egress was not checked (--no-egress)")
-    _connectors(env, connectors or {}, [str(Path(c).expanduser() if c.startswith("~")
-                                            else root / c) for c in mcp_configs])
-    return env
 
 
 def _tools(env: Environment, tools: list[str]) -> None:

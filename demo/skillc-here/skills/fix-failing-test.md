@@ -9,16 +9,16 @@ Your job is finished when the fix is **verified**.
 
 ## Tools
 
-Tools: Grep, Read, Edit, Bash.
+Tools: grep, view, edit, bash.
 
-- `Grep` marks the failure **located**.
-- `Read` requires the failure **located** and marks the code **understood**.
-- `Edit` requires the code **understood** and marks the fix **applied**.
-- `Bash` requires the fix **applied** and marks the fix **verified**.
+- `grep` marks the failure **located**.
+- `view` requires the failure **located** and marks the code **understood**.
+- `edit` requires the code **understood** and marks the fix **applied**.
+- `bash` requires the fix **applied** and marks the fix **verified**.
 
 ## Workflow
 
-1. Find the failing test with Grep.
-2. Read the code under test with Read.
-3. Fix the code with Edit.
-4. Run the test suite with Bash.
+1. Find the failing test with grep.
+2. Read the code under test with view.
+3. Fix the code with edit.
+4. Run the test suite with bash.

@@ -397,7 +397,7 @@ def _hook(kind, event, cwd):
 
 
 def test_hook_refuses_the_call_that_realizes_a_hazardous_thought(tmp_path):
-    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--root",
+    subprocess.run([sys.executable, "-m", "skillc.cli", "monitor", "init", "--claude", "--root",
                     str(tmp_path)], check=True, capture_output=True)
     cfg = json.loads((tmp_path / ".skillc" / "monitor.json").read_text("utf-8"))
     assert cfg["interaction"] == {} and cfg["allowed_destinations"] == [] \

@@ -85,29 +85,54 @@ pip install -e ".[mcp]"                # + MCP server, for hosts without hooks (
 pip install -e ".[dev]"                # + tests and lint
 ```
 
+**GitHub Copilot is the default runtime.** Without options, `check` and `scan` use the
+`copilot-cli` profile, `reach` and `env probe` read the Copilot CLI runtime of this folder, and
+`monitor init` installs Copilot hooks. Pass `--profile vscode-copilot`, `--profile claude-code` or
+`--profile claude-ai` for another runtime, and `--claude` to read or hook Claude Code instead.
+
 | Tool | What it does | Use it when |
 |---|---|---|
-| `skillc check SKILL.md --profile claude-code` | Verdict for one skill, agent file, prompt or pack in a runtime | Before publishing or installing a skill; exit codes `0` ok, `1` impossible, `3` unknown, `2` error gate CI |
+| `skillc check SKILL.md` | Verdict for one skill, agent file, prompt or pack in a runtime (default `--profile copilot-cli`) | Before publishing or installing a skill; exit codes `0` ok, `1` impossible, `3` unknown, `2` error gate CI |
 | `skillc scan DIR` | `check` for every skill under a folder | CI for a skill repository |
-| `skillc reach SKILL.md --claude` or `--env FILE` | What the skill can achieve in *this* environment, a checked plan, and the fix for what is blocked | Before running in a real workspace or subscription |
-| `skillc env probe` | Read the environment read-only into a graph: Azure roles and policies, MCP servers, tools | To snapshot, `diff` or `watch` what an agent may do |
+| `skillc reach SKILL.md` (or `--claude`, `--env FILE`) | What the skill can achieve in *this* folder as Copilot CLI sees it, a checked plan, and the fix for what is blocked | Before running in a real workspace or subscription |
+| `skillc env probe` | Read the environment read-only into a graph: Copilot CLI tools, saved approvals and MCP servers by default; Azure roles and policies with `--azure` | To snapshot, `diff` or `watch` what an agent may do |
 | `skillc twin explore GRAPH` · `skillc twin check GRAPH --workflow FILE` | What a graph holds, and per target which workflow evidence it has and which is missing | Before building a verifier or report on tenant data |
-| `skillc monitor init` | Runtime monitor through Claude Code or Copilot hooks: plan first, every action checked | Coding agents with write or shell access |
+| `skillc monitor init` | Runtime monitor through Copilot hooks (`.github/hooks/skillc.json`), or Claude Code hooks with `--claude`: plan first, every action checked | Coding agents with write or shell access |
 | `skillc_monitor(..., strict=True, fail_open=False)` | Enforced gate as Agent Framework middleware, with evidence-bound approvals | Agent 365 and Foundry hosted agents that send, pay or delete |
 | `skillc monitor scout-install` | The same checks as MCP tools (cooperative, not enforced) | Microsoft Scout |
 | `skillc gate` | Packs, skills and topology against an azd project's `azure.yaml` | Before `azd deploy` |
 | `skillc compile` · `skillc ce` · `skillc audit` · `skillc cost` | The formal pack; Controlled English; a risky-pattern pre-pass; token economics | Reviewing or explaining a verdict |
 
-**Try it in two minutes:** `python demo/skillc-here/app.py`. It reads your machine by itself and shows
-one skill's verdict in claude.ai, Claude Code and here. See [all demos](demo/README.md).
+**Try it in two minutes:** `python demo/skillc-here/app.py`. It reads this folder as GitHub Copilot
+CLI sees it and shows one skill's verdict here and in Copilot CLI, VS Code Copilot, Claude Code and
+claude.ai. See [all demos](demo/README.md).
 
 ```console
 $ skillc check call-to-book/SKILL.md --profile claude-ai
 call-to-book: ACHIEVABLE
-$ skillc check call-to-book/SKILL.md --profile claude-code
+$ skillc check call-to-book/SKILL.md
 call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
   missing: ask_user_input_v0 (line 7)
 ```
+
+Profiles match tool **names**: a skill that calls `web_fetch` is ACHIEVABLE in Copilot CLI and
+IMPOSSIBLE in Claude Code, which names that tool `WebFetch`. Any runtime with a shell
+(`powershell` on Windows) grants `bash`.
+
+### Using skillc with GitHub Copilot
+
+1. **Before you install a skill:** `skillc check SKILL.md` (Copilot CLI), or
+   `skillc check SKILL.md --profile vscode-copilot` (VS Code agent mode).
+2. **Before you run it here:** `skillc reach SKILL.md`. skillc reads what a Copilot CLI agent
+   started in this folder would have: the built-in tools, the approvals you saved for this
+   repository (`~/.copilot/permissions-config.json`), saved URLs, and MCP servers
+   (`~/.copilot/mcp-config.json`, `.mcp.json`, `.github/mcp.json`). Nothing has to be typed in.
+3. **While it runs:** `skillc monitor init`, then start `copilot` in the folder. Copilot CLI and
+   the Copilot cloud agent call skillc before every tool call; a refused call does not run.
+
+What skillc cannot see from files: options a session was started with (`--deny-tool`,
+`--available-tools`, `--excluded-tools`) and the tools of MCP servers, which it reports as
+unknown. Tools that ask first count as possible, conditional on your approval.
 
 ## Benchmark: performance and cost
 

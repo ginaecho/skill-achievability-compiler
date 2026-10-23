@@ -327,9 +327,12 @@ def test_cli_reach_exit_codes(tmp_path):
     assert main(["reach", "building-topology", "--env", str(unknown)]) == 3
 
 
-def test_cli_probe_needs_a_source(capsys):
-    assert main(["env", "probe", "-o", "x.json"]) == 2
-    assert "say what to probe" in capsys.readouterr().err
+def test_cli_probe_defaults_to_the_copilot_runtime(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("COPILOT_HOME", str(tmp_path / "copilot-home"))
+    monkeypatch.chdir(tmp_path)
+    out = tmp_path / "x.json"
+    assert main(["env", "probe", "--no-egress", "-o", str(out)]) == 0
+    assert json.loads(out.read_text())["sources"][0]["adapter"] == "copilot"
 
 
 def test_watch_reports_status_changes_between_rounds(tmp_path, capsys):

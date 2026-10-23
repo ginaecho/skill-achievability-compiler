@@ -1,14 +1,15 @@
 """skillc here -- what can an agent do on this machine, and what can a graph answer?
 
-Two tabs, nothing to set up:
+Three tabs, nothing to set up:
 
-1. **My environment.** The page reads this machine the way a Claude Code agent started here
-   sees it (`skillc.env.claude.probe`: tools, allow / deny rules, MCP servers, which credential
-   names are set), then checks a skill against three settings side by side: the claude.ai
-   profile, the Claude Code profile and this machine.
+1. **My environment.** The page reads this machine the way a GitHub Copilot CLI agent started
+   here sees it (`skillc.env.copilot.probe`: built-in tools, saved approvals, MCP servers,
+   which credential names are set), then checks a skill against this machine and four
+   published tool profiles side by side: Copilot CLI, VS Code Copilot, Claude Code, claude.ai.
 2. **A graph.** Upload a building graph (Turtle, TriG, N-Triples, N-Quads, RDF/XML) and paste a
    workflow; `skillc twin` says what the graph holds and, per target, which evidence is there
    and which is missing.
+3. **Why skillc.** Measured comparison with a plain and a guided LLM, and case replays.
 
 Standard library plus skillc (rdflib for the graph tab). Offline: no model call, no egress
 check, nothing is executed. Binds to 127.0.0.1 only.
@@ -34,6 +35,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from skillc.cli import main as skillc  # noqa: E402
 from skillc.frontend.contracts import bind_environment  # noqa: E402
 from skillc.monitor import Config, Monitor  # noqa: E402
+from skillc.monitor_copilot import copilot_config  # noqa: E402
 from skillc.profiles import load_profile, normalize_tool  # noqa: E402
 
 GRAPH_EXAMPLE = ROOT / "examples" / "building-twin" / "campus-building.trig"
@@ -49,23 +51,24 @@ _ENV: dict | None = None
 # --- tab 1: my environment ----------------------------------------------------------------
 
 def read_environment(refresh: bool = False, probe=None) -> dict:
-    """This machine as a Claude Code agent started in this repository sees it. Cached."""
+    """This machine as a GitHub Copilot CLI agent started in this repository sees it. Cached."""
     global _ENV
     if _ENV is not None and not refresh:
         return _ENV
-    from skillc.env import claude
-    from skillc.env.facts import need
-    env = (probe or (lambda: claude.probe(root=ROOT, check_egress=False)))()
-    tools, grants = [], set()
+    from skillc.env import copilot
+    from skillc.env.facts import need, possible_tools
+    env = (probe or (lambda: copilot.probe(root=ROOT, check_egress=False)))()
+    tools = []
     for node in sorted(env.of_kind("tool"), key=lambda n: n["name"]):
+        if not node["id"].startswith("tool/"):
+            continue                               # MCP tools are listed under their server
         fact = need(env, {"tool": node["name"]})
         status = ("allowed" if fact.value is True
                   else "asks first" if fact.value is None else "denied")
         tools.append({"name": node["name"], "status": status, "why": list(fact.reasons)[:2]})
-        if fact.possible:
-            grants.add(normalize_tool(node["name"]))
     services = list(env.of_kind("service"))
     _ENV = {
+        "runtime": "GitHub Copilot CLI",
         "captured": env.captured_at,
         "sources": [s.get("detail", "") for s in env.sources],
         "tools": tools,
@@ -79,17 +82,25 @@ def read_environment(refresh: bool = False, probe=None) -> dict:
         "platform": [n["name"] for n in services
                      if n["attrs"].get("type") in ("platform", "daemon")
                      and n["attrs"].get("available")],
-        "grants": sorted(grants),
+        "grants": sorted(possible_tools(env)),
     }
     return _ENV
 
 
+PROFILES = {"Copilot CLI": "copilot-cli", "VS Code Copilot": "vscode-copilot",
+            "Claude Code": "claude-code", "claude.ai": "claude-ai"}
+
+
+def profile_grants(name: str) -> list[str]:
+    """A published profile's tools; a profile with a shell also grants `bash`."""
+    p = load_profile(name)
+    return sorted({normalize_tool(t) for t in p.tools} | ({"bash"} if p.shell else set()))
+
+
 def settings(env: dict) -> dict[str, list[str]]:
-    """The settings a skill is checked against: two published profiles and this machine."""
-    def profile(name):
-        return sorted({normalize_tool(t) for t in load_profile(name).tools})
-    return {"claude.ai": profile("claude-ai"), "Claude Code": profile("claude-code"),
-            "this machine": env["grants"]}
+    """The settings a skill is checked against: this machine, then four published profiles."""
+    return {"this machine": env["grants"],
+            **{label: profile_grants(name) for label, name in PROFILES.items()}}
 
 
 def _run(argv: list[str]) -> tuple[int, str]:
@@ -136,7 +147,7 @@ def samples() -> list[dict]:
 # --- tab 3: why skillc ----------------------------------------------------------------------
 
 WHY = json.loads((HERE / "why_cases.json").read_text(encoding="utf-8"))
-SETUP_PROFILE = {"coding": "claude-code", "chat": "claude-ai"}
+SETUP_PROFILE = {"coding": "copilot-cli", "chat": "claude-ai"}
 _FIX = """Skill `fix-tests`.
 Roles: `agent`.
 Tool `run_tests` (owner `agent`): via `bash`; adds `tests_run`.
@@ -168,6 +179,14 @@ PLANS = {
 }
 
 
+def _monitor_config(case: dict) -> Config:
+    """The monitor as the case's host runs it: Copilot hooks for the coding agent."""
+    if case["setup"] == "coding":
+        default = Config()
+        return copilot_config(default.runtime, default.thinking)
+    return Config(**case["skillc"].get("config", {}))
+
+
 def why_run(case_id: str) -> dict:
     """The skillc column of one case, decided live: a static check of the skill against the
     setup's tools, or the monitor over the plan and the actions the plain LLM attempted."""
@@ -177,13 +196,12 @@ def why_run(case_id: str) -> dict:
     spec = case["skillc"]
     if spec["mode"] == "static":
         name = SETUP_PROFILE[case["setup"]]
-        grants = sorted({normalize_tool(t) for t in load_profile(name).tools})
         text = (HERE / "skills" / f"{spec['skill']}.md").read_text(encoding="utf-8")
-        row = check_skill(text, {name: grants})["rows"][0]
+        row = check_skill(text, {name: profile_grants(name)})["rows"][0]
         return {"mode": "static", "skill": text, "profile": name, **row}
     plan = PLANS[spec["plan"]]
     with _LOCK, tempfile.TemporaryDirectory(prefix="skillc-here-") as tmp:
-        mon = Monitor(Config(**spec.get("config", {})), tmp)
+        mon = Monitor(_monitor_config(case), tmp)
         d = mon.submit_plan(plan)
         out = {"mode": "runtime", "plan": plan, "plan_decision": d.action,
                "plan_reason": d.reason, "steps": [], "stopped": d.action == "deny"}

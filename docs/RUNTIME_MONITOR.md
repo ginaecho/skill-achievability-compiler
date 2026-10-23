@@ -241,14 +241,15 @@ Limitations that are known, not fixed:
 ## Use
 
 ```bash
-skillc monitor init --runtime developer-sandbox       # writes .skillc/monitor.json, prints the hooks
+skillc monitor init --claude --runtime developer-sandbox   # Claude Code: writes .skillc/monitor.json, prints the hooks
 # add the printed "hooks" block to .claude/settings.json
 skillc monitor plan my_plan.ce                         # check a plan by hand
 skillc monitor status                                  # approved plan, held reason, observed facts, log
 skillc monitor reset
 ```
 
-The hook commands are `skillc monitor hook prompt|pre|post`. They read the hook JSON on
+`skillc monitor init` without `--claude` sets up GitHub Copilot, the default (next section).
+The Claude Code hook commands are `skillc monitor hook prompt|pre|post`. They read the hook JSON on
 stdin and answer with `hookSpecificOutput` (`permissionDecision: "deny"` plus a reason, or
 `additionalContext`). Where `.skillc/monitor.json` is absent, the hooks do nothing.
 
@@ -256,10 +257,10 @@ stdin and answer with `hookSpecificOutput` (`permissionDecision: "deny"` plus a 
 
 The monitor speaks a second hook protocol, GitHub Copilot's, with no model API in the
 loop: the adapter is `src/skillc/monitor_copilot.py`, the tests are the `copilot` cases in
-`tests/test_monitor.py`.
+`tests/test_monitor.py`. Copilot is the default host of `skillc monitor init`.
 
 ```bash
-skillc monitor init --copilot --runtime developer-sandbox
+skillc monitor init --runtime developer-sandbox     # --copilot is the default
 # writes .skillc/monitor.json (Copilot tool names) and .github/hooks/skillc.json
 ```
 

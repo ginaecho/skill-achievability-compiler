@@ -23,9 +23,9 @@ without it you can still paste your own text.
    evidence graph** left to right: received source, compaction, environment, binding, schema,
    capability, reachability, verdict. Click a node to show its input, its output and the Python
    functions that produced it.
-3. Switch **Environment snapshot** to **Current environment · automatically observed** (this machine;
-   **Refresh now** reads it again) and run the same intent. Point at the binding node: the tools the
-   intent needs that this machine lacks are why the verdict changes.
+3. Switch **Environment snapshot** to **Current environment · automatically observed** (this folder
+   as GitHub Copilot CLI sees it; **Refresh now** reads it again) and run the same intent. Point at
+   the binding node: the tools the intent needs that this machine lacks are why the verdict changes.
 4. Paste a free-form prompt. Show `UNKNOWN [INCOMPLETE_COMPACTION]`: skillc abstains instead of
    guessing, and an abstention never permits the run.
 
