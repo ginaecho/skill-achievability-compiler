@@ -104,6 +104,7 @@ ul.ev li.missing b { color: var(--no); }
 ul.ev li.declared b { color: var(--unk); }
 .mono { font: 11.5px/1.5 var(--mono); overflow-wrap: anywhere; }
 .tag { font-size: 12px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
+td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
 </style>
 </head>
 <body>
@@ -296,25 +297,57 @@ async function loadEnv(refresh) {
 
 function verdictCell(v) { return `<span class="v ${esc(v)}">${esc(v)}</span>`; }
 
-async function check() {
+async function check(askLlm = true) {
   const text = $("skill").value;
   if (!text.trim()) return;
   $("result").innerHTML = '<p class="muted">Checking…</p>';
+  const llmOn = state.env && state.env.llm && state.env.llm.enabled;
+  const llm = llmOn && askLlm;
   try {
-    const r = await api("/api/check", {text, machine: state.env ? machineGrants() : undefined});
-    const rows = r.rows.map((x) => `<tr><td>${esc(x.setting)}${x.setting === "this machine" && edited() ? " <span class='muted'>(what-if)</span>" : ""}</td>
-      <td>${verdictCell(x.verdict)}</td>
-      <td>${x.verdict === "IMPOSSIBLE" && x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>"
-           : x.verdict === "UNKNOWN" ? esc(x.detail) : x.verdict === "ACHIEVABLE" ? "every tool it needs is here" : esc(x.detail)}</td></tr>`).join("");
+    const body = {text, machine: state.env ? machineGrants() : undefined};
+    const r = await api("/api/check", body);
+    const label = (s) => s === "this machine" ? "this machine <span class='muted'>(your Copilot CLI here, read automatically)</span>"
+      + (edited() ? " <span class='muted'>(what-if)</span>" : "") : esc(s);
+    const llmCell = (i) => `<td class="llm" data-i="${i}">${llm ? '<span class="muted">asking…</span>' : '<span class="muted">off</span>'}</td>`;
+    const rows = r.rows.map((x, i) => `<tr><td>${label(x.setting)}</td>
+      <td>${verdictCell(x.verdict)}<div class="muted">${x.verdict === "IMPOSSIBLE" && x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>"
+           : x.verdict === "UNKNOWN" ? esc(x.detail) : x.verdict === "ACHIEVABLE" ? "every tool it needs is here" : esc(x.detail)}</div></td>
+      ${llmCell(`plain-${i}`)}${llmCell(`guided-${i}`)}</tr>`).join("");
     $("result").innerHTML = `<p><b>${esc(r.name)}</b> needs ${r.needs.length ? "<code>" + r.needs.map(esc).join("</code>, <code>") + "</code>" : "no tool skillc could read"}.</p>
-      <table><tr><th>where it runs</th><th>verdict</th><th>why</th></tr>${rows}</table>
+      <p class="muted">Each <b>row</b> is a place the skill could run. Each <b>column</b> is a checker: skillc (no model), an LLM asked directly, and an LLM given a guiding skill.</p>
+      <div style="overflow-x:auto"><table><tr><th>where it would run</th><th>skillc</th><th>LLM</th><th>LLM + guiding skill</th></tr>${rows}</table></div>
+      <div id="llmFoot" class="muted"></div>
+      <details><summary>What the guiding skill tells the LLM</summary><pre>${esc(state.env ? state.env.llm.guide : "")}</pre>
+        <p class="muted">Both LLMs get the same skill and the same facts (tool names; for this machine also which tools ask first, the MCP servers and the credential names that are set). Only the guided one gets these instructions.</p></details>
       <p class="muted">IMPOSSIBLE is relative to the compiled workflow and selected tool inventory. ACHIEVABLE is not runtime success or permission to act. UNKNOWN means the text could not be compacted sufficiently; it never counts as permission.</p>
       <p class="muted">"This machine" is what a Copilot CLI agent started in this folder would have: its built-in tools, the approvals you saved for this repository, and its MCP servers. It cannot see options a running session was started with (<code>--deny-tool</code>, <code>--excluded-tools</code>), and MCP servers' tools are not listed. Tools marked "asks first" count as possible, conditional on your approval. Credential presence is not authentication. Profiles match tool names: a skill written for one runtime's names can be IMPOSSIBLE in another. Use the measured benchmark in tab 3 for independently executed outcomes.</p>`;
-  } catch (err) { $("result").innerHTML = `<p class="err">${esc(err.message)}</p>`; }
+    if (!llm) {
+      $("llmFoot").innerHTML = llmOn
+        ? "The LLMs are not asked again for a what-if edit (each ask costs tokens); press <b>Check it here</b> to ask them."
+        : `LLM columns are off: no model is called. ${esc(state.env ? state.env.llm.why : "")}.`;
+      return;
+    }
+    const sk = r.rows.map((x) => x.verdict);
+    const l = await api("/api/llm-check", body);
+    const foot = [];
+    for (const arm of ["plain", "guided"]) {
+      const a = l.arms[arm];
+      a.rows.forEach((x, i) => {
+        const cell = $("result").querySelector(`td[data-i="${arm}-${i}"]`);
+        if (!cell) return;
+        cell.classList.toggle("differs", x.verdict !== sk[i]);
+        cell.title = x.reason;
+        cell.innerHTML = verdictCell(x.verdict) + `<div class="muted">${x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>" : esc(x.reason)}</div>`;
+      });
+      foot.push(`${arm === "plain" ? "LLM" : "LLM + guiding skill"}: ${(a.input_tokens + a.output_tokens).toLocaleString("en-US")} tokens, ${(a.ms / 1000).toFixed(1)} s`
+        + (a.error ? ` · <span class="err">${esc(a.error)}</span>` : ""));
+    }
+    $("llmFoot").innerHTML = `${esc(l.provider)} · ${esc(l.model)} · ${foot.join(" · ")} · skillc: 0 tokens. A cell outlined in amber differs from skillc.`;
+  } catch (err) { $("result").innerHTML += `<p class="err">${esc(err.message)}</p>`; }
 }
-function recheck() { if ($("skill").value.trim() && $("result").innerHTML) check(); }
+function recheck() { if ($("skill").value.trim() && $("result").innerHTML) check(false); }
 
-$("check").onclick = check;
+$("check").onclick = () => check(true);
 $("refresh").onclick = () => loadEnv(true);
 $("reset").onclick = () => { state.off.clear(); state.added.clear(); drawEnv(); recheck(); };
 $("addBtn").onclick = () => { const t = $("addTool").value.trim(); if (t) { state.added.add(t); $("addTool").value = ""; drawEnv(); recheck(); } };

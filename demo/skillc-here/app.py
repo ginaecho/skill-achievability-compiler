@@ -31,7 +31,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(HERE))
 
+import llm_check  # noqa: E402
 from skillc.cli import main as skillc  # noqa: E402
 from skillc.frontend.contracts import bind_environment  # noqa: E402
 from skillc.monitor import Config, Monitor  # noqa: E402
@@ -142,6 +144,53 @@ def check_skill(text: str, where: dict[str, list[str]]) -> dict:
 def samples() -> list[dict]:
     return [{"name": p.stem, "text": p.read_text(encoding="utf-8")}
             for p in sorted((HERE / "skills").glob("*.md"))]
+
+
+# --- tab 1: the two LLM columns (off unless the demo is started with --llm) ---------------
+
+LLM: dict = {"enabled": False, "provider": None, "model": None,
+             "why": "start the demo with --llm and SKILLC_ALLOW_MODEL_CALLS=1 to compare"}
+
+
+def enable_llm(provider: str | None, model: str | None) -> dict:
+    """Turn the LLM columns on, only with the explicit model-call opt-in."""
+    from skillc.frontend.providers import (ModelCallsDisabled, require_model_opt_in,
+                                           resolve_provider)
+    try:
+        require_model_opt_in()
+        LLM.update(enabled=True, provider=resolve_provider(provider), model=model, why="")
+    except (ModelCallsDisabled, RuntimeError) as e:
+        LLM.update(enabled=False, why=str(e))
+    return LLM
+
+
+def machine_facts(env: dict, grants: list[str]) -> dict:
+    """What the LLMs are told about this machine beyond its tool names (names only)."""
+    return {"asks_first": [t["name"] for t in env["tools"]
+                           if t["status"] == "asks first" and normalize_tool(t["name"]) in grants],
+            "mcp_servers": [m["name"] for m in env["mcp"]],
+            "credentials_set": [c["name"] for c in env["credentials"] if c["set"]]}
+
+
+def llm_checks(text: str, where: dict[str, list[str]], env: dict, complete=None) -> dict:
+    """The plain and the guided LLM check, run side by side."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    if not LLM["enabled"]:
+        raise ValueError("the LLM columns are off: " + LLM["why"])
+    if not text.strip():
+        raise ValueError("paste a SKILL.md, an agent file or a prompt")
+    if len(text) > MAX_SKILL:
+        raise ValueError(f"the text is over {MAX_SKILL // 1000} KB")
+    facts = machine_facts(env, where["this machine"])
+    with ThreadPoolExecutor(max_workers=len(llm_check.ARMS)) as pool:
+        runs = {arm: pool.submit(llm_check.llm_check, text, where, facts, arm=arm,
+                                 provider=LLM["provider"], model=LLM["model"],
+                                 complete=complete)
+                for arm in llm_check.ARMS}
+        arms = {arm: run.result() for arm, run in runs.items()}
+    return {"provider": LLM["provider"], "model": LLM["model"] or "provider default",
+            "guide": llm_check.GUIDE, "arms": arms}
 
 
 # --- tab 3: why skillc ----------------------------------------------------------------------
@@ -376,7 +425,9 @@ class Handler(BaseHTTPRequestHandler):
                 "text/plain; charset=utf-8")
         if path == "/api/environment":
             env = read_environment(refresh="refresh=1" in query)
-            return self._json(HTTPStatus.OK, {**env, "settings": settings(env)})
+            return self._json(HTTPStatus.OK, {**env, "settings": settings(env),
+                                              "llm": {"enabled": LLM["enabled"], "why": LLM["why"],
+                                                      "guide": llm_check.GUIDE}})
         if path == "/api/why":
             return self._json(HTTPStatus.OK, WHY)
         if path == "/api/benchmark":
@@ -399,12 +450,16 @@ class Handler(BaseHTTPRequestHandler):
             if length > MAX_GRAPH * 2:
                 raise ValueError("the request is too large")
             body = json.loads(self.rfile.read(length) or b"{}")
-            if self.path == "/api/check":
-                where = settings(read_environment())
+            if self.path in ("/api/check", "/api/llm-check"):
+                env = read_environment()
+                where = settings(env)
                 if isinstance(body.get("machine"), list):  # the page's what-if edits
                     where["this machine"] = sorted({normalize_tool(str(t))
                                                     for t in body["machine"] if str(t).strip()})
-                return self._json(HTTPStatus.OK, check_skill(str(body.get("text", "")), where))
+                text = str(body.get("text", ""))
+                result = (check_skill(text, where) if self.path == "/api/check"
+                          else llm_checks(text, where, env))
+                return self._json(HTTPStatus.OK, result)
             if self.path == "/api/why/run":
                 return self._json(HTTPStatus.OK, why_run(str(body.get("id", ""))))
             graph = str(body.get("graph", "")).encode("utf-8")
@@ -443,10 +498,21 @@ def main(argv=None) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=8770)
     ap.add_argument("--no-browser", action="store_true", help="do not open a browser tab")
+    ap.add_argument("--llm", action="store_true",
+                    help="add the plain-LLM and guided-LLM columns to tab 1; each check calls "
+                         "a model twice and needs SKILLC_ALLOW_MODEL_CALLS=1")
+    ap.add_argument("--llm-provider", help="anthropic or azure-openai "
+                                           "(default: SKILLC_LLM_PROVIDER, else anthropic)")
+    ap.add_argument("--model", help="model or Azure OpenAI deployment name")
     args = ap.parse_args(argv)
+    if args.llm:
+        enable_llm(args.llm_provider, args.model)
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     url = f"http://127.0.0.1:{args.port}/"
-    print(f"skillc here: {url}  (offline, no model call; Ctrl+C to stop)", flush=True)
+    mode = (f"LLM columns on: {LLM['provider']}" if LLM["enabled"]
+            else "offline, no model call" + (f" (LLM columns off: {LLM['why']})"
+                                             if args.llm else ""))
+    print(f"skillc here: {url}  ({mode}; Ctrl+C to stop)", flush=True)
     if not args.no_browser:
         threading.Timer(0.4, webbrowser.open, args=(url,)).start()
     try:

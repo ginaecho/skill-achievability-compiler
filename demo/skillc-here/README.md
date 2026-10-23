@@ -13,8 +13,20 @@ pip install -e ".[twin]"          # skillc, plus rdflib for the graph tab
 python demo/skillc-here/app.py    # opens http://127.0.0.1:8770/
 ```
 
-Offline: no model call, no network check, nothing is executed. The server binds to 127.0.0.1
-and answers only requests addressed to `127.0.0.1` or `localhost`.
+Offline by default: no model call, no network check, nothing is executed. The server binds to
+127.0.0.1 and answers only requests addressed to `127.0.0.1` or `localhost`.
+
+**With the LLM columns** (tab 1 then also asks a plain LLM and a guided LLM; each check calls a
+model twice and costs tokens), opt in for this run only:
+
+```powershell
+$env:SKILLC_ALLOW_MODEL_CALLS = '1'
+$env:AZURE_OPENAI_ENDPOINT = '<your Azure OpenAI endpoint>'
+python demo/skillc-here/app.py --llm --llm-provider azure-openai --model <deployment>
+```
+
+Azure CLI sign-in or `AZURE_OPENAI_API_KEY` authenticates; `--llm-provider anthropic` uses
+`ANTHROPIC_API_KEY`. Without the opt-in the columns stay off and say why.
 
 ## Present it
 
@@ -63,6 +75,20 @@ Pick an example skill or paste your own, and press **Check it here**. skillc com
 Profiles match tool **names**, so a skill written with one runtime's names is IMPOSSIBLE where the
 names differ (VS Code Copilot calls them `grep_search` and `read_file`). Any runtime with a shell
 grants `bash`, so Windows' `powershell` serves a skill that runs commands through Bash.
+
+**Rows and columns.** Each row is a place the skill could run; "this machine" is your own Copilot
+CLI in this folder, read automatically (it is not skillc). Each column is a checker:
+
+| Column | Who decides | What it is given |
+|---|---|---|
+| **skillc** | the checker, no model | the compiled skill and the row's tools |
+| **LLM** | a model, asked directly | the skill and, per row, the tool names; for this machine also which tools ask first, the MCP servers and the credential names set |
+| **LLM + guiding skill** | the same model | the same facts, plus a guiding skill: start with what "finished" means, **look at the tools first**, match each step to a tool by name, then see **how the agent may interact** (asks first, denied, MCP servers, credentials), and answer UNKNOWN rather than guess |
+
+The guiding skill is shown on the page under the table. Neither LLM sees skillc's answer. A cell
+outlined in amber differs from skillc; the footer gives each LLM's tokens and time (skillc: 0
+tokens). A what-if edit re-runs only skillc; press **Check it here** to ask the LLMs again. Tab 3
+has the measured comparison, with each task really executed.
 
 **Use it in your own Copilot sessions** (the panel's last section):
 
@@ -211,6 +237,9 @@ the benchmark must report that rather than assume SkillC wins.
 * `GET /api/samples`: the example skills, graph and workflow.
 * `POST /api/check` `{"text", "machine": [tool, ...]?}`: `name`, `needs`, and `rows` with
   `setting`, `verdict`, `reason`, `detail`, `missing`.
+* `POST /api/llm-check` (same body; only with `--llm` and the opt-in): `provider`, `model`,
+  `guide`, and `arms.plain` / `arms.guided`, each with `rows` (`setting`, `verdict`, `missing`,
+  `reason`), `input_tokens`, `output_tokens`, `ms` and `error`.
 * `GET /api/why`: the arms, setups and cases. `POST /api/why/run` `{"id"}`: the live skillc column
   (`mode` static: `verdict`, `missing`; `mode` runtime: `plan_decision`, `plan_reason`, `steps`).
 * `GET /api/benchmark`: latest local benchmark aggregates and case outcomes, or an explicit

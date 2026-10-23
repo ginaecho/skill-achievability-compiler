@@ -1,5 +1,6 @@
 """demo/skillc-here: the environment tab and the graph tab, without the server."""
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,75 @@ def test_what_if_changes_only_this_machine(env):
 def test_profiles_with_a_shell_grant_bash():
     assert "bash" in app.profile_grants("vscode-copilot")
     assert "bash" in app.profile_grants("copilot-cli")
+
+
+# --- tab 1's LLM columns, with the model stubbed ------------------------------------------
+
+def _stub(replies, seen):
+    def complete(provider, system, user, model, timeout):
+        seen.append((system, json.loads(user)))
+        from skillc.frontend import providers
+        providers._record_usage({"input_tokens": 100, "output_tokens": 20})
+        return replies(json.loads(user))
+    return complete
+
+
+def _all(verdict):
+    return lambda req: json.dumps({"settings": {
+        r["id"]: {"verdict": verdict, "missing": [], "reason": "r"} for r in req["runtimes"]}})
+
+
+@pytest.fixture
+def llm_on(monkeypatch):
+    monkeypatch.setitem(app.LLM, "enabled", True)
+    monkeypatch.setitem(app.LLM, "provider", "azure-openai")
+    monkeypatch.setitem(app.LLM, "model", "stub")
+
+
+def test_llm_columns_are_off_without_the_opt_in(env, monkeypatch):
+    monkeypatch.delenv("SKILLC_ALLOW_MODEL_CALLS", raising=False)
+    monkeypatch.setitem(app.LLM, "enabled", False)
+    assert app.enable_llm("azure-openai", None)["enabled"] is False
+    with pytest.raises(ValueError, match="off"):
+        app.llm_checks(_skill("fix-failing-test"), app.settings(env), env)
+
+
+def test_both_llms_get_the_same_facts_and_only_guided_gets_the_guide(env, llm_on):
+    seen = []
+    out = app.llm_checks(_skill("fix-failing-test"), app.settings(env), env,
+                         complete=_stub(_all("ACHIEVABLE"), seen))
+    (s1, u1), (s2, u2) = sorted(seen, key=lambda x: len(x[0]))
+    assert u1 == u2
+    assert s2 == s1 + "\n\n" + app.llm_check.GUIDE
+    assert "look at the tools first" in app.llm_check.GUIDE.lower()
+    rows = out["arms"]["plain"]["rows"]
+    assert [r["setting"] for r in rows] == list(app.settings(env))
+    assert out["arms"]["guided"]["input_tokens"] == 100
+
+
+def test_llm_request_uses_neutral_ids_and_no_paths_or_domains(env, llm_on, tmp_path):
+    seen = []
+    app.llm_checks(_skill("fix-failing-test"), app.settings(env), env,
+                   complete=_stub(_all("UNKNOWN"), seen))
+    sent = json.dumps(seen[0][1])
+    assert [r["id"] for r in seen[0][1]["runtimes"]] == ["s1", "s2", "s3", "s4", "s5"]
+    assert "claude.ai" not in sent and str(tmp_path) not in sent
+    machine = seen[0][1]["runtimes"][0]
+    assert machine["mcp_servers_tools_not_listed"] == ["github"]
+    assert "edit" in machine["tools_that_ask_first"]
+
+
+def test_a_failed_or_partial_llm_answer_is_unknown(env, llm_on):
+    def boom(*a):
+        raise RuntimeError("no deployment")
+    out = app.llm_checks(_skill("fix-failing-test"), app.settings(env), env, complete=boom)
+    assert {r["verdict"] for r in out["arms"]["plain"]["rows"]} == {"UNKNOWN"}
+    assert "no deployment" in out["arms"]["plain"]["error"]
+    partial = lambda req: json.dumps({"settings": {"s1": {"verdict": "maybe"}}})
+    out = app.llm_checks(_skill("fix-failing-test"), app.settings(env), env,
+                         complete=_stub(partial, []))
+    rows = out["arms"]["guided"]["rows"]
+    assert rows[0]["verdict"] == "UNKNOWN" and rows[1]["reason"] == "no answer for this setting"
 
 
 def test_free_prompt_abstains_rather_than_approves(env):
