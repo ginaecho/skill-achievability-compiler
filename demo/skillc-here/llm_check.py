@@ -49,6 +49,39 @@ GUIDE = """Guiding skill: check the environment before you decide.
    answer UNKNOWN rather than guessing."""
 
 
+def transcribe_sketch(image: bytes, mime: str, *, provider: str, model: str | None,
+                      timeout: int = 180, complete=None) -> dict:
+    """A picture of a building sketch -> sketch text in the reader's line format. The model
+    only transcribes; the deterministic reader (`skillc.env.twin_sketch`) decides what the
+    text means, and the user reviews the text first."""
+    complete = complete or providers.complete
+    started = time.perf_counter()
+    with providers.metered() as usage:
+        text = complete(provider, TRANSCRIBE, "Transcribe this building sketch.", model,
+                        timeout, json_mode=False, image=(image, mime))
+    lines = [ln.rstrip() for ln in text.strip().strip("`").splitlines()]
+    return {"text": "\n".join(ln for ln in lines if ln.strip() and not ln.startswith("```")),
+            "ms": round((time.perf_counter() - started) * 1000),
+            "input_tokens": sum(int(u.get("input_tokens", 0)) for u in usage),
+            "output_tokens": sum(int(u.get("output_tokens", 0)) for u in usage)}
+
+
+TRANSCRIBE = """You transcribe a picture of a building sketch (a whiteboard drawing, a photo
+of a scribble, a diagram) into plain text lines, one fact per line, using only these forms:
+  A -> B -> C                      the first feeds the next (equipment to equipment or place);
+                                   between two places (zone -> room) it means contains
+  X, Y in P                        X and Y are part of place P (floors, zones, rooms)
+  P on E: 16..26 degC, priority 9, BACnet analog-value,11, history ts-p
+                                   point P (a set point, sensor, status) on equipment E with
+                                   the attributes written next to it in the picture
+  Schedule S for E: Mon-Fri 07:00-19:00, Sat 08:00-13:00, except 2026-12-25
+  Policy N for Z: hours 06:00-20:00, setpoints 18..24
+  B timezone Europe/Berlin
+Write names exactly as drawn. Write only what the picture shows: never add a limit, unit,
+reference, schedule or policy that is not drawn, and keep remarks such as "no limits" as a
+line starting with #. Return only the lines, with no explanation."""
+
+
 def build_request(skill: str, settings: dict[str, list[str]], machine: dict) -> tuple[str, dict]:
     """The user message and the id -> setting name map. `machine` holds this machine's extra
     facts: `asks_first`, `mcp_servers`, `credentials_set` (names only)."""

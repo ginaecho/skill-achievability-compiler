@@ -46,7 +46,12 @@ Azure CLI sign-in or `AZURE_OPENAI_API_KEY` authenticates; `--llm-provider anthr
 7. Click `ex:sp13` in the list: its evidence path lights up in green (VAV, zone, rooms) and the
    panel shows what is missing (a BACnet reference). Click `ex:sp11` (verifiable) and `ex:zone31`
    (no schedule, no policy) to compare.
-8. Open **3 · Why skillc**. Pick a tool setup, then a case, and compare the three columns (below).
+8. Pick **campus-sketch.txt · sketch** and **Load example**: the same kind of building, typed as
+   whiteboard arrows, read without a model. Open the sketch box, delete the `BACnet` part of the SP-11
+   line and press **Read this sketch**: SP-11 turns IMPOSSIBLE. With `--llm`, pick
+   **campus-sketch.svg · picture** and **Read the picture**: a model writes the sketch text, which
+   you review before skillc reads it.
+9. Open **3 · Why skillc**. Pick a tool setup, then a case, and compare the three columns (below).
 
 ## 1 · My environment: what can an agent do here?
 
@@ -108,8 +113,13 @@ means and list their tools and steps, which the deterministic reader needs.
 
 ## 2 · A graph: what can it answer?
 
-1. **Load a graph.** Pick an example and press **Load example**, or upload a building graph (Turtle,
-   TriG, N-Triples, N-Quads or RDF/XML; JSON-LD is refused). The graph is drawn in rows: building and
+1. **Load a graph**, in any of four forms. Pick an example and press **Load example**, or upload
+   your own: an RDF file (Turtle, TriG, N-Triples, N-Quads or RDF/XML; JSON-LD is refused), a
+   **scribble** of arrows or a **plain description** (`.txt`), or a **picture** of a sketch (PNG,
+   JPEG, WebP or SVG). A scribble or description opens in an editable box: skillc reads it without
+   a model, says line by line what it read, and lists every line it could not read (that line adds
+   nothing). A picture is first turned into that text by a model (only with `--llm` and the
+   opt-in), shown for you to review, then read the same way. The graph is drawn in rows: building and
    floors, equipment, schedules and policies, places, points, each coloured by kind. Classes, units,
    values and nested structures such as priority arrays are not drawn; they appear in a node's
    details when you click it.
@@ -122,13 +132,16 @@ means and list their tools and steps, which the deterministic reader needs.
    or red ring, and the side panel lists each piece of evidence with its graph path, or why it is
    missing. **How skillc read the workflow** shows how each line was mapped.
 
-| Example | What it has |
-|---|---|
-| `campus-building.trig` (default) | 3 floors, 3 AHUs, 9 VAVs, 9 zones, 18 rooms, 10 set points; 3 of 10 set points and 2 of 9 zones can be verified, and each other one misses something specific (limits, a BACnet reference, a schedule or an operating policy). Made by `examples/building-twin/make_campus.py`. |
-| `demo-building.trig` | The small example from [`docs/TWIN.md`](../../docs/TWIN.md): Brick and RealEstateCore styles, an extra equipment hop, a vendor class defined only in an ontology graph. |
+| Example | Form | What it has |
+|---|---|---|
+| `campus-building.trig` (default) | RDF graph | 3 floors, 3 AHUs, 9 VAVs, 9 zones, 18 rooms, 10 set points; 3 of 10 set points and 2 of 9 zones can be verified, and each other one misses something specific (limits, a BACnet reference, a schedule or an operating policy). Made by `examples/building-twin/make_campus.py`. |
+| `demo-building.trig` | RDF graph | The small example from [`docs/TWIN.md`](../../docs/TWIN.md): Brick and RealEstateCore styles, an extra equipment hop, a vendor class defined only in an ontology graph. |
+| `campus-sketch.txt` | scribble | A smaller campus as whiteboard arrows: 2 floors, 2 AHUs, 3 VAVs, 3 zones; SP-11 and Zone 11 verify, SP-12 has no limits, SP-21 no BACnet reference, Zones 12 and 21 no policy. |
+| `campus-description.txt` | plain sentences | The same campus written as sentences; same verdicts. |
+| `campus-sketch.svg` | picture | The same campus drawn on a whiteboard. Needs a model to read (`--llm`). |
 
-This is `skillc twin explore` and `skillc twin check` (see [`docs/TWIN.md`](../../docs/TWIN.md)). Both
-examples are made up; no tenant data.
+This is `skillc twin explore` and `skillc twin check` (see [`docs/TWIN.md`](../../docs/TWIN.md)), which
+accept the `.txt` forms too. All examples are made up; no tenant data.
 
 ## 3 · Why skillc: an LLM alone, an LLM with a guiding skill, and skillc
 
@@ -246,7 +259,10 @@ the benchmark must report that rather than assume SkillC wins.
   unavailable/error reason; never raw settings, credentials or model transcripts.
 * `GET /benchmark-report`: the curated published report as readable plain-text Markdown.
 * `POST /api/twin/graph` `{"graph", "filename", "tenant"?}`: `nodes` (`id`, `kind`, `types`,
-  `details`), `edges` (`s`, `t`, `p`), `facts`, `truncated` (at most 800 entities are drawn).
+  `details`), `edges` (`s`, `t`, `p`), `facts`, `truncated` (at most 800 entities are drawn), and
+  for a `.txt` sketch `sketch` (`read`: line, text, meaning; `ignored`: line, text; `entities`).
+* `POST /api/twin/transcribe` `{"image": base64, "mime"}` (only with `--llm` and the opt-in):
+  `text` (the sketch, for review), `reading`, `input_tokens`, `output_tokens`, `ms`.
 * `POST /api/twin/explore` `{"graph", "filename", "tenant"?}`: `text`.
 * `POST /api/twin/check` `{"graph", "filename", "workflow", "tenant"?}`: `workflows`, each with
   `title`, `reading`, `results` (`target`, `verdict`, `missing`, `found`, `evidence` with each

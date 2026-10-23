@@ -133,6 +133,45 @@ def test_a_failed_or_partial_llm_answer_is_unknown(env, llm_on):
     assert rows[0]["verdict"] == "UNKNOWN" and rows[1]["reason"] == "no answer for this setting"
 
 
+# --- tab 2's other forms: a sketch or description, and a picture -------------------------
+
+def test_sketch_examples_load_check_and_report_their_reading():
+    pytest.importorskip("rdflib")
+    for path in app.SKETCH_EXAMPLES:
+        data = path.read_bytes()
+        reading = app.sketch_reading(path.name, data)
+        assert reading["read"] and reading["ignored"] == []
+        out = app.twin_check(path.name, data, "")
+        sp = {r["target"]: r for r in out["workflows"][0]["results"]}
+        assert sp["ex:sp-11"]["verdict"] == "ACHIEVABLE"
+        assert sp["ex:sp-12"]["missing"] == ["min_max_units"]
+    assert app.sketch_reading("graph.ttl", b"") is None
+
+
+def test_picture_needs_the_opt_in(monkeypatch):
+    monkeypatch.setitem(app.LLM, "enabled", False)
+    with pytest.raises(ValueError, match="needs a model"):
+        app.twin_transcribe("aGVsbG8=", "image/png")
+
+
+def test_picture_is_transcribed_then_read_without_a_model(llm_on):
+    import base64
+    seen = {}
+
+    def complete(provider, system, user, model, timeout, json_mode=True, image=None):
+        seen.update(system=system, image=image, json_mode=json_mode)
+        return "```\nAHU-1 -> VAV-1 -> Zone 1\nSP-1 on VAV-1: 16..26 degC\nsomething vague\n```"
+
+    png = base64.b64encode(b"\x89PNG not really").decode()
+    out = app.twin_transcribe(png, "image/png", complete=complete)
+    assert seen["image"] == (b"\x89PNG not really", "image/png") and seen["json_mode"] is False
+    assert "never add" in seen["system"]
+    assert out["text"].splitlines()[0] == "AHU-1 -> VAV-1 -> Zone 1"
+    assert [x["text"] for x in out["reading"]["ignored"]] == ["something vague"]
+    with pytest.raises(ValueError, match="base64"):
+        app.twin_transcribe("not base64!", "image/png", complete=complete)
+
+
 def test_free_prompt_abstains_rather_than_approves(env):
     v = _verdicts(app.check_skill("Book me a flight to Paris and email me the ticket.",
                                   app.settings(env)))

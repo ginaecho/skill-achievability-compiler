@@ -157,10 +157,25 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
       <select id="exPick"></select>
       <button class="ghost" id="exGraph">Load example</button>
       <span class="muted">or</span>
-      <input type="file" id="file" accept=".ttl,.trig,.nt,.nq,.rdf,.owl,.xml,.n3">
+      <input type="file" id="file" accept=".ttl,.trig,.nt,.nq,.rdf,.owl,.xml,.n3,.txt,.sketch,.png,.jpg,.jpeg,.webp,.svg">
       <input type="text" id="tenant" placeholder="tenant (only if the file holds several)" style="max-width:260px">
     </div>
-    <div id="graphName" class="muted">Turtle, TriG, N-Triples, N-Quads or RDF/XML. Ontology graphs only name classes; they never count as evidence.</div>
+    <div id="graphName" class="muted">A building graph in any of four forms: an RDF file (Turtle, TriG, N-Triples, N-Quads, RDF/XML), a scribble of arrows, a plain description (.txt), or a picture of a sketch. Ontology graphs only name classes; they never count as evidence.</div>
+    <details id="sketchBox" hidden><summary>The sketch, as text: edit it, then read it again</summary>
+      <div class="muted">One fact per line or sentence: <code>AHU-1 -> VAV-11 -> Zone 11</code>, <code>Zone 11 in Floor 1</code>, <code>SP-11 on VAV-11: 16..26 degC, priority 9, BACnet analog-value,11</code>, <code>Schedule S-11 for VAV-11: Mon-Fri 07:00-19:00</code>, <code>Policy P for Zone 11: hours 06:00-20:00</code>, <code>HQ timezone Europe/Berlin</code>. Read without a model; a line it cannot read is listed, never guessed.</div>
+      <textarea id="sketchText" spellcheck="false"></textarea>
+      <div class="row"><button class="ghost" id="sketchRead">Read this sketch</button></div>
+      <div id="sketchReport"></div>
+    </details>
+    <div id="picBox" class="row" hidden style="align-items:flex-start">
+      <img id="picImg" alt="the sketch picture" style="max-width:520px;width:100%;border:1px solid var(--line);border-radius:8px;background:#fff">
+      <div style="flex:1;min-width:240px">
+        <p><b>A picture of a sketch.</b> A model turns the picture into the sketch text above; skillc then reads that text without a model, so you can review exactly what was understood.</p>
+        <div class="row"><button class="act" id="picRead">Read the picture (calls a model)</button></div>
+        <p class="muted" id="picNote"></p>
+        <p class="muted">The picture is sent to the model as it is. skillc removes links from the text it sends, but it cannot remove links written inside a picture: send only pictures without links or e-mail addresses.</p>
+      </div>
+    </div>
     <details id="wfBox"><summary>Your workflow (optional): leave empty to run the built-in set-point and schedule-update verifiers</summary>
       <textarea id="workflow" placeholder="# Comfort complaint check&#10;Evidence needed:&#10;- Set-point identity and type&#10;- Configured minimum/maximum and units&#10;- Occupancy sensor"></textarea>
       <div class="row"><button class="ghost" id="exWf">Use the example workflow</button></div>
@@ -461,15 +476,66 @@ async function loadGraph(text, name) {
   const body = {graph: text, filename: name, tenant: $("tenant").value.trim()};
   try {
     G.data = await api("/api/twin/graph", body); draw();
+    showReading(G.data.sketch);
     const ex = await api("/api/twin/explore", body);
     $("exploreOut").innerHTML = `<pre>${esc(ex.text)}</pre>`;
   } catch (err) {
     $("gHint").innerHTML = `<span class="err">${esc(err.message)}</span>`; G.data = null; $("gsvg").innerHTML = "";
   }
 }
-$("file").onchange = async () => { const f = $("file").files[0]; if (f) loadGraph(await f.text(), f.name); };
+
+// --- the other forms of a graph: a scribble or description (.txt), or a picture ---
+const formOf = (name) => /\.(png|jpe?g|gif|webp|svg)$/i.test(name) ? "picture"
+  : /\.(txt|sketch)$/i.test(name) ? "sketch" : "graph";
+const FORM_LABEL = {graph: "RDF graph", sketch: "sketch or description, read without a model", picture: "picture of a sketch"};
+
+function showReading(s) {
+  if (!s) { $("sketchReport").innerHTML = ""; return; }
+  const read = s.read.map((x) => `<li><b>line ${x.line}</b> ${esc(x.meaning)}</li>`).join("");
+  const missed = s.ignored.map((x) => `<li class="missing"><b>line ${x.line}</b> not understood: <code>${esc(x.text)}</code></li>`).join("");
+  $("sketchReport").innerHTML = `<p class="muted">Read ${s.read.length} statement(s) into ${s.entities} entities${s.ignored.length ? `; <b>${s.ignored.length} not understood</b>, so not in the graph` : ""}.</p><ul class="ev">${missed}${read}</ul>`;
+}
+async function showSketch(text, name) {
+  state.sketchName = name; $("sketchBox").hidden = false; $("sketchBox").open = true; $("sketchText").value = text;
+  await loadGraph(text, name);
+}
+function showPicture(blob, name) {
+  state.picture = {blob, name}; $("picBox").hidden = false; $("picImg").src = URL.createObjectURL(blob);
+  const on = state.env && state.env.llm && state.env.llm.enabled;
+  $("picRead").disabled = !on;
+  $("picNote").textContent = on ? "" : "Off: start the demo with --llm and SKILLC_ALLOW_MODEL_CALLS=1 to read pictures. The same campus is in the example campus-sketch.txt, which needs no model.";
+}
+async function toPng(blob) {
+  const img = new Image(); img.src = URL.createObjectURL(blob); await img.decode();
+  const w = img.naturalWidth || 1200, h = img.naturalHeight || 760, k = Math.min(1, 1600 / Math.max(w, h));
+  const c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
+  const ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/png").split(",")[1];
+}
+async function openForm(name, text, blob) {
+  $("picBox").hidden = true; $("sketchBox").hidden = true; showReading(null);
+  const form = formOf(name);
+  if (form === "picture") return showPicture(blob, name);
+  if (form === "sketch") { await showSketch(text, name); return $("twinCheck").click(); }
+  await loadGraph(text, name); $("twinCheck").click();
+}
+$("sketchRead").onclick = async () => { await loadGraph($("sketchText").value, state.sketchName || "sketch.txt"); $("twinCheck").click(); };
+$("picRead").onclick = async () => {
+  $("picNote").textContent = "Reading the picture…";
+  try {
+    const r = await api("/api/twin/transcribe", {image: await toPng(state.picture.blob), mime: "image/png"});
+    $("picNote").textContent = `The model wrote the sketch text above (${(r.input_tokens + r.output_tokens).toLocaleString("en-US")} tokens, ${(r.ms / 1000).toFixed(1)} s). Review it: edit any line and press Read this sketch.`;
+    await showSketch(r.text, "picture-sketch.txt"); $("picBox").hidden = false; $("twinCheck").click();
+  } catch (err) { $("picNote").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+};
+$("file").onchange = async () => {
+  const f = $("file").files[0]; if (!f) return;
+  await openForm(f.name, formOf(f.name) === "picture" ? "" : await f.text(), f);
+};
 $("exGraph").onclick = async () => {
-  const g = state.samples.graphs[$("exPick").selectedIndex]; await loadGraph(g.text, g.name); $("twinCheck").click();
+  const g = state.examples[$("exPick").selectedIndex];
+  await openForm(g.name, g.text || "", g.svg ? new Blob([g.svg], {type: "image/svg+xml"}) : null);
 };
 $("exWf").onclick = () => { $("workflow").value = state.samples.workflow; };
 
@@ -602,7 +668,8 @@ $("benchRefresh").onclick = benchmarkShow;
   whyInit();
   benchmarkShow();
   state.samples = await api("/api/samples");
-  $("exPick").innerHTML = state.samples.graphs.map((g) => `<option>${esc(g.name)}</option>`).join("");
+  state.examples = [...state.samples.graphs, {name: state.samples.picture.name, svg: state.samples.picture.svg}];
+  $("exPick").innerHTML = state.examples.map((g) => `<option>${esc(g.name)} · ${esc(FORM_LABEL[formOf(g.name)])}</option>`).join("");
   $("samples").innerHTML = '<span class="muted">Examples:</span>' + state.samples.skills.map((s, i) =>
     `<button class="ghost" data-i="${i}">${esc(s.name)}</button>`).join("");
   $("samples").querySelectorAll("button").forEach((b) => b.onclick = () => {

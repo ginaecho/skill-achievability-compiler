@@ -42,10 +42,15 @@ from skillc.profiles import load_profile, normalize_tool  # noqa: E402
 
 GRAPH_EXAMPLE = ROOT / "examples" / "building-twin" / "campus-building.trig"
 GRAPH_SMALL = ROOT / "examples" / "building-twin" / "demo-building.trig"
+SKETCH_EXAMPLES = [ROOT / "examples" / "building-twin" / n
+                   for n in ("campus-sketch.txt", "campus-description.txt")]
+PICTURE_EXAMPLE = ROOT / "examples" / "building-twin" / "campus-sketch.svg"
 WORKFLOW_EXAMPLE = ROOT / "examples" / "building-twin" / "workflow.md"
-GRAPH_SUFFIXES = (".ttl", ".trig", ".nt", ".nq", ".rdf", ".owl", ".xml", ".n3")
+GRAPH_SUFFIXES = (".ttl", ".trig", ".nt", ".nq", ".rdf", ".owl", ".xml", ".n3", ".txt",
+                  ".sketch")
 MAX_SKILL = 100_000
 MAX_GRAPH = 20_000_000
+MAX_PICTURE = 5_000_000
 _LOCK = threading.Lock()  # z3 and the CLI's stdout capture are not thread-safe
 _ENV: dict | None = None
 
@@ -307,6 +312,34 @@ def _graph_file(tmp: Path, filename: str, data: bytes) -> Path:
     return path
 
 
+def sketch_reading(filename: str, data: bytes) -> dict | None:
+    """How the sketch reader read a text sketch, line by line; None for an RDF file."""
+    from skillc.env.twin_sketch import SUFFIXES, read_sketch
+    if Path(filename or "").suffix.lower() not in SUFFIXES:
+        return None
+    s = read_sketch(data.decode("utf-8", errors="replace"))
+    return {"read": [{"line": n, "text": t, "meaning": m} for n, t, m in s.read],
+            "ignored": [{"line": n, "text": t} for n, t in s.ignored],
+            "entities": len(s.entities)}
+
+
+def twin_transcribe(image_b64: str, mime: str, complete=None) -> dict:
+    """A picture of a sketch -> sketch text, by a model (opt-in), for the user to review."""
+    import base64
+    import binascii
+    if not LLM["enabled"]:
+        raise ValueError("reading a picture needs a model: " + LLM["why"])
+    try:
+        image = base64.b64decode(image_b64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise ValueError("the picture is not valid base64") from e
+    if not image or len(image) > MAX_PICTURE:
+        raise ValueError(f"the picture must be under {MAX_PICTURE // 1_000_000} MB")
+    out = llm_check.transcribe_sketch(image, mime, provider=LLM["provider"],
+                                      model=LLM["model"], complete=complete)
+    return {**out, "reading": sketch_reading("picture.txt", out["text"].encode("utf-8"))}
+
+
 def twin_explore(filename: str, data: bytes, tenant: str | None = None) -> dict:
     from skillc.env.twin import load_twin
     from skillc.env.twin_workflow import explore
@@ -438,7 +471,9 @@ class Handler(BaseHTTPRequestHandler):
                 "graph": {"name": GRAPH_EXAMPLE.name,
                           "text": GRAPH_EXAMPLE.read_text(encoding="utf-8")},
                 "graphs": [{"name": g.name, "text": g.read_text(encoding="utf-8")}
-                           for g in (GRAPH_EXAMPLE, GRAPH_SMALL)],
+                           for g in (GRAPH_EXAMPLE, GRAPH_SMALL, *SKETCH_EXAMPLES)],
+                "picture": {"name": PICTURE_EXAMPLE.name,
+                            "svg": PICTURE_EXAMPLE.read_text(encoding="utf-8")},
                 "workflow": WORKFLOW_EXAMPLE.read_text(encoding="utf-8")})
         return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
@@ -462,10 +497,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(HTTPStatus.OK, result)
             if self.path == "/api/why/run":
                 return self._json(HTTPStatus.OK, why_run(str(body.get("id", ""))))
+            if self.path == "/api/twin/transcribe":
+                return self._json(HTTPStatus.OK, twin_transcribe(str(body.get("image", "")),
+                                                                 str(body.get("mime", ""))))
             graph = str(body.get("graph", "")).encode("utf-8")
             if self.path == "/api/twin/graph":
-                return self._json(HTTPStatus.OK, twin_graph(body.get("filename", ""), graph,
-                                                            body.get("tenant")))
+                out = twin_graph(body.get("filename", ""), graph, body.get("tenant"))
+                return self._json(HTTPStatus.OK, {
+                    **out, "sketch": sketch_reading(body.get("filename", ""), graph)})
             if self.path == "/api/twin/explore":
                 return self._json(HTTPStatus.OK, twin_explore(body.get("filename", ""), graph,
                                                               body.get("tenant")))

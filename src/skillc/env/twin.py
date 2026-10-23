@@ -167,25 +167,36 @@ def _is_bnode(term) -> bool:
     return isinstance(term, BNode)
 
 
+def _format(path: Path) -> str | None:
+    """The rdflib format of a graph file; a sketch (.txt, .sketch) is read as TriG."""
+    from .twin_sketch import SUFFIXES
+    return "trig" if path.suffix.lower() in SUFFIXES else FORMATS.get(path.suffix.lower())
+
+
 def _parse(path: Path, into):
-    fmt = FORMATS.get(path.suffix.lower())
+    fmt = _format(path)
     if fmt is None:
         raise TwinError(f"{path.name}: unsupported graph format (use one of "
-                        f"{', '.join(sorted(FORMATS))}; JSON-LD is refused because it can "
-                        "fetch remote contexts)")
-    into.parse(source=str(path), format=fmt)
+                        f"{', '.join(sorted(FORMATS))}, or a .txt sketch; JSON-LD is refused "
+                        "because it can fetch remote contexts)")
+    if path.suffix.lower() in FORMATS:
+        into.parse(source=str(path), format=fmt)
+        return
+    from .twin_sketch import read_sketch
+    into.parse(data=read_sketch(path.read_text(encoding="utf-8")).trig(), format="trig")
 
 
 def load_twin(path, tenant: str | None = None, ontologies=()) -> Twin:
-    """Read a building graph file. A TriG / N-Quads file with several named
-    graphs must say which tenant graph to use; ontology graphs are kept apart."""
+    """Read a building graph file, or a sketch of one (`env.twin_sketch`). A TriG / N-Quads
+    file with several named graphs must say which tenant graph to use; ontology graphs are
+    kept apart."""
     try:
         from rdflib import Dataset, Graph
     except ImportError as e:  # pragma: no cover - exercised only without the extra
         raise TwinError("reading a building graph needs rdflib: pip install 'skillc[twin]'") from e
     path = Path(path)
     instance, schema = Graph(), Graph()
-    if FORMATS.get(path.suffix.lower()) in ("trig", "nquads"):
+    if _format(path) in ("trig", "nquads"):
         ds = Dataset()
         _parse(path, ds)
         default = str(ds.default_graph.identifier)

@@ -87,25 +87,47 @@ def resolve_provider(provider: str | None = None) -> str:
 
 
 def complete(provider: str, system: str, user: str, model: str | None,
-             timeout: int, json_mode: bool = True) -> str:
-    """One completion from `provider` (already resolved)."""
+             timeout: int, json_mode: bool = True,
+             image: tuple[bytes, str] | None = None) -> str:
+    """One completion from `provider` (already resolved). `image` is (bytes, media type),
+    sent beside the text for a model that reads pictures; text inside a picture cannot be
+    scrubbed of URLs, so callers send only pictures the user chose to send."""
     if provider == "anthropic":
-        return anthropic_complete(system, user, model or DEFAULT_MODEL, timeout)
-    return azure_openai_complete(system, user, model, timeout, json_mode=json_mode)
+        if image is None:
+            return anthropic_complete(system, user, model or DEFAULT_MODEL, timeout)
+        return anthropic_complete(system, user, model or DEFAULT_MODEL, timeout, image=image)
+    if image is None:
+        return azure_openai_complete(system, user, model, timeout, json_mode=json_mode)
+    return azure_openai_complete(system, user, model, timeout, json_mode=json_mode,
+                                 image=image)
+
+
+def _b64(image: tuple[bytes, str]) -> tuple[str, str]:
+    import base64
+    data, mime = image
+    if mime not in ("image/png", "image/jpeg", "image/gif", "image/webp"):
+        raise ValueError(f"unsupported image type {mime!r}")
+    return base64.b64encode(data).decode("ascii"), mime
 
 
 def anthropic_complete(system: str, user: str, model: str,
-                       timeout: int) -> str:
+                       timeout: int, image: tuple[bytes, str] | None = None) -> str:
     require_model_opt_in()
     key = os.environ.get("ANTHROPIC_API_KEY")
     if not key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set; the LLM front-end is "
                            "opt-in")
+    content: str | list = user
+    if image is not None:
+        data, mime = _b64(image)
+        content = [{"type": "image", "source": {"type": "base64", "media_type": mime,
+                                                "data": data}},
+                   {"type": "text", "text": user}]
     body, table = guarded_body({
         "model": model,
         "max_tokens": 16000,
         "system": system,
-        "messages": [{"role": "user", "content": user}],
+        "messages": [{"role": "user", "content": content}],
     })
     req = urllib.request.Request(
         ANTHROPIC_API_URL, data=body,
@@ -119,7 +141,8 @@ def anthropic_complete(system: str, user: str, model: str,
 
 
 def azure_openai_complete(system: str, user: str, model: str | None,
-                          timeout: int, json_mode: bool = True) -> str:
+                          timeout: int, json_mode: bool = True,
+                          image: tuple[bytes, str] | None = None) -> str:
     require_model_opt_in()
     key = os.environ.get("AZURE_OPENAI_API_KEY")
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
@@ -161,10 +184,15 @@ def azure_openai_complete(system: str, user: str, model: str | None,
         url = v1 + "/chat/completions"
         include_model = True
 
+    content: str | list = user
+    if image is not None:
+        data, mime = _b64(image)
+        content = [{"type": "text", "text": user},
+                   {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}}]
     payload = {
         "messages": [
             {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "user", "content": content},
         ],
         "max_completion_tokens": 32000,
     }

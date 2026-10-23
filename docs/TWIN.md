@@ -20,6 +20,40 @@ $ skillc twin check building.trig --scenario setpoint --json    # skillc.twin/1
 Exit codes: `0` every target is achievable from the graph; `3` achievable, but only
 with evidence declared by `--source`; `1` at least one target is impossible; `2` error.
 
+## No RDF file? A scribble, a description or a picture
+
+The graph can also be a sketch of the building, read without a model
+(`src/skillc/env/twin_sketch.py`). Every command above accepts a `.txt` sketch:
+
+```console
+$ skillc twin explore examples/building-twin/campus-sketch.txt
+$ skillc twin check examples/building-twin/campus-description.txt --scenario setpoint
+```
+
+One fact per line (a scribble) or per sentence (a description):
+
+| Form | Example | Means |
+|---|---|---|
+| Arrow | `AHU-1 -> VAV-11 -> Zone 11 -> Room 111, Room 112` | feeds; between two places, contains |
+| Sentence | `AHU-1 feeds VAV-11.` · `Zone 11 is in Floor 1.` · `Zone 11 contains Room 111.` | the same relations in words |
+| Point | `SP-11 on VAV-11: 16..26 degC, priority 9, BACnet analog-value,11, history ts-sp11` | a point with limits, unit, priority and references |
+| Schedule | `Schedule S-11 for VAV-11: Mon-Fri 07:00-19:00, except 2026-12-25` | a weekly schedule with exceptions |
+| Policy | `Policy office-hours for Zone 11: hours 06:00-20:00, setpoints 18..24` | an operating policy |
+| Timezone | `HQ timezone Europe/Berlin` | the building's timezone |
+
+Kinds come from names (AHU, VAV, FCU, boiler: equipment; building, floor, zone, room:
+places; SP / set point, occupancy, sensor: points). The reader states what it read, line
+by line, and lists every line it could not read; such a line adds nothing to the graph.
+`campus-sketch.txt` (scribble) and `campus-description.txt` (sentences) describe the same
+campus and give the same verdicts; each misses something on purpose (limits on SP-12, a
+BACnet reference on SP-21, a policy on Zones 12 and 21).
+
+A **picture** of a sketch (`campus-sketch.svg`, a photo of a whiteboard) needs a model to
+turn it into this text first. The demo does that only when started with `--llm` and
+`SKILLC_ALLOW_MODEL_CALLS=1`, shows the text for review, and then reads it as above. The
+model only transcribes; what the text means is decided without it. Text inside a picture
+cannot be scrubbed of links, so send only pictures without them.
+
 ## Explore a graph, then paste a workflow
 
 You need no description of the graph:

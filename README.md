@@ -96,7 +96,7 @@ pip install -e ".[dev]"                # + tests and lint
 | `skillc scan DIR` | `check` for every skill under a folder | CI for a skill repository |
 | `skillc reach SKILL.md` (or `--claude`, `--env FILE`) | What the skill can achieve in *this* folder as Copilot CLI sees it, a checked plan, and the fix for what is blocked | Before running in a real workspace or subscription |
 | `skillc env probe` | Read the environment read-only into a graph: Copilot CLI tools, saved approvals and MCP servers by default; Azure roles and policies with `--azure` | To snapshot, `diff` or `watch` what an agent may do |
-| `skillc twin explore GRAPH` · `skillc twin check GRAPH --workflow FILE` | What a graph holds, and per target which workflow evidence it has and which is missing | Before building a verifier or report on tenant data |
+| `skillc twin explore GRAPH` · `skillc twin check GRAPH --workflow FILE` | What a graph holds, and per target which workflow evidence it has and which is missing; the graph can be RDF or a `.txt` scribble or description | Before building a verifier or report on tenant data |
 | `skillc monitor init` | Runtime monitor through Copilot hooks (`.github/hooks/skillc.json`), or Claude Code hooks with `--claude`: plan first, every action checked | Coding agents with write or shell access |
 | `skillc_monitor(..., strict=True, fail_open=False)` | Enforced gate as Agent Framework middleware, with evidence-bound approvals | Agent 365 and Foundry hosted agents that send, pay or delete |
 | `skillc monitor scout-install` | The same checks as MCP tools (cooperative, not enforced) | Microsoft Scout |
