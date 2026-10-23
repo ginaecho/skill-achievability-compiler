@@ -138,7 +138,7 @@ def check_skill(text: str, where: dict[str, list[str]]) -> dict:
         rows = []
         for name, grants in where.items():
             started = time.perf_counter()
-            bound = bind_environment(pack, grants, equivalents=True)
+            bound = bind_environment(pack, grants)
             bound_file = tmp / "bound.json"
             bound_file.write_text(json.dumps(bound.pack), encoding="utf-8")
             _code, out = _run(["check", str(bound_file), "--json", "--source", str(src),

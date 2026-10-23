@@ -227,9 +227,12 @@ def test_eval_reports_abstentions(capsys):
 def test_examples_check_out(capsys):
     root = Path(__file__).parent.parent / "examples"
     for skill in sorted(root.rglob("SKILL.md")):
-        if "skillc" in skill.relative_to(root).parts:
+        parts = skill.relative_to(root).parts
+        if "skillc" in parts:
             continue      # a vendored copy of the package (deploy staging), not an example
-        assert main(["check", str(skill)]) == 0, skill
+        # runtime-skills are written for claude.ai, their home runtime
+        home = ["--profile", "claude-ai"] if "runtime-skills" in parts else []
+        assert main(["check", str(skill), *home]) == 0, skill
 
 
 def test_audit_poisoned_exit_1(capsys):

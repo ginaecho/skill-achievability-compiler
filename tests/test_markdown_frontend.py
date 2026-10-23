@@ -135,11 +135,19 @@ def test_undeclared_snake_case_tool_is_refuted():
 
 def test_profile_relativity_same_skill_two_verdicts():
     """The heart of the design: achievability is judged relative to Γ."""
-    md = "# s\nAsk via `ask_user_input_v0`, then proceed."
+    md = "# s\nShow it via `show_widget`, then proceed."
     ok = check(compile_markdown(md, CLAUDE_AI).pack)
     bad = check(compile_markdown(md, CLAUDE_CODE).pack)
     assert ok.achievable
     assert not bad.achievable and bad.reason == "MISSING_CAPABILITY"
+
+
+def test_the_same_tool_under_another_name_counts_unless_exact():
+    from dataclasses import replace
+    md = "# s\nAsk via `ask_user_input_v0`, then proceed."
+    assert check(compile_markdown(md, CLAUDE_CODE).pack).achievable      # AskUserQuestion
+    exact = check(compile_markdown(md, replace(CLAUDE_CODE, exact=True)).pack)
+    assert not exact.achievable and exact.reason == "MISSING_CAPABILITY"
 
 
 def test_extra_tools_widen_the_context():

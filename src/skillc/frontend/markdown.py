@@ -388,8 +388,17 @@ def compile_markdown(text: str, profile: Profile,
 
 
 def _capability_context(meta: dict, prose: str, profile: Profile) -> dict[str, str]:
-    """Γ: declared tool -> where it was declared (profile, frontmatter, prose)."""
+    """Γ: declared tool -> where it was declared (profile, frontmatter, prose).
+
+    Unless the profile is `exact`, every other name of a profile tool is declared too
+    (`skillc.equivalents`): a skill that calls claude.ai's `ask_user_input_v0` is served
+    by Claude Code's `AskUserQuestion`. This only adds grants, so it never refutes."""
     declared = dict.fromkeys(sorted(profile.tools), f"profile:{profile.name}")
+    if not profile.exact:
+        from ..equivalents import same_tool
+        for tool in sorted(profile.tools):
+            for other in sorted(same_tool(tool) - profile.tools):
+                declared.setdefault(other, f"profile:{profile.name}(same tool as {tool})")
     for key in ("allowed-tools", "allowed_tools", "tools"):
         for t in _tool_list(meta.get(key)):
             declared[normalize_tool(t)] = f"frontmatter:{key}"

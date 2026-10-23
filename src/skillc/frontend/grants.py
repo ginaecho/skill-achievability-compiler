@@ -19,7 +19,7 @@ class GrantBinding:
 
 
 def bind_grants(pack: dict, environment_grants: Iterable[str],
-                equivalents: bool = False) -> GrantBinding:
+                equivalents: bool = True) -> GrantBinding:
     """Remove capability definitions the environment does not grant.
 
     The protocol remains unchanged. Consequently, a required action whose

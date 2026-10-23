@@ -54,21 +54,30 @@ def test_real_skills_achievable_in_their_home_runtime(path):
 
 
 def test_consumer_only_skills_are_refuted_under_claude_code():
-    """Skills built around consumer-app tools must be refuted under the
-    claude-code profile, with the missing tool named in the frontier."""
+    """A tool Claude Code lacks under every name (claude.ai's show_widget) refutes; a
+    tool it has under another name (ask_user_input_v0 = AskUserQuestion) refutes only
+    when exact names are required."""
+    from dataclasses import replace
     path = SKILLS_DIR / "examples/call-to-book/SKILL.md"
     if not path.exists():
         pytest.skip("call-to-book not in corpus")
-    v = check(compile_file(path, CLAUDE_CODE).pack)
+    assert check(compile_file(path, CLAUDE_CODE).pack).achievable
+    v = check(compile_file(path, replace(CLAUDE_CODE, exact=True)).pack)
     assert not v.achievable
     assert v.reason == "MISSING_CAPABILITY"
     assert "ask_user_input_v0" in v.frontier
+    learn = SKILLS_DIR / "examples/learn/SKILL.md"
+    if learn.exists():
+        v = check(compile_file(learn, CLAUDE_CODE).pack)
+        assert not v.achievable and "show_widget" in v.frontier
 
 
 def test_profile_narrowing_refutes_with_the_removed_tool_named():
     """Mutation testing on real skills, refutation direction: take a skill
     that is achievable under claude-ai and remove one agent-tool it actually
-    invokes -- the compiler must flip to IMPOSSIBLE and name that tool."""
+    invokes, under all its names -- the compiler must flip to IMPOSSIBLE and
+    name that tool."""
+    from skillc.equivalents import same_tool
     from skillc.profiles import Profile
     mutated = 0
     for path in all_skill_files():
@@ -79,7 +88,7 @@ def test_profile_narrowing_refutes_with_the_removed_tool_named():
         if not used or not check(res.pack).achievable:
             continue
         victim = sorted(used)[0]
-        narrowed = Profile(name="narrowed", tools=CLAUDE_AI.tools - {victim},
+        narrowed = Profile(name="narrowed", tools=CLAUDE_AI.tools - same_tool(victim),
                            shell=CLAUDE_AI.shell)
         v = check(compile_file(path, narrowed).pack)
         assert not v.achievable, f"{path}: still achievable without {victim}"

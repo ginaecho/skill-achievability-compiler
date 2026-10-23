@@ -25,22 +25,26 @@ compliant agent follows the same verdicts, but nothing forces it to.
 pip install -e ".[dev]"        # installs the `skillc` CLI
 ```
 
-Check a real skill against the runtime that will execute it:
+Check a skill against the runtime that will execute it
+(examples in [`examples/runtime-skills`](../examples/runtime-skills/README.md)):
 
 ```console
-$ skillc check call-to-book/SKILL.md --profile claude-ai
-call-to-book: ACHIEVABLE
+$ skillc check examples/runtime-skills/quiz-widget/SKILL.md --profile claude-ai
+quiz-widget: ACHIEVABLE
 
-$ skillc check call-to-book/SKILL.md --profile claude-code
-call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
-  protocol invokes undeclared capabilities: ['ask_user_input_v0']
-  missing: ask_user_input_v0 (line 7)
+$ skillc check examples/runtime-skills/quiz-widget/SKILL.md --profile claude-code
+quiz-widget: IMPOSSIBLE [MISSING_CAPABILITY]
+  protocol invokes undeclared capabilities: ['show_widget']
+  missing: show_widget (line 3)
 ```
 
 The same skill, two verdicts: achievability is **relative to the declared
 environment**. Without `--profile`, skillc checks against GitHub Copilot CLI
 (`copilot-cli`); `skillc profiles` lists the others (`vscode-copilot`,
-`claude-code`, `claude-ai`, `none`). Profiles and self-declared
+`claude-code`, `claude-ai`, `none`). A profile tool also serves its other names
+(Claude Code's `AskUserQuestion` is claude.ai's `ask_user_input_v0`; reviewed
+groups in `src/skillc/data/tool_equivalents.json`); `--exact-tool-names` turns
+that off. Profiles and self-declared
 `allowed-tools`/`tools` metadata are distinct trust inputs; the frontend combines
 them but does not discover or verify actual runtime grants (`skillc reach` does).
 
@@ -420,8 +424,10 @@ two-agent deadlock run (modeled, not measured). See
 
 * **Public skills** ([anthropics/skills](https://github.com/anthropics/skills),
   42 `SKILL.md`): **42/42 achievable** in their home runtime (`claude-ai`), and
-  **18/42 refuted** under `claude-code`, each naming the missing tool and source
-  line; granting the named tools flips every one back.
+  **6/42 refuted** under `claude-code`, each naming a tool Claude Code lacks under
+  every name. With exact tool names (`--exact-tool-names`) 18/42 were refuted; 12
+  of those differed only by name (`ask_user_input_v0` = `AskUserQuestion`), and
+  granting the named tools flips every one back.
   [Real-skills report](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/REAL_SKILLS_REPORT.md) ·
   [benchmark report](https://github.com/ginaecho/skill-achievability-compiler/blob/main/docs/BENCHMARK_REPORT.md).
 * **Semantic level** (recorded with `skillc 0.2.0`): 4/4 LLM-compacted consumer

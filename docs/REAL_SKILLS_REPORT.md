@@ -50,3 +50,25 @@ A verdict is always *relative to a capability context*: `IMPOSSIBLE [MISSING_CAP
 | `public/xlsx` | ACHIEVABLE | ACHIEVABLE |
 
 **Totals:** 42/42 achievable under `claude-ai`, 24/42 achievable under `claude-code`
+
+## With equivalent tool names (the default since skillc counts them)
+
+The table above was measured with exact tool names (now `--exact-tool-names`). skillc now
+also counts a tool that does the same job under another name
+(`src/skillc/data/tool_equivalents.json`). The corpus (claude.ai's built-in skills folder)
+is not available in this repository, so the totals below are derived from the recorded
+frontiers above, not re-run. The derivation is exact for these skills because, as the
+real-skill tests check, granting a refuted skill's frontier tools always flips it to
+ACHIEVABLE: a skill flips exactly when every frontier tool has a Claude Code equivalent.
+
+* Flip to ACHIEVABLE (12): `call-to-book`, `cancel-unsubscribe`, `event-planning`,
+  `file-expenses`, `file-form`, `financial-calculator`, `grocery-shopping`, `hire-help`,
+  `meal-delivery`, `prescription-refill`, `return-refund` (`ask_user_input_v0` =
+  `AskUserQuestion`) and `doc-coauthoring` (`create_file` = `Write`, `str_replace` = `Edit`).
+* Stay IMPOSSIBLE (6), a tool Claude Code lacks under every name: `benepass-reimbursement`
+  (`read_page`, `upload_file`), `built-in-browser` (`tabs_context`), `chrome-browser`
+  (`tabs_context_mcp`), `learn` (`read_me`, `show_widget`), `paint` (`present_files`; its
+  `bash_tool` is Claude Code's `Bash`), `setup-writing-style` (`search_mcp_registry`).
+
+**Totals with equivalents:** 42/42 achievable under `claude-ai`, 36/42 achievable under
+`claude-code`. Regenerating the table with `scripts/make_report.py` now uses equivalents.

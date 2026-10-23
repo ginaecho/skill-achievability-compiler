@@ -108,19 +108,29 @@ CLI sees it and shows one skill's verdict here and in Copilot CLI, VS Code Copil
 claude.ai. See [all demos](demo/README.md).
 
 ```console
-$ skillc check call-to-book/SKILL.md --profile claude-ai
-call-to-book: ACHIEVABLE
-$ skillc check call-to-book/SKILL.md
-call-to-book: IMPOSSIBLE [MISSING_CAPABILITY]
-  missing: ask_user_input_v0 (line 7)
+$ skillc check examples/runtime-skills/quiz-widget/SKILL.md --profile claude-ai
+quiz-widget: ACHIEVABLE
+$ skillc check examples/runtime-skills/quiz-widget/SKILL.md
+quiz-widget: IMPOSSIBLE [MISSING_CAPABILITY]
+  missing: show_widget (line 3)
 ```
 
-Profiles match tool **names**: a skill that calls `web_fetch` is ACHIEVABLE in Copilot CLI and
-IMPOSSIBLE in Claude Code, which names that tool `WebFetch`. Any runtime with a shell
-(`powershell` on Windows) grants `bash`. Environment binding can also count a tool that does the
-same job under another name (`bind_environment(..., equivalents=True)`, from the reviewed groups in
-[`src/skillc/data/tool_equivalents.json`](src/skillc/data/tool_equivalents.json)); the demo does,
-and shows which name it counted. It is off by default, so published results stay exact-name.
+**The same tool under another name counts.** claude.ai asks the user with `ask_user_input_v0`,
+Copilot CLI with `ask_user`, Claude Code with `AskUserQuestion`: a skill written for one runtime
+names that runtime's tools. skillc counts a tool that does the same job under another name, from
+the reviewed groups in [`src/skillc/data/tool_equivalents.json`](src/skillc/data/tool_equivalents.json),
+in the compiler, in environment binding and in `reach`. This only ever adds tools, so it cannot
+create a false refutation. `--exact-tool-names` (or `bind_environment(..., equivalents=False)`)
+counts exact names only. A tool with no equivalent stays missing, as `show_widget` above. Any
+runtime with a shell (`powershell` on Windows) grants `bash`.
+
+```console
+$ skillc check examples/runtime-skills/pick-an-evening/SKILL.md
+pick-an-evening: ACHIEVABLE
+$ skillc check examples/runtime-skills/pick-an-evening/SKILL.md --exact-tool-names
+pick-an-evening: IMPOSSIBLE [MISSING_CAPABILITY]
+  missing: ask_user_input_v0 (line 3)
+```
 
 ### Using skillc with GitHub Copilot
 
@@ -178,7 +188,7 @@ the dated published findings, fresh local measurements and illustrative replays.
 
 | Benchmark | Result |
 |---|---|
-| Public skills: 42 `SKILL.md` from Anthropic's skills repository | 42/42 `ACHIEVABLE` in their home runtime; 18/42 `IMPOSSIBLE` in Claude Code, each naming the missing tool and line, and every one flips back when that tool is granted |
+| Public skills: 42 `SKILL.md` from Anthropic's skills repository | 42/42 `ACHIEVABLE` in their home runtime; 6/42 `IMPOSSIBLE` in Claude Code, each naming a tool Claude Code lacks under every name (`show_widget`, `tabs_context`, `present_files`, ...). Measured with exact names, 18/42 were refuted; 12 of those differed only by name (`ask_user_input_v0` = `AskUserQuestion`; `create_file` = `Write`) and every refutation flips back when its tool is granted |
 | Ground-truth corpus (`skillc eval`) | 0 false negatives; the only false `ACHIEVABLE`s are two planted residues |
 | Agent 365: ten source-backed workflows | 123/123 expectations met (63 static, 60 runtime); no denied call reached a transport |
 | Hosted agents (Foundry, Agent Framework) | With the policy removed from the prompt, the bare agent sent unapproved reports; skillc refused every one |

@@ -65,9 +65,17 @@ class Profile:
     tools: frozenset = frozenset()
     shell: bool = False
     extra: list[str] = field(default_factory=list)
+    exact: bool = False          # True: a tool counts only under its exact name
 
     def grants(self, tool: str) -> bool:
-        return normalize_tool(tool) in self.tools
+        """Whether the profile grants `tool`: by its name, or (unless `exact`) by another
+        name of the same tool (`skillc.equivalents`)."""
+        if normalize_tool(tool) in self.tools:
+            return True
+        if self.exact:
+            return False
+        from .equivalents import same_tool
+        return bool(same_tool(tool) & self.tools)
 
     @staticmethod
     def from_dict(d: dict) -> Profile:

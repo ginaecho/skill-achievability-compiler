@@ -27,21 +27,67 @@ def test_match_prefers_the_exact_name_then_an_equivalent():
     assert same_tool("unknown_tool") == {"unknown_tool"}
 
 
-def test_binding_matches_exact_names_unless_equivalents_are_asked_for():
+def test_binding_counts_equivalents_unless_exact_names_are_asked_for():
     copilot = sorted(load_profile("copilot-cli").tools)
-    exact = bind_grants(PACK, copilot)
+    exact = bind_grants(PACK, copilot, equivalents=False)
     assert exact.unavailable == ("ask_user_input_v0",) and exact.matched == ()
-    loose = bind_environment(PACK, copilot, equivalents=True)
+    loose = bind_environment(PACK, copilot)
     assert loose.unavailable == () and loose.matched == (("ask_user_input_v0", "ask_user"),)
 
 
 def test_equivalents_only_ever_add_grants():
     for name in ("copilot-cli", "vscode-copilot", "claude-code", "claude-ai"):
         tools = sorted(load_profile(name).tools)
-        exact = set(bind_grants(PACK, tools).granted)
-        loose = set(bind_grants(PACK, tools, equivalents=True).granted)
+        exact = set(bind_grants(PACK, tools, equivalents=False).granted)
+        loose = set(bind_grants(PACK, tools).granted)
         assert exact <= loose
 
 
 def test_copilot_cli_profile_has_web_search():
     assert "web_search" in load_profile("copilot-cli").tools
+
+
+# --- the compiler and the CLI ---------------------------------------------------------------
+
+SKILL = ("---\nname: book\ndescription: Book a table.\n---\n# Book\n\n"
+         "Call `ask_user_input_v0` to ask which evening suits, then use `web_search`.\n")
+
+
+def test_profile_grants_another_name_of_its_tool_unless_exact():
+    from dataclasses import replace
+    code = load_profile("claude-code")
+    assert code.grants("ask_user_input_v0") and code.grants("web_search")
+    assert not replace(code, exact=True).grants("ask_user_input_v0")
+    assert not code.grants("slack_send_message")
+
+
+def test_compiler_declares_equivalents_with_their_provenance():
+    from skillc.checker import check
+    from skillc.frontend.markdown import compile_markdown
+    res = compile_markdown(SKILL, load_profile("claude-code"))
+    assert res.declared["ask_user_input_v0"] == "profile:claude-code(same tool as askuserquestion)"
+    assert check(res.pack).achievable
+
+
+def test_cli_counts_equivalents_and_can_require_exact_names(tmp_path, capsys):
+    from skillc.cli import main
+    path = tmp_path / "SKILL.md"
+    path.write_text(SKILL, encoding="utf-8")
+    assert main(["check", str(path), "--profile", "claude-code"]) == 0
+    assert main(["check", str(path), "--profile", "claude-code", "--exact-tool-names"]) == 1
+    assert "ask_user_input_v0" in capsys.readouterr().out
+    assert main(["check", str(path), "--profile", "vscode-copilot"]) == 1   # no web search
+
+
+def test_environment_need_finds_the_tool_under_another_name():
+    from skillc.env.facts import need
+    from skillc.env.model import Environment
+    env = Environment()
+    p = env.add_node("principal/agent", "principal", "agent")
+    env.add_node("/", "scope", "session", level="root")
+    env.add_node("tool/ask_user", "tool", "ask_user")
+    env.add_edge(p, env.add_node("allow", "role", "allow", actions=["ask_user"]),
+                 "assigned", scope="/")
+    fact = need(env, {"tool": "AskUserQuestion"})
+    assert fact.value is True and "AskUserQuestion is ask_user here" in fact.reasons[0]
+    assert need(env, {"tool": "slack_send_message"}).value is False

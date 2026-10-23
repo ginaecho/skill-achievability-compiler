@@ -80,6 +80,8 @@ def _load_front(path: Path, args) -> tuple[dict, CompileResult | None, str | Non
         profile = load_profile(args.profile)
         if getattr(args, "tool", None):
             profile = profile.with_tools(args.tool)
+        if getattr(args, "exact_tool_names", False):
+            profile = replace(profile, exact=True)
         res = compile_file(path, profile)
         pack = res.pack
     if getattr(args, "contract", None):
@@ -967,6 +969,10 @@ def _add_compile_opts(sp) -> None:
                          "copilot-cli, see `skillc profiles`)")
     sp.add_argument("--tool", action="append", metavar="NAME",
                     help="grant an extra tool capability (repeatable)")
+    sp.add_argument("--exact-tool-names", action="store_true",
+                    help="count a tool only under its exact name; by default a profile tool "
+                         "also serves its other names (AskUserQuestion = ask_user_input_v0; "
+                         "see src/skillc/data/tool_equivalents.json)")
     sp.add_argument("--contract", metavar="JSON",
                     help="bind extraction to reviewed goal, capabilities, and initial state")
     sp.add_argument("--llm", action="store_true",

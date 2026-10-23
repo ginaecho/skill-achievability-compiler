@@ -226,12 +226,11 @@ class EnvironmentBinding:
 
 def bind_environment(pack: dict, grants: Iterable[str],
                      manifest: dict | None = None, align: bool = False,
-                     equivalents: bool = False) -> EnvironmentBinding:
+                     equivalents: bool = True) -> EnvironmentBinding:
     """Bind an intent pack to an environment: tool existence, then tool contracts.
     `align=True` first aligns the pack's names through its bindings
-    (`align_to_contracts`); off by default. `equivalents=True` also counts a granted
-    tool that does the same job under another name (`skillc.equivalents`); off by
-    default, so verdicts published against exact names are unchanged."""
+    (`align_to_contracts`); off by default. A granted tool also serves its other names
+    (`skillc.equivalents`); `equivalents=False` counts exact names only."""
     from .grants import bind_grants
 
     existence = bind_grants(pack, grants, equivalents=equivalents)

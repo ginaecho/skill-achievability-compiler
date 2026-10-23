@@ -61,7 +61,9 @@ def test_reads_run_without_asking_and_writes_ask_first(home, tmp_path):
     assert need(env, {"tool": "grep"}).value is True
     asked = need(env, {"tool": "powershell", "arg": "npm test"})
     assert asked.value is None and "asks" in asked.reasons[0]
-    assert need(env, {"tool": "bash"}).value is False          # not this platform's shell
+    bash = need(env, {"tool": "bash"})                         # Windows' shell is powershell
+    assert bash.value is None and "bash is powershell here" in bash.reasons[0]
+    assert need(env, {"tool": "slack_send_message"}).value is False
 
 
 def test_saved_approvals_apply_only_to_this_repository(home):
@@ -106,12 +108,12 @@ def test_any_shell_grants_the_bash_capability(home):
 def test_copilot_is_the_default_profile(tmp_path, capsys):
     # tools the skill uses but does not declare are judged against the profile
     skill = tmp_path / "SKILL.md"
-    skill.write_text("---\nname: t\ndescription: Summarise a page.\n---\n# T\n\n"
-                     "Use `web_fetch` to read the page, then call `ask_user` to confirm.\n")
+    skill.write_text("---\nname: t\ndescription: Patch a file.\n---\n# T\n\n"
+                     "Use `apply_patch` to change the file, then call `list_agents`.\n")
     assert main(["check", str(skill)]) == 0
     capsys.readouterr()
     assert main(["check", str(skill), "--profile", "claude-code"]) == 1
-    assert "web_fetch" in capsys.readouterr().out
+    assert "apply_patch" in capsys.readouterr().out
 
 
 def test_reach_and_env_probe_default_to_copilot(tmp_path, monkeypatch, capsys):

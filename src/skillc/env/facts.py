@@ -215,7 +215,13 @@ def _path_need(env: Environment, path: str) -> Fact:
 
 def _tool_need(env: Environment, tool: str, arg: str | None) -> Fact:
     if norm_id(f"tool/{tool}") not in env.nodes:
-        return Fact(False, (f"the runtime has no {tool} tool",))
+        from ..equivalents import same_tool
+        other = next((env.nodes[norm_id(f"tool/{n}")]["name"] for n in sorted(same_tool(tool))
+                      if norm_id(f"tool/{n}") in env.nodes), None)
+        if other is None:
+            return Fact(False, (f"the runtime has no {tool} tool",))
+        fact = _tool_need(env, other, arg)
+        return Fact(fact.value, (f"{tool} is {other} here",) + fact.reasons, fact.assumptions)
     action = f"{tool}({arg})" if arg else tool
     principal = env.principal()
     for edge in env.out_edges(principal["id"], "denied") if principal else []:
