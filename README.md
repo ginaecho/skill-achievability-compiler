@@ -132,6 +132,15 @@ pick-an-evening: IMPOSSIBLE [MISSING_CAPABILITY]
   missing: ask_user_input_v0 (line 3)
 ```
 
+### Extending the no-model reader
+
+**Extend the no-model reader without Python edits:** add literal action phrases,
+invocation verbs, completion phrases and workflow headings in a JSON file.
+Set `SKILLC_DETERMINISTIC_VOCABULARY` to its path before starting SkillC.
+See the [example vocabulary](examples/deterministic-vocabulary.json) and
+[format and limitations](docs/KNOWLEDGE_GRAPH.md#editable-deterministic-vocabulary).
+These mappings extend extraction, not environment permissions or the CE grammar.
+
 ### Using skillc with GitHub Copilot
 
 1. **Before you install a skill:** `skillc check SKILL.md` (Copilot CLI), or

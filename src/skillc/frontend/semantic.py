@@ -22,14 +22,14 @@ from dataclasses import dataclass, field
 
 from ..pack import iter_steps
 from ..profiles import normalize_tool
-from .prose import (BOLD_RE, CONTINUE_RE, INVOKE_RE, Condition, Role,
+from .prose import (BOLD_RE, CONTINUE_RE, Condition, Role,
                     condition_predicate, content_stems, find_num_clause,
                     find_section, goal_clause, negated_before, numbered_steps,
                     parse_goal, parse_roles, quantity_var, sentences,
                     split_bullets, split_loop_segments, split_sections, stem,
                     stem_index)
+from .vocabulary import vocabulary
 
-WORKFLOW_HEADING = r"\b(workflow|contract|steps|procedure|process|protocol|instructions)\b"
 TOOLS_HEADING = r"\btools?\b"
 BEHAVIOUR_HEADING = r"declared\s+(?:(\w+)\s+)?behaviou?rs?"
 
@@ -143,6 +143,17 @@ def match_tools(text: str, tools: list[str]) -> list[tuple[str, int]]:
                for other, (_, oparts) in hits.items()):
             continue
         out.append((t, pos))
+    for action, match in vocabulary().action_matches(text):
+        target = action.target(tools)
+        if target is None:
+            continue
+        out = [(tool, pos) for tool, pos in out if not match.start() <= pos < match.end()]
+        if negated_before(text, match.start()):
+            continue
+        position = min([match.start(), *(pos for tool, pos in out if tool == target)])
+        out = [(tool, pos) for tool, pos in out
+               if tool != target]
+        out.append((target, position))
     return sorted(out, key=lambda x: x[1])
 
 
@@ -198,7 +209,7 @@ def scan_span(text: str, tools: list[str], roles: list[Role],
         events.append(Event("act", pos, cap=tool,
                             by=_role_at(roles, text, pos, default_role)))
     seen = {e.cap for e in events if e.kind == "act"}
-    for m in INVOKE_RE.finditer(text):
+    for m in vocabulary().invoke_re.finditer(text):
         if negated_before(text, m.start()):
             continue
         cap = normalize_tool(m.group(1))
@@ -428,7 +439,7 @@ def build(name: str, prose: str, declared: dict[str, str]) -> SemanticResult | N
     if not conds:
         return None
     sections = split_sections(prose)
-    wf = find_section(sections, WORKFLOW_HEADING)
+    wf = find_section(sections, vocabulary().workflow_heading)
     if wf is None:
         return None
     segments = split_loop_segments(wf.body)

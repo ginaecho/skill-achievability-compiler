@@ -68,6 +68,7 @@ flowchart TD
     I["Concrete user task: skill / agent / prompt"] --> L["Opt-in LLM compaction: prompts + guarded providers"]
     L --> CE["Model proposes CE / JSON; deterministic parser + schema gate"]
     I -. "alternate non-LLM reader" .-> M["markdown + prose + semantic"]
+    DV["Editable literal action and grammar vocabulary"] --> M
     M --> P["Candidate formal pack"]
     CE --> P
     P -. "external review; not mandatory today" .-> REVIEW["Intent fidelity / optional reviewed task contract"]
@@ -99,6 +100,7 @@ flowchart TD
 |---|---|---|
 | Markdown reader **produces** a candidate pack | Extracts source declarations, invocations and, when supported, task semantics | [`compile_markdown`](../src/skillc/frontend/markdown.py), [`semantic.build`](../src/skillc/frontend/semantic.py) |
 | Prose reader **names** logical conditions | Completion clauses become predicates and numeric comparisons | [`parse_goal`, `condition_predicate`](../src/skillc/frontend/prose.py) |
+| Vocabulary **configures** the no-model reading | JSON extends literal action phrases, invocation verbs, completion phrases and workflow headings | [`vocabulary`](../src/skillc/frontend/vocabulary.py) |
 | Environment **grants**, intent **requires** | A tool mentioned in a document is not automatically authorized in a target environment | [`bind_grants`](../src/skillc/frontend/grants.py) |
 | Contracts **replace** assumed behavior | Aligned environment effects/guards replace intent assumptions; incompatible vocabularies are reported | [`bind_environment`, `apply_contracts`](../src/skillc/frontend/contracts.py) |
 | Runtime binding **maps** abstract tools | CE `via` maps to a runtime tool; `needs` adds resource guards | [`bind_runtime`](../src/skillc/frontend/runtime.py) |
@@ -325,6 +327,64 @@ recognizable completion text and numbered workflow steps. The prose reader
 models at most one numeric quantity per document; independent budgets can be
 conflated. Retry language without an explicit supported loop can become a
 straight-line path. Review the produced pack before relying on its meaning.
+
+### Editable deterministic vocabulary
+
+The no-model Markdown reader uses
+[`data/deterministic_vocabulary.json`](../src/skillc/data/deterministic_vocabulary.json),
+loaded by [`frontend/vocabulary.py`](../src/skillc/frontend/vocabulary.py).
+Action phrases are shared by invocation extraction and semantic workflow reading.
+The built-ins now also recognize forms such as `execute`, `success requires`,
+`action plan`, `search online` and `reserve a flight`.
+
+To extend them for one project, copy
+[`examples/deterministic-vocabulary.json`](../examples/deterministic-vocabulary.json)
+and edit its ordinary words, not Python or regular expressions:
+
+```json
+{
+  "actions": {
+    "scan_package": {
+      "phrases": ["scan the package for malware"],
+      "tool_names": ["scan_package", "scan_artifact"]
+    }
+  },
+  "invocation_verbs": ["activate"],
+  "completion_phrases": ["the review succeeds when"],
+  "workflow_headings": ["review checklist"]
+}
+```
+
+In PowerShell, select the file before running SkillC:
+
+```powershell
+$env:SKILLC_DETERMINISTIC_VOCABULARY = ".\examples\deterministic-vocabulary.json"
+skillc compile .\SKILL.md --profile none
+```
+
+All four top-level fields are optional in an extension. Lists append to the
+built-ins; they do not erase existing grammar. Phrases are literal,
+case-insensitive, word-bounded and tolerate whitespace. Longer overlapping
+action phrases win. The same phrase cannot name two different actions.
+Unknown fields, invalid entries, missing files and malformed JSON are reported,
+not silently ignored. Vocabulary is cached: restart the process after editing.
+
+An action's key is its required capability name when no named target is present.
+`tool_names` lists preferred existing tool names in priority order, followed by
+the action key. Optional `tool_prefixes` supplies literal fallback prefixes;
+the built-in flight rule retains its legacy `book_` mapping. Prefer explicit
+names because prefixes can select unrelated operations.
+
+In this example, `scan the package for malware` names `scan_package` or an
+already declared `scan_artifact`. It does **not** establish that the package is
+safe, supply a scanner, grant permission or execute a scan. Bind independent
+environment grants and reviewed tool contracts as appropriate.
+`activate` still requires a backticked identifier; a completion phrase still
+requires the supported bold state clauses, and workflows still need numbered
+steps. Negation handling remains a local heuristic, not general English
+understanding. This configuration changes neither CE syntax, LLM prompts nor
+the separate runtime requirement reader. Inspect the extracted pack; vocabulary
+coverage is not intent-fidelity evidence.
 
 ### LLM output formats and the deterministic boundary
 
@@ -588,6 +648,7 @@ The HTML directory also shows internal imports and reverse import relationships.
 | [`frontend/__init__.py`](../src/skillc/frontend/__init__.py) | Re-exports deterministic compilation API | `markdown` |
 | [`frontend/markdown.py`](../src/skillc/frontend/markdown.py) | `compile_markdown`, invocations, fallback and provenance | `prose`, `semantic` |
 | [`frontend/prose.py`](../src/skillc/frontend/prose.py) | Goal clauses, stems, roles, sections, steps and numeric phrases | `semantic` |
+| [`frontend/vocabulary.py`](../src/skillc/frontend/vocabulary.py) | Validated JSON vocabulary extensions; shared literal action and grammar matching | `markdown`, `prose`, `semantic` |
 | [`frontend/semantic.py`](../src/skillc/frontend/semantic.py) | `build`: turn supported readings into guards, effects and protocol | `pack` |
 | [`frontend/ce.py`](../src/skillc/frontend/ce.py) | Tokenize, parse and render formal Controlled English | `runtime` |
 | [`frontend/llm.py`](../src/skillc/frontend/llm.py) | Opt-in JSON/CE compaction, repair and reader-first decisions | `providers`, `prompts`, `runtime` |

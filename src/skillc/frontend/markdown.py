@@ -58,7 +58,8 @@ import yaml
 from ..pack import PackError, validate_pack
 from ..profiles import Profile, normalize_tool
 from . import semantic
-from .prose import INVOKE_RE, negated_before
+from .prose import negated_before
+from .vocabulary import vocabulary
 
 FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.S)
 FENCE_RE = re.compile(r"^(```+|~~~+)([^\n]*)\n(.*?)^\1\s*$\n?", re.S | re.M)
@@ -66,12 +67,6 @@ TOOLS_LINE_RE = re.compile(
     r"^\s*(?:\*\*)?(?:required\s+)?tools?(?:\s+available)?(?:\*\*)?\s*:\s*(.+)$",
     re.I | re.M,
 )
-EXPLICIT_ACTION_RE = re.compile(
-    r"(?P<websearch>\bsearch\s+(?:for\s+)?(?:the\s+)?(?:internet|web)\b)"
-    r"|(?P<book_flight>\bbook\s+(?:a\s+)?(?:flight(?:\s+ticket)?|airline\s+ticket)\b)",
-    re.I,
-)
-
 AGENT_TOOL_RE = re.compile(r"\A(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Za-z0-9]*)\Z")
 SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
 
@@ -281,7 +276,7 @@ def _names_a_value(raw: str, body: str) -> bool:
 def extract(body: str, declared: set[str]) -> list[Invocation]:
     """Extract ordered tool invocations from prose (code fences pre-stripped)."""
     out: list[Invocation] = []
-    for m in INVOKE_RE.finditer(body):
+    for m in vocabulary().invoke_re.finditer(body):
         # Skip negated invocations: "do NOT use `X`", "never call `X`", etc.
         if negated_before(body, m.start(), window=20):
             continue
@@ -311,15 +306,12 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
 def extract_explicit_actions(body: str) -> list[Invocation]:
     """Extract unambiguous external actions stated directly in plain prose."""
     out = []
-    for match in EXPLICIT_ACTION_RE.finditer(body):
+    for action, match in vocabulary().action_matches(body):
         if negated_before(body, match.start(), window=20):
-            continue
-        tool = match.lastgroup
-        if tool is None:
             continue
         out.append(Invocation(
             match.group(0),
-            tool,
+            action.name,
             "intent-action",
             body.count("\n", 0, match.start()) + 1,
         ))
@@ -328,16 +320,7 @@ def extract_explicit_actions(body: str) -> list[Invocation]:
 
 def _declared_action_target(action: str, declared: dict[str, str]) -> str | None:
     """Reuse an author's declared operation instead of inventing an alias."""
-    candidates = {
-        "book_flight": ("book", "book_flight"),
-        "websearch": ("websearch", "web_search", "search_web", "search"),
-    }.get(action, (action,))
-    for candidate in candidates:
-        if candidate in declared:
-            return candidate
-    if action == "book_flight":
-        return next((name for name in declared if name.startswith("book_")), None)
-    return None
+    return vocabulary().actions[action].target(declared)
 
 
 def compile_markdown(text: str, profile: Profile,

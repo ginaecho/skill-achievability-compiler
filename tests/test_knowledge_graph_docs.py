@@ -35,8 +35,9 @@ def script_json(identifier):
 
 def worked_example():
     document = DOC.read_text(encoding="utf-8")
-    text = re.search(r"```markdown\n(.*?)\n```", document, re.S)[1]
-    pack = json.loads(re.search(r"```json\n(.*?)\n```", document, re.S)[1])
+    example = document.split("## 4. Worked example: draft, approve, send", 1)[1]
+    text = re.search(r"```markdown\n(.*?)\n```", example, re.S)[1]
+    pack = json.loads(re.search(r"```json\n(.*?)\n```", example, re.S)[1])
     return document, compile_markdown(text, load_profile("none")), pack
 
 
@@ -240,6 +241,31 @@ class SourceExcerpts(HTMLParser):
                 self.block = None
 
 
+def test_code_cards_explain_responsibilities_and_keep_source_readable_without_javascript():
+    cards = re.findall(
+        r'<article class="code-card" id="([^"]+)">(.*?)</article>',
+        HTML.read_text(encoding="utf-8"), re.S,
+    )
+    assert cards
+    for identifier, body in cards:
+        links = re.findall(r'<p class="code-links">(.*?)</p>', body, re.S)
+        if identifier == "code-prompts" or identifier.startswith("code-prompt-"):
+            assert len(links) == 1, identifier
+            assert re.findall(r'href="([^"]+)"', links[0]) == ["#prompt-construction"]
+        else:
+            assert not links, identifier
+        explanation = re.search(
+            r'<div class="plain-explanation">(.*?)</div>\s*'
+            r'<div class="source-explanation">', body, re.S,
+        )
+        assert explanation, identifier
+        assert len(re.findall(r"<li>.+?</li>", explanation[1])) >= 2, identifier
+        assert "<strong>Example:</strong>" in explanation[1], identifier
+        assert "<strong>Boundary:</strong>" in explanation[1], identifier
+        source = body.split('<div class="source-explanation">', 1)
+        assert len(source) == 2 and 'class="source-block"' in source[1], identifier
+
+
 def test_graph_inspector_excerpts_match_the_actual_source_lines():
     text = HTML.read_text(encoding="utf-8")
     page = SourceExcerpts()
@@ -255,6 +281,14 @@ def test_graph_inspector_excerpts_match_the_actual_source_lines():
     targets = set(re.findall(r'data-inspect="([^"]+)"', text))
     cards = set(re.findall(r'<article class="code-card" id="([^"]+)"', text))
     assert targets == cards
+
+
+def test_navigation_reaches_every_guide_page():
+    text = HTML.read_text(encoding="utf-8")
+    navigation = re.search(r'<nav aria-label="Guide sections">(.*?)</nav>', text, re.S)[1]
+    pages = re.findall(r'href="#([^"]+)"', navigation)
+    assert len(pages) == len(set(pages))
+    assert set(pages) == set(re.findall(r'<section id="([^"]+)">', text))
 
 
 def test_guide_links_resolve_and_html_has_no_external_resources():

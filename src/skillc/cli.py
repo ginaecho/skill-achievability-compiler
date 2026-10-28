@@ -47,8 +47,11 @@ def _load_result(path: Path, args) -> tuple[dict, CompileResult | None]:
 
 def _deterministic_refutes(path: Path, args):
     """Tier T2 probe: (pack, res) when the deterministic front-end alone
-    refutes the skill (IMPOSSIBLE, not an abstention), else None.  Any error
-    falls back to the LLM path, so `needed` is never worse than `always`."""
+    refutes the skill (IMPOSSIBLE, not an abstention), else None. Extraction
+    errors fall back to the LLM path; invalid vocabulary is reported."""
+    from .frontend.vocabulary import vocabulary
+
+    vocabulary()  # Configuration errors must not become an optional LLM fallback.
     try:
         det = argparse.Namespace(**{**vars(args), "llm": False})
         pack, res = _load_result(path, det)

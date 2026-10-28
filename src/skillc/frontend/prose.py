@@ -59,6 +59,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from .vocabulary import vocabulary
+
 # --------------------------------------------------------------------------
 # Morphology: crude but deterministic stemming, enough to tell "Book the
 # flight" from "the booking is confirmed".
@@ -227,16 +229,6 @@ def quantity_var(noun: str | None) -> str:
 # Goal conditions
 # --------------------------------------------------------------------------
 
-DONE_RE = re.compile(
-    r"(?:your\s+job\s+is\s+finished\s+when"
-    r"|you(?:'re|\s+are)\s+done\s+when"
-    r"|(?:the\s+)?(?:job|task|skill|work)\s+is\s+"
-    r"(?:finished|complete|completed|done)\s+when"
-    r"|this\s+is\s+done\s+when"
-    r"|success\s+means"
-    r"|definition\s+of\s+done\s*:)"
-    r"(.{0,400}?)(?<!\d)\.(?:\s|$)", re.I | re.S)
-
 BOLD_RE = re.compile(r"\*\*([^*]+?)\*\*")
 
 # Head of a goal condition: the last participle-looking word in the clause.
@@ -298,14 +290,14 @@ class Condition:
 
 def goal_clause(prose: str) -> str | None:
     """The raw text of the document's completion sentence, if it has one."""
-    m = DONE_RE.search(prose)
+    m = vocabulary().done_re.search(prose)
     return m.group(1) if m else None
 
 
 def parse_goal(prose: str) -> tuple[list[Condition], str | None]:
     """Conditions the document says must hold when the skill is finished,
     plus the name of the numeric quantity it budgets (if any)."""
-    m = DONE_RE.search(prose)
+    m = vocabulary().done_re.search(prose)
     if not m:
         return [], None
     clause = m.group(1)
@@ -522,15 +514,8 @@ def sentences(text: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------
-# Invocation verbs (shared with the legacy used_<tool> extraction)
+# Negation before invocations
 # --------------------------------------------------------------------------
-
-INVOKE_RE = re.compile(
-    r"\b(?:via|use[sd]?|using|call(?:s|ed|ing)?|invoke[sd]?|invoking"
-    r"|run(?:s|ning)?|through)"
-    r"\s+(?:the\s+)?`([A-Za-z][A-Za-z0-9_.:-]*)`",
-    re.I,
-)
 
 # A negation word in the ~20 characters before an invocation verb, used to
 # skip "do NOT use `X`" false positives.
