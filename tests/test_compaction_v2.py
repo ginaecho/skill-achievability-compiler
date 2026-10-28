@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 import shutil
@@ -27,6 +28,7 @@ from skillc.pack import Pack, PackError, normalize, validate_pack
 
 ROOT = Path(__file__).parent.parent
 FROZEN = Path(__file__).parent / "fixtures" / "p2g_prompts" / "frozen.json"
+MESSAGE_HASHES = FROZEN.with_name("message_hashes.json")
 FINANCE = ROOT / "examples" / "hosted-agent-finance"
 
 
@@ -249,6 +251,57 @@ def test_reply_is_listed_only_in_the_p2g_plus_runtime_note():
 # --------------------------------------------------------------------------
 # F-c / F-f: prompt versions
 # --------------------------------------------------------------------------
+
+def _prompt_message_cases():
+    text = "Draft a report, obtain approval, then send it.\nDo not send unapproved drafts."
+    yield "ce|plain", prompts.ce_messages(text)
+    yield "ce|abilities", prompts.ce_messages(text, ["read files", "ask the user"])
+    runtimes = [
+        load_runtime(name) for name in (
+            "developer-sandbox", "claude-code-cloud", "foundry-hosted",
+            "office-assistant", "offline-workstation", "scout-desktop",
+        )
+    ]
+    runtimes.append(Runtime("empty", "No external tools or resources.", {}, (), ()))
+    for rt in runtimes:
+        for version in ("p2g", "p2g+", "p2g++"):
+            for levels in (False, True):
+                yield f"{rt.name}|{version}|levels={levels}", prompts.ce_runtime_messages(
+                    text, rt, levels=levels, version=version,
+                )
+        yield f"{rt.name}|grounded", prompts.ce_grounded_messages(text, rt)
+        yield f"{rt.name}|tool-policy", prompts.ce_tpl_messages(text, rt, [])
+        yield f"{rt.name}|index", prompts.ce_index_messages(text, rt, "REFERENCE FACTS\n")
+        yield f"{rt.name}|json", prompts.json_runtime_messages(text, rt)
+        yield f"{rt.name}|direct", prompts.direct_messages(text, rt)
+
+
+def test_all_prompt_builders_preserve_pre_refactor_message_bytes():
+    expected = json.loads(MESSAGE_HASHES.read_text(encoding="utf-8"))
+    actual = {
+        key: {role: hashlib.sha256(message.encode("utf-8")).hexdigest()
+              for role, message in zip(("system", "user"), messages)}
+        for key, messages in _prompt_message_cases()
+    }
+    assert actual.keys() == expected.keys()
+    for key in expected:
+        assert actual[key] == expected[key], key
+
+
+def test_grounded_prompt_edits_do_not_depend_on_sentence_anchors(monkeypatch):
+    monkeypatch.setattr(prompts, "CE_CORE_DELIVERABLE_RULE", "CORE DELIVERABLE\n")
+    monkeypatch.setattr(prompts, "CE_RUNTIME_BINDING_SYNTAX", "BINDING SYNTAX\n")
+    rt = load_runtime("developer-sandbox")
+    plain, user = prompts.ce_runtime_messages("task", rt)
+    grounded, grounded_user = prompts.ce_grounded_messages("task", rt)
+    assert "CORE DELIVERABLE\n" in plain
+    assert "CORE DELIVERABLE " + prompts.CE_FALLBACK_RULE in grounded
+    assert "BINDING SYNTAX\n" + prompts.CE_RUNTIME_BINDING_EXAMPLES in plain
+    assert (
+        "BINDING SYNTAX\n" + prompts.CE_SOFTWARE_DOC + prompts.CE_RUNTIME_BINDING_EXAMPLES
+    ) in grounded
+    assert grounded_user == user
+
 
 def test_p2g_prompt_is_byte_identical_to_the_frozen_text():
     frozen = json.loads(FROZEN.read_text(encoding="utf-8"))

@@ -14,8 +14,8 @@ here, together with the builders that assemble (system, user) message pairs:
     json_runtime_messages       JB: P2g's rules with the pack written as JSON
     direct_messages             D: intent -> verdict, no logical block
 
-The texts are data: changing a word changes the experiment, so they are kept
-verbatim and assembled by string surgery rather than rewritten per variant.
+The texts are experiment data. Named instruction and syntax blocks are composed
+explicitly; regression snapshots preserve the existing model-facing messages.
 """
 from __future__ import annotations
 
@@ -61,14 +61,18 @@ Multiplication must have an integer constant operand (QF-LIA); never multiply
 two variable-bearing expressions.
 """
 
-SYSTEM = (
+JSON_OUTPUT_INSTRUCTIONS = (
     "You convert a natural-language agent skill into a formal achievability "
-    "pack. Output ONLY JSON conforming to the schema. Be conservative:\n"
+    "pack. Output ONLY JSON conforming to the schema. Be conservative:\n")
+
+JSON_PROSE_TOOL_POLICY = (
     "1. Declare a capability ONLY if the prose grants that tool. Never invent "
     "a tool to make the goal reachable. If the plan mentions an action with "
     "no corresponding tool, still emit it in the protocol as an 'act', but do "
     "NOT add it to capabilities -- the checker will flag the gap. This is the "
-    "single most important rule.\n"
+    "single most important rule.\n")
+
+JSON_EXTRACTION_RULES = (
     "2. For each capability, extract its precondition (pre) and effects "
     "(add/del/assigns/nondet) from what the prose claims. Use nondet for "
     "\"books a fare under 500\"-style post-conditions.\n"
@@ -102,7 +106,11 @@ SYSTEM = (
     "Reserve msg steps for genuinely asynchronous handoffs between separate "
     "agents; a choice with neither observed:true nor informing msgs is "
     "refuted as a deadlock. Use \"external\": true when the environment "
-    "rather than the agent resolves the choice.\n" + SCHEMA_DOC)
+    "rather than the agent resolves the choice.\n")
+
+SYSTEM = "".join((
+    JSON_OUTPUT_INSTRUCTIONS, JSON_PROSE_TOOL_POLICY, JSON_EXTRACTION_RULES, SCHEMA_DOC,
+))
 
 RUNTIME_ABILITIES_NOTE = (
     "\nThe skill executes in a runtime that ALREADY grants the agent these "
@@ -165,7 +173,7 @@ def vocabulary_note(vocabulary: dict) -> str:
     ) or "(none)"
     return ENVIRONMENT_VOCABULARY_NOTE.format(tools=tools, states=states)
 
-CE_DOC = """
+CE_SYNTAX_GUIDE = """
 SkillC Controlled English (CE). One statement per line; identifiers are ALWAYS
 in backticks; nested steps are "- " bullets indented two spaces per level.
 
@@ -217,15 +225,22 @@ Example:
 no such tool: the checker reports that gap.)
 """
 
-CE_SYSTEM = (
+# Compatibility names used by monitor integrations and older benchmark scripts.
+CE_DOC = CE_SYNTAX_GUIDE
+
+CE_OUTPUT_INSTRUCTIONS = (
     "You convert a natural-language agent skill into a formal achievability "
     "pack written in SkillC Controlled English (CE). Output ONLY the CE "
-    "document, inside one ```ce fenced block. Be conservative:\n"
+    "document, inside one ```ce fenced block. Be conservative:\n")
+
+CE_PROSE_TOOL_POLICY = (
     "1. Declare a Tool ONLY if the prose grants that tool. Never invent "
     "a tool to make the goal reachable. If the plan mentions an action with "
     "no corresponding tool, still write it in the Protocol as a 'uses' step, "
     "but do NOT declare it as a Tool -- the checker will flag the gap. This is "
-    "the single most important rule.\n"
+    "the single most important rule.\n")
+
+CE_EXTRACTION_RULES = (
     "2. For each Tool, extract its precondition (requires) and effects "
     "(adds/removes/sets/picks) from what the prose claims. Use 'picks' for "
     "\"books a fare under 500\"-style post-conditions.\n"
@@ -259,7 +274,11 @@ CE_SYSTEM = (
     "Reserve 'tells' steps for genuinely asynchronous handoffs between separate "
     "agents; a choice with neither (observed) nor informing messages is "
     "refuted as a deadlock. Mark a choice (external) when the environment "
-    "rather than the agent resolves it.\n" + CE_DOC)
+    "rather than the agent resolves it.\n")
+
+CE_SYSTEM = "".join((
+    CE_OUTPUT_INSTRUCTIONS, CE_PROSE_TOOL_POLICY, CE_EXTRACTION_RULES, CE_SYNTAX_GUIDE,
+))
 
 CE_RETRY_PROMPT = (
     "\n\nYour previous CE document was rejected by the deterministic parser "
@@ -268,7 +287,7 @@ CE_RETRY_PROMPT = (
     "tools the prose does not grant.")
 
 
-CE_RUNTIME_RULE_1 = (
+CE_RUNTIME_BINDING_RULE = (
     "1. Declare a Tool for every operation in the plan that changes the world "
     "or reaches beyond the conversation (running commands, writing files, "
     "calling services, deploying), and bind it with 'via' to the RUNTIME tool "
@@ -285,11 +304,15 @@ CE_RUNTIME_RULE_1 = (
     "grants that resource. Never bind an operation to a RUNTIME tool that "
     "cannot really perform it. This is the single most important rule.\n")
 
-CE_RUNTIME_EXTRA_RULES = (
+CE_INTERNAL_WORK_PREFIX = (
     "9. Thinking is not a Tool. Reasoning, deciding, planning, reading these "
     "instructions or reference text you already have, following a procedure, "
     "and writing text in your reply are done by the agent itself: do not "
-    "declare them as Tools and do not write them as protocol steps.\n"
+    "declare them as Tools and ")
+
+CE_INTERNAL_WORK_RULE = CE_INTERNAL_WORK_PREFIX + "do not write them as protocol steps.\n"
+
+CE_CORE_DELIVERABLE_RULE = (
     "10. The Goal is the skill's core deliverable for one representative "
     "request. Optional, conditional or follow-up work (extra diagnostics, "
     "notifications, clean-up extras, publishing or production deploys the "
@@ -297,8 +320,7 @@ CE_RUNTIME_EXTRA_RULES = (
     "with a branch that skips it, or is left out. If the core deliverable "
     "itself is a deployment or publication, it stays on the mandatory path.\n")
 
-# P3: two goal levels.  Replaces rule 10; the rest of the prompt is P1's.
-CE_LEVELS_RULE_10 = (
+CE_CORE_LIVE_GOAL_RULE = (
     "10. Two goal levels. 'Goal:' is the skill's core deliverable for one "
     "representative request: the artifact, change, answer or verified result "
     "a developer would accept as the skill having done its job. 'Live goal:' "
@@ -316,7 +338,7 @@ CE_LEVELS_RULE_10 = (
     "the live effect IS the Goal and there is no Live goal. Other optional or "
     "follow-up work goes in a skippable branch or is left out.\n")
 
-CE_LEVELS_DOC = (
+CE_GOAL_LEVELS_GUIDE = (
     "\nGoal levels:\n"
     "  Goal: F.           -- the core deliverable (required)\n"
     "  Live goal: F.      -- optional, right after Goal: the effect outside "
@@ -332,15 +354,19 @@ CE_LEVELS_DOC = (
     "        - `agent` uses `deploy_site`.\n"
     "      - branch `skip`: none.\n")
 
-CE_RUNTIME_DOC = (
+CE_RUNTIME_BINDING_SYNTAX = (
     "\nRuntime bindings (tool clauses, written first):\n"
     "  via `T`            -- T is the RUNTIME tool that performs this Tool\n"
-    "  needs `R`, ...     -- resources outside the conversation it needs\n"
+    "  needs `R`, ...     -- resources outside the conversation it needs\n")
+
+CE_RUNTIME_BINDING_EXAMPLES = (
     "Example: Tool `run_tests` (owner `agent`): via `bash`; requires "
     "`code_written`; adds `tests_pass`.\n"
     "Example: Tool `deploy_prod` (owner `agent`): via `bash`; needs "
     "`cloud_account`; adds `deployed`.\n")
 
+CE_RUNTIME_BINDING_GUIDE = CE_RUNTIME_BINDING_SYNTAX + CE_RUNTIME_BINDING_EXAMPLES
+CE_RUNTIME_DOC = CE_RUNTIME_BINDING_GUIDE
 
 # Tool-policy library (frontend.toolpolicy): extra clauses and the per-skill
 # obligations.  Appended to P1's prompt; nothing else changes.
@@ -358,17 +384,15 @@ CE_TPL_DOC = (
     "Subagents: spawning a subagent is not a RUNTIME tool here unless listed; "
     "write it as a 'spawn' step.\n")
 
-# Compaction v2 ("P2g+", runs/20261015_review_response/PLAN.md, Addendum B and
-# its amendment): an amended rule 9, rules 11-14, the `assuming` branch form, the
-# universal `reply` tool.  Selected with ce_runtime_messages(version="p2g+").
-CE_RULE_9_END = "do not write them as protocol steps.\n"
-CE_PLUS_RULE_9_AMENDMENT = (
+# The legacy version IDs remain stable for reproducible experiments.
+CE_REPLY_DELIVERABLE_RULE = (
+    CE_INTERNAL_WORK_PREFIX +
     "do not write them as protocol steps. The exception is a deliverable "
     "written in the reply (an answer, a plan, a document written inline): "
     "declare one Tool via `reply` that adds the Goal atom, and use it in the "
     "Protocol.\n")
 
-CE_PLUS_RULES = (
+CE_BRANCH_AND_ROLE_RULES = (
     "11. Facts the environment or the user decides (what kind of project this "
     "is, whether the user gave an input, which case applies) are branch "
     "assumptions: write them on the observed branch where they hold, "
@@ -385,7 +409,7 @@ CE_PLUS_RULES = (
     "each Tool's owner as the document states. Never give an approving or "
     "reviewing action to the role whose action it gates.\n")
 
-CE_PLUS_DOC = (
+CE_BRANCH_AND_REPLY_GUIDE = (
     "Branch assumptions (on a branch of a protocol choice):\n"
     "  - branch `L` (assuming `P`, ...):   -- facts that hold once this branch "
     "is taken\n"
@@ -397,10 +421,8 @@ CE_PLUS_DOC = (
     "Example: Tool `write_summary` (owner `agent`): via `reply`; requires "
     "`notes_read`; adds `summary_written`.\n")
 
-# Compaction v3 ("P2g++", PLAN.md Addendum E-c): P2g+ with rule 9's exception
-# narrowed to the one Tool that writes the stated deliverable in the answer.  Its
-# packs also go through pack.prune_dead_reply.  P2g and P2g+ texts are unchanged.
-CE_PLUSPLUS_RULE_9_AMENDMENT = (
+CE_FINAL_REPLY_DELIVERABLE_RULE = (
+    CE_INTERNAL_WORK_PREFIX +
     "do not write them as protocol steps. The one exception is the deliverable "
     "itself when the document says it is written in the answer (an answer, a "
     "report, a plan or a document given inline): declare one Tool via `reply` "
@@ -408,7 +430,35 @@ CE_PLUSPLUS_RULE_9_AMENDMENT = (
     "planning, summarising and intermediate notes are never Tools, even when "
     "their text appears in the reply; do not bind anything else via `reply`.\n")
 
-CE_PROMPT_VERSIONS = ("p2g", "p2g+", "p2g++")
+CE_REPLY_RULES_BY_VERSION = {
+    "p2g": CE_INTERNAL_WORK_RULE,
+    "p2g+": CE_REPLY_DELIVERABLE_RULE,
+    "p2g++": CE_FINAL_REPLY_DELIVERABLE_RULE,
+}
+CE_PROMPT_VERSIONS = tuple(CE_REPLY_RULES_BY_VERSION)
+
+
+def _ce_runtime_sections(runtime, *, levels: bool = False,
+                         version: str = "p2g") -> dict[str, str]:
+    """Ordered content blocks shared by runtime-bound CE prompt builders."""
+    if version not in CE_REPLY_RULES_BY_VERSION:
+        raise ValueError(f"unknown CE prompt version {version!r}: use one of "
+                         f"{', '.join(CE_PROMPT_VERSIONS)}")
+    include_branch_rules = version != "p2g"
+    return {
+        "output_instructions": CE_OUTPUT_INSTRUCTIONS,
+        "runtime_binding": CE_RUNTIME_BINDING_RULE,
+        "extraction": CE_EXTRACTION_RULES,
+        "reply_policy": CE_REPLY_RULES_BY_VERSION[version],
+        "goal_scope": CE_CORE_LIVE_GOAL_RULE if levels else CE_CORE_DELIVERABLE_RULE,
+        "branch_and_roles": CE_BRANCH_AND_ROLE_RULES if include_branch_rules else "",
+        "syntax": CE_SYNTAX_GUIDE,
+        "binding_syntax": CE_RUNTIME_BINDING_SYNTAX,
+        "binding_examples": CE_RUNTIME_BINDING_EXAMPLES,
+        "branch_examples": CE_BRANCH_AND_REPLY_GUIDE if include_branch_rules else "",
+        "goal_levels": CE_GOAL_LEVELS_GUIDE if levels else "",
+        "runtime_context": runtime_note(runtime, universal=include_branch_rules),
+    }
 
 
 def ce_runtime_messages(nl: str, runtime, levels: bool = False,
@@ -428,25 +478,8 @@ def ce_runtime_messages(nl: str, runtime, levels: bool = False,
     `version="p2g++"` is P2g+ with rule 9's exception narrowed (only the Tool
     that adds a Goal atom the document says is written in the answer is
     bound via `reply`; analysis and planning are never Tools)."""
-    if version not in CE_PROMPT_VERSIONS:
-        raise ValueError(f"unknown CE prompt version {version!r}: use one of "
-                         f"{', '.join(CE_PROMPT_VERSIONS)}")
-    head, rest = CE_SYSTEM.split("\n1. ", 1)
-    rule1, others = rest.split("\n2. ", 1)
-    rules, doc = ("2. " + others).split(CE_DOC, 1)
-    extra = CE_RUNTIME_EXTRA_RULES
-    if levels:
-        extra = extra.split("10. ", 1)[0] + CE_LEVELS_RULE_10
-    plus = version in ("p2g+", "p2g++")
-    if plus:
-        assert extra.count(CE_RULE_9_END) == 1
-        amendment = (CE_PLUSPLUS_RULE_9_AMENDMENT if version == "p2g++"
-                     else CE_PLUS_RULE_9_AMENDMENT)
-        extra = extra.replace(CE_RULE_9_END, amendment) + CE_PLUS_RULES
-    system = (head + "\n" + CE_RUNTIME_RULE_1 + rules + extra
-              + CE_DOC + CE_RUNTIME_DOC + (CE_PLUS_DOC if plus else "")
-              + (CE_LEVELS_DOC if levels else "")
-              + runtime_note(runtime, universal=plus))
+    sections = _ce_runtime_sections(runtime, levels=levels, version=version)
+    system = "".join(sections.values())
     user = f"Natural-language skill:\n```\n{nl}\n```\nCE document:"
     return system, user
 
@@ -501,14 +534,14 @@ def ce_grounded_messages(nl: str, runtime) -> tuple[str, str]:
     """(system, user) for P2g-grounded: P2g's messages with the documented-
     fallback sentence added to rule 10, rule 11 (software), the `runs` clause and
     the runtime's software policy."""
-    system, user = ce_runtime_messages(nl, runtime)
-    r10_end = "it stays on the mandatory path.\n"
-    assert r10_end in system
-    system = system.replace(r10_end, r10_end.rstrip("\n") + " " + CE_FALLBACK_RULE
-                            + CE_SOFTWARE_RULE, 1)
-    doc_anchor = "  needs `R`, ...     -- resources outside the conversation it needs\n"
-    system = system.replace(doc_anchor, doc_anchor + CE_SOFTWARE_DOC, 1)
-    return system + SOFTWARE_NOTE.get(runtime.software, ""), user
+    sections = _ce_runtime_sections(runtime)
+    sections["goal_scope"] = (
+        CE_CORE_DELIVERABLE_RULE.rstrip("\n") + " " + CE_FALLBACK_RULE + CE_SOFTWARE_RULE
+    )
+    sections["binding_examples"] = CE_SOFTWARE_DOC + CE_RUNTIME_BINDING_EXAMPLES
+    system = "".join(sections.values()) + SOFTWARE_NOTE.get(runtime.software, "")
+    user = f"Natural-language skill:\n```\n{nl}\n```\nCE document:"
+    return system, user
 
 # JB (runs/20260928_i2l/PLAN.md): P2g's rules, RUNTIME section, binder, retry and
 # guarded repair, with the pack written as JSON instead of CE.  Each capability also
@@ -568,10 +601,10 @@ def json_runtime_messages(nl: str, runtime) -> tuple[str, str]:
 
     Rules 2-8 are the original JSON prompt's (they are the JSON wording of CE
     rules 2-8); rule 1 and rules 9-10 are P2g's, reworded for JSON."""
-    head, rest = SYSTEM.split("\n1. ", 1)
-    rules_2_8 = "2. " + rest.split("\n2. ", 1)[1].split(SCHEMA_DOC, 1)[0]
-    system = (head + "\n" + JSON_RT_RULE_1 + rules_2_8.rstrip("\n") + "\n"
-              + JSON_RT_EXTRA_RULES + SCHEMA_DOC + JSON_RT_DOC + runtime_note(runtime))
+    system = "".join((
+        JSON_OUTPUT_INSTRUCTIONS, JSON_RT_RULE_1, JSON_EXTRACTION_RULES,
+        JSON_RT_EXTRA_RULES, SCHEMA_DOC, JSON_RT_DOC, runtime_note(runtime),
+    ))
     user = f"Natural-language skill:\n```\n{nl}\n```\nJSON pack:"
     return system, user
 

@@ -228,6 +228,7 @@ Runtime waste is a model, not a measurement. `UNKNOWN` claims no savings. Run `s
 
 ## Learn more
 
+* [Code knowledge graph and translation walkthrough](docs/KNOWLEDGE_GRAPH.md) · [Interactive HTML guide](docs/KNOWLEDGE_GRAPH.html)
 * [Full reference](docs/REFERENCE.md): every integration, the checker's judgments and the full results.
 * [Demos](demo/README.md) · [Agent 365 security](docs/AGENT365_SECURITY.md) · [Scout](docs/SCOUT_PARITY.md) · [Runtime monitor](docs/RUNTIME_MONITOR.md)
 * [Environment and `reach`](docs/ENVIRONMENT.md) · [Graphs and `twin`](docs/TWIN.md) · [Controlled English](docs/CONTROLLED_ENGLISH.md) · [Verdict coverage](docs/VERDICT_COVERAGE.md)
