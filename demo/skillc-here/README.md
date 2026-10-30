@@ -42,15 +42,15 @@ Azure CLI sign-in or `AZURE_OPENAI_API_KEY` authenticates; `--llm-provider anthr
    **Undo my changes**.
 5. Click **post-release-note**: IMPOSSIBLE everywhere, no Slack tool. Type `slack_send_message` in
    *add a tool* and press **Add**: it becomes ACHIEVABLE here, as if a Slack server were connected.
-6. Open **2 · A graph** and press **Load example** (`campus-building.trig`). The building is
+6. Open **2 · A graph**: `campus-building.trig` loads automatically. The building is
    drawn: floors on top, then AHUs and VAVs, schedules and the policy, zones and rooms, points.
-   skillc runs the built-in set-point and schedule-update verifiers at once.
+   skillc streams the built-in set-point and schedule-update results as each target finishes.
 7. Click `ex:sp13` in the list: its evidence path lights up in green (VAV, zone, rooms) and the
    panel shows what is missing (a BACnet reference). Click `ex:sp11` (verifiable) and `ex:zone31`
    (no schedule, no policy) to compare.
-8. Pick **campus-sketch.txt · sketch** and **Load example**: the same kind of building, typed as
+8. Pick **campus-sketch.txt · sketch**: the same kind of building, typed as
    whiteboard arrows, read without a model. Open the sketch box, delete the `BACnet` part of the SP-11
-   line and press **Read this sketch**: SP-11 turns IMPOSSIBLE. With `--llm`, pick
+   line: the graph and results update automatically, and SP-11 turns IMPOSSIBLE. With `--llm`, pick
    **campus-sketch.svg · picture** and **Read the picture**: a model writes the sketch text, which
    you review before skillc reads it.
 9. Open **3 · Why skillc**. Pick a tool setup, then a case, and compare the three columns (below).
@@ -122,7 +122,7 @@ means and list their tools and steps, which the deterministic reader needs.
 
 ## 2 · A graph: what can it answer?
 
-1. **Load a graph**, in any of four forms. Pick an example and press **Load example**, or upload
+1. **Load a graph**, in any of four forms. Select an example, or upload
    your own: an RDF file (Turtle, TriG, N-Triples, N-Quads or RDF/XML; JSON-LD is refused), a
    **scribble** of arrows or a **plain description** (`.txt`), or a **picture** of a sketch (PNG,
    JPEG, WebP or SVG). A scribble or description opens in an editable box: skillc reads it without
@@ -132,14 +132,18 @@ means and list their tools and steps, which the deterministic reader needs.
    floors, equipment, schedules and policies, places, points, each coloured by kind. Classes, units,
    values and nested structures such as priority arrays are not drawn; they appear in a node's
    details when you click it.
-2. **Check it.** Press **Check what the graph can establish**. With no workflow, skillc runs the
-   built-in set-point and schedule-update verifiers. To check your own workflow, open **Your
-   workflow** and paste it as you have it: a brief with "Evidence needed", a bullet list or a table.
+2. **Watch it update.** With no workflow, skillc runs the built-in set-point and schedule-update
+   verifiers automatically and streams each target's result. Editing the sketch, tenant or
+   evidence requirements triggers another check after a short typing pause; outdated requests
+   are cancelled. To replace the evidence contract, open **Advanced** and paste a brief with
+   "Evidence needed", a bullet list or a table. These local checks never call a model.
 3. **Read the result.** Each target gets `ACHIEVABLE` (every critical piece of evidence is in the
    graph) or `IMPOSSIBLE` with the evidence that is missing. Click a target, in the list or in the
    graph: the entities and links that prove its evidence light up in green, the target gets a green
    or red ring, and the side panel lists each piece of evidence with its graph path, or why it is
-   missing. **How skillc read the workflow** shows how each line was mapped.
+   missing. The repeated target tables and raw graph inventory are under collapsed
+   **Technical details**, including unlinked controls that do not appear in a room's report.
+   **How skillc read the workflow** shows how each line was mapped.
 
 | Example | Form | What it has |
 |---|---|---|
@@ -276,3 +280,6 @@ the benchmark must report that rather than assume SkillC wins.
 * `POST /api/twin/check` `{"graph", "filename", "workflow", "tenant"?}`: `workflows`, each with
   `title`, `reading`, `results` (`target`, `verdict`, `missing`, `found`, `evidence` with each
   piece's `found` path lines or `note`) and `report`. An empty `workflow` runs the built-in verifiers.
+* `POST /api/twin/stream` (same body): newline-delimited JSON events, in order:
+  `workflow` (metadata and target count), `result` (one completed target),
+  `workflow_complete` (text report), then `complete`; failures emit `error`, never `complete`.

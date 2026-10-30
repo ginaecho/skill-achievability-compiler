@@ -278,6 +278,153 @@ def test_graph_tab_runs_the_built_in_verifiers_without_a_workflow():
     assert any("ex:vav11 ->feeds ex:zone11" in line for line in places["found"])
 
 
+def test_graph_results_explain_each_required_and_optional_input():
+    pytest.importorskip("rdflib")
+    out = app.twin_check(app.GRAPH_EXAMPLE.name, app.GRAPH_EXAMPLE.read_bytes(), "")
+    for workflow in out["workflows"]:
+        assert workflow["request"]
+        for result in workflow["results"]:
+            assert all(e["why"] for e in result["evidence"])
+    by = {w["title"]: {r["target"]: r for r in w["results"]} for w in out["workflows"]}
+    sp = by["Set-point verifier"]
+    limits = next(e for e in sp["ex:sp12"]["evidence"] if e["key"] == "min_max_units")
+    assert limits["status"] == "missing"
+    assert "applicable equipment limits" in limits["why"]
+    assert "no minimum/maximum" in limits["note"]
+    history = next(e for e in sp["ex:sp_orphan"]["evidence"] if e["key"] == "history")
+    assert history["status"] == "missing" and not history["critical"]
+    assert "history" not in sp["ex:sp_orphan"]["missing"]
+    policy = next(e for e in by["Schedule-update verifier"]["ex:zone21"]["evidence"]
+                  if e["key"] == "operating_policy")
+    assert policy["status"] == "missing" and "permitted hours" in policy["why"]
+
+
+def test_custom_workflow_replaces_the_default_evidence_question():
+    pytest.importorskip("rdflib")
+    data = app.GRAPH_EXAMPLE.read_bytes()
+    default = app.twin_check(app.GRAPH_EXAMPLE.name, data, "")
+    workflow = "# Temperature evidence review\nEvidence needed:\n" \
+               "- Set-point identity and type\n- Configured minimum/maximum and units\n"
+    custom = app.twin_check(app.GRAPH_EXAMPLE.name, data, workflow)
+    assert len(custom["workflows"]) == 1
+    result = custom["workflows"][0]
+    assert result["title"] == "Temperature evidence review"
+    original = {r["target"]: r for r in default["workflows"][0]["results"]}
+    changed = {r["target"]: r for r in result["results"]}
+    # This narrower checklist no longer asks for a BACnet reference.
+    assert original["ex:sp13"]["verdict"] == "IMPOSSIBLE"
+    assert changed["ex:sp13"]["verdict"] == "ACHIEVABLE"
+    assert changed["ex:sp12"]["verdict"] == "IMPOSSIBLE"
+    assert changed["ex:sp12"]["missing"] == ["min_max_units"]
+    assert all(len(r["evidence"]) == 2 for r in result["results"])
+
+
+def test_graph_stream_yields_before_checking_all_targets_and_releases_lock(monkeypatch):
+    from contextlib import closing
+    from skillc.env import twin
+
+    pytest.importorskip("rdflib")
+    checked = []
+    verify = twin.verify_target
+
+    def track(*args, **kwargs):
+        checked.append(args[2])
+        return verify(*args, **kwargs)
+
+    monkeypatch.setattr(twin, "verify_target", track)
+    with closing(app.twin_check_events(
+            app.GRAPH_EXAMPLE.name, app.GRAPH_EXAMPLE.read_bytes(), "")) as events:
+        first = next(events)
+        assert first["event"] == "workflow" and first["targets"] == 10
+        assert checked == []
+        result = next(events)
+        assert result["event"] == "result" and result["result"]["target"] == "ex:sp11"
+        assert len(checked) == 1
+    assert app._LOCK.acquire(blocking=False)
+    app._LOCK.release()
+
+
+def test_graph_stream_http_emits_results_and_explicit_errors():
+    import threading
+    import urllib.request
+
+    pytest.importorskip("rdflib")
+    server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        endpoint = f"http://127.0.0.1:{server.server_port}/api/twin/stream"
+        body = {"graph": app.GRAPH_SMALL.read_text("utf-8"),
+                "filename": app.GRAPH_SMALL.name, "workflow": ""}
+        request = urllib.request.Request(
+            endpoint, json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            assert response.headers["Content-Type"] == "application/x-ndjson; charset=utf-8"
+            events = [json.loads(line) for line in response]
+        assert events[0]["event"] == "workflow" and events[-1]["event"] == "complete"
+        assert sum(e["event"] == "workflow_complete" for e in events) == 2
+        streamed = [e["result"] for e in events if e["event"] == "result"]
+        expected = app.twin_check(app.GRAPH_SMALL.name, app.GRAPH_SMALL.read_bytes(), "")
+        summary = lambda rows: [(r["target"], r["verdict"], r["missing"]) for r in rows]
+        assert summary(streamed) == summary(
+            [r for w in expected["workflows"] for r in w["results"]])
+        body["workflow"] = "not an evidence checklist"
+        request = urllib.request.Request(
+            endpoint, json.dumps(body).encode(), {"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=15) as response:
+            error = [json.loads(line) for line in response]
+        assert len(error) == 1 and error[0]["event"] == "error"
+        assert "no evidence needs" in error[0]["error"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_campus_room_context_follows_graph_links_and_preserves_constraint_values():
+    pytest.importorskip("rdflib")
+    graph = app.twin_graph(app.GRAPH_EXAMPLE.name, app.GRAPH_EXAMPLE.read_bytes())
+    case = graph["case"]
+    assert case["counts"] == {
+        "buildings": 1, "floors": 3, "zones": 9, "rooms": 18,
+        "equipment": 12, "setpoints": 10,
+    }
+    rooms = {r["id"]: r for r in case["rooms"]}
+    assert "ex:sp_orphan" not in rooms
+    room = rooms["ex:room111"]
+    assert room["description"] == ""  # the fixture has no room-use descriptions
+    assert room["containers"] == ["ex:zone11", "ex:floor1", "ex:hq"]
+    assert room["setpoints"] == ["ex:sp11"] and room["equipment"] == ["ex:vav11"]
+    assert room["schedule_targets"] == ["ex:zone11"]
+    assert {"ex:sched11", "ex:policy_office_hours"} <= set(room["context_nodes"])
+    assert "ex:sp_orphan" not in room["context_nodes"]
+    assert any("ex:vav11 ->feeds ex:zone11 ->hasPart ex:room111" in p for p in room["paths"])
+    nodes = {n["id"]: n for n in graph["nodes"]}
+    assert any("activePriority=9" in value for _, value in nodes["ex:sp11"]["details"])
+    assert any("saturday=08:00-13:00" in value for _, value in nodes["ex:sched11"]["details"])
+    assert ["minSetpoint", "18.0"] in nodes["ex:policy_office_hours"]["details"]
+    assert "ex:policy_office_hours" not in rooms["ex:room211"]["context_nodes"]
+    assert not any(n.startswith("ex:sched") for n in rooms["ex:room311"]["context_nodes"])
+
+
+def test_room_context_uses_inverse_links_not_campus_names():
+    pytest.importorskip("rdflib")
+    graph = b"""
+        @prefix ex: <urn:test:> .
+        ex:office a ex:Room; ex:isPartOf ex:area; ex:description "An equipment test room." .
+        ex:area a ex:Zone; ex:isFedBy ex:terminal .
+        ex:terminal a ex:VAV .
+        ex:control a ex:Temperature_Setpoint; ex:isPointOf ex:terminal .
+    """
+    room = app.twin_graph("custom.ttl", graph)["case"]["rooms"][0]
+    assert room["description"] == "An equipment test room."
+    assert room["setpoints"] == ["ex:control"]
+    assert room["schedule_targets"] == ["ex:area"]
+    assert room["equipment"] == ["ex:terminal"]
+    empty = app.twin_graph("empty-rooms.ttl", b"@prefix ex: <urn:test:> . ex:p a ex:Setpoint .")
+    assert empty["case"]["rooms"] == []
+
+
 def test_measured_benchmark_reports_absence_and_corruption(tmp_path):
     assert not app.measured_benchmark(tmp_path)["available"]
     run = tmp_path / "20261022_here_benchmark"

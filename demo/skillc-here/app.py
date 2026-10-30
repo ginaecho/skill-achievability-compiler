@@ -377,34 +377,52 @@ def _result(r) -> dict:
     return {"target": r.target, "verdict": r.verdict,
             "missing": [e.key for e in r.missing],
             "found": [e.key for e in r.evidence if e.status == "found"],
-            "evidence": [{"key": e.key, "need": e.need, "status": e.status,
-                          "critical": e.critical, "found": e.found, "note": e.note}
-                         for e in r.evidence]}
+            "evidence": [e.as_dict() for e in r.evidence]}
 
 
-def twin_check(filename: str, data: bytes, workflow: str, tenant: str | None = None) -> dict:
-    """Check a pasted workflow against the graph; with no workflow, run the built-in
-    set-point and schedule-update verifiers."""
-    from skillc.env.twin import SCENARIOS, load_twin, text_report, verify_all
+def twin_check_events(filename: str, data: bytes, workflow: str, tenant: str | None = None):
+    """Yield real verifier results one target at a time; keep all z3 work sequential."""
+    from skillc.env.twin import SCENARIOS, candidates, load_twin, text_report, verify_target
     from skillc.env.twin_workflow import read_workflows, verify_workflow, workflow_targets
     with _LOCK, tempfile.TemporaryDirectory(prefix="skillc-here-") as tmp:
         twin = load_twin(_graph_file(Path(tmp), filename, data), tenant=tenant or None)
-        out = []
-        if not workflow.strip():
-            for name, sc in SCENARIOS.items():
-                results = verify_all(twin, name)
+        definitions = read_workflows(workflow) if workflow.strip() else list(SCENARIOS)
+        for definition in definitions:
+            if isinstance(definition, str):
+                name = definition
+                sc = SCENARIOS[name]
                 reading = (f"built-in {sc['title']}: "
                            + ", ".join(k for k, *_ in sc["evidence"]))
-                out.append({"title": sc["title"], "reading": reading,
-                            "results": [_result(r) for r in results],
-                            "report": text_report(results, True)})
-            return {"workflows": out}
-        for wf in read_workflows(workflow):
-            results = [verify_workflow(twin, wf, t) for t in workflow_targets(twin, wf)]
-            out.append({"title": wf.title, "reading": wf.describe(),
-                        "results": [_result(r) for r in results],
-                        "report": text_report(results, True)})
-        return {"workflows": out}
+                metadata = {"title": sc["title"], "kind": name,
+                            "request": sc["request"], "reading": reading}
+                targets = candidates(twin, name)
+            else:
+                metadata = {"title": definition.title, "kind": definition.kind,
+                            "reading": definition.describe()}
+                targets = workflow_targets(twin, definition)
+            yield {"event": "workflow", "workflow": metadata, "targets": len(targets)}
+            results = []
+            for target in targets:
+                result = (verify_target(twin, definition, target)
+                          if isinstance(definition, str)
+                          else verify_workflow(twin, definition, target))
+                results.append(result)
+                yield {"event": "result", "result": _result(result)}
+            yield {"event": "workflow_complete", "report": text_report(results, True)}
+        yield {"event": "complete"}
+
+
+def twin_check(filename: str, data: bytes, workflow: str, tenant: str | None = None) -> dict:
+    """The JSON form of the same incremental check used by the browser."""
+    out = []
+    for event in twin_check_events(filename, data, workflow, tenant):
+        if event["event"] == "workflow":
+            out.append({**event["workflow"], "results": []})
+        elif event["event"] == "result":
+            out[-1]["results"].append(event["result"])
+        elif event["event"] == "workflow_complete":
+            out[-1]["report"] = event["report"]
+    return {"workflows": out}
 
 
 def twin_graph(filename: str, data: bytes, tenant: str | None = None,
@@ -413,11 +431,13 @@ def twin_graph(filename: str, data: bytes, tenant: str | None = None,
     between two entities. Classes, units, literals and blank-node structures become node
     details, read through the entity that owns them."""
     from rdflib import RDF, BNode, Literal
+    from graph_case import describe_case
     from skillc.env.twin import EQUIP_WORDS, _is_place, _is_point, load_twin, local
     with _LOCK, tempfile.TemporaryDirectory(prefix="skillc-here-") as tmp:
         twin = load_twin(_graph_file(Path(tmp), filename, data), tenant=tenant or None)
         g = twin.graph
-        entities = [s for s in dict.fromkeys(g.subjects()) if not isinstance(s, BNode)]
+        entities = sorted({s for s in g.subjects() if not isinstance(s, BNode)},
+                          key=twin.label)
         keep = set(entities[:max_nodes])
 
         def kind(n):
@@ -443,7 +463,9 @@ def twin_graph(filename: str, data: bytes, tenant: str | None = None,
                 if p == RDF.type or o in keep:
                     continue
                 if isinstance(o, BNode):
-                    inner = sorted({local(q) for q in g.predicates(o) if q != RDF.type})
+                    inner = sorted(
+                        f"{local(q)}={str(v) if isinstance(v, Literal) else twin.label(v)}"
+                        for q, v in g.predicate_objects(o) if q != RDF.type)
                     kinds = sorted({local(c) for c in g.objects(o, RDF.type)})
                     details.append([local(p), "{" + ", ".join(kinds + inner) + "}"])
                 else:
@@ -455,7 +477,7 @@ def twin_graph(filename: str, data: bytes, tenant: str | None = None,
                 if o in keep and p != RDF.type:
                     edges.append({"s": twin.label(n), "t": twin.label(o), "p": local(p)})
         return {"nodes": nodes, "edges": edges, "facts": len(g),
-                "truncated": len(entities) > max_nodes}
+                "truncated": len(entities) > max_nodes, "case": describe_case(twin)}
 
 
 # --- server -------------------------------------------------------------------------------
@@ -484,6 +506,8 @@ class Handler(BaseHTTPRequestHandler):
             env = read_environment(refresh="refresh=1" in query)
             return self._json(HTTPStatus.OK, {**env, "settings": settings(env),
                                               "llm": {"enabled": LLM["enabled"], "why": LLM["why"],
+                                                      "provider": LLM["provider"],
+                                                      "model": LLM["model"],
                                                       "guide": llm_check.GUIDE}})
         if path == "/api/why":
             return self._json(HTTPStatus.OK, WHY)
@@ -536,11 +560,38 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(HTTPStatus.OK, twin_check(body.get("filename", ""), graph,
                                                             str(body.get("workflow", "")),
                                                             body.get("tenant")))
+            if self.path == "/api/twin/stream":
+                return self._stream_twin(body.get("filename", ""), graph,
+                                         str(body.get("workflow", "")), body.get("tenant"))
         except (ValueError, json.JSONDecodeError) as e:
             return self._json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
         except Exception as e:  # a parser error in an uploaded graph, say
             return self._json(HTTPStatus.BAD_REQUEST, {"error": f"{type(e).__name__}: {e}"[:400]})
         return self._json(HTTPStatus.NOT_FOUND, {"error": "not found"})
+
+    def _stream_twin(self, filename, graph, workflow, tenant) -> None:
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.end_headers()
+
+        def send(event):
+            self.wfile.write((json.dumps(event, ensure_ascii=False) + "\n").encode("utf-8"))
+            self.wfile.flush()
+
+        try:
+            with contextlib.closing(twin_check_events(filename, graph, workflow, tenant)) as events:
+                try:
+                    for event in events:
+                        send(event)
+                except Exception as error:
+                    if isinstance(error, (BrokenPipeError, ConnectionResetError)):
+                        raise
+                    send({"event": "error", "error": f"{type(error).__name__}: {error}"[:400]})
+        except (BrokenPipeError, ConnectionResetError):
+            # A newer edit cancels the previous browser request.
+            return
 
     def _json(self, status, payload) -> None:
         self._send(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"),

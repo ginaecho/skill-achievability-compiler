@@ -18,6 +18,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--ink);
   font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
 header { padding: 20px 16px 0; max-width: 1180px; margin: 0 auto; }
@@ -80,9 +81,16 @@ select { font: inherit; background: var(--panel); color: var(--ink); border: 1px
 .outcome.bad { color: var(--no); background: var(--no-bg); }
 .outcome.waste { color: var(--unk); background: var(--unk-bg); }
 .outcome.ok { color: var(--ok); background: var(--ok-bg); }
-.gwrap { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; margin-top: 16px; align-items: start; }
-@media (max-width: 960px) { .gwrap { grid-template-columns: minmax(0, 1fr); } }
+.gwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.graph-scroll { overflow-x: auto; }
 #gsvg { width: 100%; height: auto; min-height: 260px; display: block; }
+.graph-scroll #gsvg { min-width: 1000px; }
+.case-panel { margin-top: 16px; }
+.task-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.room-table { overflow-x: auto; }
+.room-table td { min-width: 180px; }
+.room-table td:first-child { min-width: 110px; }
+.node-link { border: 0; padding: 0; background: none; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
 .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 5px; margin-right: 4px; vertical-align: -1px; }
 .legend i.ring { background: none; border: 2px solid; }
@@ -94,7 +102,7 @@ select { font: inherit; background: var(--panel); color: var(--ink); border: 1px
 .elabel { font: 10px var(--mono); fill: var(--ok); text-anchor: middle; }
 .nlabel { font: 11px var(--mono); fill: var(--ink); text-anchor: middle; }
 .node { cursor: pointer; }
-.side { max-height: 640px; overflow-y: auto; }
+.side { overflow-wrap: anywhere; }
 table.pick tr { cursor: pointer; }
 table.pick tr.sel td { background: var(--chip); }
 ul.ev { list-style: none; padding: 0; margin: 6px 0; }
@@ -111,7 +119,8 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
 <body>
 <header>
   <h1>skillc here</h1>
-  <p class="sub">What can an agent do on this machine, and what can a graph answer? Nothing to set up; no model is called.</p>
+  <p class="sub">What can an agent do on this machine, and what can a graph answer?
+    <span id="modelStatus">Reading model configuration…</span></p>
   <nav>
     <button class="on" data-tab="env">1 · My environment</button>
     <button data-tab="graph">2 · A graph</button>
@@ -120,6 +129,29 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
 </header>
 <main>
 <section id="env" class="tab on">
+  <div class="panel" id="environmentGuide" style="margin-bottom:16px">
+    <h2>How to read the comparison: rows are environments, columns are checkers</h2>
+    <p>Every row asks the same question: <b>could this skill run with this environment's tools?</b>
+      The row names are not the models answering the question.</p>
+    <div style="overflow-x:auto"><table>
+      <tr><th>Row</th><th>What it represents</th><th>Where its tool list comes from</th></tr>
+      <tr><td>Local Copilot CLI</td><td>Your local saved setup in this repository</td><td>Built-in inventory plus your saved Copilot configuration, approvals and MCP configuration; not an inspection of this running session</td></tr>
+      <tr><td>Copilot CLI reference</td><td>A standard Copilot CLI setup for comparison</td><td>A JSON tool profile bundled with SkillC, not your local configuration</td></tr>
+      <tr><td>VS Code Copilot</td><td>A reference VS Code Copilot environment</td><td>A bundled JSON tool profile; no live VS Code session is inspected</td></tr>
+      <tr><td>Claude Code</td><td>A reference Claude Code environment</td><td>A bundled JSON tool profile; Claude Code is not running or answering</td></tr>
+      <tr><td>claude.ai</td><td>A reference Claude chat environment</td><td>A bundled JSON tool profile; no Claude chat session is contacted</td></tr>
+    </table></div>
+    <p><b>Why two Copilot rows?</b> One represents your saved local setup; the other is a reference setup.
+      They can produce identical answers when both provide what the skill needs, even if their full tool lists differ.
+      What-if tool edits affect only the local row.</p>
+    <p><b>Columns:</b> SkillC performs static validation without a model.
+      LLM asks the configured model directly; LLM + guiding skill asks <b>the same model</b> with additional checking instructions.
+      Both LLM columns use that configured model for every row, including the Claude rows.</p>
+    <p><b>Not model memory:</b> each LLM request explicitly includes the skill and that row's tool list.
+      Reference lists are saved in repository files; local discovery is cached by the app until you press
+      <b>Read again</b>. Neither is an LLM remembering your environment.
+      After a check, expand a row's <b>Tool list supplied to the checkers</b> to inspect the actual list.</p>
+  </div>
   <div class="grid">
     <div class="panel">
       <h2><span class="step">1</span>What skillc found here</h2>
@@ -156,16 +188,18 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
   <div class="panel">
     <div class="row">
       <select id="exPick"></select>
-      <button class="ghost" id="exGraph">Load example</button>
       <span class="muted">or</span>
       <input type="file" id="file" accept=".ttl,.trig,.nt,.nq,.rdf,.owl,.xml,.n3,.txt,.sketch,.png,.jpg,.jpeg,.webp,.svg">
       <input type="text" id="tenant" placeholder="tenant (only if the file holds several)" style="max-width:260px">
     </div>
     <div id="graphName" class="muted">A building graph in any of four forms: an RDF file (Turtle, TriG, N-Triples, N-Quads, RDF/XML), a scribble of arrows, a plain description (.txt), or a picture of a sketch. Ontology graphs only name classes; they never count as evidence.</div>
-    <details id="sketchBox" hidden><summary>The sketch, as text: edit it, then read it again</summary>
+    <p class="muted"><b>No model needed for graph checks.</b> RDF graphs and text sketches are read
+      and checked locally. A model is used only when you choose to read a picture; that action
+      costs tokens. Editing the extracted text or evidence requirements never calls a model.</p>
+    <div id="caseIntro"></div>
+    <details id="sketchBox" hidden><summary>The sketch, as text: edits update the graph automatically</summary>
       <div class="muted">One fact per line or sentence: <code>AHU-1 -> VAV-11 -> Zone 11</code>, <code>Zone 11 in Floor 1</code>, <code>SP-11 on VAV-11: 16..26 degC, priority 9, BACnet analog-value,11</code>, <code>Schedule S-11 for VAV-11: Mon-Fri 07:00-19:00</code>, <code>Policy P for Zone 11: hours 06:00-20:00</code>, <code>HQ timezone Europe/Berlin</code>. Read without a model; a line it cannot read is listed, never guessed.</div>
       <textarea id="sketchText" spellcheck="false"></textarea>
-      <div class="row"><button class="ghost" id="sketchRead">Read this sketch</button></div>
       <div id="sketchReport"></div>
     </details>
     <div id="picBox" class="row" hidden style="align-items:flex-start">
@@ -177,24 +211,43 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
         <p class="muted">The picture is sent to the model as it is. skillc removes links from the text it sends, but it cannot remove links written inside a picture: send only pictures without links or e-mail addresses.</p>
       </div>
     </div>
-    <details id="wfBox"><summary>Your workflow (optional): leave empty to run the built-in set-point and schedule-update verifiers</summary>
+    <details id="wfBox"><summary>Advanced: replace the default tasks' evidence requirements</summary>
+      <p>Leave this empty for the two building requests above. To define a different check,
+        give it a title and list its required inputs under <b>Evidence needed:</b>.
+        This is an evidence checklist, not a command box: it does not execute a building change
+        or understand arbitrary instructions. The report shows how each line was interpreted.</p>
+      <p class="muted">Replacing the checklist changes the question being checked.
+        Removing a required input can make a result ACHIEVABLE without making the original
+        building request achievable.</p>
       <textarea id="workflow" placeholder="# Comfort complaint check&#10;Evidence needed:&#10;- Set-point identity and type&#10;- Configured minimum/maximum and units&#10;- Occupancy sensor"></textarea>
-      <div class="row"><button class="ghost" id="exWf">Use the example workflow</button></div>
+      <div class="row"><button class="ghost" id="exWf">Use example requirements</button>
+        <button class="ghost" id="restoreWf">Restore default tasks</button></div>
     </details>
-    <div class="row"><button class="act" id="twinCheck">Check what the graph can establish</button><span class="muted" id="twinStatus"></span></div>
+    <p class="muted">Results update automatically when you select a graph or edit its text,
+      evidence requirements or tenant. Each target appears as its check finishes.</p>
+    <div id="twinStatus" class="muted" role="status" aria-live="polite"></div>
   </div>
+  <div class="panel case-panel" id="caseTasks" hidden></div>
+  <p class="muted"><b>What these verdicts mean:</b> ACHIEVABLE means every required piece of evidence
+    for this verifier is available. IMPOSSIBLE means this graph is missing required evidence,
+    not that the building change is physically impossible. This is static validation of evidence
+    availability, not approval of a value or schedule, live device access, or runtime verification.
+    Expand any row for its explanation, or click its target to highlight the evidence in the graph.</p>
   <div class="gwrap">
     <div class="panel gpanel">
+      <h2>See the building and its connections</h2>
       <div class="legend" id="legend"></div>
-      <svg id="gsvg" role="img" aria-label="The building graph"></svg>
+      <div class="graph-scroll"><svg id="gsvg" role="img" aria-label="The building graph"></svg></div>
       <div class="muted" id="gHint">Load a graph to draw it. Then click a target on the right, or a node here.</div>
     </div>
-    <div class="panel side">
-      <div id="twinOut" class="muted">Results appear here: one row per target. Click one to light up its evidence in the graph.</div>
-      <div id="nodeInfo"></div>
-    </div>
+    <div class="panel side" id="nodeInfo" hidden></div>
   </div>
-  <details class="panel" style="margin-top:16px"><summary>What the graph holds (skillc twin explore)</summary><div id="exploreOut" class="muted">Load a graph first.</div></details>
+  <div class="panel case-panel" id="roomOut" hidden></div>
+  <details class="panel case-panel side" id="technicalDetails">
+    <summary>Technical details: all targets, including unlinked controls</summary>
+    <div id="twinOut" class="muted">Results appear automatically as targets are checked.</div>
+    <details id="technicalExplore"><summary>Raw graph inventory (skillc twin explore)</summary><div id="exploreOut" class="muted">Load a graph first.</div></details>
+  </details>
 </section>
 
 <section id="why" class="tab">
@@ -265,9 +318,9 @@ document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
   b.classList.add("on"); $(b.dataset.tab).classList.add("on");
 });
 
-async function api(path, body) {
-  const r = await fetch(path, body === undefined ? {} : {
-    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+async function api(path, body, signal) {
+  const r = await fetch(path, {...(body === undefined ? {} : {
+    method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)}), signal});
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || r.statusText);
   return j;
@@ -302,6 +355,9 @@ function drawEnv() {
   $("sources").textContent = `Read as ${e.runtime} sees this folder · captured ${new Date(e.captured).toLocaleString()}`;
   $("sources").title = e.sources.join("\n");
   $("envStatus").textContent = `${e.tools.length} tools, ${e.mcp.length} MCP servers` + (edited() ? " · edited by you (what-if)" : "");
+  $("modelStatus").textContent = e.llm.enabled
+    ? `LLM + guided LLM and picture reading ON · ${e.llm.model || e.llm.provider}. Checks and picture reading cost model tokens.`
+    : `Model calls OFF. ${e.llm.why}`;
   $("envBody").hidden = false;
 }
 
@@ -316,14 +372,21 @@ function verdictCell(v) { return `<span class="v ${esc(v)}">${esc(v)}</span>`; }
 async function check(askLlm = true) {
   const text = $("skill").value;
   if (!text.trim()) return;
+  if (!state.env) { $("result").innerHTML = '<p class="err">The environment has not loaded yet. Wait for discovery, or press Read again, before checking.</p>'; return; }
   $("result").innerHTML = '<p class="muted">Checking…</p>';
   const llmOn = state.env && state.env.llm && state.env.llm.enabled;
   const llm = llmOn && askLlm;
   try {
     const body = {text, machine: state.env ? machineGrants() : undefined};
     const r = await api("/api/check", body);
-    const label = (s) => s === "this machine" ? "this machine <span class='muted'>(your Copilot CLI here, read automatically)</span>"
-      + (edited() ? " <span class='muted'>(what-if)</span>" : "") : esc(s);
+    const label = (s) => {
+      const local = s === "this machine";
+      const tools = local ? machineGrants() : state.env.settings[s];
+      return (local ? "Local Copilot CLI <span class='muted'>(your saved setup, read automatically)</span>"
+        + (edited() ? " <span class='muted'>(what-if)</span>" : "")
+        : `${esc(s)} <span class="muted">(bundled reference profile, not a live session)</span>`)
+        + `<details><summary>Tool list supplied to the checkers (${tools.length})</summary><code>${tools.map(esc).join(", ")}</code></details>`;
+    };
     const llmCell = (i) => `<td class="llm" data-i="${i}">${llm ? '<span class="muted">asking…</span>' : '<span class="muted">off</span>'}</td>`;
     const cost = (tokens, ms) => `<div class="cost">${tokens.toLocaleString("en-US")} tokens · ${ms < 1000 ? Math.round(ms) + " ms" : (ms / 1000).toFixed(1) + " s"}</div>`;
     const rows = r.rows.map((x, i) => `<tr><td>${label(x.setting)}</td>
@@ -372,13 +435,97 @@ $("addBtn").onclick = () => { const t = $("addTool").value.trim(); if (t) { stat
 $("addTool").onkeydown = (e) => { if (e.key === "Enter") $("addBtn").click(); };
 
 // --- graph tab ---
-const G = { data: null, pos: {}, results: [], sel: null };
+const G = { data: null, pos: {}, results: [], workflows: [], sel: null,
+  revision: 0, controller: null, timer: null, running: false };
 const KINDS = [["structure", "building / floor", "#7a6ff0"], ["equipment", "equipment", "#2f8fd3"],
   ["place", "zone / room", "#2aa198"], ["point", "point", "#d08a2a"], ["schedule", "schedule", "#9c6bc7"],
   ["policy", "policy", "#c74f7a"], ["other", "other", "#8b8b85"]];
 const KCOLOR = Object.fromEntries(KINDS.map(([k, , c]) => [k, c]));
 const LAYER = {structure: 0, equipment: 1, schedule: 1, policy: 1, place: 2, point: 3, other: 3};
 const short = (id) => id.includes(":") ? id.split(":").slice(1).join(":") : id;
+const nodeLink = (id) => `<button class="node-link" data-node="${esc(id)}">${esc(id)}</button>`;
+const nodeType = (n) => n.types.join(", ") || n.kind;
+
+function bindNodeLinks(element) {
+  element.querySelectorAll("[data-node]").forEach((button) => button.onclick = () => {
+    pick(button.dataset.node);
+    if (!$("nodeInfo").hidden) $("nodeInfo").scrollIntoView({block: "nearest"});
+  });
+}
+
+function caseIntro() {
+  const c = G.data.case;
+  const sample = state.samples.graphs.find((g) => g.name === "campus-building.trig");
+  const campus = sample && state.graph === sample.text;
+  $("caseIntro").innerHTML = `<h2 style="margin-top:16px">What is this case about?</h2>`
+    + `<p>${campus ? "A synthetic campus building, deliberately missing different records in different zones. No real tenant data." : "A building described by the selected graph. Only facts present in that graph are shown."}</p>`
+    + `<p>${Object.entries(c.counts).map(([kind, count]) => `${count} ${kind}`).join(" · ")}.</p>`
+    + `<p>A <b>room</b> is a physical space; a <b>zone</b> groups spaces. An <b>AHU</b> supplies air; a <b>VAV</b> regulates air to a zone. A <b>set point</b> is its control setting, not a room. Schedules say when systems run; policies state permitted operation.</p>`
+    + `<h2>Default building requests: what are we trying to do?</h2><ol>`
+    + `<li><b>Temperature request:</b> change the temperature set point to <b>22°C</b>. For each control and its rooms, is the evidence available to assess this request?</li>`
+    + `<li><b>Operating-hours request:</b> add a <b>Saturday cleaning period, 08:00–13:00, at 20°C</b>. For each zone and its rooms, is the evidence available to assess this request?</li></ol>`
+    + `<p><b>The demo's actual task is to prepare an evidence-readiness report, not change the building.</b>
+      It identifies the rooms and controls with all required records, and explains exactly which records block the others.
+      It does not send device commands, compare the proposed value with limits, or calculate schedule conflicts.</p>`
+    + (campus ? `<p>Each of the three floors has three zones, each with two rooms. In every floor's second zone the set-point limits are absent; in its third zone the BACnet control reference is absent. Floor 1 has schedules and a policy; floor 2 has schedules but no policy; floor 3 has neither. The orphan set point has no linked equipment or rooms.</p>` : "");
+}
+
+function roomResults(room, workflow) {
+  const targets = workflow.kind === "setpoint" ? room.setpoints : room.schedule_targets;
+  return workflow.results.filter((r) => targets.includes(r.target));
+}
+
+function resultReason(r) {
+  const missing = r.evidence.filter((e) => e.critical && e.status === "missing");
+  return missing.length ? missing.map((e) => `${e.need}: ${e.note || "not supplied by this graph"}. ${e.why}`).join(" ")
+    : "Every required evidence input is present. See the linked control, scope and constraint records; this is not approval to execute the change.";
+}
+
+function roomTask(room, workflow) {
+  const results = roomResults(room, workflow);
+  return results.length ? results.map((r) => `<p>${nodeLink(r.target)} ${verdictCell(r.verdict)}<br>${esc(resultReason(r))}</p>`).join("")
+    : G.running && (workflow.kind === "setpoint" ? room.setpoints : room.schedule_targets).length
+      ? '<p class="muted">Waiting for this room\'s linked target to finish checking…</p>'
+      : '<p class="muted">Not evaluated: no linked target for this workflow was found. This is not a successful check.</p>';
+}
+
+function roomFacts(room) {
+  return room.context_nodes.map((id) => {
+    const n = G.data.nodes.find((x) => x.id === id);
+    return n && n.details.length ? `<p><b>${nodeLink(id)} (${esc(nodeType(n))})</b><br>`
+      + n.details.map(([p, v]) => `${esc(p)}: ${esc(v)}`).join("<br>") + "</p>" : "";
+  }).join("") || '<p class="muted">No linked values or constraints are recorded.</p>';
+}
+
+function roomDescription(room) {
+  return `<p>${esc(room.description || "No room-specific description or use is recorded in this graph.")}</p>`
+    + `<p><b>Contained in:</b> ${room.containers.map(nodeLink).join(" → ") || "not recorded"}<br>`
+    + `<b>Serving controls:</b> ${room.equipment.map(nodeLink).join(", ") || "not recorded"}<br>`
+    + `<b>Set points:</b> ${room.setpoints.map(nodeLink).join(", ") || "not recorded"}</p>`
+    + `<div class="mono">${room.paths.map(esc).join("<br>")}</div>`;
+}
+
+function showCaseResults() {
+  $("caseTasks").hidden = false;
+  $("caseTasks").innerHTML = `<h2>The requested tasks and what counts as success</h2><div class="task-cards">`
+    + G.workflows.map((w, i) => {
+      const ok = w.results.filter((r) => r.verdict === "ACHIEVABLE").length;
+      return `<div><h2>Task ${i + 1} · ${esc(w.title)}</h2><p>${esc(w.request || w.title)}</p>`
+        + `<p><b>Goal of this check:</b> establish that every required evidence input is available for each target, before attempting the change.</p>`
+        + `<p><b>Supported${G.running ? " so far" : ""}:</b> ${ok} of ${w.results.length} checked targets. <b>Not established:</b> ${w.results.length - ok}.</p></div>`;
+    }).join("") + `</div><p class="muted">Tasks have different evidence contracts. A room can have enough schedule evidence but lack temperature limits, or the reverse. Presence of limits does not mean a requested value has been compared with them.</p>`;
+  const rooms = G.data.case.rooms;
+  $("roomOut").hidden = false;
+  $("roomOut").innerHTML = `<h2>Every room: description, linked constraints and task outcomes</h2>`
+    + `<p>Room conditions come from their linked controls, zones and policies; they are not invented room attributes. Expand a room's records to see actual values and their source. Missing means <b>not recorded</b>, not unrestricted.</p>`
+    + (rooms.length ? `<div class="room-table"><table><thead><tr><th>Room</th><th>Description and control chain</th><th>Known constraints and records</th>`
+      + G.workflows.map((w, i) => `<th>Task ${i + 1}: ${esc(w.title)}</th>`).join("") + `</tr></thead><tbody>`
+      + rooms.map((room) => `<tr data-room="${esc(room.id)}"><td>${nodeLink(room.id)}</td>`
+        + `<td>${roomDescription(room)}</td><td><details><summary>Limits, units, schedules, policy and control references</summary>${roomFacts(room)}</details></td>`
+        + G.workflows.map((w) => `<td>${roomTask(room, w)}</td>`).join("") + "</tr>").join("")
+      + "</tbody></table></div>" : '<p class="muted">No typed room entities were found. Use the graph nodes and target results below; no room descriptions are inferred.</p>');
+  bindNodeLinks($("roomOut"));
+}
 
 $("legend").innerHTML = KINDS.map(([, label, c]) => `<span><i style="background:${c}"></i>${esc(label)}</span>`).join("")
   + '<span><i class="ring ok"></i>evidence found</span><span><i class="ring no"></i>target cannot be verified</span>';
@@ -430,7 +577,10 @@ function draw() {
   const d = G.data; if (!d) return;
   const {pos, W, H} = layout(d.nodes, d.edges); G.pos = pos;
   const sel = G.sel, r = sel && G.results.find((x) => x.target === sel);
-  const lit = r ? pathPairs(r.evidence.flatMap((e) => e.found)) : {nodes: new Set(), pairs: []};
+  const room = d.case.rooms.find((x) => x.id === sel);
+  const selectedResults = room ? G.workflows.flatMap((w) => roomResults(room, w)) : r ? [r] : [];
+  const lit = pathPairs(selectedResults.flatMap((x) => x.evidence.flatMap((e) => e.found)));
+  if (room) room.context_nodes.forEach((id) => lit.nodes.add(id));
   if (sel) lit.nodes.add(sel);
   const onPair = (e) => lit.pairs.some(([a, b]) => (a === e.s && b === e.t) || (a === e.t && b === e.s));
   const dim = sel ? 0.18 : 1;
@@ -444,48 +594,134 @@ function draw() {
   const nodes = d.nodes.map((n) => {
     const p = pos[n.id], on = lit.nodes.has(n.id), v = verdictOf[n.id];
     const ring = n.id === sel ? (v === "ACHIEVABLE" ? "ok" : v ? "no" : "") : (on ? "ok" : "");
-    return `<g class="node" data-id="${esc(n.id)}" style="opacity:${!sel || on ? 1 : dim}" transform="translate(${p.x},${p.y})">`
+    return `<g class="node" data-id="${esc(n.id)}" role="button" tabindex="0" aria-label="${esc(n.id)}: ${esc(nodeType(n))}" style="opacity:${!sel || on ? 1 : dim}" transform="translate(${p.x},${p.y})">`
       + (ring ? `<circle r="13" class="ring ${ring}"/>` : "")
       + `<circle r="${v ? 9 : 7}" fill="${KCOLOR[n.kind]}"${v ? ' stroke="var(--ink)" stroke-width="1.5"' : ""}/>`
-      + `<text y="22" class="nlabel">${esc(short(n.id))}</text><title>${esc(n.id)} (${esc(n.types.join(", ") || "untyped")})</title></g>`;
+      + `<text y="22" class="nlabel">${esc(short(n.id))}</text><text y="36" class="nlabel">${esc(n.types[0] || n.kind)}</text><title>${esc(n.id)} (${esc(nodeType(n))})</title></g>`;
   }).join("");
   const svg = $("gsvg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.innerHTML = edges + nodes;
-  svg.querySelectorAll(".node").forEach((g) => g.onclick = () => pick(g.dataset.id));
+  svg.querySelectorAll(".node").forEach((g) => {
+    g.onclick = () => pick(g.dataset.id);
+    g.onkeydown = (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pick(g.dataset.id); }
+    };
+  });
   $("gHint").textContent = `${d.nodes.length} entities, ${d.edges.length} links, ${d.facts} facts`
     + (d.truncated ? " (the first 800 entities are drawn)" : "") + ". Targets have a dark outline: click one.";
+}
+
+function evidenceHtml(r) {
+  const missing = r.evidence.filter((e) => e.critical && e.status === "missing");
+  const declared = r.evidence.filter((e) => e.critical && e.status === "declared");
+  const explanation = missing.length
+    ? `This verifier cannot finish from this graph: ${missing.map((e) => e.need).join("; ")} ${missing.length === 1 ? "is" : "are"} missing. Other evidence cannot replace these required inputs.`
+    : declared.length
+      ? "Every required input is available only under the declared outside-source assumptions; those sources have not been verified."
+      : "The graph supplies every required input for this verifier. This does not establish that the proposed building change is safe or authorized.";
+  return `<p>${esc(explanation)}</p><ul class="ev">` + r.evidence.map((e) =>
+    `<li class="${esc(e.status)}"><b>${e.status === "found" ? "✓ Found:" : e.status === "declared" ? "~ Assumed:" : e.critical ? "✗ Missing:" : "— Missing (optional):"} ${esc(e.need)}</b>${e.critical ? "" : ' <span class="tag">optional; does not block this check</span>'}`
+    + (e.why ? `<div><b>Why needed:</b> ${esc(e.why)}.</div>` : "")
+    + (e.found.length ? `<div class="mono">${e.found.map(esc).join("<br>")}</div>` : "")
+    + (e.note ? `<div class="muted">${esc(e.note)}</div>` : "") + "</li>").join("") + "</ul>";
 }
 
 function pick(id) {
   G.sel = G.sel === id ? null : id; draw();
   document.querySelectorAll("#twinOut tr[data-t]").forEach((tr) => tr.classList.toggle("sel", tr.dataset.t === G.sel));
   const n = G.data.nodes.find((x) => x.id === id), r = G.results.find((x) => x.target === id);
+  $("nodeInfo").hidden = !G.sel || !n;
   if (!G.sel || !n) { $("nodeInfo").innerHTML = ""; return; }
-  const ev = r ? `<h2>${esc(id)}: ${verdictCell(r.verdict)}</h2><ul class="ev">` + r.evidence.map((e) =>
-      `<li class="${esc(e.status)}"><b>${e.status === "found" ? "✓" : e.status === "declared" ? "~" : "✗"} ${esc(e.need)}</b>${e.critical ? "" : ' <span class="tag">optional</span>'}`
-      + (e.found.length ? `<div class="mono">${e.found.map(esc).join("<br>")}</div>` : "")
-      + (e.note ? `<div class="muted">${esc(e.note)}</div>` : "") + "</li>").join("") + "</ul>"
-    : `<h2>${esc(id)}</h2><p class="muted">Not a target of these checks.</p>`;
+  const room = G.data.case.rooms.find((x) => x.id === id);
+  if (room) {
+    $("nodeInfo").innerHTML = `<h2>${esc(id)} · ${esc(nodeType(n))}</h2>` + roomDescription(room)
+      + G.workflows.map((w) => `<h2>${esc(w.request || w.title)}</h2>${roomTask(room, w)}`).join("")
+      + `<h2>Linked constraints and records (source shown for each value)</h2>${roomFacts(room)}`;
+    bindNodeLinks($("nodeInfo"));
+    return;
+  }
+  const ev = r ? `<h2>${esc(id)}: ${verdictCell(r.verdict)}</h2>` + evidenceHtml(r)
+    : `<h2>${esc(id)} · ${esc(nodeType(n))}</h2><p class="muted">This is a supporting entity, not a direct task target. Its type, values and connections explain its role.</p>`;
   $("nodeInfo").innerHTML = ev + `<details${r ? "" : " open"}><summary>What the graph says about it</summary><div class="mono">${esc(n.types.join(", ") || "untyped")}<br>`
-    + n.details.map(([p, v]) => `${esc(p)}: ${esc(v)}`).join("<br>") + "</div></details>";
+    + n.details.map(([p, v]) => `${esc(p)}: ${esc(v)}`).join("<br>") + "</div></details>"
+    + `<h2>Connections</h2>` + G.data.edges.filter((e) => e.s === id || e.t === id)
+      .map((e) => `<div>${nodeLink(e.s)} → ${esc(e.p)} → ${nodeLink(e.t)}</div>`).join("");
+  bindNodeLinks($("nodeInfo"));
 }
 
-async function loadGraph(text, name) {
-  state.graph = text; state.graphName = name; G.sel = null; G.results = [];
+function cancelGraphUpdate() {
+  clearTimeout(G.timer);
+  if (G.controller) G.controller.abort();
+  G.running = false;
+  return ++G.revision;
+}
+
+function clearGraphReport() {
+  G.data = null; G.sel = null; G.results = []; G.workflows = [];
+  $("caseTasks").hidden = true; $("roomOut").hidden = true; $("nodeInfo").hidden = true;
+  $("caseIntro").innerHTML = ""; $("gsvg").innerHTML = ""; $("nodeInfo").innerHTML = "";
+  $("twinOut").textContent = "Waiting for the current graph check.";
+  $("exploreOut").textContent = "Open this section after loading a graph to read its raw inventory.";
+  delete $("exploreOut").dataset.revision;
+}
+
+async function loadGraph(text, name, revision) {
+  if (revision === undefined) revision = cancelGraphUpdate();
+  if (revision !== G.revision) return;
+  const controller = new AbortController(); G.controller = controller;
+  state.graph = text; state.graphName = name;
+  clearGraphReport();
   $("graphName").textContent = `${name} · ${(text.length / 1024).toFixed(1)} KB`;
-  $("twinOut").innerHTML = '<span class="muted">Press <b>Check what the graph can establish</b>.</span>';
-  $("nodeInfo").innerHTML = "";
+  $("twinStatus").textContent = "Reading graph…";
   const body = {graph: text, filename: name, tenant: $("tenant").value.trim()};
   try {
-    G.data = await api("/api/twin/graph", body); draw();
+    const data = await api("/api/twin/graph", body, controller.signal);
+    if (revision !== G.revision) return;
+    G.data = data; caseIntro(); draw();
     showReading(G.data.sketch);
-    const ex = await api("/api/twin/explore", body);
-    $("exploreOut").innerHTML = `<pre>${esc(ex.text)}</pre>`;
+    G.running = true;
+    $("twinStatus").textContent = "Checking targets… results will appear as each finishes.";
+    await streamGraphCheck({...body, workflow: $("workflow").value}, revision, controller.signal);
+    if (revision === G.revision && $("technicalExplore").open) loadExplore();
   } catch (err) {
-    $("gHint").innerHTML = `<span class="err">${esc(err.message)}</span>`; G.data = null; $("gsvg").innerHTML = "";
+    if (revision !== G.revision || err.name === "AbortError") return;
+    G.running = false;
+    if (G.data) renderGraphResults();
+    $("twinStatus").innerHTML = `<span class="err">Automatic update failed. Results are incomplete; no completed report is claimed. ${esc(err.message)}</span>`;
   }
 }
+
+function queueGraphUpdate() {
+  const revision = cancelGraphUpdate();
+  const sketch = !$("sketchBox").hidden;
+  const text = sketch ? $("sketchText").value : state.graph;
+  const name = sketch ? state.sketchName || "sketch.txt" : state.graphName;
+  clearGraphReport();
+  if (text === null) {
+    $("twinStatus").textContent = "Choose a graph, or read the selected picture into text first.";
+    return;
+  }
+  $("twinStatus").textContent = "Updating automatically…";
+  G.timer = setTimeout(() => loadGraph(text, name, revision), 350);
+}
+
+async function loadExplore() {
+  const revision = G.revision;
+  if (!G.data || $("exploreOut").dataset.revision === String(revision)) return;
+  $("exploreOut").dataset.revision = String(revision);
+  $("exploreOut").textContent = "Reading raw graph inventory…";
+  try {
+    const ex = await api("/api/twin/explore", {graph: state.graph, filename: state.graphName,
+      tenant: $("tenant").value.trim()}, G.controller.signal);
+    if (revision === G.revision) $("exploreOut").innerHTML = `<pre>${esc(ex.text)}</pre>`;
+  } catch (err) {
+    if (revision !== G.revision || err.name === "AbortError") return;
+    delete $("exploreOut").dataset.revision;
+    $("exploreOut").innerHTML = `<span class="err">${esc(err.message)}</span>`;
+  }
+}
+$("technicalExplore").ontoggle = () => { if ($("technicalExplore").open) loadExplore(); };
 
 // --- the other forms of a graph: a scribble or description (.txt), or a picture ---
 const formOf = (name) => /\.(png|jpe?g|gif|webp|svg)$/i.test(name) ? "picture"
@@ -503,6 +739,12 @@ async function showSketch(text, name) {
   await loadGraph(text, name);
 }
 function showPicture(blob, name) {
+  cancelGraphUpdate(); clearGraphReport();
+  state.graph = null; state.graphName = name;
+  $("graphName").textContent = name;
+  $("gHint").textContent = "Read the picture and review the extracted sketch before a graph can be drawn.";
+  $("twinOut").textContent = "This picture has not been read or checked yet.";
+  $("twinStatus").textContent = "Picture selected. Reading it uses a model; graph checks afterwards are automatic and model-free.";
   state.picture = {blob, name}; $("picBox").hidden = false; $("picImg").src = URL.createObjectURL(blob);
   const on = state.env && state.env.llm && state.env.llm.enabled;
   $("picRead").disabled = !on;
@@ -520,47 +762,101 @@ async function openForm(name, text, blob) {
   $("picBox").hidden = true; $("sketchBox").hidden = true; showReading(null);
   const form = formOf(name);
   if (form === "picture") return showPicture(blob, name);
-  if (form === "sketch") { await showSketch(text, name); return $("twinCheck").click(); }
-  await loadGraph(text, name); $("twinCheck").click();
+  if (form === "sketch") return showSketch(text, name);
+  await loadGraph(text, name);
 }
-$("sketchRead").onclick = async () => { await loadGraph($("sketchText").value, state.sketchName || "sketch.txt"); $("twinCheck").click(); };
+$("sketchText").oninput = queueGraphUpdate;
 $("picRead").onclick = async () => {
+  const picture = state.picture, revision = G.revision;
+  $("picRead").disabled = true;
   $("picNote").textContent = "Reading the picture…";
   try {
-    const r = await api("/api/twin/transcribe", {image: await toPng(state.picture.blob), mime: "image/png"});
-    $("picNote").textContent = `The model wrote the sketch text above (${(r.input_tokens + r.output_tokens).toLocaleString("en-US")} tokens, ${(r.ms / 1000).toFixed(1)} s). Review it: edit any line and press Read this sketch.`;
-    await showSketch(r.text, "picture-sketch.txt"); $("picBox").hidden = false; $("twinCheck").click();
-  } catch (err) { $("picNote").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+    const r = await api("/api/twin/transcribe", {image: await toPng(picture.blob), mime: "image/png"});
+    if (picture !== state.picture || revision !== G.revision) return;
+    $("picNote").textContent = `The model wrote the sketch text above (${(r.input_tokens + r.output_tokens).toLocaleString("en-US")} tokens, ${(r.ms / 1000).toFixed(1)} s). Review it: edits update the graph automatically without another model call.`;
+    await showSketch(r.text, "picture-sketch.txt"); $("picBox").hidden = false;
+  } catch (err) {
+    if (picture === state.picture && revision === G.revision) $("picNote").innerHTML = `<span class="err">${esc(err.message)}</span>`;
+  } finally { if (picture === state.picture) $("picRead").disabled = !state.env?.llm.enabled; }
 };
 $("file").onchange = async () => {
   const f = $("file").files[0]; if (!f) return;
   await openForm(f.name, formOf(f.name) === "picture" ? "" : await f.text(), f);
 };
-$("exGraph").onclick = async () => {
+$("exPick").onchange = async () => {
   const g = state.examples[$("exPick").selectedIndex];
   await openForm(g.name, g.text || "", g.svg ? new Blob([g.svg], {type: "image/svg+xml"}) : null);
 };
-$("exWf").onclick = () => { $("workflow").value = state.samples.workflow; };
+$("exWf").onclick = () => { $("workflow").value = state.samples.workflow; queueGraphUpdate(); };
+$("restoreWf").onclick = () => { $("workflow").value = ""; queueGraphUpdate(); };
+$("workflow").oninput = queueGraphUpdate;
+$("tenant").oninput = queueGraphUpdate;
 
-$("twinCheck").onclick = async () => {
-  if (!state.graph) { $("twinOut").innerHTML = '<span class="err">Load a graph first.</span>'; return; }
-  $("twinStatus").textContent = "Checking…";
-  try {
-    const r = await api("/api/twin/check", {graph: state.graph, filename: state.graphName,
-      workflow: $("workflow").value, tenant: $("tenant").value.trim()});
-    G.results = r.workflows.flatMap((w) => w.results);
-    $("twinOut").innerHTML = r.workflows.map((w) => {
+function renderGraphResults() {
+    if (G.workflows.length) showCaseResults();
+    $("twinOut").innerHTML = G.workflows.map((w) => {
       const ok = w.results.filter((x) => x.verdict === "ACHIEVABLE").length;
-      const rows = w.results.map((x) => `<tr data-t="${esc(x.target)}"><td><code>${esc(x.target)}</code></td><td>${verdictCell(x.verdict)}</td>`
-        + `<td>${x.missing.length ? "missing: " + x.missing.map(esc).join(", ") : "all critical evidence found"}</td></tr>`).join("");
+      const rows = w.results.map((x) => {
+        const missing = x.evidence.filter((e) => e.critical && e.status === "missing");
+        const summary = missing.length ? "Missing: " + missing.map((e) => e.need).join("; ")
+          : "All required evidence available";
+        return `<tr data-t="${esc(x.target)}"><td><code>${esc(x.target)}</code></td><td>${verdictCell(x.verdict)}</td>`
+          + `<td><details><summary>${esc(summary)} — why?</summary>${evidenceHtml(x)}</details></td></tr>`;
+      }).join("");
       return `<h2>${esc(w.title)}: ${ok} of ${w.results.length} can be verified</h2>`
+        + (w.request ? `<p><b>Requested change:</b> ${esc(w.request)}</p>` : "")
         + `<details><summary>How skillc read the workflow</summary><pre>${esc(w.reading)}</pre></details>`
-        + `<table class="pick">${rows || '<tr><td class="muted">no targets of this kind in the graph</td></tr>'}</table>`;
+        + `<table class="pick">${rows || `<tr><td class="muted">${G.running ? "Waiting for target checks…" : "no targets of this kind in the graph"}</td></tr>`}</table>`;
     }).join("") + '<p class="muted">Missing evidence is never read as approval. Add the facts to the graph, or declare where they live, to change a verdict.</p>';
-    $("twinOut").querySelectorAll("tr[data-t]").forEach((tr) => tr.onclick = () => pick(tr.dataset.t));
-    $("twinStatus").textContent = ""; draw();
-  } catch (err) { $("twinStatus").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
-};
+    $("twinOut").querySelectorAll("tr[data-t]").forEach((tr) => tr.onclick = (event) => {
+      if (!event.target.closest("details")) pick(tr.dataset.t);
+    });
+    draw();
+    if (G.sel) { const id = G.sel; G.sel = null; pick(id); }
+}
+
+async function streamGraphCheck(body, revision, signal) {
+  const response = await fetch("/api/twin/stream", {method: "POST",
+    headers: {"Content-Type": "application/json"}, body: JSON.stringify(body), signal});
+  if (!response.ok) throw new Error((await response.json()).error || response.statusText);
+  const reader = response.body.getReader(), decoder = new TextDecoder();
+  let buffer = "", complete = false;
+  const consume = (line) => {
+    if (!line.trim()) return;
+    const event = JSON.parse(line);
+    if (event.event === "workflow") {
+      G.workflows.push({...event.workflow, results: [], expected: event.targets});
+    } else if (event.event === "result") {
+      G.workflows[G.workflows.length - 1].results.push(event.result);
+      G.results.push(event.result);
+    } else if (event.event === "workflow_complete") {
+      G.workflows[G.workflows.length - 1].report = event.report;
+    } else if (event.event === "complete") {
+      complete = true; G.running = false;
+    } else if (event.event === "error") {
+      throw new Error(event.error);
+    } else { throw new Error("Unrecognized graph-check event."); }
+  };
+  try {
+    while (true) {
+      const {value, done} = await reader.read();
+      if (revision !== G.revision) { await reader.cancel(); return; }
+      buffer += decoder.decode(value, {stream: !done});
+      const lines = buffer.split("\n"); buffer = lines.pop();
+      lines.forEach(consume);
+      if (done && buffer.trim()) consume(buffer);
+      renderGraphResults();
+      const ok = G.results.filter((r) => r.verdict === "ACHIEVABLE").length;
+      $("twinStatus").textContent = complete
+        ? `Up to date · ${G.workflows.length} task(s), ${G.results.length} targets; ${ok} evidence-complete, ${G.results.length - ok} not established. No building changes executed.`
+        : `Checking… ${G.results.length} targets finished; results are partial.`;
+      if (done) break;
+    }
+    if (!complete || G.results.length !== G.workflows.reduce((n, w) => n + w.expected, 0)) {
+      throw new Error("The graph-check stream ended before all targets completed.");
+    }
+  } finally { reader.releaseLock(); }
+}
 
 // --- why skillc tab ---
 const why = { data: null };
@@ -673,6 +969,7 @@ $("benchRefresh").onclick = benchmarkShow;
   state.samples = await api("/api/samples");
   state.examples = [...state.samples.graphs, {name: state.samples.picture.name, svg: state.samples.picture.svg}];
   $("exPick").innerHTML = state.examples.map((g) => `<option>${esc(g.name)} · ${esc(FORM_LABEL[formOf(g.name)])}</option>`).join("");
+  $("exPick").onchange();
   $("samples").innerHTML = '<span class="muted">Examples:</span>' + state.samples.skills.map((s, i) =>
     `<button class="ghost" data-i="${i}">${esc(s.name)}</button>`).join("");
   $("samples").querySelectorAll("button").forEach((b) => b.onclick = () => {
