@@ -7,7 +7,9 @@ template); every support file matches the pinned commit;, names and hashes; ever
 every file of the skill folder is copied or listed; every skill is user-facing; no id,
 name or hash of an earlier test or training document; Jaccard of 5-word shingles below
 0.5 against every earlier document (the gc/data_train_test corpora and the
-benchmark/claude_env case texts) and within the set.
+benchmark/claude_env case texts) and within the set; and name-masked TF-IDF cosine
+below 0.40 against the same documents and within the set (no skill is the same
+skill as another in other words).
 """
 import hashlib, json, re, subprocess, sys, collections
 from pathlib import Path
@@ -80,6 +82,30 @@ for i in range(len(ks)):
         j = jac(sh[ks[i]], sh[k]); wmax = max(wmax, j)
         if j >= S.NEAR: prob["near_within"].append((ks[i], k, round(j, 2)))
 print("max Jaccard vs used", round(max(worst), 3), "max within set", round(wmax, 3))
+# same skill in other words: name-masked TF-IDF cosine, vs earlier documents and within the set
+tfs = {c["case"]: S.terms(S.masked((ROOT / "benchmark/real2/sources" / c["id"] / "SKILL.md")
+                                   .read_text(errors="replace"), c["id"].split("__")[-1].lower()))
+       for c in cases}
+# weights as in the draw: over the earlier documents and the whole eligible pool
+pool_cands, _ = S.pool(CL, *S.used_sets())       # exactly the draw's eligible pool
+df = __import__("collections").Counter()
+for tf in S.used_terms:
+    df.update(tf.keys())
+for c in pool_cands:
+    df.update(S.terms(S.masked(Path(c["_src"]).read_text(errors="replace"),
+                               c["id"].split("__")[-1].lower())).keys())
+n = len(S.used_terms) + len(pool_cands)
+earlier, within = S.SameIndex(df, n), S.SameIndex(df, n)
+for tf in S.used_terms:
+    earlier.add(tf)
+s_e = s_w = 0.0
+for k in sorted(tfs):
+    a_, b_ = earlier.best(tfs[k]), within.best(tfs[k])
+    s_e, s_w = max(s_e, a_), max(s_w, b_)
+    if a_ >= S.SAME: prob["same_skill_as_earlier"].append((k, round(a_, 3)))
+    if b_ >= S.SAME: prob["same_skill_within_set"].append((k, round(b_, 3)))
+    within.add(tfs[k])
+print("max same-skill cosine vs earlier", round(s_e, 3), "within set", round(s_w, 3))
 print("licences", collections.Counter(c["license"] for c in cases))
 print("runtimes", collections.Counter(c["runtime"] for c in cases))
 print("repos", len({c["repo_url"] for c in cases}), "max per repo", max(collections.Counter(c["repo_url"] for c in cases).values()))

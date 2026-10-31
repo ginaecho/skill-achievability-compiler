@@ -17,8 +17,8 @@ amendment at the end of this file, before the step it affects runs.
 ## Test set: 300 skill-runtime pairs (`benchmark/real2/cases.json`)
 
 - 300 public skills from 19 repositories, pinned by commit, each copied as it is installed:
-  its whole folder (`SKILL.md` and 1,481 bundled scripts, references and templates in 207
-  skills) plus 1,799 support files in 129 skills (its plugin's shared files, and the other
+  its whole folder (`SKILL.md` and 1,529 bundled scripts, references and templates in 210
+  skills) plus 1,855 support files in 128 skills (its plugin's shared files, and the other
   files and skill folders of its repository that `SKILL.md` refers to), every file with its
   sha256, copied with the licence under `benchmark/real2/sources/` (MIT 255, Apache-2.0 34,
   CC-BY-SA-4.0 11).
@@ -30,7 +30,16 @@ amendment at the end of this file, before the step it affects runs.
 - **Not a near-copy.** A skill is also excluded if it shares half or more of its five-word
   phrases (Jaccard of 5-word shingles >= 0.5) with any earlier document, so a renamed or lightly
   edited copy of a used skill is out (72 excluded); drawn skills are below 0.5 with each other
-  too. The largest overlap left is 0.39 with an earlier document and 0.44 within the set.
+  too. The largest overlap left is 0.21 with an earlier document and 0.42 within the set.
+- **Not the same skill in other words.** With each document's own name masked, the TF-IDF
+  cosine (words and word pairs; weights over the earlier documents and the eligible pool) is
+  below 0.40 against every earlier document and every other drawn skill. This catches a skill
+  revised under a new product name and skills generated from one template with the name
+  swapped, which the phrase rule misses. The line was set before any run by reading the
+  highest-scoring pairs: every pair at 0.44 or above was the same skill or one template; the
+  highest pairs left are 0.39 with an earlier document (the same four coding principles
+  written as a different skill) and 0.37 within the set (two skills of one vendor pack doing
+  different jobs). Applied while drawing.
 - **User-facing.** The frontmatter has a name and a description and does not set
   `disable-model-invocation: true` (a repository's own helper command; 101 excluded).
 - **A real skill, in scope.** Not a test fixture (a `tests` or `fixtures` folder on its path),
@@ -38,12 +47,13 @@ amendment at the end of this file, before the step it affects runs.
   not an offensive-security skill (marked `risk: offensive`, or red-team, attack-chain,
   exploit or penetration-testing work in its name, description or category), because
   executors really attempt each skill. Applied while drawing, so a skipped skill only frees
-  its slot for the next one in the seeded order: 7 were skipped (1 template, 2 fixtures,
-  4 offensive-security).
+  its slot for the next one in the seeded order. In all 17 were skipped while drawing:
+  1 template, 2 fixtures, 4 offensive-security, 4 the same skill as an earlier document and
+  6 the same skill as another drawn one (`skipped_while_drawing` in `cases.json`).
 - Drawn with seed 20261031 from 6,424 eligible skills, at most 30 per repository, 70% with a
   fenced code block (the rule of `select_cases.py`).
 - **Runtime by hash of the id**, independent of skillc: developer-sandbox 110,
-  offline-workstation 75, office-assistant 115 (`src/skillc/data/runtimes/*.json`, unchanged).
+  offline-workstation 76, office-assistant 114 (`src/skillc/data/runtimes/*.json`, unchanged).
 - Reproduce: `python benchmark/real2/select_real2.py --clones <dir>` (the clone commits are
   in `cases.json`); check: `python benchmark/real2/verify_real2.py <dir>` (every rule above, and
   every copied file against its pinned commit; result on 2026-10-31: no problem found).
@@ -57,8 +67,10 @@ or Anthropic API key is used.
 - **Arms S and D run on every model a sub-agent can be given on the subscription**: the four
   model options of the Agent and Workflow tools, `opus`, `sonnet`, `haiku` and `fable`
   (`MODELS` in `scripts/real2.py`). Each job names its model and the workflow passes it to the
-  sub-agent. The pilot runs one job per model first; a model the subscription does not serve
-  is dropped by a dated amendment before the main run, and is reported as dropped.
+  sub-agent. **Opus runs first**: the pilot, then both arms with all three repeats on
+  `opus`, then `sonnet`, `haiku` and `fable` in that order. Before a model's main run, one
+  pilot job checks that the subscription serves it; a model that is not served is dropped by
+  a dated amendment and reported as dropped.
 - **Executions and adjudications** (the ground truth) run once, on the session's default
   sub-agent model, so every model is judged against the same truth. This is the same arrangement as
 batches 1-4 (`runs/20260928_i2l/PLAN.md`: "compaction subagents read the frozen prompt
@@ -147,7 +159,7 @@ Each criterion is judged separately for every model.
 ## Safety and data handling (from CLAUDE.md, mandatory)
 
 - **No URL reaches a model.** Every prompt built from a skill is scrubbed with
-  `skillc.frontend.urlguard` (`scrub`, then `assert_clean`) before a sub-agent sees it; 186 of
+  `skillc.frontend.urlguard` (`scrub`, then `assert_clean`) before a sub-agent sees it; 185 of
   the 300 `SKILL.md` files contain a link, an e-mail address or a domain name. Executors read
   the scrubbed copy of the skill folder (amendment 1). `python scripts/real2.py audit`
   re-checks every prompt and every copied file before each batch.
@@ -179,7 +191,7 @@ hash), `missing.log`, `checker_times.json`, `metrics.json`, and a report
 ## How to run (`scripts/real2.py`; no model call inside it)
 
 1. `skills`; `prepare --arm s|d --repeat 1|2|3` (every model); `jobs --arm exec --work <scratchpad>/real2_work`;
-   `audit`. Done in the commit of amendment 2: 7,200 S and D prompts (300 pairs x 2 arms x 3
+   `audit`. Done in the commit of amendment 3: 7,200 S and D prompts (300 pairs x 2 arms x 3
    repeats x 4 models; the prompt files of one pair are identical across repeats and models)
    and 300 executor prompts.
 2. Executions: one workflow per batch file `batches/exec_*.json`; each sub-agent reads its
@@ -192,8 +204,7 @@ hash), `missing.log`, `checker_times.json`, `metrics.json`, and a report
 5. `calls --transcripts <workflow transcript dir>` after each workflow; `score` at the end.
 
 **Pilot.** 10 pairs (the first 10 jobs of `batches/exec_00.json`) go through every step on
-repeat r1 and every model first, to check the files, the transcripts, that each model option
-is served, and the scoring. If the pilot needs no
+repeat r1 with `opus` first, to check the files, the transcripts and the scoring. If the pilot needs no
 change of method, its outputs stay in the round. If it does, the change is committed as an
 amendment, the pilot outputs are moved to `pilot/` and left out, and the 10 pairs are run again.
 
@@ -256,3 +267,22 @@ A second check read every skill for validity and setup, and the user asked for e
    `sonnet`, `haiku`, `fable`), three repeats each; executions and adjudications stay on the
    session's default sub-agent model. Criteria C1-C4 are judged per model; agreement across
    models is added as a secondary measure. About 9,600 sub-agent calls in all.
+
+**Amendment 3 (2026-10-31, before any model call, execution or compaction in this round).**
+The user asked that all 300 be validated cases and none a duplicate, and that Opus run first.
+
+1. *Same skill in other words.* A name-masked TF-IDF check (rule in the test-set section)
+   found 10 skills the phrase rule had let through: three revised and renamed versions of
+   skills used before (a product renamed in name and text), one guide sharing whole sections
+   with an earlier skill, three stubs generated from one template with only the name changed
+   (one stub of the family stays), two siblings of one register template (one stays) and one
+   step of a plugin pipeline that repeats a sibling step. A first line at 0.45 skipped 9;
+   reading the pair just under it (0.44, two siblings of the register template) moved the line
+   to 0.40, which skipped one more. 290 of the amendment-2 draw and 284 of the amendment-1
+   draw remain; 10 replacements came in the seeded order.
+   Runtimes now 110 / 76 / 114; licences unchanged.
+2. *Opus first.* The pilot and then both arms with all three repeats run on `opus` before the
+   other models, in the order `sonnet`, `haiku`, `fable`.
+3. `verify_real2.py` also checks the same-skill rule, with the draw's weights: no problem.
+   Every relative reference in a `SKILL.md` that exists at the pinned commit is present in the
+   executor copy (1,364 references, none missing).

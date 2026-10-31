@@ -12,6 +12,10 @@ by commit and sha256.  A document is eligible only if
   * it shares less than half of its five-word phrases (Jaccard of 5-gram
     shingles) with every earlier document and with every other drawn document,
     so a renamed or lightly edited copy of a used skill is excluded;
+  * it is not the same skill as an earlier or another drawn document in other
+    words: with each document's own name masked, the TF-IDF cosine of words and
+    word pairs is below 0.40 (a skill revised under a new product name, or two
+    skills generated from one template).  Applied while drawing;
   * it is a user-facing skill: frontmatter with a name and a description, and
     not marked `disable-model-invocation: true` (a repository's own helper
     command);
@@ -46,11 +50,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import random
 import re
 import shutil
 import subprocess
+from collections import Counter
 from pathlib import Path
 
 SEED = 20261031
@@ -62,6 +68,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 FENCE = re.compile(r"^[ \t]*```", re.M)
 NEAR = 0.5                       # Jaccard of 5-word shingles that counts as a copy
+SAME = 0.40                      # TF-IDF cosine, own names masked, that counts as the same skill
 MAX_FILE = 2_000_000             # bundled files larger than this are listed, not copied
 FRONT = re.compile(r"^\s*---\s*\n(.*?)\n---", re.S)
 
@@ -92,6 +99,49 @@ class NearIndex:
             for j in self.inv.get(g, ()):
                 hits[j] = hits.get(j, 0) + 1
         return max((v / len(s | self.sets[j]) for j, v in hits.items()), default=0.0)
+
+
+def masked(text: str, name: str) -> str:
+    """The text with the skill's own name and its parts replaced, lower-cased."""
+    t = text.lower()
+    for tok in sorted({name} | set(name.split("-")), key=len, reverse=True):
+        if len(tok) >= 3:
+            t = re.sub(r"\b" + re.escape(tok) + r"\b", "x", t)
+    return t
+
+
+def terms(text: str) -> Counter:
+    w = re.findall(r"[a-z][a-z0-9]+", text)
+    return Counter(w + [a + " " + b for a, b in zip(w, w[1:])])
+
+
+class SameIndex:
+    """TF-IDF (words and word pairs) cosine over name-masked texts. `best(tf)` is the
+    largest cosine against the documents added so far. It catches a skill rewritten
+    under a new name, or two skills made from one template with the name swapped."""
+
+    def __init__(self, df: Counter, n: int) -> None:
+        self.df, self.n = df, n
+        self.inv: dict[str, list[tuple[int, float]]] = {}
+        self.size = 0
+
+    def vec(self, tf: Counter) -> dict[str, float]:
+        v = {t: (1 + math.log(k)) * math.log(self.n / self.df[t])
+             for t, k in tf.items() if 0 < self.df[t] < self.n}
+        z = math.sqrt(sum(x * x for x in v.values())) or 1.0
+        return {t: x / z for t, x in v.items()}
+
+    def add(self, tf: Counter) -> None:
+        for t, x in self.vec(tf).items():
+            self.inv.setdefault(t, []).append((self.size, x))
+        self.size += 1
+
+    def best(self, tf: Counter) -> float:
+        acc: dict[int, float] = {}
+        for t, x in self.vec(tf).items():
+            for j, y in self.inv.get(t, ()):
+                acc[j] = acc.get(j, 0.0) + x * y
+        return max(acc.values(), default=0.0)
 
 
 def user_facing(text: str) -> bool:
@@ -235,6 +285,9 @@ def licence_for(skill_dir: Path, repo_dir: Path) -> tuple[str | None, Path | Non
     return None, None
 
 
+used_terms: list[Counter] = []     # name-masked terms of every earlier document
+
+
 def used_sets() -> tuple[set[str], set[str], set[str], NearIndex]:
     """Ids, skill names and content hashes of every earlier test or training document."""
     names = subprocess.run(["git", "ls-tree", "-r", "--name-only", BRANCH, "--", "benchmark/"],
@@ -244,14 +297,20 @@ def used_sets() -> tuple[set[str], set[str], set[str], NearIndex]:
     batch = subprocess.run(["git", "cat-file", "--batch"], cwd=ROOT, check=True,
                            input="".join(f"{BRANCH}:{p}\n" for p in paths).encode(),
                            capture_output=True).stdout
-    hashes, i, index = set(), 0, NearIndex()
+    hashes, i, index, k = set(), 0, NearIndex(), 0
+    used_terms.clear()
     while i < len(batch):
         nl = batch.index(b"\n", i)
         size = int(batch[i:nl].split()[2])
         body = batch[nl + 1:nl + 1 + size]
         hashes.add(hashlib.sha256(body).hexdigest())
         index.add(shingles(body.decode(errors="replace")))
+        used_terms.append(terms(masked(body.decode(errors="replace"),
+                                       paths[k].split("/")[-2].split("__")[-1].lower())))
         i = nl + 1 + size + 1
+        k += 1
+    for p in sorted((ROOT / "benchmark/claude_env").glob("**/cases/*.md")):
+        used_terms.append(terms(p.read_text(errors="replace").lower()))
     for f in ["benchmark/claude_env/cases.json"] + [
             f"benchmark/claude_env/{s}/cases.json" for s in ("set2", "set3", "set4")]:
         p = ROOT / f
@@ -335,6 +394,17 @@ def draw(cands: list[dict], n: int, cap: int, rng: random.Random) -> list[dict]:
     rng.shuffle(fenced)
     rng.shuffle(plain)
     index = NearIndex()
+    df: Counter = Counter()
+    for tf in used_terms:
+        df.update(tf.keys())
+    for c in cands:
+        c["_tf"] = terms(masked(Path(c["_src"]).read_text(errors="replace"),
+                                c["id"].split("__")[-1].lower()))
+        df.update(c["_tf"].keys())
+    n_docs = len(used_terms) + len(cands)
+    earlier, drawn = SameIndex(df, n_docs), SameIndex(df, n_docs)
+    for tf in used_terms:
+        earlier.add(tf)
     skipped: dict[str, str] = {}
     draw.skipped = skipped
 
@@ -347,9 +417,18 @@ def draw(cands: list[dict], n: int, cap: int, rng: random.Random) -> list[dict]:
                                                        Path(d["_src"]).read_text(errors="replace"))):
                 skipped[d["id"]] = why
                 continue
+            if len(into) < want:
+                d["_same_earlier"] = earlier.best(d["_tf"])
+            if len(into) < want and d["_same_earlier"] >= SAME:
+                skipped[d["id"]] = "same_skill_as_earlier"
+                continue
+            if len(into) < want and drawn.best(d["_tf"]) >= SAME:
+                skipped[d["id"]] = "same_skill_as_drawn"
+                continue
             if len(into) < want and index.near(d["_sh"]) < NEAR:
                 into.append(d)
                 index.add(d["_sh"])
+                drawn.add(d["_tf"])
             else:
                 left.append(d)
         return left
@@ -409,6 +488,7 @@ def main() -> None:
         if d["_lic"] and not (dst / "LICENSE").exists():
             shutil.copyfile(d["_lic"], dst / "LICENSE")
         case = {k: v for k, v in d.items() if not k.startswith("_")}
+        case["max_same_score_earlier"] = round(d.get("_same_earlier", 0.0), 3)
         case["files"] = files
         case["files_not_copied"] = skipped
         case["support_files"] = support
