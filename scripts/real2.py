@@ -12,7 +12,8 @@ read, and scores the files they write back.
   jobs --arm exec|s|d [--repeat K] [--model M] [--round N] [--only CASES]
                           shuffled job batches of at most 50 for the workflows; each job
                           names the model its sub-agent must run on
-  collect-exec --work DIR copy executor result.json files into execution/
+  adj-jobs --work DIR     blind adjudication jobs for the achieved reports
+  collect-exec --work DIR copy executor and adjudicator reports into the run (after S and D)
   calls --transcripts DIR one line per sub-agent call into calls.jsonl
   mark-missing --arm s|d --repeat K [--model M]
                           record replies still missing after one re-run (no verdict)
@@ -265,6 +266,9 @@ Rules added for this round (runs/20261031_real2/PLAN.md, amendments 1 and 2):
   package installation, run package managers in quiet mode (for example pip -q, npm --silent).
 - Never print or write a URL, a domain name or an e-mail address into result.json; describe
   the resource in words instead.
+- Install packages only inside the work directory: a virtual environment there for Python
+  (python -m venv <work>/.venv), local node_modules for Node, never globally, never with
+  sudo, and never into the interpreter or packages the machine already has (amendment 4).
 """
 
 
@@ -311,6 +315,37 @@ def make_jobs(arm: str, k: int, rnd: int, only: list[str] | None,
     print(f"{len(items)} {tag} jobs in {math.ceil(len(items) / BATCH)} batches")
 
 
+def adj_prompt(c: dict, work_root: Path) -> str:
+    tpl = (RUN / "adjudicator_prompt.txt").read_text(encoding="utf-8")
+    return (tpl.replace("{ID}", c["case"])
+            .replace("{PATH}", str(RUN / "skills" / c["case"] / c["path_in_repo"]))
+            .replace("{WORK}", str(work_root / c["case"])))
+
+
+def make_adj_jobs(work_root: Path) -> None:
+    """Strict sensitivity: one blind adjudication per achieved report (before S and D)."""
+    items = []
+    for c in cases():
+        p = work_root / c["case"] / "result.json"
+        try:
+            if extract_json_object(p.read_text(encoding="utf-8")).get("outcome") != "achieved":
+                continue
+        except (OSError, ValueError, TypeError):
+            continue
+        rel = f"adjudication/prompts/{c['case']}.txt"
+        (RUN / rel).parent.mkdir(parents=True, exist_ok=True)
+        text = adj_prompt(c, work_root)
+        assert_clean(text)
+        (RUN / rel).write_text(text, encoding="utf-8")
+        items.append({"job": f"adj:{c['case']}", "case": c["case"], "model": None,
+                      "prompt": str(RUN / rel),
+                      "output": str(work_root / c["case"] / "adjudication.json")})
+    random.Random(f"{SEED}:adj").shuffle(items)
+    for i in range(0, len(items), BATCH):
+        write_json(RUN / "batches" / f"adj_{i // BATCH:02d}.json", items[i:i + BATCH])
+    print(f"{len(items)} adjudication jobs")
+
+
 # ------------------------------------------------------------ execution truth
 PERSONAL = [(re.compile(r"/home/[^/\s\"']+"), "/home/<user>"),
             (re.compile(r"/root\b"), "/<root>")]
@@ -329,6 +364,13 @@ def collect_exec(work_root: Path) -> None:
             text = rx.sub(rep, text)
         (out / f"{c['case']}.json").write_text(text, encoding="utf-8")
         got += 1
+        a = work_root / c["case"] / "adjudication.json"
+        if a.exists():
+            (RUN / "adjudication").mkdir(parents=True, exist_ok=True)
+            text, _ = scrub(a.read_text(encoding="utf-8", errors="replace"))
+            for rx, rep in PERSONAL:
+                text = rx.sub(rep, text)
+            (RUN / "adjudication" / f"{c['case']}.json").write_text(text, encoding="utf-8")
     print(f"collected {got} executor reports")
 
 
@@ -677,6 +719,7 @@ def main() -> None:
     j.add_argument("--round", type=int, default=1)
     j.add_argument("--only", nargs="*")
     j.add_argument("--work", type=Path, default=Path("/tmp/real2_work"))
+    sub.add_parser("adj-jobs").add_argument("--work", type=Path, required=True)
     sub.add_parser("collect-exec").add_argument("--work", type=Path, required=True)
     sub.add_parser("calls").add_argument("--transcripts", type=Path, required=True)
     sub.add_parser("audit")
@@ -700,6 +743,8 @@ def main() -> None:
     elif a.cmd == "jobs":
         for mo in ((None,) if a.arm == "exec" else models):
             make_jobs(a.arm, a.repeat, a.round, a.only, a.work, mo)
+    elif a.cmd == "adj-jobs":
+        make_adj_jobs(a.work)
     elif a.cmd == "collect-exec":
         collect_exec(a.work)
     elif a.cmd == "calls":

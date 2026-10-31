@@ -286,3 +286,31 @@ The user asked that all 300 be validated cases and none a duplicate, and that Op
 3. `verify_real2.py` also checks the same-skill rule, with the draw's weights: no problem.
    Every relative reference in a `SKILL.md` that exists at the pinned commit is present in the
    executor copy (1,364 references, none missing).
+
+**Amendment 4 (2026-10-31, before the pilot; no execution, compaction or verdict yet).**
+
+1. *The model.* The user chose one Opus model for this round. A probe of the sub-agent model
+   option (two one-word calls, no skill text) showed that the plain `opus` option resolves to
+   a different model than the one chosen, and that the exact model id is accepted and served,
+   as the transcripts record. So every call of this round (executions, adjudications, S and
+   D, all three repeats) passes that exact id; the directory label stays `opus`, the id is
+   given to the workflow at run time, and transcripts store the serving model as a hash.
+   Ground truth therefore also comes from this model (was: the session's default model).
+2. *Per-call overhead.* Each sub-agent call carries the same fixed harness context (system
+   prompt, tool definitions, project rules; about 60,000 input tokens, mostly written to the
+   prompt cache) whatever its job. Token results are reported in total and by kind (input,
+   cache write, cache read, output), and also with that fixed per-call part, measured on the
+   probe, subtracted, so the arms are compared on what their own prompts and replies cost.
+3. *Executor installs.* Executors install packages only inside their work directory (a
+   virtual environment for Python, local node_modules for Node), never globally (rule added to
+   `EXEC_NOTE`), so the checker's own environment cannot change during the round. The list of
+   installed packages is recorded before the round and checked after it.
+4. *No leak of the truth.* Executor and adjudicator reports stay in the work directories
+   outside the repository until every S and D call has finished; `collect-exec` runs after
+   that. S and D sub-agents are told to read only their one prompt file and write only their
+   one output file.
+5. *Adjudicator prompt* written (`adjudicator_prompt.txt`): blind, read-only, judges an
+   achieved report genuine or simulated. Adjudication runs after all executions and before S
+   and D.
+6. *Concurrency.* The machine has 4 CPUs, so one workflow runs 2 sub-agents at a time; several
+   workflows run side by side, each on its own batch file.
