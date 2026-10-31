@@ -25,7 +25,9 @@ def drop_invoked_capability(pack: dict) -> tuple[dict, str] | None:
     """Remove a capability the protocol actually invokes.
 
     Expected verdict on the mutant: IMPOSSIBLE / MISSING_CAPABILITY with the
-    dropped tool in the frontier (hallucinated planning, manufactured)."""
+    dropped tool in the frontier (hallucinated planning, manufactured) when
+    every path needs the tool; otherwise ACHIEVABLE with the protocol
+    REJECTED for MISSING_CAPABILITY.  Either way the mutant is not admitted."""
     invoked = [s["act"]["cap"] for s in iter_steps(pack["protocol"])
                if "act" in s and s["act"]["cap"] in pack["capabilities"]]
     if not invoked:

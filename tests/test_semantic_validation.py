@@ -42,8 +42,15 @@ def test_drop_capability_mutants_are_always_caught():
             continue
         mutant, victim = m
         v = check(mutant)
-        assert not v.achievable, f"{cid}: dropped {victim}, still achievable"
-        assert v.reason == "MISSING_CAPABILITY" and victim in v.frontier, cid
+        # Caught means: never admitted.  When every path needs the dropped
+        # tool the goal is refuted; when another branch avoids it, the goal
+        # stays reachable and the missing tool rejects the protocol instead.
+        assert not v.admissible, f"{cid}: dropped {victim}, still admitted"
+        if v.refuted:
+            assert v.reason == "MISSING_CAPABILITY" and victim in v.frontier, cid
+        else:
+            assert v.protocol_reason == "MISSING_CAPABILITY", cid
+            assert victim in v.protocol_detail, cid
         hit += 1
     assert hit >= 10
 

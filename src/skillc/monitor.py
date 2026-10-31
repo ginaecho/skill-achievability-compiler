@@ -446,10 +446,13 @@ class Monitor:
         if v.label == "ACHIEVABLE" and v.protocol == "REJECTED":
             # the goal is reachable, but the coordination is not well typed:
             # not a refutation, and not admissible either
+            advice = ("remove the path that uses the missing tool, or grant the tool."
+                      if v.protocol_reason == "MISSING_CAPABILITY" else
+                      "the coordination can deadlock; rewrite the plan so every role "
+                      "can observe the branch it must act in.")
             return Decision(DENY, f"skillc: plan protocol REJECTED ({v.protocol_reason}) in "
                                   f"runtime `{rt.name}`: {v.protocol_detail}. The goal is "
-                                  "reachable but the coordination can deadlock; rewrite the "
-                                  "plan so every role can observe the branch it must act in.",
+                                  f"reachable, but {advice}",
                             sorted(set(b.withdrawn) | set(b.blocked)), REPLAN), info
         if v.admissible:
             skipped = sorted(set(b.withdrawn) | set(b.blocked))
