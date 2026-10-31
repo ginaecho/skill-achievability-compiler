@@ -1,0 +1,382 @@
+<llmstxt_playbook>
+
+<overview>
+The llms.txt file is a Markdown-formatted document placed at a website's root path that provides LLMs with a curated, context-window-friendly overview of a site's most important content. Proposed by Jeremy Howard (Answer.AI) on September 3, 2024, it addresses a fundamental mismatch: websites are built for humans browsing HTML, but LLMs need concise, structured text they can ingest in a single context window. Adoption has surged past 844,000 websites as of late 2025, driven largely by documentation platforms auto-generating the file. The standard's strongest value lies in developer documentation, where AI coding assistants like Cursor and Windsurf can consume it directly. Unlike robots.txt (crawler access permissions) or sitemap.xml (exhaustive page index), llms.txt is designed for inference time — the moment a user or agent actively seeks information. Site authors curate a selective "greatest hits" of their most useful content for LLM consumption. The specification is Apache-2.0 licensed (github.com/AnswerDotAI/llms-txt, 2,100+ stars) and carries no formal standards body backing — no RFC, no IETF standard, no W3C recommendation.
+</overview>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: THE OFFICIAL SPECIFICATION                         -->
+<!-- ============================================================ -->
+
+<specification source="llmstxt.org" format="standard Markdown" placement="/llms.txt at domain root">
+
+  <file_placement>
+    <rule>Place at /llms.txt on the website root.</rule>
+    <rule>Subpath placement is also valid (e.g., /docs/llms.txt).</rule>
+    <rule>Serve with MIME type text/plain.</rule>
+    <rule>Provide clean Markdown versions of individual pages at the same URL with .md appended (e.g., example.com/docs/guide.html becomes example.com/docs/guide.html.md). URLs without filenames should append index.html.md.</rule>
+  </file_placement>
+
+  <section_order note="Four sections in strict order. Only section 1 is required.">
+
+    <section order="1" name="H1 Header" required="true">
+      <description>An H1 header with the project or site name. This is the only required element.</description>
+      <example># FastHTML</example>
+    </section>
+
+    <section order="2" name="Blockquote Summary" required="recommended">
+      <description>A blockquote with a short summary containing key information necessary for understanding the rest of the file. This is the single most impactful element for LLM comprehension.</description>
+      <example>> FastHTML is a python library which brings together Starlette, Uvicorn, HTMX, and fastcore's FT "FastTags" into a library for creating server-rendered hypermedia applications.</example>
+    </section>
+
+    <section order="3" name="Freeform Context" required="optional">
+      <description>Zero or more Markdown sections (paragraphs, lists, but NO headings) providing additional project context — important caveats, compatibility notes, constraints.</description>
+    </section>
+
+    <section order="4" name="H2 Link Sections" required="optional">
+      <description>Zero or more H2-delimited sections containing "file lists" — Markdown lists where each item has a required hyperlink [name](url), optionally followed by a colon and descriptive notes. The special heading "## Optional" carries specific meaning: URLs listed there can be skipped when a shorter context is needed, enabling tiered content delivery.</description>
+      <link_format>[Display Name](url): 10-20 word factual description of what this page contains</link_format>
+    </section>
+
+  </section_order>
+
+  <canonical_example>
+# FastHTML
+
+> FastHTML is a python library which brings together Starlette, Uvicorn, HTMX,
+> and fastcore's FT "FastTags" into a library for creating server-rendered
+> hypermedia applications.
+
+Important notes:
+
+- Although parts of its API are inspired by FastAPI, it is *not* compatible
+  with FastAPI syntax and is not targeted at creating API services
+- FastHTML is compatible with JS-native web components and any vanilla JS
+  library, but not with React, Vue, or Svelte.
+
+## Docs
+
+- [FastHTML quick start](https://fastht.ml/docs/tutorials/quickstart_for_web_devs.html.md): A brief overview of many FastHTML features
+- [HTMX reference](https://github.com/bigskysoftware/htmx/blob/master/www/content/reference.md): Brief description of all HTMX attributes, CSS classes, headers, events, extensions, js lib methods, and config options
+
+## Examples
+
+- [Todo list application](https://github.com/AnswerDotAI/fasthtml/blob/main/examples/adv_app.py): Detailed walk-thru of a complete CRUD app in FastHTML showing idiomatic use of FastHTML and HTMX patterns.
+
+## Optional
+
+- [Starlette full documentation](https://gist.githubusercontent.com/jph00/.../starlette-sml.md): A subset of the Starlette documentation useful for FastHTML development.
+  </canonical_example>
+
+</specification>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: COMPANION FILES AND VARIANTS                       -->
+<!-- ============================================================ -->
+
+<companion_files>
+
+  <file id="llms-full.txt" importance="most important variant" origin="Mintlify + Anthropic collaboration">
+    <description>Compiles all documentation content into a single Markdown file. While llms.txt serves as a table of contents with links, llms-full.txt contains the complete rendered content.</description>
+    <stats>Anthropic's spans ~481,000 tokens. Cloudflare's reaches ~3.7 million tokens. AI agents visit llms-full.txt over 2x more frequently than llms.txt.</stats>
+    <best_for>Most sites. Agents prefer complete content when their context window can handle it.</best_for>
+  </file>
+
+  <file id="llms-small.txt" importance="useful variant">
+    <description>Ultra-compact version containing only page structure and titles, useful for the most constrained context windows.</description>
+    <best_for>Constrained context windows. Quick structural overview.</best_for>
+  </file>
+
+  <file id="llms-ctx.txt" origin="FastHTML project">
+    <description>Programmatically expanded version of llms.txt — the llms_txt2ctx CLI tool fetches and inlines the content of every linked URL into an XML-based structure suitable for models like Claude.</description>
+    <variant id="llms-ctx-full.txt">Includes content from the Optional section as well.</variant>
+  </file>
+
+  <file id="per-topic files" example_site="Supabase">
+    <description>Separate files for each topic or SDK language (e.g., /llms/guides.txt, /llms/js.txt, /llms/python.txt). Supabase's llms.txt is just 100 tokens, pointing to these separate files.</description>
+    <best_for>Modular documentation. Lets agents fetch only the slice they need.</best_for>
+  </file>
+
+  <tiering_strategy>Offer tiered files to match different context window sizes — from a minimal index (llms-small.txt) to a curated directory (llms.txt) to complete content (llms-full.txt).</tiering_strategy>
+
+</companion_files>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: IMPLEMENTATION PATTERNS                            -->
+<!-- ============================================================ -->
+
+<implementation_patterns note="Five structural approaches observed across dozens of live llms.txt files.">
+
+  <pattern id="minimal_index" example_sites="Supabase">
+    <description>Uses llms.txt as a tiny pointer file (~100 tokens) linking to separate topic-specific text files. Modular approach lets agents fetch only the slice of documentation they need.</description>
+    <characteristics>H1 and a handful of links to per-topic files. Roughly 100 tokens total.</characteristics>
+    <best_for>Small sites, modular documentation, sites with distinct topic areas or SDK languages.</best_for>
+  </pattern>
+
+  <pattern id="comprehensive_directory" example_sites="Vercel, Cloudflare">
+    <description>Large, hierarchically organized llms.txt with deep nesting and extensive link lists organized by product area.</description>
+    <characteristics>Indented sub-items for nested content. Tens of thousands of tokens. Every link points to .md page versions. Organized by product line.</characteristics>
+    <best_for>Large multi-product sites with extensive documentation hierarchies.</best_for>
+  </pattern>
+
+  <pattern id="dual_file" example_sites="Anthropic, Stripe">
+    <description>Maintains an llms.txt index for navigation alongside a separate llms-full.txt containing all content. Covers both quick lookups and deep dives.</description>
+    <characteristics>llms.txt includes blockquote summary and product-category organization. Explicitly links to llms-full.txt for complete documentation.</characteristics>
+    <best_for>Medium-to-large documentation sites. The most broadly recommended pattern.</best_for>
+  </pattern>
+
+  <pattern id="product_segmented" example_sites="Cloudflare">
+    <description>Generates per-product llms-full.txt files (e.g., /workers/llms-full.txt, /agents/llms-full.txt), keeping each file within manageable token limits.</description>
+    <characteristics>Root llms.txt links to product areas. Each product has its own complete llms-full.txt.</characteristics>
+    <best_for>Multi-product organizations where a single llms-full.txt would exceed useful context window sizes.</best_for>
+  </pattern>
+
+  <pattern id="multi_site" example_sites="Stripe">
+    <description>Deploys separate llms.txt files for distinct web properties — one for the marketing site (product descriptions, ecosystem links), another for the documentation site (API references, integration guides).</description>
+    <characteristics>Different files serve different audiences. Marketing vs. technical documentation separated.</characteristics>
+    <best_for>Organizations with distinct web properties serving different audiences.</best_for>
+  </pattern>
+
+  <decision_tree>
+    <step order="1">Single product, small docs? Use minimal_index or dual_file.</step>
+    <step order="2">Single product, large docs? Use dual_file.</step>
+    <step order="3">Multi-product, manageable docs? Use comprehensive_directory or dual_file.</step>
+    <step order="4">Multi-product, massive docs? Use product_segmented.</step>
+    <step order="5">Distinct web properties with different audiences? Use multi_site.</step>
+  </decision_tree>
+
+</implementation_patterns>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: BEST PRACTICES                                     -->
+<!-- ============================================================ -->
+
+<best_practices>
+
+  <content_curation>
+    <rule id="curator_not_collector">Be a curator, not a collector — list your most important pages like a "greatest hits," not every page like a sitemap.</rule>
+    <rule id="descriptive_links">Write descriptive link text: "[Quickstart Guide](url): A 5-minute tutorial for getting your first project running" is far more useful than "[Docs](url)".</rule>
+    <rule id="description_length">Keep link descriptions to 10-20 words, factual and value-oriented.</rule>
+    <rule id="section_priority">Place the most important sections first. Core docs and API reference before blog posts and changelogs.</rule>
+    <rule id="optional_section">Use the ## Optional section strategically for secondary content that can be dropped when context is tight.</rule>
+    <rule id="blockquote_quality">The blockquote summary should answer: What is this? What does it do? Who is it for? What key constraints matter? This is the single most impactful element.</rule>
+  </content_curation>
+
+  <content_to_include>
+    <item>Core documentation and getting-started guides</item>
+    <item>API references</item>
+    <item>Tutorials and how-to guides</item>
+    <item>FAQs</item>
+    <item>Pricing pages</item>
+    <item>Key blog posts</item>
+    <item>SDK and language-specific guides</item>
+  </content_to_include>
+
+  <content_to_exclude>
+    <item>Login pages and admin panels</item>
+    <item>User-generated content</item>
+    <item>Gated or premium content</item>
+    <item>Duplicate pages</item>
+    <item>Legal boilerplate (unless critical, e.g., API terms of service)</item>
+  </content_to_exclude>
+
+  <industry_specific>
+    <guideline industry="e-commerce">Link to return policies and explain product category structure rather than listing every product.</guideline>
+    <guideline industry="saas">Prioritize technical docs, SDK guides, and tutorials.</guideline>
+    <guideline industry="open-source">Include quickstart, API reference, contributing guide, and examples.</guideline>
+  </industry_specific>
+
+  <technical_implementation>
+    <rule id="hosting">Host at domain root (example.com/llms.txt).</rule>
+    <rule id="mime_type">Serve as text/plain.</rule>
+    <rule id="markdown_versions">Link to .md versions of pages wherever possible — Markdown is up to 10x more token-efficient than HTML.</rule>
+    <rule id="valid_markdown">Use standard Markdown and avoid syntax errors.</rule>
+    <rule id="tiered_files">Consider offering tiered files (llms.txt, llms-full.txt, llms-small.txt) to serve different context window sizes.</rule>
+  </technical_implementation>
+
+</best_practices>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: VALIDATION CHECKLIST                               -->
+<!-- ============================================================ -->
+
+<validation_checklist>
+
+  <spec_compliance>
+    <check id="h1_present">H1 header with project/site name is present (the only required element).</check>
+    <check id="blockquote_present">Blockquote summary follows the H1.</check>
+    <check id="freeform_no_headings">Freeform context (if any) uses paragraphs/lists only, no headings.</check>
+    <check id="h2_link_format">H2 sections contain properly formatted link lists: [name](url) with optional ": description".</check>
+    <check id="section_order">Sections follow the specification order: H1, blockquote, freeform, H2 sections.</check>
+    <check id="optional_section_correct">## Optional section used only for skippable secondary content.</check>
+    <check id="valid_markdown">Valid Markdown syntax throughout.</check>
+  </spec_compliance>
+
+  <content_quality>
+    <check id="summary_quality">Summary blockquote provides enough context for an LLM to understand the project without reading further.</check>
+    <check id="curated_not_exhaustive">Curated selection, not an exhaustive sitemap dump.</check>
+    <check id="link_descriptions">Link descriptions are 10-20 words, factual, and value-oriented.</check>
+    <check id="md_versions">Links point to .md versions where available.</check>
+    <check id="priority_ordering">Most important content appears in the first sections.</check>
+    <check id="no_gated_content">No login pages, admin panels, or gated content.</check>
+    <check id="reasonable_size">Reasonable total size — flag if unusually large (sitemap-like) or small (missing key content).</check>
+  </content_quality>
+
+  <paste_test>
+    <description>Paste the file contents into ChatGPT or Claude with web search disabled, then ask questions about the product. If the model gives poor answers, the file needs revision.</description>
+    <test_questions>
+      <question>What does this project do?</question>
+      <question>How do I get started?</question>
+      <question>What are the main features?</question>
+      <question>What are the key limitations or constraints?</question>
+    </test_questions>
+  </paste_test>
+
+</validation_checklist>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: TOOLING ECOSYSTEM                                  -->
+<!-- ============================================================ -->
+
+<tooling_ecosystem>
+
+  <web_generators>
+    <tool id="firecrawl" url="llmstxt.firecrawl.dev">
+      <description>Crawls websites and uses GPT-4-mini to produce both llms.txt and llms-full.txt.</description>
+    </tool>
+    <tool id="llms-txt-io" url="llms-txt.io">
+      <description>Free generation for up to 20 URLs.</description>
+    </tool>
+    <tool id="writesonic">
+      <description>Free instant generator.</description>
+    </tool>
+    <tool id="wordlift">
+      <description>AI-powered tool using knowledge graphs for SEO-optimized generation.</description>
+    </tool>
+    <tool id="llmstxt-new" url="llmstxt.new" origin="Mintlify">
+      <description>Generates a draft by prepending a URL.</description>
+    </tool>
+  </web_generators>
+
+  <cli_tools>
+    <tool id="llms_txt2ctx" language="Python" origin="official">
+      <description>Official CLI for parsing llms.txt and generating expanded context files (llms-ctx.txt).</description>
+    </tool>
+    <tool id="create-llmstxt-py" language="Python" origin="Firecrawl">
+      <description>Python script for llms.txt generation.</description>
+    </tool>
+    <tool id="generate-llmstxt" language="Node.js" command="npx generate-llmstxt">
+      <description>NPX tool for generating llms.txt.</description>
+    </tool>
+    <tool id="llms-txt-php" language="PHP">
+      <description>PHP implementation for llms.txt generation.</description>
+    </tool>
+  </cli_tools>
+
+  <documentation_platforms note="Most frictionless path to adoption — zero or minimal configuration.">
+    <platform id="mintlify" auto_generates="llms.txt, llms-full.txt" config="zero">
+      <description>Auto-generates both files for all hosted documentation. Single rollout in November 2024 gave thousands of sites instant support, including Anthropic and Cursor.</description>
+    </platform>
+    <platform id="gitbook" auto_generates="llms.txt, llms-full.txt">
+      <description>Produces both files for all published docs.</description>
+    </platform>
+    <platform id="redocly" config="toggle-on">
+      <description>Added toggle-on support.</description>
+    </platform>
+    <platform id="optimizely" config="built-in">
+      <description>Built into their CMS.</description>
+    </platform>
+  </documentation_platforms>
+
+  <framework_plugins>
+    <plugin framework="VitePress" package="vitepress-plugin-llms">
+      <note>Also supports special llm-only tags for LLM-specific instructions invisible to humans.</note>
+    </plugin>
+    <plugin framework="Docusaurus" package="docusaurus-plugin-llms" />
+    <plugin framework="Astro" package="@4hse/astro-llms-txt" />
+    <plugin framework="Next.js" package="next-llms-txt">
+      <note>Manual placement in public/ also works. Active discussion on adding native framework support.</note>
+    </plugin>
+    <plugin framework="Hugo" method="manual">
+      <note>Place in /static/llms.txt.</note>
+    </plugin>
+    <plugin framework="Jekyll" method="manual">
+      <note>Place in root directory.</note>
+    </plugin>
+  </framework_plugins>
+
+  <wordpress_plugins>
+    <plugin id="yoast-seo" since="June 2025">Built-in llms.txt generation.</plugin>
+    <plugin id="aioseo" users="3M+">Enables llms.txt by default for all users.</plugin>
+    <plugin id="website-llmstxt">Fine-grained control with WooCommerce support and AI crawler detection.</plugin>
+    <plugin id="llms-full-txt-generator">Dedicated llms-full.txt generation.</plugin>
+  </wordpress_plugins>
+
+  <mcp_integration>
+    <tool id="mcpdoc" origin="LangChain">Exposes llms.txt files to AI coding assistants through the Model Context Protocol, bridging static content files with dynamic tool use in IDEs.</tool>
+  </mcp_integration>
+
+</tooling_ecosystem>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: ADOPTION AND EVIDENCE                              -->
+<!-- ============================================================ -->
+
+<adoption period="2024-2025">
+
+  <statistics>
+    <stat source="BuiltWith" date="October 2025">844,000+ websites have llms.txt.</stat>
+    <stat source="llms-txt-hub (GitHub, David Dias)">500+ notable sites cataloged by category.</stat>
+    <stat source="Majestic Million">Growth from 15 sites (February 2025) to 105 (May 2025) — 600% increase in three months.</stat>
+    <stat source="SE Ranking">llms.txt found on approximately 10% of 300,000 sampled domains.</stat>
+  </statistics>
+
+  <notable_adopters>Anthropic, Cloudflare, Stripe, Vercel, Supabase, Pinecone, Cursor, Windsurf, LangChain, ElevenLabs, Perplexity, HubSpot, Zapier, NVIDIA, Docker, Deno, Svelte, Hono. Google's A2A protocol repository includes an llms.txt despite Google officially rejecting the standard for search.</notable_adopters>
+
+  <notable_non_adopters>
+    <non_adopter site="OpenAI">No llms.txt.</non_adopter>
+    <non_adopter site="Tailwind CSS">Explicitly rejected it after internal restructuring.</non_adopter>
+    <non_adopter site="React.dev">GitHub issue requesting it received 26 downvotes.</non_adopter>
+  </notable_non_adopters>
+
+  <directories>llmstxt.site, directory.llmstxt.cloud, llms-text.com/directory, llmsdirectory.com</directories>
+
+</adoption>
+
+<!-- ============================================================ -->
+<!-- SECTION 8: THE CASE FOR AND AGAINST                           -->
+<!-- ============================================================ -->
+
+<value_assessment>
+
+  <case_against>
+    <evidence>No major LLM provider has officially confirmed their models read llms.txt during inference or search.</evidence>
+    <evidence>Google explicitly rejected it — John Mueller compared it to the discredited keywords meta tag.</evidence>
+    <evidence source="SE Ranking, 300K domains">No correlation between having llms.txt and AI citation frequency. Removing llms.txt from prediction model actually improved accuracy.</evidence>
+    <evidence source="CDN log analysis, 1,000 AEM domains, 30 days">Zero LLM-specific bots (GPTBot, ClaudeBot, PerplexityBot) requesting llms.txt files.</evidence>
+    <evidence source="Redocly">"Unless you explicitly paste the llms.txt file into the LLM, it doesn't do anything."</evidence>
+  </case_against>
+
+  <case_for>
+    <evidence>Implementation cost is trivially low — typically 1-4 hours of work.</evidence>
+    <evidence>For developer documentation, value is concrete and immediate: AI coding assistants like Cursor and Windsurf consume it directly.</evidence>
+    <evidence source="Vercel">10% of new signups now come from ChatGPT, attributable in part to LLM-friendly documentation strategy.</evidence>
+    <evidence>Low-risk bet on future AI indexing behavior.</evidence>
+    <evidence source="Profound tracking data">Microsoft and OpenAI bots are actively crawling llms.txt files.</evidence>
+  </case_for>
+
+  <consensus>llms.txt delivers genuine value for developer documentation and AI coding assistant contexts, where users manually feed documentation to models. Its value as an SEO or "generative engine optimization" tool remains unproven. Best understood as a developer experience improvement first, and a speculative future-proofing measure second.</consensus>
+
+</value_assessment>
+
+<!-- ============================================================ -->
+<!-- SECTION 9: STANDARDIZATION STATUS                             -->
+<!-- ============================================================ -->
+
+<standardization>
+  <status>No formal standards body backing. Explicitly described as a "proposal" and "informal overview." GitHub repository open for community input, Discord channel for discussion.</status>
+  <open_question id="file_placement">Simon Willison proposed /.well-known/llms.txt per IANA's Well-Known URI registry (RFC 8615). Received 96 thumbs-up on GitHub but not adopted. Current convention remains /llms.txt at domain root.</open_question>
+  <competing_effort id="ietf_ai_preferences">IETF launched an AI Preferences Working Group in January 2025, co-chaired by Mark Nottingham and Suresh Krishnan, with Google, Microsoft, and Meta participation. Developing standardized rules for AI-web content interactions through potential extensions to the Robots Exclusion Protocol. Distinct from llms.txt and may eventually compete with or supersede it.</competing_effort>
+</standardization>
+
+</llmstxt_playbook>

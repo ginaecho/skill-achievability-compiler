@@ -16,36 +16,47 @@ amendment at the end of this file, before the step it affects runs.
 
 ## Test set: 300 skill-runtime pairs (`benchmark/real2/cases.json`)
 
-- 300 public `SKILL.md` files from 20 repositories, pinned by commit and sha256, with a copy
-  and its licence under `benchmark/real2/sources/` (MIT 246, Apache-2.0 40, CC-BY-SA-4.0 14).
+- 300 public skills from 19 repositories, pinned by commit, each a whole skill folder: its
+  `SKILL.md` and its 1,428 bundled scripts, references and templates (206 skills have some),
+  every file with its sha256, copied with the licence under `benchmark/real2/sources/`
+  (MIT 254, Apache-2.0 33, CC-BY-SA-4.0 13).
 - **Never used before.** A skill is excluded if its id, its skill name or its content (sha256)
   occurs in any earlier test or training set: 2,472 ids and 2,476 content hashes from the
   corpora on `gc/data_train_test` (`ce_sources*`, `slm_silver`, `compaction_sources`) and
   `benchmark/claude_env` (cases, set2, set3, set4). Duplicates within the pool are dropped,
   and an aggregator's copy never wins over the original.
-- Drawn with seed 20261031 from 6,489 eligible skills, at most 30 per repository, 70% with a
+- **Not a near-copy.** A skill is also excluded if it shares half or more of its five-word
+  phrases (Jaccard of 5-word shingles >= 0.5) with any earlier document, so a renamed or lightly
+  edited copy of a used skill is out (72 excluded); drawn skills are below 0.5 with each other
+  too. The largest overlap left is 0.39 with an earlier document and 0.44 within the set.
+- **User-facing.** The frontmatter has a name and a description and does not set
+  `disable-model-invocation: true` (a repository's own helper command; 101 excluded).
+- Drawn with seed 20261031 from 6,424 eligible skills, at most 30 per repository, 70% with a
   fenced code block (the rule of `select_cases.py`).
-- **Runtime by hash of the id**, independent of skillc: developer-sandbox 109,
-  offline-workstation 92, office-assistant 99 (`src/skillc/data/runtimes/*.json`, unchanged).
+- **Runtime by hash of the id**, independent of skillc: developer-sandbox 108,
+  offline-workstation 75, office-assistant 117 (`src/skillc/data/runtimes/*.json`, unchanged).
 - Reproduce: `python benchmark/real2/select_real2.py --clones <dir>` (the clone commits are
-  in `cases.json`).
+  in `cases.json`); check: `python benchmark/real2/verify_real2.py <dir>` (every rule above, and
+  every copied file against its pinned commit; result on 2026-10-31: no problem found).
 
 ## The model
 
 Every model call in this round (compaction, direct verdict, execution, adjudication) is made
-by a **Claude sub-agent of a Claude Code session on the user's subscription**, model alias
-`opus`. No Azure, OpenAI or Anthropic API key is used. This is the same arrangement as
+by a **Claude sub-agent of a Claude Code session on the user's subscription**; sub-agents run on
+the session's model (no per-agent model override). No Azure, OpenAI or Anthropic API key is
+used. This is the same arrangement as
 batches 1-4 (`runs/20260928_i2l/PLAN.md`: "compaction subagents read the frozen prompt
 files"). Each sub-agent is a fresh context and sees one job. The model that served each call
-is recorded from the session (`get_session`: `session_context.model`,
-`external_metadata.last_served_model`) at the start and end of every batch; if it changes,
-the affected calls are reported separately.
+is read from its transcript; `calls.jsonl` stores it as a short hash, and the model's name is
+reported in the paper, not in the repository. If the model changes within the round, the
+affected calls are reported separately.
 
 ## Ground truth: blind execution (one run per pair)
 
 - An executor sub-agent receives the frozen prompt for the pair's runtime
   (`executor_prompt_<runtime>.txt`, copied unchanged from batch 4, `runs/20261001_gr`), the
-  skill id and the path of its `SKILL.md`, and a fresh work directory. It never sees a skillc
+  case id, the path of its `SKILL.md` in the scrubbed copy of its folder
+  (`runs/20261031_real2/skills/<case>/`), and a fresh work directory. It never sees a skillc
   or direct verdict. It writes `result.json` with `outcome`, `blocker_kind` and evidence.
 - **Labels (L2, the rule of batches 1-4):**
   - **achieved:** outcome `achieved`;
@@ -77,11 +88,11 @@ the affected calls are reported separately.
 
 ## What is measured, per call
 
-- **Tokens.** The sub-agent's reported total tokens for the call (the subscription reports a
-  total per sub-agent, not an input/output split). For an input/output estimate, prompt and
-  reply are also counted with the local GPT-2 BPE tokenizer, the proxy used in
-  `runs/20260928_i2l`. Both are reported, labelled.
-- **Time.** The sub-agent's reported wall-clock duration for the call.
+- **Tokens.** The provider-reported usage in the sub-agent's transcript, summed over its
+  turns: input, output, cache-read and cache-creation tokens, kept apart. Prompt and reply
+  are also counted with the GPT-2 BPE tokenizer (`tiktoken` 0.14.0, encoding `gpt2`, the same
+  vocabulary as the proxy of `runs/20260928_i2l`). Both are reported, labelled.
+- **Time.** Wall-clock time of the sub-agent, first to last timestamp of its transcript.
 - **Checker time.** Measured locally for every S pack: median of 7 runs of `check()` on the
   bound pack (`time.perf_counter`), with the machine's CPU count recorded.
 - A decision's cost is the sum over its calls (S: compaction, retry and repair if any; D: one
@@ -111,8 +122,10 @@ For each arm, per repeat and pooled over the three repeats, with Wilson 95% inte
 ## Safety and data handling (from CLAUDE.md, mandatory)
 
 - **No URL reaches a model.** Every prompt built from a skill is scrubbed with
-  `skillc.frontend.urlguard` (`scrub`, then `assert_clean`) before a sub-agent sees it; 132 of
-  the 300 skills contain links. Executors read the scrubbed copy of the skill.
+  `skillc.frontend.urlguard` (`scrub`, then `assert_clean`) before a sub-agent sees it; 183 of
+  the 300 `SKILL.md` files contain a link, an e-mail address or a domain name. Executors read
+  the scrubbed copy of the skill folder (amendment 1). `python scripts/real2.py audit`
+  re-checks every prompt and every copied file before each batch.
 - **Sandbox only.** Executors work only in their own work directory under the session's
   scratchpad, never in this repository, never push or write to an external service, never
   read environment variables, credentials or tokens (the container holds an unrelated API key
@@ -130,11 +143,61 @@ For each arm, per repeat and pooled over the three repeats, with Wilson 95% inte
 
 ## Outputs
 
-`runs/20261031_real2/`: `execution/`, `adjudication/`, `s/{prompts,outputs,packs}/r{1,2,3}/`,
-`d/{prompts,outputs}/r{1,2,3}/`, `calls.jsonl` (one line per sub-agent call: job, arm, repeat,
-tokens, duration, model), `checker_times.json`, `metrics.json`, and a report
+`runs/20261031_real2/`: `skills/` (executor copies) and `skills.json`, `execution/`,
+`adjudication/`, `s/r{1,2,3}/{prompts,outputs,packs}/`, `d/r{1,2,3}/{prompts,outputs}/`,
+`batches/`, `calls.jsonl` (one line per sub-agent call: job, tokens by kind, seconds, model
+hash), `missing.log`, `checker_times.json`, `metrics.json`, and a report
 `docs/REAL2_BENCHMARK.md`.
+
+## How to run (`scripts/real2.py`; no model call inside it)
+
+1. `skills`; `prepare --arm s|d --repeat 1|2|3`; `jobs --arm exec --work <scratchpad>/real2_work`;
+   `audit`. Done in the commit of amendment 1: 1,800 S and D prompts and 300 executor prompts.
+2. Executions: one workflow per batch file `batches/exec_*.json`; each sub-agent reads its
+   prompt file and writes `result.json` in its work directory. Then `collect-exec --work <dir>`.
+3. Adjudication of achieved reports (strict sensitivity): blind, one sub-agent each.
+4. For each repeat K: S round 1 and D from `jobs --arm s|d --repeat K`; then `retry --repeat K`
+   and S round 2; `repair --repeat K` and S round 3. A failed job is re-run once; what is still
+   missing is recorded with `mark-missing` (no verdict) and listed in `missing.log`.
+5. `calls --transcripts <workflow transcript dir>` after each workflow; `score` at the end.
+
+**Pilot.** 10 pairs (the first 10 jobs of `batches/exec_00.json`) go through every step on
+repeat r1 first, to check the files, the transcripts and the scoring. If the pilot needs no
+change of method, its outputs stay in the round. If it does, the change is committed as an
+amendment, the pilot outputs are moved to `pilot/` and left out, and the 10 pairs are run again.
 
 ## Amendments
 
-(none yet)
+**Amendment 1 (2026-10-31, before any model call, execution or compaction in this round).**
+The body above is the amended text; this lists what changed from the first commit of this plan
+(13cd307c).
+
+1. *Test set redrawn.* Checking the first draw found 10 renamed or near-identical copies of
+   skills used before (for example a copy of an earlier artifacts-builder skill, overlap 0.97),
+   one internal helper command that is not a user-facing skill, and 208 skills whose bundled
+   files had not been copied. `select_real2.py` now excludes near-copies (Jaccard >= 0.5) and
+   non-user-facing skills and copies whole folders. The new draw: 19 repositories (was 20),
+   6,424 eligible (was 6,489), licences MIT 254 / Apache-2.0 33 / CC-BY-SA-4.0 13 (was
+   246/40/14), runtimes 108 / 75 / 117 (was 109/92/99). `verify_real2.py` was added and passes.
+2. *Executor copies.* Executors read `runs/20261031_real2/skills/<case>/`, a copy of the skill
+   folder with links, e-mail addresses and domain names replaced by placeholders (CLAUDE.md: no
+   URL reaches an agent). In source code a member access such as `subprocess.run` or
+   `self.live` looks like a domain to the scrubber and would break the script, so code files
+   keep a two-part name whose last part is a common member name (list in `scripts/real2.py`);
+   every other link or domain is replaced. 40 skills have a code file with a placeholder, and
+   one image that carries a link was withheld; outcomes on these skills are also reported
+   separately. Batch 4 gave executors the original files.
+3. *Executor rules added* (appended to every job; text in `scripts/real2.py`, `EXEC_NOTE`):
+   placeholders stand for unreachable resources; no web search or web fetch tools and no
+   opening of links; quiet package managers; no URL in `result.json`. Batch 4 allowed web
+   tools. Residual: the output of a package manager or a test run can still show a link to
+   the executor; this cannot be removed without changing what execution means.
+4. *S and D prompts* are built from the scrubbed `SKILL.md` (batches 1-4 were not scrubbed), and
+   S retry and repair prompts, which quote the model's own reply, are scrubbed again.
+5. *Checker.* The S arm uses the checker of this commit, which includes the MISSING_CAPABILITY
+   fix (a missing tool refutes the goal only when no path to the goal avoids it), not the
+   checker of batches 1-4.
+6. *Measurement.* Tokens and time come from the sub-agent transcripts (input/output split
+   available), not from a single reported total; the model is stored as a hash. The pilot
+   checks that the transcripts carry usage; if they do not, an amendment says what is used.
+7. *Pilot and runner* added (sections "How to run" and the pilot paragraph above).

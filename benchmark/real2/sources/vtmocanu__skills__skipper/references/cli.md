@@ -1,0 +1,246 @@
+# CLI and state
+
+Invoke `<this skill's directory>/scripts/skipper` directly. Put global options
+before the subcommand. Use a private state directory outside every repository:
+`SKIPPER_STATE_DIR` when nonempty, otherwise `${XDG_STATE_HOME:-$HOME/.local/state}/skipper/`.
+Use `--state-dir PATH` to override either default for an
+independent skipper ledger and `--owner SESSION_UUID` for every mutation.
+Use a canonical bare UUID (Claude/Codex) or native `ses_` id (OpenCode) for
+`--owner` and an enrollment's `skipper` field. Session targets use
+`claude:UUID`, `codex:UUID` or `opencode:ses_ID`; peer addressing instead uses
+`oc:ses_ID`. SESSION_UUID in the examples also accepts the bare OpenCode id.
+Refuse state paths with a `.git` entry in the directory or any ancestor. This
+includes a home directory tracked as a dotfiles repository. Use `--state-dir`
+with a private directory you own outside that repository, for example
+`--state-dir /absolute/private/non-repo/skipper`; do not bypass the parent check.
+
+## Observation
+
+```sh
+<this skill's directory>/scripts/skipper observe
+<this skill's directory>/scripts/skipper --owner SESSION_UUID status --save
+<this skill's directory>/scripts/skipper status --cached --json
+<this skill's directory>/scripts/skipper status --all --verbose
+<this skill's directory>/scripts/skipper resolve NAME --runtime claude --json
+```
+
+`observe` and ordinary `status` are read-only. `status --save` persists the
+baseline for the next new/vanished diff. Use it for patrol and live refreshes. Discovery
+reads Claude's session registry and only assistant usage metadata from matching
+transcripts across projects. Check PID, PID domain and process start time;
+preserve failed probes as unverified. Session-peers supplies optional Codex
+discovery; its failure cannot prove Codex disappearance. The CLI runs no sends.
+
+`status --cached` reads only the saved ledger, with no process, peer, git,
+export or transcript discovery. Render current ledger task reports over the saved
+roster. Report `mode: "cached"`, `observation_age` in seconds (null without a
+valid past timestamp) and the original `observed_at`. Preserve historical context
+percentages/provenance, set context `quality` to `cached` (or unknown with no
+percentage) and preserve `last_quality`, update reading ages, mark rows cached and
+liveness unverified, and set current `complete` coverage false. Keep previous coverage in
+`last_complete`; it proves nothing current. Put historical warnings in
+`last_warnings` and label them `cached warning:` in tables; reserve `warnings`
+for current cache diagnostics. Emit `observed_at: null` when no observation was
+saved. Suppress historical new/vanished
+diffs. An empty cache has unknown age/coverage, not a verified empty fleet.
+`--all` shows only Codex rows already saved, never additional discovery.
+Refuse `--cached --save`; cached reads never advance the baseline or events.
+Use fresh discovery and verify the relevant facts before consequential decisions;
+never use this view for identity resolution, ownership transfers or hold coverage.
+Fresh observation memoizes repo lookup per cwd only for that refresh; a trusted
+fresh context export avoids transcript globbing entirely.
+
+`status --json` and `observe` return an observation snapshot. `sessions` is a
+mapping keyed by `claude:UUID`, `codex:UUID` or `opencode:ses_ID`; it contains each observed session
+once. Read `.sessions[]`, not a recursive object sweep. Each row has `id`,
+`session_id`, `name`, `runtime`, `liveness`, observed `state`, `cwd`,
+`repo: {root, remote}` and `context`. `repo` is an object; use `.repo.root` for
+the path. This is observation state, not the ledger's task/role report.
+Without `--owner`, `status` prints a one-line ledger owner/path note to stderr;
+JSON stdout stays parseable. Mutations refuse a different owner and name both UUIDs.
+
+`new`, `vanished` and `unverified_missing` are ID arrays. `changes` carries
+name/repo/runtime labels for those diffs, including absent sessions; those labels
+are not additional roster rows. `complete` and `warnings` describe coverage.
+Different sessions can share a name; never deduplicate identities by name.
+For example, `jq '.sessions[] | {name, id, state, repo: .repo.root}'` reads the roster.
+
+`resolve NAME` prints its bare native id for enrollment/grants; `--json` returns its observation
+row. Match exact names or UUIDs, never prefixes. Ambiguous, absent or unverified
+matches fail with exit 2; use `--runtime claude|codex|opencode` or a qualified id to
+disambiguate. Resolving an identity grants no coordinator role, buddy binding
+or enrollment authority.
+Use the row's qualified `id` for ledger targets and `session_id` for a bare UUID.
+Resolution uses the observed roster; inspect coverage before assuming it is exhaustive.
+
+OpenCode resolution accepts freshly API-confirmed identity/reachability without
+claiming TUI attachment; cached or missing observations cannot establish it.
+See [OpenCode](opencode.md) for coverage and timer limits.
+
+Default tables show Claude and OpenCode leads with short repo names and an explicit buddy
+column. Store a pair on a session/enrollment record as `buddy: {id: "codex:UUID",
+name: "buddy-name"}`; resolve the displayed name by that ID, never by a name match.
+Keep UUIDs in JSON; `--verbose` shows them and full repo paths. `--all` adds
+Codex rows and internal reviewers. Footers use names and short repo labels and
+follow the table's runtime filter. Preserve Codex state from direct peer fields,
+shim status entries or the registry instead of overwriting it with unknown.
+
+Exclude unattached/unregistered internal reviewer rows by default. Use a parent
+peer alias plus shared holder PID when available; for Guardian review rows use
+the shared holder with an attached parent, falling back to the title when no
+parent relationship is available. A shared PID alone never excludes a thread.
+Retain explicitly registered or shim-attached threads. Record exclusion reasons
+in JSON; `observe --all` includes those rows for inspection. Exclusions are not
+vanished-session events.
+
+Use `--home`, `--claude-dir`, `--export-dir` and `--peers` to override discovery
+paths. Honor `CLAUDE_CONFIG_DIR` and `CC_STATUSLINE_CTX_EXPORT_DIR`. Execute only
+a trusted session-peers installation. Runtime registries are vendor internals;
+report unknown schema or liveness without claiming compatibility.
+Peer invocation failures report the selected script and the underlying error.
+Inspect that diagnostic before changing paths; retry process/socket-denied probes
+with authorized host permission. Status tables show Codex rows only with `--all`; the buddy column
+shows only explicitly recorded pairs. Missing discovery never authorizes a guess.
+For sends, correlate `peers.py send` JSON's `message_id`, not `msg_id`;
+delivery alone is no enrollment or stop acknowledgment.
+
+For Claude context, accept cc-statusline schema v1 only for the matching session
+ID, `source` native/tokens, `stale: false`, integer percentage 0..100 and publication
+age from zero inclusive to 180 seconds exclusive. Ignore extra fields. Export
+files never establish liveness. Record runtime version and model when available.
+
+Otherwise sum the latest non-synthetic assistant's input, cache-read and
+cache-creation tokens. Require all three nonnegative finite fields. Select the
+window from a valid native/tokens export for the same serving model published
+within 24 hours, then `SKIPPER_DEFAULT_CONTEXT_WINDOW` (positive integer), then
+200000, the conservative built-in fallback window. It errs high when the actual
+window is larger; the learned and configured windows still take precedence.
+Record `learned-export`, `configured` or `builtin` window provenance.
+Always label transcript values `est`; missing/invalid usage means `unknown`.
+Retain age in JSON; a fresh export publication does not mean a fresh API response.
+Show percentage only in tables and `ctx est` beside the state. Show `?` for unknown
+or Codex context. Never recommend a Codex handover from context.
+Display estimates above 100% as `>100%`; retain the raw percentage in JSON.
+
+## Records
+
+```sh
+<this skill's directory>/scripts/skipper --owner SESSION_UUID record --file /absolute/private/record.json
+```
+
+Pass one JSON object; use `--file -` for stdin. Supply a stable `id` to update a
+record; omission creates a UUID. An update may omit `kind` and retain the existing
+record kind. Record evidence references, not complete
+transcripts, logs, code or credentials. The CLI records reported authorization;
+it cannot authenticate that a grant really came from the user. The receiving
+lead must establish that boundary. Session targets also accept `opencode:ses_ID`.
+
+| kind | Required fields | Lifecycle and evidence |
+|---|---|---|
+| enrollment | target, skipper, scope | requested → authorized (`user_grant_ref`) → acked (`ack_ref`) → revoked; identities/scope immutable |
+| command | target, task | queued → accepted (`ack_ref`) → done (`evidence`); queued → done (`evidence`, implicit accept); accepted ↔ blocked; queued/accepted/blocked → superseded; irreversible requires reason |
+| question | target, question, options, pair_recommendation | open → answered (`answer`, `user_answer_ref`) → acked (`ack_ref`); retain dissent, urgency, dependencies |
+| handover | predecessor, successor, task | requested → ready (`handover_ref`) → acked (`successor_ack_ref`) → transferred (`predecessor_stop_ref`, enrolled successor); requested/ready/acked → superseded (`reason`) |
+| session | target, state, report_ref; task unless pending-handover | Latest transition report, optionally buddy, blockers, next and incident references |
+
+A successor may record `state: "pending-handover"` with no task yet. This is an
+acknowledgment of enrollment/readiness, not task ownership. Require a real task
+when recording an assigned-work state; complete the normal handover gates.
+Tasks in session reports are display only, never ownership. A pending-handover
+update refuses a supplied task and drops any task stored on the prior report.
+With no session report, an enrolled target's table task falls back to its latest
+accepted/queued command, then its latest incoming nonsuperseded handover. This
+display grants no ownership. A queued command completed directly uses its evidence
+as the implicit `ack_ref`; require nonblank string evidence for that implicit
+acknowledgment. Only existing commands can transition to done; never create one
+directly in done. Preserve enrollment and action-authorization gates.
+Superseding a handover voids it without transferring tasks; require a nonblank
+text reason. Transferred handovers cannot be superseded.
+
+Use a stable task ID in `task`; keep assignment detail in an optional `prompt`.
+New commands require acknowledged enrollment and one accountable lead per active
+task. A transferred handover supersedes the predecessor's pending commands;
+create a new command ID for the successor. Changes to command intent require
+superseding it and creating another ID. State recording does not replace buddy
+review, approval gates, transport acknowledgments or the lead's permission policy.
+Revocation does not prevent recording an existing command's outcome or superseding
+it. Supersede the old command before assigning that task to another enrolled lead;
+recording an update grants no permission to continue work after revocation.
+After revocation, allow existing-command updates only to `superseded`, `done`
+or `blocked`, within the ordinary transition rules. Refuse `accepted` updates.
+
+## Batch recording and receipts
+
+```sh
+<this skill's directory>/scripts/skipper --owner SESSION_UUID record --batch --file /absolute/private/updates.json
+<this skill's directory>/scripts/skipper --owner SESSION_UUID record --compact --file /absolute/private/update.json
+```
+
+Use `--batch` with a JSON array of 1..200 ordinary record objects. Validate in
+array order against a private state copy under one owner lock. Give each update
+a strictly increasing timestamp after existing records so latest-wins lookups
+follow that order, including dependent handovers and session reports; commit once only
+if every update passes. Preserve all normal enrollment, task ownership,
+transition, evidence and acknowledgment checks. A later update may refer to a
+record created earlier in that batch. On failure, leave records, events and
+persisted state unchanged and return exit 2 with no success receipt. Barriers
+still use their separate commands; a batch sends nothing and invents no acks.
+
+Return `{"count": N, "receipts": [{"id": ID, "kind": KIND, "state": STATE,
+"event_id": EVENT_ID}]}` in input order. Keep one event per update within the
+existing 200-event retention bound; the batch limit keeps all its events in the
+committed snapshot. `--compact` returns the same four-field receipt for one
+record; the default single-record output remains the full record. Receipts mean
+ledger validation/persistence, never transport delivery or worker acceptance.
+
+## Barriers
+
+```sh
+<this skill's directory>/scripts/skipper --owner SESSION_UUID barrier request --id HOLD_ID --resource example-repo#main --scope merges --participants claude:LEAD_UUID --reason 'Release checkpoint'
+<this skill's directory>/scripts/skipper --owner SESSION_UUID barrier ack --id HOLD_ID --participant claude:LEAD_UUID --inflight '[]' --ack-ref MESSAGE_ID
+<this skill's directory>/scripts/skipper --owner SESSION_UUID barrier active --id HOLD_ID
+<this skill's directory>/scripts/skipper --owner SESSION_UUID barrier replace-participant --id HOLD_ID --participant claude:OLD_UUID --successor claude:NEW_UUID --reason 'Lead handover' --ack-ref MESSAGE_ID --inflight '[]'
+<this skill's directory>/scripts/skipper --owner SESSION_UUID barrier release --id HOLD_ID --reason 'Release finished'
+```
+
+Use scopes `merges`, `pushes-ci` or `dispatches`. Request with unique enrolled
+participants. An acknowledgment must name remaining in-flight work as a JSON
+array; an empty array explicitly means quiescent. Activate only after all
+participants acknowledge with no work remaining. A later nonempty acknowledgment
+returns the hold to requested. Refuse enrollment revocation while the target
+participates in any unreleased barrier (requested or active); use
+`replace-participant` before revoking.
+Returning to requested is not a release: the hold stays in force while its
+acknowledgments and coverage are reconciled. Resume only after explicit release.
+Release explicitly with a reason, including when
+cancelling a requested barrier. A released ID cannot be reused. No expiration,
+automatic release, broadcast or forge-side enforcement occurs.
+
+`replace-participant` requires an existing non-released hold, its current OLD
+participant, a different NEW participant with acknowledged enrollment under this
+ledger's owner, and a nonblank `--reason`. Refuse duplicate participants. Drop
+OLD's acknowledgment; never inherit it. An active hold stays active only with
+NEW's quiescent `--ack-ref REF --inflight '[]'` in the same call and complete
+remaining coverage. Supply both acknowledgment options or neither; a nonempty
+in-flight list records pending work. Otherwise return to requested, still in
+force; collect NEW's normal `barrier ack`, then explicitly activate again.
+A requested hold never auto-activates. Record OLD, NEW and reason in the event.
+Only this ledger's owner mutates it; replacement transfers no skipper authority.
+
+## Persistence and recovery
+
+Keep one skipper owner per ledger. Mutations take a nonblocking advisory file
+lock, validate state, then fsync a private temporary file and atomically replace
+`state.json`. Keep the latest 200 metadata events in the same snapshot. Retain
+records and unreleased holds; no automatic pruning erases pending work. Keep
+the state directory at mode 0700; mutations tighten an existing directory with
+group/other permissions before reading or writing state. A failure to tighten
+it fails closed. Invalid JSON/schema and wrong owners fail closed with exit 2.
+Success is exit 0.
+
+For any predecessor, live or not, follow [takeover.md](takeover.md). Create a
+separate successor ledger when recording the first fresh grant; reconcile
+commands, questions and holds per lead. Keep the old ledger until recovery is
+complete; never rewrite its owner. Store `user_grant_ref`, `ack_ref` and
+`predecessor_stop_ref` on each successor enrollment record. Record a declined
+request as `transfer_status: "declined"` and revoke it, not a new lifecycle state.

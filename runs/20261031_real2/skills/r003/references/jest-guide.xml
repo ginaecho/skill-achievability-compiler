@@ -1,0 +1,605 @@
+<jest_testing_playbook>
+
+<overview>
+Comprehensive Jest testing patterns and best practices for TypeScript and JavaScript projects. Covers test structure, the full matcher catalog, async testing, mocking strategies, data-driven tests, error handling, snapshot testing, anti-patterns, CI/CD integration, and debugging. Optimized for AI agents writing production-quality tests.
+</overview>
+
+<!-- ============================================================ -->
+<!-- SECTION 1: CORE PRINCIPLES                                    -->
+<!-- ============================================================ -->
+
+<core_principles>
+
+  <test_structure>
+    <rule>Use describe() blocks for logical grouping by component, class, or module.</rule>
+    <rule>Use test() or it() for individual test cases with descriptive names.</rule>
+    <rule>Include setup/teardown hooks (beforeEach, afterEach) for consistent state.</rule>
+    <rule>Follow AAA pattern: Arrange (set up data and mocks), Act (call the function), Assert (verify the result).</rule>
+    <template id="basic">
+describe('ComponentName', () => {
+  beforeEach(() => {
+    // Arrange: set up common test state
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('should do something specific', () => {
+    // Act
+    const result = doSomething();
+    // Assert
+    expect(result).toBe(expected);
+  });
+});
+    </template>
+    <template id="async">
+describe('AsyncService', () => {
+  test('should handle promise resolution', async () => {
+    expect.assertions(1);
+    const result = await service.method();
+    expect(result).toBe(expected);
+  });
+});
+    </template>
+  </test_structure>
+
+  <coverage_requirements>
+    <threshold scope="global" statements="95" branches="95" functions="95" lines="95" />
+    <threshold scope="services" statements="98" branches="98" functions="98" lines="98" />
+    <threshold scope="repositories" statements="95" branches="95" functions="95" lines="95" />
+    <threshold scope="utilities" statements="90" branches="90" functions="90" lines="90" />
+  </coverage_requirements>
+
+  <forbidden_patterns note="These should never appear in committed test code.">
+    <pattern>it.only / test.only / describe.only — prevents other tests from running</pattern>
+    <pattern>it.skip / test.skip / describe.skip / it.todo — dead test code</pattern>
+    <pattern>Empty test bodies without assertions — false sense of coverage</pattern>
+    <pattern>Tests without proper async handling — can silently pass</pattern>
+    <pattern>Hardcoded timeouts or delays (setTimeout in tests) — use fake timers</pattern>
+    <pattern>Tests depending on external services without mocks — fragile and slow</pattern>
+  </forbidden_patterns>
+
+</core_principles>
+
+<!-- ============================================================ -->
+<!-- SECTION 2: MATCHERS                                           -->
+<!-- ============================================================ -->
+
+<matchers>
+
+  <category id="equality">
+    <matcher id="toBe" use_case="Primitive values, object references (strict ===)">
+      <example>expect(42).toBe(42)</example>
+      <note>Use for exact type matching. Does NOT work for deep object comparison.</note>
+    </matcher>
+    <matcher id="toEqual" use_case="Objects, arrays, complex structures (deep equality)">
+      <example>expect({a: 1, b: 2}).toEqual({a: 1, b: 2})</example>
+      <note>Ignores undefined properties.</note>
+    </matcher>
+    <matcher id="toStrictEqual" use_case="Exact object matching including undefined properties">
+      <example>expect({a: undefined, b: 2}).not.toStrictEqual({b: 2})</example>
+      <note>Enforces complete type conformity. Preferred for strict validation.</note>
+    </matcher>
+  </category>
+
+  <category id="truthiness">
+    <matcher id="toBeTruthy" use_case="Any truthy value">
+      <example>expect('hello').toBeTruthy()</example>
+    </matcher>
+    <matcher id="toBeFalsy" use_case="Any falsy value">
+      <example>expect('').toBeFalsy()</example>
+    </matcher>
+    <matcher id="toBeNull" use_case="Exactly null">
+      <example>expect(null).toBeNull()</example>
+    </matcher>
+    <matcher id="toBeUndefined" use_case="Exactly undefined">
+      <example>expect(undefined).toBeUndefined()</example>
+    </matcher>
+    <matcher id="toBeDefined" use_case="Not undefined">
+      <example>expect(7).toBeDefined()</example>
+    </matcher>
+  </category>
+
+  <category id="numbers">
+    <matcher id="toBeGreaterThan">
+      <example>expect(2).toBeGreaterThan(1)</example>
+    </matcher>
+    <matcher id="toBeGreaterThanOrEqual">
+      <example>expect(1).toBeGreaterThanOrEqual(1)</example>
+    </matcher>
+    <matcher id="toBeLessThan">
+      <example>expect(1).toBeLessThan(2)</example>
+    </matcher>
+    <matcher id="toBeLessThanOrEqual">
+      <example>expect(1).toBeLessThanOrEqual(1)</example>
+    </matcher>
+    <matcher id="toBeCloseTo" use_case="Floating point precision">
+      <example>expect(0.2 + 0.1).toBeCloseTo(0.3, 5)</example>
+    </matcher>
+  </category>
+
+  <category id="strings">
+    <matcher id="toMatch" use_case="String contains substring or regex">
+      <example>expect('long string').toMatch('str')</example>
+    </matcher>
+    <matcher id="toMatch_regex" use_case="Regex pattern matching">
+      <example>expect('coffee').toMatch(/ff/)</example>
+    </matcher>
+    <matcher id="stringContaining" use_case="Partial string match in expect helpers">
+      <example>expect.stringContaining('zz')</example>
+    </matcher>
+    <matcher id="stringMatching" use_case="Regex match in expect helpers">
+      <example>expect.stringMatching(/ff/)</example>
+    </matcher>
+  </category>
+
+  <category id="arrays">
+    <matcher id="toHaveLength">
+      <example>expect(['a', 'b', 'c']).toHaveLength(3)</example>
+    </matcher>
+    <matcher id="toContain" use_case="Primitive values in array">
+      <example>expect(['Alice', 'Bob']).toContain('Alice')</example>
+    </matcher>
+    <matcher id="toContainEqual" use_case="Object values in array (deep equality)">
+      <example>expect([{a: 1}, {a: 2}]).toContainEqual({a: 1})</example>
+    </matcher>
+    <matcher id="arrayContaining" use_case="Array contains subset">
+      <example>expect.arrayContaining(['Alice', 'Bob'])</example>
+    </matcher>
+  </category>
+
+  <category id="objects">
+    <matcher id="toHaveProperty" use_case="Object has property with optional value">
+      <example>expect({a: 1}).toHaveProperty('a', 1)</example>
+    </matcher>
+    <matcher id="toMatchObject" use_case="Partial object matching">
+      <example>expect({a: 1, b: 2}).toMatchObject({a: 1})</example>
+    </matcher>
+    <matcher id="objectContaining" use_case="Nested object matching in expect helpers">
+      <example>expect.objectContaining({a: expect.any(Number)})</example>
+    </matcher>
+  </category>
+
+  <category id="generic">
+    <matcher id="expect.any" use_case="Match any value of a given constructor">
+      <example>expect(value).toEqual(expect.any(String))</example>
+    </matcher>
+    <matcher id="expect.anything" use_case="Match any non-null, non-undefined value">
+      <example>expect(value).toEqual(expect.anything())</example>
+    </matcher>
+  </category>
+
+</matchers>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: ASYNC TESTING                                      -->
+<!-- ============================================================ -->
+
+<async_testing>
+
+  <best_practices>
+    <rule>Always use expect.assertions(n) or expect.hasAssertions() for async tests — prevents false positives when promises silently resolve.</rule>
+    <rule>Prefer async/await over Promise chains for readability.</rule>
+    <rule>Use .resolves and .rejects for concise Promise testing.</rule>
+    <rule>Wrap done() callback assertions in try/catch blocks to surface failures.</rule>
+  </best_practices>
+
+  <pattern id="async_await">
+    <template>
+test('async operation succeeds', async () => {
+  expect.assertions(1);
+  const result = await asyncFunction();
+  expect(result).toBe(expected);
+});
+    </template>
+    <error_template>
+test('async operation fails', async () => {
+  expect.assertions(1);
+  await expect(asyncFunction()).rejects.toThrow('Error message');
+});
+    </error_template>
+  </pattern>
+
+  <pattern id="promise_matchers">
+    <example type="resolves">await expect(Promise.resolve('value')).resolves.toBe('value')</example>
+    <example type="rejects">await expect(Promise.reject('error')).rejects.toBeDefined()</example>
+    <example type="throws">await expect(Promise.reject(new Error('msg'))).rejects.toThrow()</example>
+  </pattern>
+
+  <pattern id="done_callback" note="Legacy pattern — prefer async/await when possible.">
+    <template>
+test('callback test', (done) => {
+  expect.assertions(1);
+  asyncOperation((result) => {
+    try {
+      expect(result).toBe(true);
+      done();
+    } catch (err) {
+      done.fail(err);
+    }
+  });
+});
+    </template>
+    <warning>Always wrap assertions in try/catch with done() callback. Without try/catch, a failing assertion causes an unhelpful timeout error instead of showing the actual failure.</warning>
+  </pattern>
+
+  <assertion_counting>
+    <method id="exact">expect.assertions(3) — exactly 3 assertions must be called in this test.</method>
+    <method id="minimum">expect.hasAssertions() — at least 1 assertion must be called.</method>
+    <method id="global">beforeEach(expect.hasAssertions) — apply to all tests in the describe block.</method>
+  </assertion_counting>
+
+</async_testing>
+
+<!-- ============================================================ -->
+<!-- SECTION 4: MOCKING                                            -->
+<!-- ============================================================ -->
+
+<mocking>
+
+  <mock_functions>
+
+    <creation>
+      <method id="basic">jest.fn() — creates a basic mock function with no implementation.</method>
+      <method id="with_impl">jest.fn(implementation) — creates a mock with a specific implementation.</method>
+      <method id="named">jest.fn().mockName('fetchUser') — named mock for better error messages and debugging.</method>
+    </creation>
+
+    <assertions>
+      <matcher id="toHaveBeenCalled" alias="toBeCalled">Function was called at least once.</matcher>
+      <matcher id="toHaveBeenCalledTimes">Called exactly n times: expect(fn).toHaveBeenCalledTimes(3)</matcher>
+      <matcher id="toHaveBeenCalledWith" alias="toBeCalledWith">Called with specific arguments: expect(fn).toHaveBeenCalledWith('arg1', 'arg2')</matcher>
+      <matcher id="toHaveBeenLastCalledWith">Last call used specific arguments.</matcher>
+      <matcher id="toHaveBeenNthCalledWith">Nth call used specific arguments: expect(fn).toHaveBeenNthCalledWith(2, 'arg')</matcher>
+    </assertions>
+
+    <return_values>
+      <method id="mockReturnValue">Always return a value: mockFn.mockReturnValue(42)</method>
+      <method id="mockReturnValueOnce">Return value once (chainable): mockFn.mockReturnValueOnce(1).mockReturnValueOnce(2)</method>
+      <method id="mockResolvedValue">Resolve promise: mockFn.mockResolvedValue(data)</method>
+      <method id="mockResolvedValueOnce">Resolve promise once: mockFn.mockResolvedValueOnce(data)</method>
+      <method id="mockRejectedValue">Reject promise: mockFn.mockRejectedValue(new Error('fail'))</method>
+      <method id="mockRejectedValueOnce">Reject promise once: mockFn.mockRejectedValueOnce(new Error('fail'))</method>
+      <method id="mockImplementation">Custom implementation: mockFn.mockImplementation((x) => x * 2)</method>
+    </return_values>
+
+  </mock_functions>
+
+  <module_mocking>
+
+    <jest_mock>
+      <pattern id="basic">jest.mock('module-name', () => ({ default: mockImplementation }))</pattern>
+      <pattern id="virtual">jest.mock('module-name', () => mockImplementation, { virtual: true })</pattern>
+      <pattern id="conditional" note="Not hoisted — useful for per-test mocking.">jest.doMock('module-name', () => mockImplementation)</pattern>
+    </jest_mock>
+
+    <manual_mocks>
+      <rule>Place mock file at __mocks__/module-name.js (adjacent to node_modules for npm packages, adjacent to the module for local files).</rule>
+      <rule>Call jest.mock('module-name') to activate — Jest automatically uses the __mocks__ file.</rule>
+    </manual_mocks>
+
+    <spy_on>
+      <pattern id="method">jest.spyOn(object, 'method').mockImplementation(mockFn)</pattern>
+      <pattern id="getter">jest.spyOn(object, 'property', 'get').mockReturnValue(value)</pattern>
+      <pattern id="setter">jest.spyOn(object, 'property', 'set').mockImplementation(mockFn)</pattern>
+    </spy_on>
+
+  </module_mocking>
+
+  <cleanup note="Always clean up mocks to prevent cross-test contamination.">
+    <individual>
+      <method id="mockClear">mockFn.mockClear() — clears call history (mock.calls, mock.results) but keeps implementation.</method>
+      <method id="mockReset">mockFn.mockReset() — clears history AND removes implementation (returns undefined).</method>
+      <method id="mockRestore">mockFn.mockRestore() — restores original implementation. Only works on jest.spyOn mocks.</method>
+    </individual>
+    <global>
+      <method id="clearAllMocks">jest.clearAllMocks() — clear all mock call history.</method>
+      <method id="resetAllMocks">jest.resetAllMocks() — reset all mock implementations.</method>
+      <method id="restoreAllMocks">jest.restoreAllMocks() — restore all original implementations.</method>
+    </global>
+    <recommended_pattern>
+afterEach(() => {
+  jest.clearAllMocks();
+  jest.restoreAllMocks();
+});
+    </recommended_pattern>
+  </cleanup>
+
+</mocking>
+
+<!-- ============================================================ -->
+<!-- SECTION 5: TIMER MOCKING                                      -->
+<!-- ============================================================ -->
+
+<timer_mocking>
+
+  <setup>jest.useFakeTimers() — replaces setTimeout, setInterval, Date.now with controllable fakes.</setup>
+
+  <methods>
+    <method id="runAllTimers">jest.runAllTimers() — execute all pending timers immediately.</method>
+    <method id="advanceTimersByTime">jest.advanceTimersByTime(ms) — advance timers by specific milliseconds.</method>
+    <method id="runOnlyPendingTimers">jest.runOnlyPendingTimers() — run only currently pending timers (not newly created ones).</method>
+  </methods>
+
+  <template>
+test('executes callback after delay', () => {
+  jest.useFakeTimers();
+  const callback = jest.fn();
+
+  setTimeout(callback, 1000);
+  expect(callback).not.toHaveBeenCalled();
+
+  jest.advanceTimersByTime(1000);
+  expect(callback).toHaveBeenCalledTimes(1);
+});
+  </template>
+
+  <cleanup_note>Call jest.useRealTimers() in afterEach if only some tests need fake timers.</cleanup_note>
+
+</timer_mocking>
+
+<!-- ============================================================ -->
+<!-- SECTION 6: DATA-DRIVEN TESTING                                -->
+<!-- ============================================================ -->
+
+<data_driven_testing>
+
+  <pattern id="test_each_array">
+    <description>Parameterized tests with array of arrays.</description>
+    <template>
+test.each([
+  [1, 1, 2],
+  [1, 2, 3],
+  [2, 1, 3],
+])('add(%s, %s) returns %s', (a, b, expected) => {
+  expect(a + b).toBe(expected);
+});
+    </template>
+  </pattern>
+
+  <pattern id="test_each_template">
+    <description>Tagged template literal syntax — more readable for complex data sets.</description>
+    <template>
+test.each`
+  a    | b    | expected
+  ${1} | ${1} | ${2}
+  ${1} | ${2} | ${3}
+  ${2} | ${1} | ${3}
+`('returns $expected when $a + $b', ({ a, b, expected }) => {
+  expect(a + b).toBe(expected);
+});
+    </template>
+  </pattern>
+
+  <pattern id="describe_each">
+    <description>Parameterized describe blocks for testing across contexts.</description>
+    <template>
+describe.each([
+  ['mobile', 375],
+  ['tablet', 768],
+  ['desktop', 1024],
+])('on %s (%spx)', (device, width) => {
+  test('renders correctly', () => {
+    // test with device/width context
+  });
+});
+    </template>
+  </pattern>
+
+</data_driven_testing>
+
+<!-- ============================================================ -->
+<!-- SECTION 7: TYPESCRIPT PATTERNS                                -->
+<!-- ============================================================ -->
+
+<typescript_patterns>
+
+  <mock_typing>
+    <pattern id="typed_mock">const mockFn = jest.fn() as jest.MockedFunction&lt;typeof originalFn&gt;</pattern>
+    <pattern id="mocked_module">const mockModule = jest.mocked(originalModule) — preferred in Jest 29+, infers types automatically.</pattern>
+    <pattern id="spy_typing">const spy = jest.spyOn(object, 'method') as jest.SpyInstance&lt;ReturnType, Parameters&gt;</pattern>
+  </mock_typing>
+
+  <configuration>
+    <setting id="preset">ts-jest</setting>
+    <setting id="transform">'^.+\\.ts$': 'ts-jest'</setting>
+    <setting id="module_resolution">moduleNameMapper: { '^@/(.*)$': '&lt;rootDir&gt;/src/$1' }</setting>
+  </configuration>
+
+</typescript_patterns>
+
+<!-- ============================================================ -->
+<!-- SECTION 8: ERROR TESTING                                      -->
+<!-- ============================================================ -->
+
+<error_testing>
+
+  <synchronous>
+    <pattern id="basic">expect(() => { throw new Error('message'); }).toThrow('message')</pattern>
+    <pattern id="specific_type">expect(() => { throw new TypeError('type error'); }).toThrow(TypeError)</pattern>
+    <pattern id="snapshot">expect(() => { throw new Error('detailed message'); }).toThrowErrorMatchingSnapshot()</pattern>
+  </synchronous>
+
+  <asynchronous>
+    <pattern id="rejects">await expect(asyncFunction()).rejects.toThrow('error message')</pattern>
+    <pattern id="try_catch" note="Use when you need to inspect the error object beyond the message.">
+try {
+  await asyncFunction();
+  fail('Should have thrown');
+} catch (error) {
+  expect(error.message).toBe('expected');
+  expect(error.code).toBe('ERR_SPECIFIC');
+}
+    </pattern>
+  </asynchronous>
+
+</error_testing>
+
+<!-- ============================================================ -->
+<!-- SECTION 9: INTEGRATION TESTING                                -->
+<!-- ============================================================ -->
+
+<integration_testing>
+
+  <repository_mocking>
+    <pattern id="query_results">mockRepository.findById.mockResolvedValue(mockEntity)</pattern>
+    <pattern id="transaction">mockRepository.transaction.mockImplementation(async (callback) => callback(mockTx))</pattern>
+    <pattern id="error_simulation">mockRepository.save.mockRejectedValue(new Error('Database connection failed'))</pattern>
+  </repository_mocking>
+
+  <test_database_lifecycle>
+    <setup>
+beforeEach(async () => {
+  await testDb.clear();
+  await testDb.seed(fixtures);
+});
+    </setup>
+    <cleanup>
+afterEach(async () => {
+  await testDb.cleanup();
+});
+    </cleanup>
+  </test_database_lifecycle>
+
+</integration_testing>
+
+<!-- ============================================================ -->
+<!-- SECTION 10: SNAPSHOT TESTING                                   -->
+<!-- ============================================================ -->
+
+<snapshot_testing>
+
+  <patterns>
+    <pattern id="basic">expect(component).toMatchSnapshot()</pattern>
+    <pattern id="property_matchers" note="Use for objects with dynamic values like IDs or timestamps.">
+expect(user).toMatchSnapshot({
+  id: expect.any(String),
+  createdAt: expect.any(Date),
+})
+    </pattern>
+    <pattern id="inline">expect(value).toMatchInlineSnapshot() — Jest writes the snapshot inline in the test file.</pattern>
+  </patterns>
+
+  <best_practices>
+    <rule>Use property matchers for dynamic values (IDs, timestamps, random data).</rule>
+    <rule>Keep snapshots small and focused — snapshot a specific output, not an entire component tree.</rule>
+    <rule>Review snapshot changes carefully in code review — they are easy to blindly update.</rule>
+    <rule>Avoid snapshots for volatile data that changes frequently.</rule>
+  </best_practices>
+
+</snapshot_testing>
+
+<!-- ============================================================ -->
+<!-- SECTION 11: PERFORMANCE TESTING                               -->
+<!-- ============================================================ -->
+
+<performance_testing>
+
+  <pattern id="execution_time">
+const start = performance.now();
+await operation();
+const duration = performance.now() - start;
+expect(duration).toBeLessThan(1000); // milliseconds
+  </pattern>
+
+  <pattern id="memory_usage">
+const initialMemory = process.memoryUsage().heapUsed;
+await operation();
+const finalMemory = process.memoryUsage().heapUsed;
+expect(finalMemory - initialMemory).toBeLessThan(threshold);
+  </pattern>
+
+</performance_testing>
+
+<!-- ============================================================ -->
+<!-- SECTION 12: ANTI-PATTERNS                                     -->
+<!-- ============================================================ -->
+
+<anti_patterns note="Common mistakes that lead to fragile, misleading, or unreliable tests.">
+
+  <anti_pattern id="testing_implementation">
+    <description>Testing implementation details instead of behavior.</description>
+    <bad>expect(component.state.count).toBe(1)</bad>
+    <good>expect(screen.getByText('Count: 1')).toBeInTheDocument()</good>
+    <reason>Implementation can change without changing behavior. Test what the user sees or what the API returns.</reason>
+  </anti_pattern>
+
+  <anti_pattern id="missing_mock_cleanup">
+    <description>Not cleaning up mocks between tests.</description>
+    <bad>// No afterEach cleanup — mock state leaks between tests</bad>
+    <good>afterEach(() => { jest.clearAllMocks(); })</good>
+    <reason>Leaked mock state causes flaky tests that pass in isolation but fail when run together.</reason>
+  </anti_pattern>
+
+  <anti_pattern id="real_timers_in_tests">
+    <description>Using real setTimeout/setInterval in tests.</description>
+    <bad>setTimeout(() => { expect(callback).toBeCalled(); done(); }, 100)</bad>
+    <good>jest.useFakeTimers(); jest.advanceTimersByTime(100); expect(callback).toBeCalled();</good>
+    <reason>Real timers make tests slow and timing-dependent. Fake timers are deterministic and instant.</reason>
+  </anti_pattern>
+
+  <anti_pattern id="missing_async_handling">
+    <description>Not awaiting async operations in tests.</description>
+    <bad>test('async', () => { asyncFn(); expect(result).toBe(true); })</bad>
+    <good>test('async', async () => { const result = await asyncFn(); expect(result).toBe(true); })</good>
+    <reason>Without await, the test completes before the async operation finishes — assertions never run, test always passes.</reason>
+  </anti_pattern>
+
+</anti_patterns>
+
+<!-- ============================================================ -->
+<!-- SECTION 13: CI/CD INTEGRATION                                 -->
+<!-- ============================================================ -->
+
+<ci_cd>
+
+  <coverage_enforcement>
+    <command>jest --coverage --passWithNoTests=false</command>
+    <config>
+coverageThreshold: {
+  global: {
+    branches: 95,
+    functions: 95,
+    lines: 95,
+    statements: 95,
+  },
+}
+    </config>
+    <report_formats>lcov, json-summary, text</report_formats>
+    <artifacts>coverage/lcov.info, coverage/coverage-summary.json</artifacts>
+  </coverage_enforcement>
+
+  <quality_gates>
+    <gate>No .only or .skip tests in committed code.</gate>
+    <gate>All async tests must have assertion counts (expect.assertions or expect.hasAssertions).</gate>
+    <gate>Coverage thresholds must be met.</gate>
+    <gate>No console.log statements in test files.</gate>
+  </quality_gates>
+
+</ci_cd>
+
+<!-- ============================================================ -->
+<!-- SECTION 14: DEBUGGING                                         -->
+<!-- ============================================================ -->
+
+<debugging>
+
+  <test_debugging>
+    <tip>Use --verbose flag for detailed test output showing each test name and status.</tip>
+    <tip>Use --detectOpenHandles to find async operations that prevent Jest from exiting cleanly.</tip>
+    <tip>Run a single test with --testNamePattern='pattern' to isolate failures.</tip>
+    <tip>Run a single file with jest path/to/test.ts to narrow scope.</tip>
+    <tip>Add temporary console.log statements, but remove before committing.</tip>
+  </test_debugging>
+
+  <mock_debugging>
+    <tip>Use .mockName('descriptiveName') for better error messages when mock assertions fail.</tip>
+    <tip>Inspect mock.calls array to see exact arguments for each call: console.log(mockFn.mock.calls)</tip>
+    <tip>Inspect mock.results array to see return values: console.log(mockFn.mock.results)</tip>
+    <tip>Use toMatchSnapshot() on mock.calls for complex call verification during development.</tip>
+  </mock_debugging>
+
+</debugging>
+
+</jest_testing_playbook>
