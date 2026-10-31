@@ -242,14 +242,73 @@ def _reclean(out: Path) -> None:
     write_json(out / "frozen.json", frozen)
 
 
+def _rounds(k: int, model: str) -> tuple[Path, dict, dict, dict]:
+    out = arm_dir("s", k, model)
+    frozen = json.loads((out / "frozen.json").read_text())
+    cases_ = {c["id"]: c for c in frozen["cases"]}
+    have = {(j["case"], j["round"]): j for j in frozen["jobs"]}
+    return out, frozen, cases_, have
+
+
 def retry(k: int, model: str) -> None:
-    bcr.retry(arm_dir("s", k, model))
-    _reclean(arm_dir("s", k, model))
+    """Incremental version of benchmark_ce_runtime.retry: for every round-1 reply that
+    exists and has no retry yet, one located-error retry if it does not parse."""
+    out, frozen, cases_, have = _rounds(k, model)
+    rt = load_runtime(bcr.RUNTIME)
+    new = []
+    for (cid, rnd), job in sorted(have.items()):
+        if rnd != 1 or (cid, 2) in have or not (out / job["output"]).exists():
+            continue
+        reply = (out / job["output"]).read_text(encoding="utf-8")
+        parsed = bcr.parse_reply(cases_[cid], reply, rt, frozen["method"], False)
+        if parsed["ok"]:
+            continue
+        prompt = json.loads((out / job["prompt"]).read_text())
+        rel = job["prompt"].replace(".json", "__r2.json")
+        tail = bcr.CE_RETRY_PROMPT.format(error=parsed["error"], text=reply.strip())
+        write_json(out / rel, _clean_prompt(prompt["system"], prompt["user"] + tail))
+        new.append({**job, "round": 2, "prompt": rel,
+                    "output": job["output"].replace(".txt", "__r2.txt"),
+                    "prompt_sha256": sha((out / rel).read_bytes())})
+    frozen["jobs"] += new
+    write_json(out / "frozen.json", frozen)
+    print(f"s {model} r{k}: {len(new)} retry jobs")
 
 
 def repair(k: int, model: str) -> None:
-    bcr.repair(arm_dir("s", k, model))
-    _reclean(arm_dir("s", k, model))
+    """Incremental version of benchmark_ce_runtime.repair: one counterexample-guided
+    repair for every case whose latest reply exists, parses and is refuted."""
+    out, frozen, cases_, have = _rounds(k, model)
+    rt = load_runtime(bcr.RUNTIME)
+    last: dict = {}
+    for (cid, rnd), job in have.items():
+        if rnd > last.get(cid, {"round": 0})["round"]:
+            last[cid] = job
+    new = []
+    for cid, job in sorted(last.items()):
+        if job["round"] >= 3 or not (out / job["output"]).exists():
+            continue
+        if job["round"] == 1 and (cid, 2) in have:
+            continue
+        reply = (out / job["output"]).read_text(encoding="utf-8")
+        parsed = bcr.parse_reply(cases_[cid], reply, rt, frozen["method"], False)
+        if not parsed["ok"]:
+            continue
+        v = check(parsed["pack"])
+        if v.label != "IMPOSSIBLE":
+            continue
+        base = json.loads((out / f"prompts/{frozen['method']}/{cid}__s0.json").read_text())
+        rel = f"prompts/{frozen['method']}/{cid}__s0__r3.json"
+        expl = bcr.explain_refutation(v, bcr._B(parsed["withdrawn"], parsed["blocked"]))
+        tail = bcr.CE_REPAIR_PROMPT.format(explanation=expl, text=bcr.extract_ce(reply).strip())
+        write_json(out / rel, _clean_prompt(base["system"], base["user"] + tail))
+        new.append({**job, "round": 3, "prompt": rel,
+                    "output": f"outputs/{frozen['method']}/{cid}__s0__r3.txt",
+                    "prompt_sha256": sha((out / rel).read_bytes())})
+    frozen["jobs"] += new
+    frozen["repair_round"] = True
+    write_json(out / "frozen.json", frozen)
+    print(f"s {model} r{k}: {len(new)} repair jobs")
 
 
 # ------------------------------------------------------------------- jobs
@@ -462,10 +521,18 @@ def checker_times(k: int, model: str) -> dict:
 def log_calls(transcripts: Path) -> None:
     """One line per sub-agent transcript: the job it ran (found by its prompt path),
     provider-reported usage summed over its turns, wall time, and the model."""
-    jobs = {}
-    for b in sorted((RUN / "batches").glob("*.json")):
-        for j in json.loads(b.read_text()):
-            jobs[j["prompt"]] = j
+    pat = re.compile(re.escape(str(RUN)) + r"/(?:(s|d)/([\w-]+)/r(\d)/prompts/(?:ce_rt|direct)/"
+                     r"(r\d{3})__s0(?:__r(\d))?\.json|(execution|adjudication)/prompts/(r\d{3})\.txt)")
+
+    def job_of(text: str) -> dict | None:
+        m = pat.search(text)
+        if not m:
+            return None
+        if m.group(6):
+            return {"job": f"{'exec' if m.group(6) == 'execution' else 'adj'}:{m.group(7)}",
+                    "case": m.group(7)}
+        return {"job": f"{m.group(1)}{m.group(3)}:{m.group(2)}:{m.group(4)}:n{m.group(5) or 1}",
+                "case": m.group(4)}
     seen = set()
     if (RUN / "calls.jsonl").exists():
         seen = {json.loads(line)["transcript"]
@@ -477,7 +544,7 @@ def log_calls(transcripts: Path) -> None:
         rows = [json.loads(line) for line in t.read_text().splitlines() if line.strip()]
         first_user = next((json.dumps(r.get("message", {})) for r in rows
                            if r.get("type") == "user"), "")
-        job = next((j for p, j in jobs.items() if p in first_user), None)
+        job = job_of(first_user)
         if job is None:
             continue
         use = Counter()

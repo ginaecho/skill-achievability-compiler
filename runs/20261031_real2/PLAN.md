@@ -314,3 +314,14 @@ The user asked that all 300 be validated cases and none a duplicate, and that Op
    and D.
 6. *Concurrency.* The machine has 4 CPUs, so one workflow runs 2 sub-agents at a time; several
    workflows run side by side, each on its own batch file.
+
+**Amendment 5 (2026-10-31, after the pilot; implementation only, no change of method).**
+The pilot (10 pairs, repeat r1, the chosen Opus model: 10 executions, 5 adjudications, 10 D
+calls, 10 S compactions, 1 retry, 4 repairs) ran every step. Every call was served by the
+chosen model and every S and D sub-agent used exactly one read and one write. No method
+changed, so the pilot outputs stay in the round. Two implementation fixes:
+1. `retry` and `repair` are incremental: they act on the replies that exist and keep the
+   rounds already frozen (the inherited functions read every round-1 reply and rebuilt the
+   job list). The rule of each round is unchanged.
+2. `calls` identifies a call's job from the frozen prompt path in its task, not from the batch
+   files (a retry or repair job is not in a batch file).
