@@ -33,8 +33,7 @@ GRID = "#E3E7EC"
 CAT = {
     "A": ("#2E7D6B", "No LLM in the loop"),
     "B": ("#1F3A5F", "LLM writes the pack; truth by running"),
-    "C": ("#7A4E9C", "LLM writes the pack; truth by people"),
-    "D": ("#8A6D3B", "Watching a running agent"),
+    "C": ("#7A4E9C", "LLM writes the pack; AI-labelled"),
 }
 
 mpl.rcParams.update({
@@ -102,13 +101,10 @@ USE_CASES = [
     ("B", "All four batches", "447 pairs",
      (394, 447), (122, 145), (30, 302), None, None, None),   # sums of the four rows
     # --- C: public skills, LLM compaction, truth from annotators (session runtime)
-    ("C", "Sample 1 of public skills", "100 skills",
+    ("C", "Sample 1, requirements probed", "100 skills",
      (60, 100), (7, 31), (11, 69), None, None, None),         # COMPACTION_RELIABILITY.md:78 (set2)
-    ("C", "Sample 2, labelled blind", "100 skills",
+    ("C", "Sample 2, judged from text", "100 skills",
      (64, 100), (7, 18), (20, 82), None, None, None),         # COMPACTION_RELIABILITY.md:303 (set3)
-    # --- D: a running agent
-    ("D", "Guard on agent traces", "37 hazards, 97 safe steps",
-     None, (10, 37), (2, 97), None, None, None),             # INTERACTION_BENCHMARK_REPORT.md:75,176
 ]
 
 
@@ -208,7 +204,7 @@ def fig_usecases():
     handles = [plt.Line2D([], [], marker="o", ls="-", color=NAVY, alpha=0.9,
                           markersize=4, lw=1.0, markeredgecolor="white")]
     fig.legend(handles, ["skillc's rate; the line is its 95% interval"],
-               loc="lower center", ncol=1, bbox_to_anchor=(0.62, -0.02),
+               loc="lower center", ncol=1, bbox_to_anchor=(0.62, -0.06),
                handlelength=1.6)
     # every label must end left of the first panel
     fig.canvas.draw()
@@ -230,9 +226,9 @@ COMPARE = [
      (21, 21), (20, 21), 0, 33047 / 21, 0.03226, 15.18),       # LOCAL_ENVIRONMENT_BENCHMARK.md:44-68
     ("Batches 1 and 4", "168 pairs, run to check",
      (150, 168), (152, 168), 8820, 3471, 0.0082, None),        # I2L_BENCHMARK.md:52-79; checker timed here
-    ("Sample 1", "100 skills, people check",
+    ("Sample 1", "100 skills, AI-labelled",
      (60, 100), (77, 100), None, None, None, None),              # COMPACTION_RELIABILITY.md:78-81
-    ("Sample 2, blind", "100 skills, people check",
+    ("Sample 2", "100 skills, AI-labelled",
      (64, 100), (74, 100), None, None, None, None),              # COMPACTION_RELIABILITY.md:303-307
 ]
 
