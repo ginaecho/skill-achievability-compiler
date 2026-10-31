@@ -83,8 +83,6 @@ def save(fig, name):
 # A metric is (x, n), or None when it does not apply.
 USE_CASES = [
     # --- A: packs read from the environment or written by hand
-    ("A", "Hand-written test packs", "15 packs",
-     (13, 15), (6, 8), (0, 7), None, None, None),            # skillc eval
     ("A", "Pre-flight in a real workspace", "7 tasks, 3 runs each",
      (21, 21), (12, 12), (0, 9), None, None, None),          # LOCAL_ENVIRONMENT_BENCHMARK.md:44-46
     ("A", "Microsoft Agent 365 workflows", "10 workflows, 123 checks",
@@ -336,9 +334,6 @@ def fig_compare():
 # ================================================================ Figure: confusion matrices
 # rows = truth, columns = verdict; counts
 CONF = [
-    ("a  Hand-written corpus", "15 packs",
-     ["achievable", "impossible"], ["ACH", "IMP"],
-     [[7, 0], [2, 6]]),                                   # skillc eval
     ("b  Pre-flight workspace", "21 runs",
      ["feasible", "blocked"], ["ACH", "IMP"],
      [[9, 0], [0, 12]]),                                  # LOCAL_ENVIRONMENT_BENCHMARK.md
@@ -361,8 +356,8 @@ def fig_confusion():
     cw, ch, top = 0.047, 0.168, 0.66
     label_w = 0.082
     x = label_w
-    titles = ["a  Corpus", "b  Pre-flight", "c  Agent 365, static",
-              "d  Batches 1-4, run", "e  Sample 2, blind"]
+    titles = ["a  Pre-flight workspace", "b  Agent 365, static",
+              "c  Batches 1-4, run", "d  Sample 2, AI-labelled"]
     for i, (_, sub, rlab, clab, M) in enumerate(CONF):
         nr, nc = len(M), len(M[0])
         ax = fig.add_axes([x, top - ch * nr, cw * nc, ch * nr])
