@@ -32,9 +32,9 @@ GRID = "#E3E7EC"
 # one accent per use-case category
 CAT = {
     "A": ("#2E7D6B", "No LLM in the loop"),
-    "B": ("#1F3A5F", "Real skills, LLM compaction, labels from blind execution"),
-    "C": ("#7A4E9C", "Real files, LLM compaction, labels from annotators"),
-    "D": ("#8A6D3B", "Watching a running agent"),
+    "B": ("#1F3A5F", "Real skills, run blindly"),
+    "C": ("#7A4E9C", "Real files, annotator labels"),
+    "D": ("#8A6D3B", "A running agent"),
 }
 
 mpl.rcParams.update({
@@ -86,28 +86,28 @@ USE_CASES = [
     # --- A: packs read from the environment or written by hand
     ("A", "Hand-written corpus", "15 packs",
      (13, 15), (6, 8), (0, 7), None, None, None),            # skillc eval
-    ("A", "Pre-flight in a real workspace", "7 workflows, 21 runs",
+    ("A", "Pre-flight, real workspace", "7 workflows, 21 runs",
      (21, 21), (12, 12), (0, 9), None, None, None),          # LOCAL_ENVIRONMENT_BENCHMARK.md:44-46
-    ("A", "Microsoft Agent 365 workflows", "10 workflows, 123 checks",
+    ("A", "Agent 365 workflows", "10 workflows, 123 checks",
      (123, 123), (92, 92), (0, 20), None, None, None),       # AGENT365_CASE_REPORT.md:35-38
     # --- B: real public skills, gpt-5.4 compaction (P2g), labels by blind execution
     ("B", "Held-out + fresh skills", "74 pairs",
      (63, 74), (20, 28), (3, 46), (67, 74), None, None),     # I2L_BENCHMARK.md (all minus gr)
     ("B", "New skills (ext)", "115 pairs",
      (103, 115), (33, 35), (10, 80), None, None, None),      # LIBRARY_TEST.md, test 2
-    ("B", "Diverse skills, 3 runtimes (div)", "164 pairs",
+    ("B", "Diverse skills (div)", "164 pairs",
      (141, 164), (38, 47), (14, 117), None, None, None),     # DIVERSITY_TEST.md, Q1
-    ("B", "Fresh blind skills (gr)", "94 pairs",
+    ("B", "Fresh skills (gr)", "94 pairs",
      (87, 94), (31, 35), (3, 59), (85, 94), None, None),     # P2G_GROUNDED_TEST.md; I2L arm D
     ("B", "All four sets, pooled", "447 pairs",
      (394, 447), (122, 145), (30, 302), None, None, None),   # sums of the four rows
     # --- C: real files, gpt-5.4 compaction, annotator labels (session runtime)
-    ("C", "set2: 70 SKILL.md + 30 agent files", "88 decided of 100",
+    ("C", "set2", "88 decided of 100 files",
      (60, 88), (7, 31), (11, 69), (77, 97), (29, 31), (18, 69)),   # COMPACTION_RELIABILITY.md:78-82
-    ("C", "set3: 100 new files, blind labels", "93 decided of 100",
-     (75, 93), (8, 18), (8, 82), (74, 96), (16, 18), (20, 82)),    # COMPACTION_RELIABILITY.md:303-307
+    ("C", "set3, blind labels", "94 decided of 100 files",
+     (64, 94), (7, 18), (20, 82), (74, 96), (16, 18), (20, 82)),   # COMPACTION_RELIABILITY.md:303,307
     # --- D: a running agent
-    ("D", "Runtime guard, blind incident traces", "37 hazards, 97 benign steps",
+    ("D", "Runtime guard", "37 hazards, 97 benign steps",
      None, (10, 37), (2, 97), None, None, None),             # INTERACTION_BENCHMARK_REPORT.md:75,176
 ]
 
@@ -128,14 +128,14 @@ def fig_usecases():
     ymax = y - 0.5
 
     fig = plt.figure(figsize=(5.5, 3.95))
-    left, top, bot = 0.335, 0.915, 0.085
-    w, gap = 0.205, 0.022
+    left, top, bot = 0.262, 0.915, 0.085
+    w, gap = 0.222, 0.032
     axes = [fig.add_axes([left + i * (w + gap), bot, w, top - bot]) for i in range(3)]
     titles = ["Correct verdicts", "Blocked cases caught", "Working cases refuted"]
     subt = ["%, higher is better", "%, higher is better", "%, lower is better"]
     cols = [3, 4, 5]
     base_cols = [6, 7, 8]
-    xlims = [(0.35, 1.0), (0.0, 1.0), (0.0, 0.32)]
+    xlims = [(0.35, 1.0), (0.0, 1.0), (0.0, 0.36)]
     xticks = [([0.4, 0.6, 0.8, 1.0], ["40", "60", "80", "100"]),
               ([0, 0.25, 0.5, 0.75, 1.0], ["0", "25", "50", "75", "100"]),
               ([0, 0.1, 0.2, 0.3], ["0", "10", "20", "30"])]
@@ -213,6 +213,13 @@ def fig_usecases():
                          "direct LLM verdict on the same cases"],
                loc="lower center", ncol=2, bbox_to_anchor=(0.66, -0.02),
                handlelength=1.6, columnspacing=1.6)
+    # every label must end left of the first panel
+    fig.canvas.draw()
+    rend = fig.canvas.get_renderer()
+    limit = axes[0].get_window_extent(rend).x0
+    for t in fig.texts:
+        ext = t.get_window_extent(rend)
+        assert ext.x1 < limit - 2, f"label overlaps the plot: {t.get_text()!r}"
     save(fig, "fig_usecases")
 
 
@@ -232,8 +239,8 @@ CONF = [
      ["achieved", "blocked"], ["ACH", "IMP"],
      [[272, 30], [23, 122]]),                             # div + ext + gr + held-out/fresh
     ("e  set3, blind labels", "100 files",
-     ["achievable", "blocked"], ["ACH", "IMP", "UNK"],
-     [[67, 8, 7], [10, 8, 0]]),                           # COMPACTION_RELIABILITY.md:306
+     ["achievable", "blocked"], ["ACH", "IMP", "none"],
+     [[57, 20, 5], [10, 7, 1]]),                          # COMPACTION_RELIABILITY.md:303
 ]
 
 
@@ -276,7 +283,7 @@ def fig_confusion():
         fig.text(x - label_w + 0.008, 0.865, sub, fontsize=5.4, color=MUTED, va="top")
         x += cw * nc + label_w + 0.024
     fig.text(0.5, 0.02, "Rows: truth.  Columns: skillc's verdict "
-             "(ACH achievable, IMP impossible, UNK unknown: an abstention).  "
+             "(ACH achievable, IMP impossible, UNK unknown, none: no verdict).  "
              "Percentages are of the row.", ha="center", fontsize=5.3, color=MUTED)
     save(fig, "fig_confusion")
 
@@ -286,7 +293,7 @@ def fig_confusion():
 PAIRED = [
     ("Real skills, executed (168 pairs)", (51, 63, 6, 105), (50, 63, 3, 105)),   # I2L_BENCHMARK.md
     ("set2, annotator labels (100 files)", (7, 31, 11, 69), (29, 31, 18, 69)),   # COMPACTION_RELIABILITY.md:78-81
-    ("set3, blind labels (100 files)", (8, 18, 8, 82), (16, 18, 20, 82)),        # COMPACTION_RELIABILITY.md:303-307
+    ("set3, blind labels (100 files)", (7, 18, 20, 82), (16, 18, 20, 82)),       # COMPACTION_RELIABILITY.md:303,307
 ]
 
 
