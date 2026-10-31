@@ -101,6 +101,7 @@
 \fi
 \newcommand{\enew}{\endgroup}
 \newcommand{\new}[1]{{\bnew #1\enew}}
+\newcommand{\revcol}{\ifrevmarks\leavevmode\color{revblue}\fi}
 
 
 \title{Can This Agent Even Do That?\\
@@ -134,23 +135,23 @@ effects, goals, and protocol structure, which is then checked deterministically.
 A Coq-verified abstraction theorem\new{, together with a mechanized lemma that
 ties it to the checker's symbolic search,} guarantees that an \emph{impossible}
 verdict is correct for the formal pack being checked.
-\bnew On a hand-written corpus of 15 packs, the checker never refutes an
-achievable goal; its only two wrong \emph{achievable} answers are planted cases
-outside the static guarantee. We then measure the whole pipeline. On 7 local
-workflows (63 trials) the check stopped all 12 blocked trials before any task
-step and used no model tokens, while two LLM baselines stopped 7 and 9. On 42
-public skills it names the 6 that cannot run in Claude Code because a tool is
-missing under every name. Used as a gate around running agents, it matched 123
-of 123 expected outcomes in Microsoft Agent 365, and it prevented every
-unapproved send when the policy was removed from a hosted agent's prompt. On
-200 real skill and agent files compacted by gpt-5.4, it refutes safely but
-misses most blocked files: on a blind set, fixes cut false refutations from
-24\% to 1\%, but recall is 11\%, against 89\% for a direct LLM verdict that
-gives no witness. The measured token saving on blocked files is $1.58\times$,
-far below the $87\times$ that our earlier cost model predicted. The check is
-cheap, explained, and safe in the refutation direction; its weak point is
-recall, which depends on how completely the compaction states what a skill
-needs.\enew
+\bnew On a hand-written corpus of 15 packs it refutes no achievable goal;
+its only two wrong \emph{achievable} answers are planted cases outside the
+static guarantee. We then evaluate it on every real use case we have run.
+With the pack read from the environment, it gave the correct verdict in
+$100\%$ over 21 pre-flight runs in a real workspace, with no model tokens, and
+in $100\%$ over 123 checks in Microsoft Agent 365 workflows. On 447 real
+public skills compacted by gpt-5.4 and labelled by blind execution, it was
+right in $88\%$, caught $84\%$ over 145 blocked skills and wrongly refuted
+$10\%$ over 302 working ones, close to a direct LLM verdict that gives no
+witness. Where what blocks a file is rarely written in it, recall falls to
+$44\%$ over 18 blocked files, against $89\%$ for the direct verdict, which
+refutes $24\%$ of working files to skillc's $10\%$. As a gate around a hosted
+agent it prevented every unapproved send ($0\%$ over 21 runs, against $10\%$
+ungated). The measured token saving is $1.58\times$, far below the $87\times$
+that our earlier cost model predicted. The check is cheap, explained, and safe
+in the refutation direction; its weak point is recall, which depends on how
+completely the compaction states what a skill needs.\enew
 \end{abstract}
 
 \section{Introduction}\label{sec:introduction}
@@ -283,7 +284,7 @@ remain finite.\egc
 
 
 \item \textbf{An implementation and evaluation}
-(Sections~\ref{sec:implementation}--\ref{sec:evaluation}). We implement the checker together with an LLM-compaction front-end and a schema gate, and evaluate it on a corpus covering the main failure modes. The results are consistent with the theoretical guarantees: we observe no false impossibility verdicts, while every false achievability verdict falls into one of the two deferred cases. \bnew We also measure the full pipeline on real files with a named model and baselines, in local pre-flight checks, across agent runtimes, and as a gate in two agent hosts, and we report where it falls short (Figures~\ref{fig:capabilities}--\ref{fig:tradeoff}).\enew
+(Sections~\ref{sec:implementation}--\ref{sec:evaluation}). We implement the checker together with an LLM-compaction front-end and a schema gate, and evaluate it on a corpus covering the main failure modes. The results are consistent with the theoretical guarantees: we observe no false impossibility verdicts, while every false achievability verdict falls into one of the two deferred cases. \bnew We also measure skillc on every real use case we have run, from pre-flight checks and agent hosts to 447 real skills labelled by blind execution, with a named model and baselines, and we report where it falls short (Figures~\ref{fig:usecases}--\ref{fig:confusion}).\enew
 
 \end{enumerate}
 
@@ -460,50 +461,27 @@ checker reports the missing role instead of leaving the assumption implicit.
 
 \section{Evaluation}\label{sec:evaluation}
 
-\bnew We ask four questions. Is the checker right on packs whose answer we
-know (Q1)? What does it catch in realistic settings (Q2)? How well does the
-whole pipeline, with LLM compaction, work on real files, compared with simpler
-baselines (Q3)? What does it cost (Q4)? Every number below is taken from a
-measured run documented in the artifact, with its set, labels and protocol;
-model runs use gpt-5.4.\enew
+\bnew We evaluate skillc on every real use case we have run, in four
+categories (Figure~\ref{fig:usecases}; Appendix~\ref{app:usecases} lists each
+one with its source, size and labels). A rate is written as a percentage over
+the number of tests, for example $100\%$ over 123 checks, and drawn with a
+Wilson 95\% interval. Figure~\ref{fig:confusion} gives the confusion matrices
+where every case has a label. Model runs use gpt-5.4.\enew
 
 \paragraph{\new{Q1: the hand-written corpus.}}
-We assembled a corpus of 15 skills covering the main failure modes:
-hallucinated planning, retry-forever loops, coordination deadlock, and
-refinement violations. The corpus also includes achievable controls with
-detours and informed branches, plus two deliberately \emph{spurious} cases
-for the deferred checks. Each skill has a ground-truth semantic label; the
-positive class is \emph{achievable}. Evaluation is deterministic and CPU-only:
-it requires no training or live model inference, completes the 15-case matrix
-in under one second on a commodity laptop, and gives each individual Z3 query
-a 10-second timeout.
-
-\begin{center}\small
-\begin{tabular}{@{}lcc@{}}
-\toprule
-& predicted achievable & predicted impossible\\
-\midrule
-truly achievable & \new{$\mathrm{TP}=7$} & $\mathrm{FN}=0$\\
-truly impossible & $\mathrm{FP}=2$ & \new{$\mathrm{TN}=6$}\\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\noindent Two claims, both confirmed. \textbf{Soundness}: $\mathrm{FN}=0$ ---
-no achievable goal was wrongly refuted, consistent with Theorem~\ref{thm:ref}
-(achievability recall \new{$7/7=100\%$}). \textbf{Incompleteness, contained}:
-$\mathrm{FP}=2$, and both are the planted spurious cases --- one a false
-payload post-condition (Layer-C obligation), and one an under-specified goal
-(intent edge). \bnew Compared with the submitted version, one case changed
-label after a hand check: in \id{deadlock\_unobserved} the goal is reachable,
-but the protocol is rejected (\id{nonconformant\_handler} in the six-case suite
-below changed in the same way). The protocol part of the verdict is scored
-separately: 11 of 11 checked cases are correct, with no false and no missed
-rejection; 4 cases are refuted before the protocol check runs.\enew\
-No structural failure was missed in this proof-of-concept
-corpus. This is evidence of coverage, not a proof that these are the only
-possible failure modes. Each refutation reason matches its intended failure
-mode:
+\bnew The corpus has 15 packs covering hallucinated planning, retry-forever
+loops, coordination deadlock and refinement violations, plus achievable
+controls with detours and informed branches, and two planted cases that the
+static check is not meant to decide. The check is deterministic, runs on a CPU
+in under a second, and gives each Z3 query a 10-second timeout. No achievable
+goal is refuted ($0\%$ over 7 achievable packs, Figure~\ref{fig:confusion}a),
+as Theorem~\ref{thm:ref} predicts. The two wrong \textsc{Achievable} answers
+are exactly the planted cases: a false payload post-condition (a runtime
+obligation) and a goal that does not capture what the user meant. One label
+changed after a hand check: in \id{deadlock\_unobserved} the goal is
+reachable but the protocol is rejected. The protocol part of the verdict is
+right in $100\%$ over 11 checked packs. Each refutation names its failure
+mode:\enew
 
 \begin{center}\small
 \begin{tabular}{@{}ll@{}}
@@ -519,105 +497,95 @@ refinement violation --- budget unsatisfiable on every run & \textsc{Goal\_Unsat
 \end{tabular}
 \end{center}
 
-A separate six-case suite tests behavior not covered by the main matrix:
-tail-recursive retry and non-terminating control, adding new participants during
-execution, refutation that remains valid when new participants are added, and
-conformant versus non-conformant declared role behavior. It yields \new{three
-\textsc{Achievable} (one of them with its protocol rejected), two
-\textsc{Impossible}}, and one \textsc{Unknown}. The
-abstention is reported separately rather than counted as a false negative
-because \textsc{Unknown} makes no refutation claim. Together the suites contain
-21 declared packs; the 15-case matrix remains the only binary ground-truth
-matrix.
+\noindent\new{A six-case suite adds loops, participants added during execution
+and role conformance; it gives three \textsc{Achievable} (one with its
+protocol rejected), two \textsc{Impossible} and one \textsc{Unknown}.}
 
 \bnew
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figures/eval/fig_capabilities.pdf}
-\caption{\textcolor{revblue}{What skillc does in three measured settings.
-(a)~Seven local workflows, three methods, three runs each: skillc gives a
-correct verdict every time, stops all 12 blocked trials before any task step,
-and uses no model tokens; the LLM baselines make no wrong definite claim but
-abstain more and start work before stopping. (b)~42 public skills checked for
-two runtimes; each refutation names the missing tool. (c)~As a gate in Agent
-365 and around a hosted agent whose prompt no longer states the approval
-policy.}}
-\label{fig:capabilities}
+\includegraphics[width=\linewidth]{figures/eval/fig_usecases.pdf}
+\caption{\textcolor{revblue}{skillc on every real use case, grouped by how the
+pack is made and how the truth is known. Each dot is a rate over the number of
+cases shown under the name, with a 95\% interval; a hollow diamond is a
+direct gpt-5.4 verdict on the same cases, where one was run. ``Blocked cases
+caught'' is the share of cases that cannot run which skillc refutes; ``working
+cases refuted'' is the share of cases that can run which it wrongly calls
+impossible. In A the 7 and 9 working cases give wide intervals around
+$0\%$.}}
+\label{fig:usecases}
 \end{figure}
-
-\paragraph{Q2: what the checker catches in practice.}
-Figure~\ref{fig:capabilities} collects three settings in which the pack is
-taken from the environment rather than guessed by a model. \emph{Pre-flight
-in a real workspace} (a): seven bounded workflows, from release reports to
-Word and Excel export, with the prerequisites probed automatically and the
-operation graph written by hand. All three methods avoided false definite
-claims; skillc was the only one that never abstained and never started work on
-a blocked request, at a median of 32\,ms instead of 15--17\,s per decision. In
-the branching case it also reports which parts of a blocked request are still
-feasible. \emph{Portability across runtimes} (b): a skill names the tools of
-the runtime it was written for, so the same file can be achievable in one
-runtime and impossible in another. \emph{A gate around a running agent} (c):
-in a tool-call path (Agent 365 with Agent Framework middleware, or Claude Code
-and Copilot hooks) a refused call does not run, whatever the model was told.
-These three settings use packs that are read deterministically or written
-by hand; the next question removes that help.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\linewidth]{figures/eval/fig_tradeoff.pdf}
-\caption{\textcolor{revblue}{The full pipeline on real files with gpt-5.4
-compaction, against simpler baselines: blocked files caught (up) against
-working files wrongly called impossible (left is better), first compaction
-sample. (a)~set2, labels verified by read-only probes (31 of 100 blocked).
-(b)~set3, new files labelled blind (18 of 100 blocked); the arrow shows the
-effect of the fixes found on set2.}}
-\label{fig:tradeoff}
+\includegraphics[width=\linewidth]{figures/eval/fig_confusion.pdf}
+\caption{\textcolor{revblue}{Confusion matrices for the use cases where every
+case has a label. (a)~The two missed impossible packs are the planted cases
+outside the static guarantee. (d)~Pooled over the four sets of category B.
+(e)~The default front-end (compaction with fixes, plus the requirement
+reader) on set3.}}
+\label{fig:confusion}
 \end{figure}
 
-\paragraph{Q3: real files, LLM compaction, and baselines.}
-The reviews of the submitted version pointed out that compaction, the
-untrusted step, was never measured. We measured it on 100 real files (set2:
-70 public SKILL.md and 30 agent files, labelled by annotators whose labels
-were verified by read-only probes; 31 cannot run in the test environment),
-with five gpt-5.4 samples per file. The schema gate accepted 67.8\% of first
-replies and 92.4\% after one retry; all five samples agreed on 39\% of files
-(Fleiss' $\kappa=0.26$). A separate Claude judge found no invented tool in 91\%
-and no invented ordering in 90\% of packs, but an omitted mandatory step in
-37\%. Figure~\ref{fig:tradeoff}a places skillc against four baselines on the
-same files: a plain planner over the capability layer only, a lint for
-withdrawn tools, and a direct LLM verdict from two model families. On this set,
-the protocol layer added nothing to accuracy (skillc and the planner differ on
-2 of 88 files), and skillc refuted 11 of 69 working files. We read the refuted
-packs, fixed eight classes of compaction defects, and validated the fixes on a
-fresh, blind set (set3, Figure~\ref{fig:tradeoff}b). False refutations fell
-from 50 to 2 of 246 pooled samples, but recall fell from 41\% to 7\%. A
-deterministic requirement reader, which looks for commands, imports, credential
-variables and tool names that the environment marks as unavailable, restores
-recall to 44\% at 9.3\% false refutations; it is now the default front-end.
+\paragraph{Q2: real use cases.}
+\emph{A.~No LLM in the loop.} The pack is read from the environment or
+written by hand. In a real workspace, seven workflows (from release reports to
+Word and Excel export), each run three times with the prerequisites probed
+automatically: skillc gave the correct verdict in $100\%$ over 21 runs,
+stopped $100\%$ over 12 blocked runs before any task step, used no model
+tokens and took a median of 32\,ms. A plain and a guided gpt-5.4 agent gave
+the correct verdict in $95\%$ and $90\%$ over 21 runs (they abstained, never
+erred) and stopped early in $58\%$ and $75\%$ over 12. In ten published
+Microsoft Agent 365 workflows, $100\%$ over 123 checks (63 static, 60 runtime)
+gave the expected result, and $0\%$ over 50 denied calls reached a tool.
 
-The direct LLM verdict remains more sensitive (16 of 18 blocked files on set3)
-and is a reported baseline. What skillc adds is the form of the answer: a
-refutation names its reason and its blocking frontier, an achievable verdict
-carries a witness path, and the same pack always gives the same verdict. On a
-labelled set of 132 topics, each written as a SKILL.md, an agent file and a
-prompt (345 scored inputs), gpt-5.4 compaction followed by the checker was right
-in 149 of its 152 \textsc{Impossible} verdicts and caught 149 of 189 impossible
-inputs; the deterministic reader alone was right in all 36 of its
-\textsc{Impossible} verdicts but caught only 36. These topics were written for
-the benchmark, and the tool was improved while looking at these results, so
-these numbers are likely optimistic.
+\emph{B.~Real skills, LLM compaction, labels from blind execution.} Four
+disjoint sets of public skills, 447 skill--runtime pairs in sandbox
+runtimes, were run by an agent that did not see skillc's verdict; a pair is
+blocked when the run met a missing tool, account, network access or safety
+rule. With the compaction prompt in use at the time, skillc was right in
+$88\%$ over 447 pairs, caught $84\%$ over 145 blocked pairs, and refuted
+$10\%$ over 302 working pairs (Figure~\ref{fig:confusion}d). On the 168 pairs
+where a direct gpt-5.4 verdict was also run, the two are close: $89\%$ and
+$90\%$ correct (Figure~\ref{fig:paired}).
+
+\emph{C.~Real files, LLM compaction, labels from annotators.} In the session
+runtime of set2 and set3, what blocks a file is rarely written in it (a
+refused host, a GPU, an account), and recall drops to $23\%$ over 31 and
+$44\%$ over 18 blocked files. A direct LLM verdict catches $94\%$ and $89\%$,
+but refutes $26\%$ and $24\%$ of working files, against $16\%$ over 69 and
+$10\%$ over 82 for skillc. On 429 further public files with no labels, a
+person checked each refutation: $72\%$ over 110 were right with gpt-5.4
+compaction, and $82\%$ over 39 with the deterministic reader alone.
+
+\emph{D.~A running agent.} In a hosted Agent Framework agent whose prompt no
+longer states the approval policy, the bare agent sent an unapproved report
+in $10\%$ over 21 runs and the gated agent in $0\%$ over 21. A guard that
+also reads the agent's reasoning caught $27\%$ over 37 hazards in blind
+incident traces and flagged $2\%$ over 97 benign steps.
+
+\paragraph{Q3: how reliable is compaction?}
+The reviews of the submitted version pointed out that compaction, the
+untrusted step, was never measured. On set2, with five samples per file, the
+schema gate accepted $68\%$ over 500 first replies and $92\%$ after one retry;
+all five samples agreed on $39\%$ over 100 files. A separate Claude judge found
+no invented tool in $91\%$ and no invented ordering in $90\%$ of packs, but an
+omitted mandatory step in $37\%$. Fixes made after reading the refuted packs
+cut false refutations on set3 from $20\%$ to $1\%$ over 246 samples, at the
+cost of recall; the deterministic requirement reader restores it to $44\%$.
+What skillc adds over a direct verdict is the form of the answer: a refutation
+names its reason and its blocking frontier, an achievable verdict carries a
+witness path, and the same pack always gives the same verdict.
 
 \paragraph{Q4: what the check costs.}
 The checker itself uses no model tokens; only compaction does, once per skill
 version. The submitted version reported an $87\times$ saving from a cost model.
-We have now measured it (Figure~\ref{fig:cost} in
-Appendix~\ref{app:tokens}). On 31 blocked files, an ungated gpt-5.4 agent used
-a median of 9{,}486 tokens before it stopped, against 6{,}289 for compaction
-and check: a saving of $1.58\times$ (95\% CI $1.01$--$2.11$). The agent gave up
-after about two turns, so the quadratic growth the model assumed never
-happened. On working files the check costs about a third of one run. The case
-for the check is therefore not cost but outcome: on 10 of the 31 blocked files
-the ungated agent reported that it had succeeded.
+Measured on 31 blocked files (Figure~\ref{fig:cost}), an ungated gpt-5.4 agent
+used a median of 9{,}486 tokens before it stopped, against 6{,}289 for
+compaction and check: a saving of $1.58\times$ (95\% CI $1.01$--$2.11$). On
+working files the check costs about a third of one run. The case for the
+check is outcome, not cost: on $32\%$ over 31 blocked files the ungated agent
+reported success on a task that could not be done.
 \enew
 
 \section{Related Work}\label{sec:related}
@@ -1765,6 +1733,63 @@ cheap negative labels for automated skill or prompt search without an LLM judge,
 while the intent-fidelity checkpoint keeps the irreducible semantic decision
 with a human. We treat such search as an application of the verifier, not as a
 contribution evaluated here.
+
+\bnew
+\section{All real use cases}\label{app:usecases}
+Table~\ref{tab:usecases} lists every real use case we have run, including those
+without labels, which Figure~\ref{fig:usecases} cannot show. A rate is a
+percentage over the number of tests in the ``Size'' column unless stated.
+``Real'' means that the skills, workflows, files or agent runs were not written
+for this paper; the hand-written corpus is included for completeness. The
+reports behind each row are in the artifact's \id{docs} folder.
+
+\begin{table}[h]
+\centering\scriptsize
+\renewcommand{\arraystretch}{1.12}
+\begin{tabular}{@{}>{\revcol}c >{\revcol}p{3.3cm} >{\revcol}p{2.0cm} >{\revcol}p{2.15cm} >{\revcol}p{4.6cm}@{}}
+\toprule
+& \textbf{Use case} & \textbf{Size} & \textbf{How truth is known} & \textbf{skillc result}\\
+\midrule
+A & Hand-written corpus & 15 packs & written with the packs & correct $87\%$; working refuted $0\%$ over 7\\
+A & Pre-flight in a real workspace & 7 workflows, 21 runs & probed prerequisites & correct $100\%$; blocked stopped early $100\%$ over 12; 0 tokens\\
+A & Microsoft Agent 365 workflows & 10 workflows, 123 checks & published workflows & expected result $100\%$; denied calls reaching a tool $0\%$ over 50\\
+A & Public skills in two runtimes & 42 skills $\times$ 2 & runtime tool lists & achievable in claude.ai $100\%$; refuted in Claude Code $14\%$ (6), each naming a missing tool\\
+\midrule
+B & Held-out and fresh skills & 74 pairs & blind execution & correct $85\%$ (direct LLM $91\%$)\\
+B & New skills (ext) & 115 pairs & blind execution & correct $90\%$; caught $94\%$ over 35\\
+B & Diverse skills, 3 runtimes (div) & 164 pairs & blind execution & correct $86\%$; caught $81\%$ over 47\\
+B & Fresh blind skills (gr) & 94 pairs & blind execution & correct $93\%$ (direct LLM $90\%$); refuted $5\%$ over 59\\
+\midrule
+C & set2: SKILL.md and agent files & 100 files & annotators, probe-checked & correct $68\%$ over 88 decided; caught $23\%$ over 31\\
+C & set3: new files & 100 files & blind annotators & correct $81\%$ over 93 decided; caught $44\%$ over 18\\
+C & Public skills, agents, prompts & 429 files & refutations checked by hand & refutations right $72\%$ over 110 (reader alone $82\%$ over 39)\\
+C & Microsoft Scout skills & 70 SKILL.md & none & valid pack $96\%$; achievable $69\%$, impossible $27\%$\\
+C & Agent 365 workflows, compacted & 195 checks & published workflows & expected result $97\%$ with the environment's state names; $0\%$ without\\
+C & Hosted finance agent, compacted & 9 configurations & all are correct & wrongly refuted $67\%$ before fixes, $0\%$ after\\
+C & Token cost & 62 files of set2 & metered model calls & saving $1.58\times$ on blocked files; ungated agent claimed success on $32\%$ over 31\\
+\midrule
+D & Hosted agent gate, policy removed & 21 runs per arm & logged sends & unapproved sends $0\%$ (ungated $10\%$)\\
+D & Runtime guard on reasoning & 37 hazards, 97 benign & blind incident traces & caught $27\%$; benign flagged $2\%$\\
+D & Runtime monitor, headless Claude Code & 4 scenarios & scripted & as intended in all 4: approved a feasible plan, refused an impossible deploy and a prohibited push, revoked a plan when a program was missing\\
+\bottomrule
+\end{tabular}
+\caption{\textcolor{revblue}{Every real use case, by category: A, no LLM in the
+loop; B, real skills with LLM compaction, labelled by blind execution; C, real
+files or workflows with LLM compaction, labelled by annotators, by hand or not
+at all; D, watching a running agent.}}
+\label{tab:usecases}
+\end{table}
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/eval/fig_paired.pdf}
+\caption{\textcolor{revblue}{skillc against a direct gpt-5.4 verdict on the
+same cases. On real skills labelled by execution the two are close; where the
+blocker is rarely written in the file (set2, set3), the direct verdict catches
+more blocked files but also refutes more working ones, and gives no witness.}}
+\label{fig:paired}
+\end{figure}
+\enew
 
 \section{Token economics of pre-execution refutation}\label{app:tokens}
 
