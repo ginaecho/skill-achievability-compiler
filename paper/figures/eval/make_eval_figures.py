@@ -32,9 +32,9 @@ GRID = "#E3E7EC"
 # one accent per use-case category
 CAT = {
     "A": ("#2E7D6B", "No LLM in the loop"),
-    "B": ("#1F3A5F", "Real skills, run blindly"),
-    "C": ("#7A4E9C", "Real files, annotator labels"),
-    "D": ("#8A6D3B", "A running agent"),
+    "B": ("#1F3A5F", "LLM writes the pack; truth by running"),
+    "C": ("#7A4E9C", "LLM writes the pack; truth by people"),
+    "D": ("#8A6D3B", "Watching a running agent"),
 }
 
 mpl.rcParams.update({
@@ -84,30 +84,30 @@ def save(fig, name):
 # A metric is (x, n), or None when it does not apply.
 USE_CASES = [
     # --- A: packs read from the environment or written by hand
-    ("A", "Hand-written corpus", "15 packs",
+    ("A", "Hand-written test packs", "15 packs",
      (13, 15), (6, 8), (0, 7), None, None, None),            # skillc eval
-    ("A", "Pre-flight, real workspace", "7 workflows, 21 runs",
+    ("A", "Pre-flight in a real workspace", "7 tasks, 3 runs each",
      (21, 21), (12, 12), (0, 9), None, None, None),          # LOCAL_ENVIRONMENT_BENCHMARK.md:44-46
-    ("A", "Agent 365 workflows", "10 workflows, 123 checks",
+    ("A", "Microsoft Agent 365 workflows", "10 workflows, 123 checks",
      (123, 123), (92, 92), (0, 20), None, None, None),       # AGENT365_CASE_REPORT.md:35-38
-    # --- B: real public skills, gpt-5.4 compaction (P2g), labels by blind execution
-    ("B", "Held-out + fresh skills", "74 pairs",
-     (63, 74), (20, 28), (3, 46), (67, 74), None, None),     # I2L_BENCHMARK.md (all minus gr)
-    ("B", "New skills (ext)", "115 pairs",
-     (103, 115), (33, 35), (10, 80), None, None, None),      # LIBRARY_TEST.md, test 2
-    ("B", "Diverse skills (div)", "164 pairs",
-     (141, 164), (38, 47), (14, 117), None, None, None),     # DIVERSITY_TEST.md, Q1
-    ("B", "Fresh skills (gr)", "94 pairs",
-     (87, 94), (31, 35), (3, 59), (85, 94), None, None),     # P2G_GROUNDED_TEST.md; I2L arm D
-    ("B", "All four sets, pooled", "447 pairs",
+    # --- B: public skills, LLM compaction, truth from running each skill blindly
+    ("B", "Batch 1 of public skills", "74 skill-runtime pairs",
+     (63, 74), (20, 28), (3, 46), None, None, None),         # I2L_BENCHMARK.md (held-out + fresh)
+    ("B", "Batch 2", "115 pairs",
+     (103, 115), (33, 35), (10, 80), None, None, None),      # LIBRARY_TEST.md, test 2 (ext)
+    ("B", "Batch 3, three runtimes", "164 pairs",
+     (141, 164), (38, 47), (14, 117), None, None, None),     # DIVERSITY_TEST.md, Q1 (div)
+    ("B", "Batch 4", "94 pairs",
+     (87, 94), (31, 35), (3, 59), None, None, None),         # P2G_GROUNDED_TEST.md (gr)
+    ("B", "All four batches", "447 pairs",
      (394, 447), (122, 145), (30, 302), None, None, None),   # sums of the four rows
-    # --- C: real files, gpt-5.4 compaction, annotator labels (session runtime)
-    ("C", "set2", "88 decided of 100 files",
-     (60, 88), (7, 31), (11, 69), (77, 97), (29, 31), (18, 69)),   # COMPACTION_RELIABILITY.md:78-82
-    ("C", "set3, blind labels", "94 decided of 100 files",
-     (64, 94), (7, 18), (20, 82), (74, 96), (16, 18), (20, 82)),   # COMPACTION_RELIABILITY.md:303,307
+    # --- C: public skills, LLM compaction, truth from annotators (session runtime)
+    ("C", "Sample 1 of public skills", "100 skills",
+     (60, 100), (7, 31), (11, 69), None, None, None),         # COMPACTION_RELIABILITY.md:78 (set2)
+    ("C", "Sample 2, labelled blind", "100 skills",
+     (64, 100), (7, 18), (20, 82), None, None, None),         # COMPACTION_RELIABILITY.md:303 (set3)
     # --- D: a running agent
-    ("D", "Runtime guard", "37 hazards, 97 benign steps",
+    ("D", "Guard on agent traces", "37 hazards, 97 safe steps",
      None, (10, 37), (2, 97), None, None, None),             # INTERACTION_BENCHMARK_REPORT.md:75,176
 ]
 
@@ -127,9 +127,9 @@ def fig_usecases():
         y += 1.0
     ymax = y - 0.5
 
-    fig = plt.figure(figsize=(5.5, 3.95))
-    left, top, bot = 0.262, 0.915, 0.085
-    w, gap = 0.222, 0.032
+    fig = plt.figure(figsize=(5.5, 3.6))
+    left, top, bot = 0.345, 0.915, 0.085
+    w, gap = 0.200, 0.027
     axes = [fig.add_axes([left + i * (w + gap), bot, w, top - bot]) for i in range(3)]
     titles = ["Correct verdicts", "Blocked cases caught", "Working cases refuted"]
     subt = ["%, higher is better", "%, higher is better", "%, lower is better"]
@@ -206,13 +206,10 @@ def fig_usecases():
                  color=MUTED)
 
     handles = [plt.Line2D([], [], marker="o", ls="-", color=NAVY, alpha=0.9,
-                          markersize=4, lw=1.0, markeredgecolor="white"),
-               plt.Line2D([], [], marker="D", ls="", markersize=4,
-                          markerfacecolor="white", markeredgecolor=AMBER)]
-    fig.legend(handles, ["skillc, with 95% interval",
-                         "direct LLM verdict on the same cases"],
-               loc="lower center", ncol=2, bbox_to_anchor=(0.66, -0.02),
-               handlelength=1.6, columnspacing=1.6)
+                          markersize=4, lw=1.0, markeredgecolor="white")]
+    fig.legend(handles, ["skillc's rate; the line is its 95% interval"],
+               loc="lower center", ncol=1, bbox_to_anchor=(0.62, -0.02),
+               handlelength=1.6)
     # every label must end left of the first panel
     fig.canvas.draw()
     rend = fig.canvas.get_renderer()
@@ -221,6 +218,123 @@ def fig_usecases():
         ext = t.get_window_extent(rend)
         assert ext.x1 < limit - 2, f"label overlaps the plot: {t.get_text()!r}"
     save(fig, "fig_usecases")
+
+
+# ================================================================ Figure: skillc vs a direct LLM verdict
+# Same cases, gpt-5.4.  Accuracy = verdicts matching the truth, over decided cases.
+# Tokens and time are per decision; None = not measured.
+COMPARE = [
+    # name, size, (skillc correct, n), (LLM correct, n), skillc tokens, LLM tokens,
+    # skillc seconds, LLM seconds, note on what skillc's tokens are
+    ("Real workspace, 7 tasks", "21 runs, no LLM",
+     (21, 21), (20, 21), 0, 33047 / 21, 0.03226, 15.18),       # LOCAL_ENVIRONMENT_BENCHMARK.md:44-68
+    ("Batches 1 and 4", "168 pairs, run to check",
+     (150, 168), (152, 168), 8820, 3471, 0.0082, None),        # I2L_BENCHMARK.md:52-79; checker timed here
+    ("Sample 1", "100 skills, people check",
+     (60, 100), (77, 100), None, None, None, None),              # COMPACTION_RELIABILITY.md:78-81
+    ("Sample 2, blind", "100 skills, people check",
+     (64, 100), (74, 100), None, None, None, None),              # COMPACTION_RELIABILITY.md:303-307
+]
+
+
+def fig_compare():
+    fig = plt.figure(figsize=(5.5, 1.95))
+    left, top, bot = 0.215, 0.80, 0.17
+    w, gap = 0.24, 0.025
+    axes = [fig.add_axes([left + i * (w + gap), bot, w, top - bot]) for i in range(3)]
+    n = len(COMPARE)
+    ys = list(range(n))
+    titles = ["a  Accuracy", "b  Tokens per decision", "c  Time per decision"]
+    subs = ["% of all cases right", "log scale; 0 drawn at left", "log scale, seconds"]
+    for k, ax in enumerate(axes):
+        ax.set_ylim(n - 0.45, -0.6)
+        ax.set_yticks([])
+        for side in ("top", "right", "left"):
+            ax.spines[side].set_visible(False)
+        ax.grid(axis="x", color=GRID, lw=0.6, zorder=0)
+        ax.set_axisbelow(True)
+        ax.set_title(titles[k], fontsize=7.0, pad=9)
+        ax.text(0, 1.02, subs[k], transform=ax.transAxes, fontsize=5.4, color=MUTED)
+        for y in ys:
+            ax.axhspan(y - 0.46, y + 0.46, color="#1F3A5F", alpha=0.035, lw=0, zorder=0)
+    # a: accuracy
+    ax = axes[0]
+    ax.set_xlim(0.5, 1.02)
+    ax.set_xticks([0.5, 0.75, 1.0], ["50", "75", "100"])
+    for y, row in enumerate(COMPARE):
+        (sx, sn), (dx, dn) = row[2], row[3]
+        sv, dv = sx / sn, dx / dn
+        ax.plot([sv, dv], [y, y], color="#C9D1DA", lw=2.2, zorder=2)
+        ax.scatter(sv, y, s=30, color=NAVY, zorder=4, edgecolor="white", lw=0.6)
+        ax.scatter(dv, y, s=26, marker="D", facecolor="white", edgecolor=AMBER, lw=1.0, zorder=4)
+        lo_first = sv <= dv
+        ax.text(sv, y - 0.34, f"{100 * sv:.0f}", ha="right" if lo_first else "left",
+                fontsize=5.8, color=NAVY, fontweight="semibold")
+        ax.text(dv, y - 0.34, f"{100 * dv:.0f}", ha="left" if lo_first else "right",
+                fontsize=5.8, color=AMBER)
+    # b: tokens (log; zero drawn at the left edge)
+    ax = axes[1]
+    ax.set_xscale("log")
+    ax.set_xlim(60, 30000)
+    ax.set_xticks([100, 1000, 10000], ["100", "1k", "10k"])
+    ax.minorticks_off()
+    for y, row in enumerate(COMPARE):
+        st_, dt = row[4], row[5]
+        if st_ is None and dt is None:
+            ax.text(math.sqrt(60 * 30000), y, "not measured", ha="center", va="center",
+                    fontsize=5.3, color="#A7B0BA", style="italic")
+            continue
+        sp = 60 if st_ == 0 else st_
+        ax.plot([sp, dt], [y, y], color="#C9D1DA", lw=2.2, zorder=2)
+        ax.scatter(sp, y, s=30, color=NAVY, zorder=4, edgecolor="white", lw=0.6, clip_on=False)
+        ax.scatter(dt, y, s=26, marker="D", facecolor="white", edgecolor=AMBER, lw=1.0, zorder=4)
+        s_left = sp < dt
+        ax.text(sp, y - 0.34, "0" if st_ == 0 else f"{st_:,.0f}",
+                ha="left" if st_ == 0 else ("right" if s_left else "left"),
+                fontsize=5.8, color=NAVY, fontweight="semibold")
+        ax.text(dt, y - 0.34, f"{dt:,.0f}", ha="left" if s_left else "right",
+                fontsize=5.8, color=AMBER)
+    # c: time (log)
+    ax = axes[2]
+    ax.set_xscale("log")
+    ax.set_xlim(0.003, 60)
+    ax.set_xticks([0.01, 0.1, 1, 10], ["10 ms", "0.1 s", "1 s", "10 s"])
+    ax.minorticks_off()
+    for y, row in enumerate(COMPARE):
+        sv, dv = row[6], row[7]
+        if sv is None and dv is None:
+            ax.text(math.sqrt(0.003 * 60), y, "not measured", ha="center", va="center",
+                    fontsize=5.3, color="#A7B0BA", style="italic")
+            continue
+        if sv is not None and dv is not None:
+            ax.plot([sv, dv], [y, y], color="#C9D1DA", lw=2.2, zorder=2)
+        if sv is not None:
+            ax.scatter(sv, y, s=30, color=NAVY, zorder=4, edgecolor="white", lw=0.6)
+            ax.text(sv, y - 0.33, f"{1000 * sv:.0f} ms", ha="left", fontsize=5.8,
+                    color=NAVY, fontweight="semibold")
+        if dv is not None:
+            ax.scatter(dv, y, s=26, marker="D", facecolor="white", edgecolor=AMBER, lw=1.0, zorder=4)
+            ax.text(dv, y - 0.33, f"{dv:.0f} s", ha="right", fontsize=5.8, color=AMBER)
+        else:
+            ax.text(1.0, y, "LLM: not timed", ha="center", va="center", fontsize=5.3,
+                    color="#A7B0BA", style="italic")
+    def fy(y):
+        return bot + (top - bot) * (1 - (y + 0.6) / (n - 0.45 + 0.6))
+    for y, row in enumerate(COMPARE):
+        fig.text(0.012, fy(y) + 0.035, row[0], fontsize=6.3, color=INK, va="center")
+        fig.text(0.012, fy(y) - 0.03, row[1], fontsize=5.3, color=MUTED, va="center")
+    handles = [plt.Line2D([], [], marker="o", ls="", color=NAVY, markersize=4.5),
+               plt.Line2D([], [], marker="D", ls="", markersize=4,
+                          markerfacecolor="white", markeredgecolor=AMBER)]
+    fig.legend(handles, ["skillc: verdict with a witness, or a named blocker",
+                         "direct LLM verdict: an answer only"],
+               loc="lower center", ncol=2, bbox_to_anchor=(0.6, -0.06))
+    fig.canvas.draw()
+    rend = fig.canvas.get_renderer()
+    limit = axes[0].get_window_extent(rend).x0
+    for t in fig.texts:
+        assert t.get_window_extent(rend).x1 < limit - 2, f"label overlaps: {t.get_text()!r}"
+    save(fig, "fig_compare")
 
 
 # ================================================================ Figure: confusion matrices
@@ -252,7 +366,7 @@ def fig_confusion():
     label_w = 0.082
     x = label_w
     titles = ["a  Corpus", "b  Pre-flight", "c  Agent 365, static",
-              "d  Real skills, executed", "e  set3, blind labels"]
+              "d  Batches 1-4, run", "e  Sample 2, blind"]
     for i, (_, sub, rlab, clab, M) in enumerate(CONF):
         nr, nc = len(M), len(M[0])
         ax = fig.add_axes([x, top - ch * nr, cw * nc, ch * nr])
@@ -291,9 +405,9 @@ def fig_confusion():
 # ================================================================ Figure: paired comparison
 # skillc against a direct gpt-5.4 verdict on the same cases
 PAIRED = [
-    ("Real skills, executed (168 pairs)", (51, 63, 6, 105), (50, 63, 3, 105)),   # I2L_BENCHMARK.md
-    ("set2, annotator labels (100 files)", (7, 31, 11, 69), (29, 31, 18, 69)),   # COMPACTION_RELIABILITY.md:78-81
-    ("set3, blind labels (100 files)", (7, 18, 20, 82), (16, 18, 20, 82)),       # COMPACTION_RELIABILITY.md:303,307
+    ("Batches 1 and 4 (168 pairs)", (51, 63, 6, 105), (50, 63, 3, 105)),   # I2L_BENCHMARK.md
+    ("Sample 1 (100 skills)", (7, 31, 11, 69), (29, 31, 18, 69)),   # COMPACTION_RELIABILITY.md:78-81
+    ("Sample 2, blind (100 skills)", (7, 18, 20, 82), (16, 18, 20, 82)),       # COMPACTION_RELIABILITY.md:303,307
 ]
 
 
@@ -391,6 +505,7 @@ def fig_cost():
 
 if __name__ == "__main__":
     fig_usecases()
+    fig_compare()
     fig_confusion()
     fig_paired()
     fig_cost()

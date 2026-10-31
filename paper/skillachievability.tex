@@ -505,14 +505,18 @@ protocol rejected), two \textsc{Impossible} and one \textsc{Unknown}.}
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figures/eval/fig_usecases.pdf}
-\caption{\textcolor{revblue}{skillc on every real use case, grouped by how the
-pack is made and how the truth is known. Each dot is a rate over the number of
-cases shown under the name, with a 95\% interval; a hollow diamond is a
-direct gpt-5.4 verdict on the same cases, where one was run. ``Blocked cases
-caught'' is the share of cases that cannot run which skillc refutes; ``working
-cases refuted'' is the share of cases that can run which it wrongly calls
-impossible. In A the 7 and 9 working cases give wide intervals around
-$0\%$.}}
+\caption{\textcolor{revblue}{skillc on every real use case. Each row is one
+evaluation; the grey line under its name gives its size. A: the pack is read
+from the environment or written by hand, with no LLM. B: an LLM (gpt-5.4)
+writes the pack from a public skill, and the truth comes from running the
+skill in a sandbox without showing skillc's verdict; batches 1--4 are four
+disjoint samples of public skills. C: the same, but the truth comes from
+people who read each skill (sample 2 was labelled blind). D: a guard that
+watches a running agent. Columns: the share of cases whose verdict matches
+the truth (a case with no verdict counts as not right); the share of cases that cannot run which skillc refutes;
+and the share of cases that can run which skillc wrongly refutes. Dots are
+rates, lines are 95\% intervals; with only 7 or 9 working cases (rows of A),
+the interval around $0\%$ is wide.}}
 \label{fig:usecases}
 \end{figure}
 
@@ -521,9 +525,9 @@ $0\%$.}}
 \includegraphics[width=\linewidth]{figures/eval/fig_confusion.pdf}
 \caption{\textcolor{revblue}{Confusion matrices for the use cases where every
 case has a label. (a)~The two missed impossible packs are the planted cases
-outside the static guarantee. (d)~Pooled over the four sets of category B.
-(e)~set3; ``none'' means no verdict: an abstention or a pack that did not
-pass the schema gate.}}
+outside the static guarantee. (d)~Batches 1--4 of category B, pooled.
+(e)~Sample 2 of category C; ``none'' means no verdict: an abstention or a
+pack that did not pass the schema gate.}}
 \label{fig:confusion}
 \end{figure}
 
@@ -539,22 +543,19 @@ erred) and stopped early in $58\%$ and $75\%$ over 12. In ten published
 Microsoft Agent 365 workflows, $100\%$ over 123 checks (63 static, 60 runtime)
 gave the expected result, and $0\%$ over 50 denied calls reached a tool.
 
-\emph{B.~Real skills, LLM compaction, labels from blind execution.} Four
-disjoint sets of public skills, 447 skill--runtime pairs in sandbox
+\emph{B.~The LLM writes the pack; the truth comes from running.} Four
+disjoint batches of public skills, 447 skill--runtime pairs in sandbox
 runtimes, were run by an agent that did not see skillc's verdict; a pair is
 blocked when the run met a missing tool, account, network access or safety
 rule. skillc was right in
 $88\%$ over 447 pairs, caught $84\%$ over 145 blocked pairs, and refuted
-$10\%$ over 302 working pairs (Figure~\ref{fig:confusion}d). On the 168 pairs
-where a direct gpt-5.4 verdict was also run, the two are close: $89\%$ and
-$90\%$ correct (Figure~\ref{fig:paired}).
+$10\%$ over 302 working pairs (Figure~\ref{fig:confusion}d).
 
-\emph{C.~Real files, LLM compaction, labels from annotators.} In the session
-runtime of set2 and set3, what blocks a file is rarely written in it (a
-refused host, a GPU, an account), and recall drops to $23\%$ over 31 and
-$39\%$ over 18 blocked files. A direct LLM verdict catches $94\%$ and $89\%$.
-On set2 it also refutes more working files ($26\%$ over 69, against $16\%$
-for skillc); on set3 both refute $24\%$ over 82.
+\emph{C.~The LLM writes the pack; the truth comes from people.} Two samples of
+100 public skills were labelled by people for one agent session's runtime.
+There, what blocks a skill is rarely written in it (a refused host, a GPU, an
+account), and skillc catches only $23\%$ over 31 and $39\%$ over 18 blocked
+skills.
 
 \emph{D.~A running agent.} In a hosted Agent Framework agent whose prompt no
 longer states the approval policy, the bare agent sent an unapproved report
@@ -562,15 +563,38 @@ in $10\%$ over 21 runs and the gated agent in $0\%$ over 21. A guard that
 also reads the agent's reasoning caught $27\%$ over 37 hazards in blind
 incident traces and flagged $2\%$ over 97 benign steps.
 
-\paragraph{Q3: how reliable is compaction?}
-The reviews of the submitted version pointed out that compaction, the
-untrusted step, was never measured. On set2, with five samples per file, the
-schema gate accepted $68\%$ over 500 first replies and $92\%$ after one retry;
-all five samples agreed on $39\%$ over 100 files. A separate Claude judge found
-no invented tool in $91\%$ and no invented ordering in $90\%$ of packs, but an
-omitted mandatory step in $37\%$. What skillc adds over a direct verdict is the form of the answer: a refutation
-names its reason and its blocking frontier, an achievable verdict carries a
-witness path, and the same pack always gives the same verdict.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/eval/fig_compare.pdf}
+\caption{\textcolor{revblue}{skillc against the simplest alternative, asking
+gpt-5.4 directly whether the task can be done, on the same cases. (a)~Share
+of all cases whose verdict matches the truth; an abstention or a pack that
+fails the schema gate counts as not right. (b)~Model tokens per
+decision: in the workspace, provider-reported; for batches 1 and 4, counted
+with a GPT-2 tokenizer, and skillc's tokens are those spent writing the pack,
+since the check itself uses none. (c)~Wall-clock time per decision: in the
+workspace, medians including network and orchestration; for batches 1 and 4,
+the check alone, timed for this paper on the 120 packs of batch 4. Grey
+italics: not measured.}}
+\label{fig:compare}
+\end{figure}
+
+\paragraph{Q3: against a direct LLM verdict.}
+Figure~\ref{fig:compare} compares skillc with asking gpt-5.4 directly, on the
+same cases, by accuracy, tokens and time. When the pack is read from the
+environment, skillc is more accurate ($100\%$ against $95\%$ over 21 runs),
+uses no tokens against 1{,}574 per decision, and decides in 32\,ms against
+15\,s. When an LLM must first write the pack (batches 1 and 4, 168 pairs),
+the two are equally accurate ($89\%$ and $90\%$), but skillc spends more
+tokens: 8{,}820 per pair to write the pack against 3{,}471 for the direct
+answer; the check itself then takes a median of 8\,ms (90th percentile
+17\,ms). On samples 1 and 2 the direct verdict is more accurate ($77\%$ and
+$74\%$ against $60\%$ and $64\%$; tokens and time were not recorded there), but it
+refutes as many or more working skills (Figure~\ref{fig:paired}). What
+skillc's extra tokens buy is the form of the answer: a refutation names its
+reason and blocking frontier, an achievable verdict carries a witness path,
+the same pack always gives the same verdict, and the pack is what the runtime
+monitor enforces. A direct verdict is an answer only.
 
 \paragraph{Q4: what the check costs.}
 The checker itself uses no model tokens; only compaction does, once per skill
@@ -687,7 +711,7 @@ this revision found and fixed.}
 \item \new{\textbf{Recall on real files.} With LLM compaction, the checker
 misses most files that cannot run ($39\%$ caught over 18 on the blind
 set), because the model rarely writes down a needed
-host, GPU or account. The direct LLM verdict catches far more. Multi-actor
+host, GPU or account. Multi-actor
 files compact into one role unless the prompt names the roles, and without the
 environment's own state names the Agent 365 compaction gives no verdict at all
 (0 of 195 checks).}
@@ -713,9 +737,7 @@ derived from the skill. Its \emph{impossible} verdict is proved sound for the
 pack, and the machine-checked proof now reaches the checker's own symbolic
 search. In practice the checker is a cheap, explained pre-flight check and a
 gate that a running agent cannot argue its way past. Its weak point is recall
-when an LLM writes the pack: a direct LLM verdict still catches more blocked
-files, without a witness. Closing that gap, by making compaction state what a
-skill needs, is the next step.\enew
+when an LLM writes the pack and the skill does not state what it needs.\enew
 
 \begin{thebibliography}{9}\small
 %\bibitem{synthetic2023} S.-S.~Jongmans, F.~Ferreira. Synthetic Behavioural Typing: Sound, Regular Multiparty Sessions via Implicit Local Types. \emph{ECOOP}, LIPIcs 263, 2023.
@@ -1750,17 +1772,17 @@ A & Pre-flight in a real workspace & 7 workflows, 21 runs & probed prerequisites
 A & Microsoft Agent 365 workflows & 10 workflows, 123 checks & published workflows & expected result $100\%$; denied calls reaching a tool $0\%$ over 50\\
 A & Public skills in two runtimes & 42 skills $\times$ 2 & runtime tool lists & achievable in claude.ai $100\%$; refuted in Claude Code $14\%$ (6), each naming a missing tool\\
 \midrule
-B & Held-out and fresh skills & 74 pairs & blind execution & correct $85\%$ (direct LLM $91\%$)\\
-B & New skills (ext) & 115 pairs & blind execution & correct $90\%$; caught $94\%$ over 35\\
-B & Diverse skills, 3 runtimes (div) & 164 pairs & blind execution & correct $86\%$; caught $81\%$ over 47\\
-B & Fresh blind skills (gr) & 94 pairs & blind execution & correct $93\%$ (direct LLM $90\%$); refuted $5\%$ over 59\\
+B & Batch 1 of public skills (artifact: held-out and fresh) & 74 pairs & blind execution & correct $85\%$ (direct LLM $91\%$)\\
+B & Batch 2 (artifact: ext) & 115 pairs & blind execution & correct $90\%$; caught $94\%$ over 35\\
+B & Batch 3, three runtimes (artifact: div) & 164 pairs & blind execution & correct $86\%$; caught $81\%$ over 47\\
+B & Batch 4 (artifact: gr) & 94 pairs & blind execution & correct $93\%$ (direct LLM $90\%$); refuted $5\%$ over 59\\
 \midrule
-C & set2: SKILL.md and agent files & 100 files & annotators, probe-checked & correct $68\%$ over 88 decided; caught $23\%$ over 31\\
-C & set3: new files & 100 files & blind annotators & correct $68\%$ over 94 decided; caught $39\%$ over 18\\
+C & Sample 1: SKILL.md and agent files (artifact: set2) & 100 files & annotators, probe-checked & correct $60\%$ over 100; caught $23\%$ over 31\\
+C & Sample 2: new files (artifact: set3) & 100 files & blind annotators & correct $64\%$ over 100; caught $39\%$ over 18\\
 C & Microsoft Scout skills & 70 SKILL.md & none & valid pack $96\%$; achievable $69\%$, impossible $27\%$\\
 C & Agent 365 workflows, compacted & 195 checks & published workflows & expected result $97\%$ with the environment's state names; $0\%$ without\\
 C & Hosted finance agent, compacted & 9 configurations & all are correct & wrongly refuted $67\%$\\
-C & Token cost & 62 files of set2 & metered model calls & saving $1.58\times$ on blocked files; ungated agent claimed success on $32\%$ over 31\\
+C & Token cost & 62 files of sample 1 & metered model calls & saving $1.58\times$ on blocked files; ungated agent claimed success on $32\%$ over 31\\
 \midrule
 D & Hosted agent gate, policy removed & 21 runs per arm & logged sends & unapproved sends $0\%$ (ungated $10\%$)\\
 D & Runtime guard on reasoning & 37 hazards, 97 benign & blind incident traces & caught $27\%$; benign flagged $2\%$\\
@@ -1779,10 +1801,18 @@ at all; D, watching a running agent.}}
 \includegraphics[width=\linewidth]{figures/eval/fig_paired.pdf}
 \caption{\textcolor{revblue}{skillc against a direct gpt-5.4 verdict on the
 same cases. On real skills labelled by execution the two are close; where the
-blocker is rarely written in the file (set2, set3), the direct verdict catches
+blocker is rarely written in the file (samples 1 and 2), the direct verdict catches
 more blocked files but also refutes more working ones, and gives no witness.}}
 \label{fig:paired}
 \end{figure}
+
+\paragraph{How reliable is compaction?} The reviews of the submitted version
+pointed out that compaction, the untrusted step, was never measured. On
+sample 1, with five samples per skill, the schema gate accepted $68\%$ over
+500 first replies and $92\%$ after one retry; all five samples agreed on
+$39\%$ over 100 skills. A separate Claude judge found no invented tool in
+$91\%$ and no invented ordering in $90\%$ of packs, but an omitted mandatory
+step in $37\%$.
 \enew
 
 \section{Token economics of pre-execution refutation}\label{app:tokens}
@@ -1792,7 +1822,7 @@ more blocked files but also refutes more working ones, and gives no witness.}}
 \begin{figure}[h]
 \centering
 \includegraphics[width=\linewidth]{figures/eval/fig_cost.pdf}
-\caption{\textcolor{revblue}{Measured cost on 62 files of set2 (31 that cannot
+\caption{\textcolor{revblue}{Measured cost on 62 files of sample 1 (31 that cannot
 run, 31 that can), gpt-5.4, real model calls with tool results simulated from
 the annotators' verified observations. (a)~Median tokens per file and 95\%
 confidence interval. (b)~How the ungated agent ended on the 31 files that
