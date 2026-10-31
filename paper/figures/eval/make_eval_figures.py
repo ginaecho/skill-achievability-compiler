@@ -124,7 +124,7 @@ def fig_usecases():
     ymax = y - 0.5
 
     fig = plt.figure(figsize=(5.5, 3.6))
-    left, top, bot = 0.345, 0.915, 0.085
+    left, top, bot = 0.345, 0.915, 0.115
     w, gap = 0.200, 0.027
     axes = [fig.add_axes([left + i * (w + gap), bot, w, top - bot]) for i in range(3)]
     titles = ["Correct verdicts", "Blocked cases caught", "Working cases refuted"]
@@ -204,7 +204,7 @@ def fig_usecases():
     handles = [plt.Line2D([], [], marker="o", ls="-", color=NAVY, alpha=0.9,
                           markersize=4, lw=1.0, markeredgecolor="white")]
     fig.legend(handles, ["skillc's rate; the line is its 95% interval"],
-               loc="lower center", ncol=1, bbox_to_anchor=(0.62, -0.06),
+               loc="lower center", ncol=1, bbox_to_anchor=(0.62, 0.0),
                handlelength=1.6)
     # every label must end left of the first panel
     fig.canvas.draw()
