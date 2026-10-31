@@ -1,7 +1,9 @@
 \documentclass{article}
 
 \PassOptionsToPackage{numbers,compress}{natbib}
-\usepackage[dblblindworkshop]{neurips_2026}
+% Revision of 2026-10-31: non-anonymous preprint build with the author names
+% (the earlier workshop submission used [dblblindworkshop]).
+\usepackage[preprint]{neurips_2026}
 \workshoptitle{Who Verifies the Agents? Toward Reliable Agent Development}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -87,11 +89,32 @@
 \def \emc {}
 \def \bgc {}
 \def \egc {}
+%%% Revision of 2026-10-31 (after the VerifyAgents reviews): every new or
+%%% changed passage is wrapped in \bnew...\enew (or \new{...}) and printed in
+%%% blue for review. Set \revmarksfalse to print the same text in black.
+\newif\ifrevmarks \revmarkstrue
+\definecolor{revblue}{RGB}{0,70,200}
+\ifrevmarks
+  \newcommand{\bnew}{\begingroup\color{revblue}}
+\else
+  \newcommand{\bnew}{\begingroup}
+\fi
+\newcommand{\enew}{\endgroup}
+\newcommand{\new}[1]{{\bnew #1\enew}}
 
 
 \title{Can This Agent Even Do That?\\
 A Decidable Goal-Achievability Type Discipline for LLM-Synthesized Agent Skills}
-\author{Anonymous Author(s)}
+\author{%
+  \new{Tzu-Chun Chen}\\
+  \new{Microsoft, ISD EAG}\\
+  \new{\texttt{tzuchunchen@microsoft.com}}
+  \And
+  \new{Mariangiola Dezani-Ciancaglini}\\
+  \new{Department of Computer Science}\\
+  \new{University of Turin}\\
+  \new{\texttt{dezani@di.unito.it}}
+}
 
 \begin{document}
 
@@ -108,17 +131,26 @@ combines capability-based reachability from automated planning with direct
 checking of multiparty communication protocols~\cite{synthetic2023,synthetic2026}.
 An LLM may compact a skill into a formal pack of capabilities, preconditions,
 effects, goals, and protocol structure, which is then checked deterministically.
-A Coq-verified abstraction theorem guarantees that an \emph{impossible} verdict
-is correct for the formal pack being checked.
-On a deterministic corpus of 15 skills, the checker correctly identifies all 6
-achievable and all 7 genuinely impossible cases; the two false
-\emph{achievable} results are deliberately constructed cases outside the static
-guarantee. The full evaluation takes less than one second. The checker uses no
-LLM tokens, while compacting the corpus costs 12.2K tokens compared with
-approximately 1.07M tokens for one round of corresponding agent executions,
-an approximately $87\times$ reduction. These results show that a lightweight
-static check can identify structurally impossible skills before execution at
-low cost.
+A Coq-verified abstraction theorem\new{, together with a mechanized lemma that
+ties it to the checker's symbolic search,} guarantees that an \emph{impossible}
+verdict is correct for the formal pack being checked.
+\bnew On a hand-written corpus of 15 packs, the checker never refutes an
+achievable goal; its only two wrong \emph{achievable} answers are planted cases
+outside the static guarantee. We then measure the whole pipeline. On 7 local
+workflows (63 trials) the check stopped all 12 blocked trials before any task
+step and used no model tokens, while two LLM baselines stopped 7 and 9. On 42
+public skills it names the 6 that cannot run in Claude Code because a tool is
+missing under every name. Used as a gate around running agents, it matched 123
+of 123 expected outcomes in Microsoft Agent 365, and it prevented every
+unapproved send when the policy was removed from a hosted agent's prompt. On
+200 real skill and agent files compacted by gpt-5.4, it refutes safely but
+misses most blocked files: on a blind set, fixes cut false refutations from
+24\% to 1\%, but recall is 11\%, against 89\% for a direct LLM verdict that
+gives no witness. The measured token saving on blocked files is $1.58\times$,
+far below the $87\times$ that our earlier cost model predicted. The check is
+cheap, explained, and safe in the refutation direction; its weak point is
+recall, which depends on how completely the compaction states what a skill
+needs.\enew
 \end{abstract}
 
 \section{Introduction}\label{sec:introduction}
@@ -191,7 +223,7 @@ A deterministic \emph{checker} then decides achievability using only the resulti
    {\tiny\color{black!55}abstention, not a refutation}};
 \node[pill=badred]  (bad) at (32,-51)
   {\textcolor{badred}{\ding{55}}~\textbf{impossible} + blocking frontier\\
-   {\tiny\color{black!55}Theorem~\ref{thm:ref}: \emph{never wrong}}};
+   {\tiny\color{black!55}Theorem~\ref{thm:ref}: \new{\emph{sound for the pack}}}};
 
 % ============ zones (behind) ============
 \begin{scope}[on background layer]
@@ -251,7 +283,7 @@ remain finite.\egc
 
 
 \item \textbf{An implementation and evaluation}
-(Sections~\ref{sec:implementation}--\ref{sec:evaluation}). We implement the checker together with an LLM-compaction front-end and a schema gate, and evaluate it on a corpus covering the main failure modes. The results are consistent with the theoretical guarantees: we observe no false impossibility verdicts, while every false achievability verdict falls into one of the two deferred cases.
+(Sections~\ref{sec:implementation}--\ref{sec:evaluation}). We implement the checker together with an LLM-compaction front-end and a schema gate, and evaluate it on a corpus covering the main failure modes. The results are consistent with the theoretical guarantees: we observe no false impossibility verdicts, while every false achievability verdict falls into one of the two deferred cases. \bnew We also measure the full pipeline on real files with a named model and baselines, in local pre-flight checks, across agent runtimes, and as a gate in two agent hosts, and we report where it falls short (Figures~\ref{fig:capabilities}--\ref{fig:tradeoff}).\enew
 
 \end{enumerate}
 
@@ -382,8 +414,20 @@ The checker implements the abstractions from
 Appendices~\ref{app:syntax}--\ref{app:types}: STRIPS frame semantics for the
 world, existential search over the protocol, and Z3 for guard and goal
 satisfiability and arithmetic refinements. On success it returns a witness
-path; on refutation, it reports the reason, such as a missing capability,
-unsatisfiable guard, unachievable goal condition, or non-projectable handoff.
+path; on refutation, it reports the reason\new{: a missing capability, a guard
+that can never hold, or a goal condition that nothing can establish}.
+\bnew A verdict has two separate parts. The \emph{goal} part is
+\textsc{Achievable}, \textsc{Impossible} or \textsc{Unknown}. The
+\emph{protocol} part is \textsc{Well\_Typed}, \textsc{Rejected} (reason
+\textsc{Non\_Projectable}, \textsc{Non\_Conformant}, or
+\textsc{Missing\_Capability} for a tool missing only on a path the goal does
+not need) or \textsc{Not\_Checked}.
+A protocol rejection never becomes \textsc{Impossible}. The reason is that
+\textsc{T-Comm} asks \emph{every} branch of a choice to conform, so one bad
+branch rejects the protocol even when another branch reaches the goal; no
+theorem says that such a goal is unreachable. Each verdict also names the
+formal result that covers it, and a host lets a plan run only when the goal is
+reachable \emph{and} the protocol is not rejected.\enew\
 The optional LLM front-end may use a \textsc{Non\_Projectable} counterexample
 for one bounded repair round. It may not invent capabilities or weaken the
 goal, and the deterministic checker remains the final decision maker.
@@ -416,6 +460,14 @@ checker reports the missing role instead of leaving the assumption implicit.
 
 \section{Evaluation}\label{sec:evaluation}
 
+\bnew We ask four questions. Is the checker right on packs whose answer we
+know (Q1)? What does it catch in realistic settings (Q2)? How well does the
+whole pipeline, with LLM compaction, work on real files, compared with simpler
+baselines (Q3)? What does it cost (Q4)? Every number below is taken from a
+measured run documented in the artifact, with its set, labels and protocol;
+model runs use gpt-5.4.\enew
+
+\paragraph{\new{Q1: the hand-written corpus.}}
 We assembled a corpus of 15 skills covering the main failure modes:
 hallucinated planning, retry-forever loops, coordination deadlock, and
 refinement violations. The corpus also includes achievable controls with
@@ -431,18 +483,24 @@ a 10-second timeout.
 \toprule
 & predicted achievable & predicted impossible\\
 \midrule
-truly achievable & $\mathrm{TP}=6$ & $\mathrm{FN}=0$\\
-truly impossible & $\mathrm{FP}=2$ & $\mathrm{TN}=7$\\
+truly achievable & \new{$\mathrm{TP}=7$} & $\mathrm{FN}=0$\\
+truly impossible & $\mathrm{FP}=2$ & \new{$\mathrm{TN}=6$}\\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \noindent Two claims, both confirmed. \textbf{Soundness}: $\mathrm{FN}=0$ ---
 no achievable goal was wrongly refuted, consistent with Theorem~\ref{thm:ref}
-(achievability recall $6/6=100\%$). \textbf{Incompleteness, contained}:
+(achievability recall \new{$7/7=100\%$}). \textbf{Incompleteness, contained}:
 $\mathrm{FP}=2$, and both are the planted spurious cases --- one a false
 payload post-condition (Layer-C obligation), and one an under-specified goal
-(intent edge). No structural failure was missed in this proof-of-concept
+(intent edge). \bnew Compared with the submitted version, one case changed
+label after a hand check: in \id{deadlock\_unobserved} the goal is reachable,
+but the protocol is rejected (\id{nonconformant\_handler} in the six-case suite
+below changed in the same way). The protocol part of the verdict is scored
+separately: 11 of 11 checked cases are correct, with no false and no missed
+rejection; 4 cases are refuted before the protocol check runs.\enew\
+No structural failure was missed in this proof-of-concept
 corpus. This is evidence of coverage, not a proof that these are the only
 possible failure modes. Each refutation reason matches its intended failure
 mode:
@@ -455,32 +513,113 @@ mode:
 hallucinated planning --- invokes a non-existent tool & \textsc{Missing\_Capability}\\
 hallucinated planning --- no establisher for a goal conjunct & \textsc{Goal\_Unsat}\\
 retry-forever loop --- guard never satisfiable & \textsc{Blocked\_Guard}\\
-coordination deadlock --- unobserved choice / bad handoff & \textsc{Non\_Projectable}\\
+coordination deadlock --- unobserved choice / bad handoff & \new{protocol \textsc{Rejected} (\textsc{Non\_Projectable})}\\
 refinement violation --- budget unsatisfiable on every run & \textsc{Goal\_Unsat}\\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\paragraph{What the check costs.}
-The checker and deterministic front-end use \emph{zero} LLM tokens. The LLM is
-used once to compact each skill \emph{version}, while a full agent run uses
-tokens on every \emph{invocation}. Under the conservative model in
-Appendix~\ref{app:tokens}, compacting the 15-spec corpus costs 12.2K tokens and
-avoids ${\sim}1.07$M tokens per round of invocations, giving ${\sim}87\times$
-leverage. For every failure mode, the cost of compaction is recovered by the
-first prevented run. For a skill that is \emph{not} broken, the check costs
-$2.9\%$ of one successful run, or nothing.
-
 A separate six-case suite tests behavior not covered by the main matrix:
 tail-recursive retry and non-terminating control, adding new participants during
 execution, refutation that remains valid when new participants are added, and
-conformant versus non-conformant declared role behavior. It yields two
-\textsc{Achievable}, three \textsc{Impossible}, and one \textsc{Unknown}. The
+conformant versus non-conformant declared role behavior. It yields \new{three
+\textsc{Achievable} (one of them with its protocol rejected), two
+\textsc{Impossible}}, and one \textsc{Unknown}. The
 abstention is reported separately rather than counted as a false negative
 because \textsc{Unknown} makes no refutation claim. Together the suites contain
 21 declared packs; the 15-case matrix remains the only binary ground-truth
 matrix.
- 
+
+\bnew
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/eval/fig_capabilities.pdf}
+\caption{\textcolor{revblue}{What skillc does in three measured settings.
+(a)~Seven local workflows, three methods, three runs each: skillc gives a
+correct verdict every time, stops all 12 blocked trials before any task step,
+and uses no model tokens; the LLM baselines make no wrong definite claim but
+abstain more and start work before stopping. (b)~42 public skills checked for
+two runtimes; each refutation names the missing tool. (c)~As a gate in Agent
+365 and around a hosted agent whose prompt no longer states the approval
+policy.}}
+\label{fig:capabilities}
+\end{figure}
+
+\paragraph{Q2: what the checker catches in practice.}
+Figure~\ref{fig:capabilities} collects three settings in which the pack is
+taken from the environment rather than guessed by a model. \emph{Pre-flight
+in a real workspace} (a): seven bounded workflows, from release reports to
+Word and Excel export, with the prerequisites probed automatically and the
+operation graph written by hand. All three methods avoided false definite
+claims; skillc was the only one that never abstained and never started work on
+a blocked request, at a median of 32\,ms instead of 15--17\,s per decision. In
+the branching case it also reports which parts of a blocked request are still
+feasible. \emph{Portability across runtimes} (b): a skill names the tools of
+the runtime it was written for, so the same file can be achievable in one
+runtime and impossible in another. \emph{A gate around a running agent} (c):
+in a tool-call path (Agent 365 with Agent Framework middleware, or Claude Code
+and Copilot hooks) a refused call does not run, whatever the model was told.
+These three settings use packs that are read deterministically or written
+by hand; the next question removes that help.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/eval/fig_tradeoff.pdf}
+\caption{\textcolor{revblue}{The full pipeline on real files with gpt-5.4
+compaction, against simpler baselines: blocked files caught (up) against
+working files wrongly called impossible (left is better), first compaction
+sample. (a)~set2, labels verified by read-only probes (31 of 100 blocked).
+(b)~set3, new files labelled blind (18 of 100 blocked); the arrow shows the
+effect of the fixes found on set2.}}
+\label{fig:tradeoff}
+\end{figure}
+
+\paragraph{Q3: real files, LLM compaction, and baselines.}
+The reviews of the submitted version pointed out that compaction, the
+untrusted step, was never measured. We measured it on 100 real files (set2:
+70 public SKILL.md and 30 agent files, labelled by annotators whose labels
+were verified by read-only probes; 31 cannot run in the test environment),
+with five gpt-5.4 samples per file. The schema gate accepted 67.8\% of first
+replies and 92.4\% after one retry; all five samples agreed on 39\% of files
+(Fleiss' $\kappa=0.26$). A separate Claude judge found no invented tool in 91\%
+and no invented ordering in 90\% of packs, but an omitted mandatory step in
+37\%. Figure~\ref{fig:tradeoff}a places skillc against four baselines on the
+same files: a plain planner over the capability layer only, a lint for
+withdrawn tools, and a direct LLM verdict from two model families. On this set,
+the protocol layer added nothing to accuracy (skillc and the planner differ on
+2 of 88 files), and skillc refuted 11 of 69 working files. We read the refuted
+packs, fixed eight classes of compaction defects, and validated the fixes on a
+fresh, blind set (set3, Figure~\ref{fig:tradeoff}b). False refutations fell
+from 50 to 2 of 246 pooled samples, but recall fell from 41\% to 7\%. A
+deterministic requirement reader, which looks for commands, imports, credential
+variables and tool names that the environment marks as unavailable, restores
+recall to 44\% at 9.3\% false refutations; it is now the default front-end.
+
+The direct LLM verdict remains more sensitive (16 of 18 blocked files on set3)
+and is a reported baseline. What skillc adds is the form of the answer: a
+refutation names its reason and its blocking frontier, an achievable verdict
+carries a witness path, and the same pack always gives the same verdict. On a
+labelled set of 132 topics, each written as a SKILL.md, an agent file and a
+prompt (345 scored inputs), gpt-5.4 compaction followed by the checker was right
+in 149 of its 152 \textsc{Impossible} verdicts and caught 149 of 189 impossible
+inputs; the deterministic reader alone was right in all 36 of its
+\textsc{Impossible} verdicts but caught only 36. These topics were written for
+the benchmark, and the tool was improved while looking at these results, so
+these numbers are likely optimistic.
+
+\paragraph{Q4: what the check costs.}
+The checker itself uses no model tokens; only compaction does, once per skill
+version. The submitted version reported an $87\times$ saving from a cost model.
+We have now measured it (Figure~\ref{fig:cost} in
+Appendix~\ref{app:tokens}). On 31 blocked files, an ungated gpt-5.4 agent used
+a median of 9{,}486 tokens before it stopped, against 6{,}289 for compaction
+and check: a saving of $1.58\times$ (95\% CI $1.01$--$2.11$). The agent gave up
+after about two turns, so the quadratic growth the model assumed never
+happened. On working files the check costs about a third of one run. The case
+for the check is therefore not cost but outcome: on 10 of the 31 blocked files
+the ungated agent reported that it had succeeded.
+\enew
+
 \section{Related Work}\label{sec:related}
 
 \emph{Multiparty session types}~\cite{honda,liprojection,yoshidagheri} provide
@@ -527,6 +666,16 @@ purpose is to identify security and consistency problems; ours is to determine
 whether the declared goal can be achieved with the available capabilities and
 protocol.
 
+\bnew \emph{Executability gating for skill selection.} Concurrently with and
+independently of this work, Ashkenazi et al.~\cite{wixgate} report a
+deterministic gate deployed in a customer-care assistant: before an LLM picks
+a skill, the gate removes skills whose own hard-stop conditions fail on the
+current account state. It removed 59.4\% of 1.75M skill--message pairs. Their
+gate checks stated conditions against live state; ours searches for a run that
+reaches the goal, over ordering, preconditions and multi-party handoffs, with
+a refutation guarantee. The two are complementary, and their deployment is
+independent evidence that a deterministic pre-check pays off at scale.\enew
+
 To our knowledge, the work above does not combine capability-based goal
 reachability with multiparty protocol checking for agent skills, nor provide
 the same refutation-sound guarantee for an \emph{impossible} verdict.
@@ -563,7 +712,20 @@ world-changing interleaving\egc\ in one development. Future work includes comple
 this mechanization, connecting interleaved session runs to the reachability
 search, proving equivalence between the declarative judgment and the
 projection-based adapter, and proving that abstract witnesses correspond to
-concrete sessions. The 21-pack evaluation is also only a proof of concept.
+concrete sessions. \new{Appendix~\ref{sec:chain} lists exactly which step from
+a checker verdict to Theorem~\ref{thm:ref} is machine-checked, which is argued
+on paper, and which is trusted, and one over-claim of the checker that
+this revision found and fixed.}
+\item \new{\textbf{Recall on real files.} With LLM compaction, the checker
+misses most files that cannot run (11\% on the blind set after fixes; 44\%
+with the requirement reader), because the model rarely writes down a needed
+host, GPU or account. The direct LLM verdict catches far more. Multi-actor
+files compact into one role unless the prompt names the roles, and without the
+environment's own state names the Agent 365 compaction gives no verdict at all
+(0 of 195 checks).}
+\item \new{\textbf{Evaluation scale.} The held-out sets have 100 files each and
+are now used up, so any further change to the front-end needs a new blind set;
+the Agent 365 gate results rest on hand-written packs.}
 \end{itemize}
 
 \paragraph{Broader impact.}
@@ -577,24 +739,15 @@ use. This work does not evaluate fairness, privacy, or deployment safety.
 
 \section{Conclusion}\label{sec:conclusion}
 
-Agent skills provide instructions, workflows, and tools that guide autonomous
-agents toward particular outcomes. Whether a skill is written by a human expert
-or generated with the help of an LLM, a basic question remains: \textbf{can the
-declared goal be achieved at all?} Our work answers this question before
-execution, using a deterministic checker over a formal pack derived from the
-skill. The checker combines capability-based reachability with a directly
-checked global protocol, and its \emph{impossible} verdict is sound for the
-formal pack it receives.
-
-This guarantee does not remove the gap between the original skill and its formal
-representation. An incorrect or incomplete pack can lead to an incorrect
-\emph{achievable} result, which is why the result must be understood relative
-to the declared pack. Nevertheless, when the pack is correct, the check can
-identify structural failures before the agent spends time and tokens executing
-the skill. This provides a simple and inspectable way to check whether an agent
-skill is achievable before execution.
-
-
+\bnew Can the declared goal of a skill be reached at all? We answer this
+question before execution, with a deterministic checker over a formal pack
+derived from the skill. Its \emph{impossible} verdict is proved sound for the
+pack, and the machine-checked proof now reaches the checker's own symbolic
+search. In practice the checker is a cheap, explained pre-flight check and a
+gate that a running agent cannot argue its way past. Its weak point is recall
+when an LLM writes the pack: a direct LLM verdict still catches more blocked
+files, without a witness. Closing that gap, by making compaction state what a
+skill needs, is the next step.\enew
 
 \begin{thebibliography}{9}\small
 %\bibitem{synthetic2023} S.-S.~Jongmans, F.~Ferreira. Synthetic Behavioural Typing: Sound, Regular Multiparty Sessions via Implicit Local Types. \emph{ECOOP}, LIPIcs 263, 2023.
@@ -641,6 +794,7 @@ skill is achievable before execution.
 \bibitem{abc} V.~P.~Bhardwaj. Agent Behavioral Contracts: Formal Specification and Runtime Enforcement for Reliable Autonomous AI Agents. arXiv:2602.22302, 2026.
 \bibitem{skillspector} N.~Paz, K.~Pradeep, N.~Raghavan, A.~Nikirk, M.~Gupta. SkillSpector: A Pre-Publication Security Control for Agent Skills. \emph{Agent Skills Workshop at CAIS}, 2026.
 \bibitem{verifiedskills} NVIDIA. NVIDIA-Verified Agent Skills Provide Capability Governance for AI Agents. NVIDIA Technical Blog, 19 May 2026.
+\bibitem{wixgate} \new{O.~Ashkenazi et~al. Don't Offer What Can't Be Done: Deterministic Executability Gating for LLM Skill Selection at Scale. arXiv:2608.01050, 2026.}
 \end{thebibliography}
 
 \appendix
@@ -1120,22 +1274,24 @@ w$; appending it gives $s\reachs_2 w$. Mechanized as \id{reach\_mono}.
 \subsection{Refutation soundness, tolerance, monotonicity}
 \begin{theorem}[Refutation soundness]\label{thm:ref}
 If the abstract system has no reachable goal state from
-$\mathit{abs}(G,W_0)$, then no declared run of that pack configuration
+\new{an abstract configuration $A_0$ with $\mathit{abs}((G,W_0),A_0)$}, then no declared run of that pack configuration
 reaches $\gphi$. Hence an \emph{impossible} verdict is never wrong relative to
 the pack, provided \textsc{step-sim} and \textsc{goal-sim} hold.
 \end{theorem}
 \begin{proof}
 We prove the contrapositive: if \emph{some} declared run reaches the goal, then
 the abstract system reaches an abstract goal state. Suppose
-$C_0\reachs C$ with $\goal_{\gphi}(C)$. By Lemma~\ref{lem:transport},
-$\mathit{abs}(C_0)\hat\reach^{*}\mathit{abs}(C)$, and by
-\textsc{goal-sim}, $\hat\goal(\mathit{abs}(C))$. Thus
-$\mathit{abs}(C)$ is an abstract goal state reachable from $\mathit{abs}(C_0)$,
+$C_0\reachs C$ with $\goal_{\gphi}(C)$. \bnew By Lemma~\ref{lem:transport},
+there is an $A$ with $A_0\,\hat\reach^{*}A$ and $\mathit{abs}(C,A)$, and by
+\textsc{goal-sim}, $\hat\goal(A)$. Thus $A$ is an abstract goal state
+reachable from $A_0$,\enew\
 contradicting the hypothesis. Hence no declared run reaches $\gphi$: a verdict of
 \emph{impossible} --- read off exactly the premise, that the abstract search
 exhausts without hitting an abstract goal --- is never wrong. Mechanized,
 axiom-free as a theorem schema parameterized by the two simulation hypotheses
-(the existential witness is $\mathit{abs}(C)$):
+(the existential witness is \new{$A$; the relational form is
+\id{refutation\_sound\_rel}, and the functional form below is its special case
+\id{refutation\_sound\_fun\_is\_rel}}):
 \end{proof}
 \begin{quote}\small\ttfamily
 Theorem refutation\_sound : forall s0,\\
@@ -1175,6 +1331,7 @@ its QF-LIA formulas denote those predicates and that the SMT solver decides
 their satisfiability correctly (Section~\ref{sec:limitations}).
 \end{proof}
 \egc
+
 
 \begin{theorem}[Tolerance soundness]\label{thm:tol}
 If a \emph{coarser} over-approximation (more edges) cannot reach the goal, neither
@@ -1224,6 +1381,71 @@ mechanized as \id{FlightInstance}. We prove \id{flight\_refuted} (no run reaches
 $\mathsf{booked}\wedge\mathsf{confirmation\_sent}$, since no step touches
 $\mathsf{conf}$) and \id{booking\_reachable} (a booking is still reachable). Both
 are axiom-free, witnessing non-vacuity of Theorem~\ref{thm:ref}.
+
+\bnew
+\subsection{From a checker verdict to Theorem~\ref{thm:ref}}\label{sec:chain}
+The reviews asked which exact path leads from an \textsc{Impossible} answer of
+the Python checker to Theorem~\ref{thm:ref}, and whether it covers every
+reason the checker gives. Here is the chain, step by step. We re-checked the
+Coq part for this revision with Coq~8.18: every theorem named below prints
+\emph{Closed under the global context}, that is, it uses no axiom.
+\begin{enumerate}\setlength{\itemsep}{2pt}
+\item \emph{The verdict comes from the search.} The checker answers
+\textsc{Impossible} with reason \textsc{Blocked\_Guard}, or with
+\textsc{Goal\_Unsat} from the search, only when its forward search over the
+pack finds no goal state. \textsc{Missing\_Capability} is different: it is the
+first premise of \textsc{Ach} (every tool the protocol names is granted) and is
+decided before any search. It is a refutation in the sense of
+Theorem~\ref{thm:ref} only when every path to the goal needs the missing tool.
+While preparing this revision we found that the checker also answered
+\textsc{Impossible} when the missing tool sat on a branch the goal does not
+need, where another branch can still reach the goal. We fixed it. The checker
+now answers \textsc{Impossible} with this reason only when (i)~every path to a
+goal point uses a missing tool, a check that ignores guards and so
+over-approximates the runs; (ii)~no protocol over $\Gamma$ can reach the goal
+at all; or (iii)~the search, which treats each step with a missing tool as a
+dead end (\textsc{World-Act} cannot fire it), finds no goal state. In every
+other case the goal is decided by the search, and the missing tool is recorded
+as a protocol rejection, so a host still refuses the plan. In all our corpora
+every missing tool lies on the only path, so the results above are
+unaffected.
+\item \emph{The search is the abstraction of Lemma~\ref{lem:inst}.} True/false
+facts are kept exactly. Numbers are kept as one accumulated constraint. An
+action step is taken only when the constraint and the guard can hold together;
+it applies the same add/delete update as the real step and replaces the
+constraint by the strongest postcondition. At a loop's back edge the constraint
+is dropped (widening). Messages and branch choices do not touch numbers: they
+are steps with a true guard and no numeric effect (a branch's assumed facts are
+an add effect), so the Coq model, which is generic in the type of steps,
+covers them as well.
+\item \emph{Lemma~\ref{lem:inst} holds for this abstraction} --- machine-checked
+as \id{SymbolicInstance.step\_sim} and \id{goal\_sim}, for every widening
+policy.
+\item \emph{Theorem~\ref{thm:ref} then applies} --- machine-checked as
+\id{refutation\_sound\_rel}, and composed with step~3 as
+\id{SymbolicInstance.symbolic\_refutation\_sound}.
+\end{enumerate}
+Three points are argued on paper, not in Coq. \emph{(a)~Loop pruning.} When
+the search comes back to the same loop with the same true facts, it stops.
+After widening, the abstract state at that point depends only on the loop and
+the facts, so it is a state the search has already explored or is still
+exploring, and any path through it twice can be shortened; stopping therefore
+loses no reachable goal state. This needs loop names to be unique, which the
+schema gate enforces. \emph{(b)~Formulas.} That the checker's QF-LIA formulas mean the
+predicates of the Coq model; the code renames each variable per step instead of
+computing the postcondition symbolically. \emph{(c)~The solver.} That Z3
+answers correctly; when it times out, the checker counts the query as
+satisfiable, which can only prevent a refutation. Other verdicts rest on other
+results: a protocol rejection is not a goal refutation at all
+(Section~\ref{sec:implementation}); a refutation by the establisher closure
+(no capability, and no initial fact, can make a goal fact true, so no run of
+any protocol over $\Gamma$ reaches the goal) rests on that one-line argument,
+argued on paper, of which \id{FlightInstance} mechanizes one instance; the
+optional adversarial mode, where the environment chooses some branches, is
+argued on paper only;
+and a refutation by the requirement reader rests on a runtime manifest, not on
+Theorem~\ref{thm:ref}. Every verdict states which of these covers it.
+\enew
 
 \subsection{Operational correspondence: subject reduction and session fidelity}
 \label{sec:safety-meta}
@@ -1534,6 +1756,35 @@ with a human. We treat such search as an application of the verifier, not as a
 contribution evaluated here.
 
 \section{Token economics of pre-execution refutation}\label{app:tokens}
+
+\bnew
+\subsection{Measured}
+\begin{figure}[h]
+\centering
+\includegraphics[width=\linewidth]{figures/eval/fig_cost.pdf}
+\caption{\textcolor{revblue}{Measured cost on 62 files of set2 (31 that cannot
+run, 31 that can), gpt-5.4, real model calls with tool results simulated from
+the annotators' verified observations. (a)~Median tokens per file and 95\%
+confidence interval. (b)~How the ungated agent ended on the 31 files that
+cannot run.}}
+\label{fig:cost}
+\end{figure}
+We ran an ungated gpt-5.4 agent on 31 files that cannot run and 31 that can,
+and metered one compaction-plus-check per file (Figure~\ref{fig:cost}). On the
+blocked files the ungated run used a median of 9{,}486 tokens and compaction
+used 6{,}289: the check saves $1.58\times$ (95\% CI $1.01$--$2.11$), where the
+model below predicts $51\times$ for these files and $87\times$ for the corpus. The reason is
+simple: the agent stopped or declared success after a median of two turns, so
+the quadratic term of the model never grew. On working files the check costs
+0.36 of one run (95\% CI 0.29--0.45), not the 3--4\% of the model. Two things
+the token count does not show: 10 of the 31 blocked runs ended with the agent
+reporting success on a task that could not be done, and 7 of the 31 working
+runs stopped although the task was feasible. The rest of this appendix is the
+original cost model. We keep it because its ordering of failure modes is
+useful, but its absolute numbers are a model, not a measurement.
+
+\subsection{A model, not a measurement}
+\enew
 The practical case for deciding achievability \emph{before} execution is an
 economic one, so we state it in tokens rather than adjectives. Two asymmetries
 carry it. First, no model sits in the trusted path: the schema gate,
@@ -1580,7 +1831,9 @@ does not show: a run whose goal conjunct has no establisher can terminate
 \emph{believing} it succeeded. \textsc{Dynamic\_Topology} claims no savings at
 all, because an abstention prevents nothing.
 
-Over the 15-spec corpus the seven structural refutations cost 12.2K tokens of
+\new{(Modelled, for the corpus as labelled in the submitted version, where one
+of the seven refutations was a protocol rejection that is no longer counted as
+a refutation.)} Over the 15-spec corpus the seven structural refutations cost 12.2K tokens of
 compaction and avoid ${\sim}1.07$M tokens per round of invocations (band
 0.28M--3.15M): ${\sim}87\times$ leverage, or nothing at all on the
 deterministic path. Break-even therefore falls \emph{inside} the first
