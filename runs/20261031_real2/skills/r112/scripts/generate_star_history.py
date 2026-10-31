@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
-"""Generate a self-hosted "Stargazers over time" SVG chart for any repo.
+"""Generate a self-hosted "Stargazers over time" SVG chart.
 
 GitHub now restricts the stargazers endpoint to a repository's own admins and
 collaborators, so third-party live-chart services (star-history free tier,
 [host-1], ...) return "Requires authentication" for everyone. This script
 fetches the star data with an authenticated token (in CI, the repo's own
 GITHUB_TOKEN works because it can read the repo's own stargazers) and renders a
-static, theme-aware SVG committed to the repository.
-
-Repo resolution order:
-  1. STAR_HISTORY_REPO env var ("owner/name")
-  2. GITHUB_REPOSITORY env var (set automatically inside GitHub Actions)
-  3. `git remote get-url origin` parsed into "owner/name"
+static, theme-aware SVG committed to docs/star-history.svg.
 
 Usage:
     GITHUB_TOKEN=xxx python scripts/generate_star_history.py
@@ -20,13 +15,12 @@ Usage:
 """
 
 import os
-import re
-import subprocess
 import sys
 from datetime import datetime, timezone
 
 import requests
 
+REPO = os.environ.get("STAR_HISTORY_REPO", "davila7/claude-code-templates")
 OUTPUT = os.environ.get("STAR_HISTORY_OUTPUT", "docs/star-history.svg")
 PER_PAGE = 100
 MAX_PAGES = 400  # GitHub caps stargazers pagination at 400 pages (40k stars)
@@ -35,40 +29,20 @@ WIDTH, HEIGHT = 800, 400
 PAD_L, PAD_R, PAD_T, PAD_B = 70, 55, 50, 55
 
 
-def resolve_repo():
-    """Return "owner/name" for the repository to chart."""
-    repo = os.environ.get("STAR_HISTORY_REPO") or os.environ.get("GITHUB_REPOSITORY")
-    if repo:
-        return repo.strip()
-    try:
-        url = subprocess.check_output(
-            ["git", "remote", "get-url", "origin"], text=True
-        ).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        raise SystemExit(
-            "Could not determine the repo. Set STAR_HISTORY_REPO=owner/name."
-        )
-    # [email-1]:owner/name.git  or  [url-1]
-    match = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?/?$", url)
-    if not match:
-        raise SystemExit(f"Unrecognized GitHub remote URL: {url}")
-    return match.group(1)
-
-
-def fetch_stargazers(token, repo):
+def fetch_stargazers(token):
     """Return a sorted list of datetime objects, one per star."""
     session = requests.Session()
     session.headers.update({
         "Authorization": f"Bearer {token}",
         "Accept": "application/vnd.github.star+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "star-history-chart-skill",
+        "User-Agent": "claude-code-templates-star-history",
     })
 
     dates = []
     for page in range(1, MAX_PAGES + 1):
         resp = session.get(
-            f"[url-2]}/stargazers",
+            f"[url-1]}/stargazers",
             params={"per_page": PER_PAGE, "page": page},
             timeout=30,
         )
@@ -173,7 +147,7 @@ def render_svg(series, repo):
 
     updated = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d")
 
-    return f'''<svg xmlns="[url-3]" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    return f'''<svg xmlns="[url-2]" width="{WIDTH}" height="{HEIGHT}" viewBox="0 0 {WIDTH} {HEIGHT}" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
   <style>
     .bg {{ fill: #ffffff; }}
     .title {{ fill: #1f2328; font-size: 17px; font-weight: 600; }}
@@ -212,17 +186,14 @@ def main():
     if not token:
         raise SystemExit("GITHUB_TOKEN is required (repo read access to stargazers).")
 
-    repo = resolve_repo()
-    print(f"Fetching stargazers for {repo} ...", file=sys.stderr)
-    dates = fetch_stargazers(token, repo)
+    print(f"Fetching stargazers for {REPO} ...", file=sys.stderr)
+    dates = fetch_stargazers(token)
     print(f"Got {len(dates)} stars.", file=sys.stderr)
 
     series = build_series(dates)
-    svg = render_svg(series, repo)
+    svg = render_svg(series, REPO)
 
-    out_dir = os.path.dirname(OUTPUT)
-    if out_dir:
-        os.makedirs(out_dir, exist_ok=True)
+    os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
     with open(OUTPUT, "w", encoding="utf-8") as fh:
         fh.write(svg)
     print(f"Wrote {OUTPUT} ({len(svg)} bytes).", file=sys.stderr)

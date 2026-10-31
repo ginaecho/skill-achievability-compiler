@@ -15,7 +15,14 @@ by commit and sha256.  A document is eligible only if
   * it is a user-facing skill: frontmatter with a name and a description, and
     not marked `disable-model-invocation: true` (a repository's own helper
     command);
-  * it is not a duplicate of another eligible document (same sha256 or name).
+  * it is not a duplicate of another eligible document (same sha256 or name);
+  * it is a real skill: not a test fixture (a folder named tests or fixtures on its
+    path) and not a blank authoring template (its first heading is a placeholder
+    such as "# Skill Name"); and it is not an offensive-security skill (marked
+    `risk: offensive`, or red-team, attack-chain, exploit or penetration-testing
+    work in its name, description or category), because executors really attempt
+    each skill.  This rule is applied while drawing, so a skipped
+    document only frees its slot for the next one in the seeded order.
 
 From the eligible pool, N documents are drawn with a fixed seed, at most CAP per
 repository, 70% from documents with a fenced code block and 30% without (the
@@ -27,13 +34,19 @@ a hash of its id, so the assignment does not depend on skillc.
 writes benchmark/real2/cases.json and a copy of each skill's whole folder at the
 pinned commit (SKILL.md, bundled scripts, references and templates; files over
 2 MB are listed but not copied) plus its licence, under
-benchmark/real2/sources/<id>/.
+benchmark/real2/sources/<id>/.  A skill is copied as it is installed: with its
+folder come (a) the shared files of the plugin it belongs to (the plugin
+directory without its skill folders) and (b) every other file or skill folder
+of its repository that SKILL.md refers to by a relative path, resolved from the
+skill folder or else from the repository root.  These support files keep their
+repository paths under sources/<id>/_support/.
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
+import os
 import random
 import re
 import shutil
@@ -88,6 +101,92 @@ def user_facing(text: str) -> bool:
     fm = m.group(1)
     return (bool(re.search(r"^name:", fm, re.M)) and bool(re.search(r"^description:", fm, re.M))
             and not re.search(r"^disable-model-invocation:\s*true", fm, re.M))
+
+PLACEHOLDER_H1 = re.compile(
+    r"#\s*[\[<{(]*\s*(?:\{\{\s*)?(?:skill[ _-]?name|your[ _-]skill[ _-]name)"
+    r"(?:\s*\}\})?\s*[\]>})]*\s*$", re.I)
+
+
+# Offensive-security skills are left out: executors really attempt a skill, and
+# CLAUDE.md allows nothing done for testing to harm an outside service.
+OFFENSIVE = re.compile(r"red[- ]?team|attack[- ]chain|-attack\b|\battack\b.*\btechniques?\b|"
+                       r"penetration|pentest|exploit|offensive|\bc2\b|malware|phishing", re.I)
+
+
+def not_a_skill(path_in_repo: str, text: str) -> str | None:
+    """Why a document is not in scope: a test fixture, a blank template or an
+    offensive-security skill; None if it is in scope."""
+    if {"tests", "test", "fixtures", "__fixtures__"} & {p.lower() for p in Path(path_in_repo).parts}:
+        return "test_fixture"
+    m = FRONT.match(text)
+    front = m.group(1) if m else ""
+    if (re.search(r"^risk:\s*['\"]?offensive", front, re.M | re.I)
+            or OFFENSIVE.search(Path(path_in_repo).parent.name)
+            or OFFENSIVE.search(" ".join(re.findall(r"^(?:name|description|category):.*$",
+                                                    front, re.M | re.I)))):
+        return "offensive_security"
+    first = next((ln for ln in text.splitlines() if ln.startswith("# ")), "")
+    if PLACEHOLDER_H1.fullmatch(first.strip()):
+        return "blank_template"
+    return None
+
+
+REFS = [re.compile(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)"),
+        re.compile(r"(?<![\w/.:-])((?:\.{1,2}/)*[\w-]+(?:/[\w.\[\]-]+)+)")]
+
+
+def support_files(rdir: Path, commit: str, skill_dir: str, text: str) -> list[str]:
+    """Repository files outside the skill folder that the installed skill uses."""
+    listing = subprocess.run(["git", "ls-tree", "-r", commit], cwd=rdir,
+                             capture_output=True, text=True, check=True).stdout.split("\n")
+    tree = [ln.split("\t", 1)[1] for ln in listing      # files only, no submodules
+            if "\t" in ln and ln.split()[1] == "blob" and ln.split()[0] != "120000"]
+    files = set(tree)
+    skill_dirs = {str(Path(t).parent) for t in tree if Path(t).name == "SKILL.md"}
+
+    def inside(path: str, d: str) -> bool:
+        return path == d or path.startswith(d + "/")
+
+    def own_skill(path: str) -> bool:
+        return inside(path, skill_dir)
+
+    out: set[str] = set()
+    parts = Path(skill_dir).parts               # (a) the plugin's shared files
+    root = None
+    for i in range(len(parts) - 1, 0, -1):
+        if str(Path(*parts[:i]) / ".claude-plugin" / "plugin.json") in files:
+            root = str(Path(*parts[:i]))
+            break
+    if root is None and "plugins" in parts[:-1]:
+        k = parts.index("plugins")
+        if len(parts) > k + 2:
+            root = str(Path(*parts[:k + 2]))
+    if root is not None:
+        for t in tree:
+            if inside(t, root) and not own_skill(t) and not any(
+                    inside(t, d) for d in skill_dirs if d != root and inside(d, root)):
+                out.add(t)
+    for rx in REFS:                             # (b) files the skill refers to
+        for ref in rx.findall(text):
+            ref = ref.split("#")[0].rstrip(".,;:)`'\"")
+            if not ref or ref.startswith("/"):
+                continue
+            for cand in (os.path.normpath(os.path.join(skill_dir, ref)),
+                         os.path.normpath(ref.lstrip("./") if ref.startswith("./") else ref)):
+                if cand.startswith("..") or own_skill(cand):
+                    continue
+                if cand in files:
+                    folder = str(Path(cand).parent)
+                    if Path(cand).name == "SKILL.md" and folder in skill_dirs:
+                        out |= {t for t in tree if inside(t, folder)}
+                    else:
+                        out.add(cand)
+                    break
+                if any(t.startswith(cand + "/") for t in tree) and cand in skill_dirs:
+                    out |= {t for t in tree if inside(t, cand)}
+                    break
+    return sorted(t for t in out if not own_skill(t))
+
 
 # repository -> clone directory name; the licence is read from the clone
 REPOS = [
@@ -236,10 +335,18 @@ def draw(cands: list[dict], n: int, cap: int, rng: random.Random) -> list[dict]:
     rng.shuffle(fenced)
     rng.shuffle(plain)
     index = NearIndex()
+    skipped: dict[str, str] = {}
+    draw.skipped = skipped
 
     def take(items: list[dict], want: int, into: list[dict]) -> list[dict]:
         left = []
         for d in items:
+            if d["id"] in skipped:
+                continue
+            if len(into) < want and (why := not_a_skill(d["path_in_repo"],
+                                                       Path(d["_src"]).read_text(errors="replace"))):
+                skipped[d["id"]] = why
+                continue
             if len(into) < want and index.near(d["_sh"]) < NEAR:
                 into.append(d)
                 index.add(d["_sh"])
@@ -288,11 +395,24 @@ def main() -> None:
             shutil.copyfile(f, dst / rel)
             files.append({"path": str(rel),
                           "sha256": hashlib.sha256(f.read_bytes()).hexdigest()})
+        rdir = Path(d["_src"]).parents[len(Path(d["path_in_repo"]).parts) - 1]
+        support, support_skipped = [], []
+        for rel in support_files(rdir, d["commit"], str(Path(d["path_in_repo"]).parent),
+                                 Path(d["_src"]).read_text(errors="replace")):
+            f = rdir / rel
+            if f.is_symlink() or not f.is_file() or f.stat().st_size > MAX_FILE:
+                support_skipped.append(rel)
+                continue
+            (dst / "_support" / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(f, dst / "_support" / rel)
+            support.append({"path": rel, "sha256": hashlib.sha256(f.read_bytes()).hexdigest()})
         if d["_lic"] and not (dst / "LICENSE").exists():
             shutil.copyfile(d["_lic"], dst / "LICENSE")
         case = {k: v for k, v in d.items() if not k.startswith("_")}
         case["files"] = files
         case["files_not_copied"] = skipped
+        case["support_files"] = support
+        case["support_files_not_copied"] = support_skipped
         case["case"] = f"r{i:03d}"
         case["runtime"] = runtime_for(d["id"])
         cases.append(case)
@@ -305,6 +425,8 @@ def main() -> None:
         "per_runtime": {r: sum(c["runtime"] == r for c in cases) for r in RUNTIMES},
         "fenced": sum(c["fenced"] for c in cases),
         "with_bundled_files": sum(len(c["files"]) > 1 for c in cases),
+        "with_support_files": sum(bool(c["support_files"]) for c in cases),
+        "skipped_while_drawing": draw.skipped,
     }
     (args.out / "cases.json").write_text(json.dumps({**summary, "cases": cases}, indent=1) + "\n")
     print(json.dumps(summary, indent=1))

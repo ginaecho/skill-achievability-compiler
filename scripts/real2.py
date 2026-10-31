@@ -4,15 +4,17 @@ This script never calls a model. It writes frozen prompt files that sub-agents
 read, and scores the files they write back.
 
   skills                  executor copies of the 300 skill folders, URL-scrubbed
-  prepare --arm s|d --repeat K
-                          freeze the S (skillc) or D (direct verdict) prompts
-  retry --repeat K        S: one located-error retry per invalid reply
-  repair --repeat K       S: one counterexample-guided repair per refuted pack
-  jobs --arm exec|s|d [--repeat K] [--round N] [--only CASES]
-                          shuffled job batches of at most 50 for the workflows
+  prepare --arm s|d --repeat K [--model M]
+                          freeze the S (skillc) or D (direct verdict) prompts, for one
+                          model or (default) every model in MODELS
+  retry --repeat K [--model M]   S: one located-error retry per invalid reply
+  repair --repeat K [--model M]  S: one counterexample-guided repair per refuted pack
+  jobs --arm exec|s|d [--repeat K] [--model M] [--round N] [--only CASES]
+                          shuffled job batches of at most 50 for the workflows; each job
+                          names the model its sub-agent must run on
   collect-exec --work DIR copy executor result.json files into execution/
   calls --transcripts DIR one line per sub-agent call into calls.jsonl
-  mark-missing --arm s|d --repeat K
+  mark-missing --arm s|d --repeat K [--model M]
                           record replies still missing after one re-run (no verdict)
   audit                   every prompt and every executor copy is URL-free
   score                   labels, verdicts, checker time, tokens, metrics.json
@@ -26,6 +28,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import random
 import re
 import shutil
@@ -46,13 +49,18 @@ from skillc import check  # noqa: E402
 from skillc.frontend.prompts import ce_runtime_messages, direct_messages  # noqa: E402
 from skillc.frontend.providers import extract_json_object  # noqa: E402
 from skillc.frontend.runtime import load_runtime  # noqa: E402
-from skillc.frontend.urlguard import HOST_RE, assert_clean, find_urls, scrub  # noqa: E402
+from skillc.frontend.urlguard import (EMAIL_RE, HOST_RE, URL_RE, assert_clean,  # noqa: E402
+                                      find_urls, scrub)
 
 RUN = ROOT / "runs" / "20261031_real2"
 SRC = ROOT / "benchmark" / "real2" / "sources"
 SEED = 20261031
 BATCH = 50
 REPEATS = (1, 2, 3)
+# Every model a sub-agent can be given on the subscription (the Agent and Workflow
+# model options). S and D run on each; executions and adjudications run on the
+# session's default sub-agent model.
+MODELS = ("opus", "sonnet", "haiku", "fable")
 L2_BLOCKED = {"missing_tool_in_runtime", "needs_credentials_or_account",
               "forbidden_by_safety_rules"}
 VERDICTS = ("ACHIEVABLE", "IMPOSSIBLE")
@@ -100,6 +108,27 @@ def code_clean(text: str) -> list[str]:
     return [h for h in find_urls(text) if not is_member(h)]
 
 
+def binary_links(raw: bytes) -> list[str]:
+    """Links and e-mail addresses inside a binary file. Bare-domain lookalikes are not
+    searched: compressed bytes produce them by chance (`v.cC`)."""
+    text = raw.decode("latin-1")
+    return [m.group(0) for rx in (URL_RE, EMAIL_RE) for m in rx.finditer(text)]
+
+
+def strip_png_text(raw: bytes) -> bytes | None:
+    """A PNG without its text chunks (tEXt, zTXt, iTXt): same pixels, no metadata."""
+    if not raw.startswith(b"\x89PNG\r\n\x1a\n"):
+        return None
+    out, i = [raw[:8]], 8
+    while i + 8 <= len(raw):
+        n = int.from_bytes(raw[i:i + 4], "big")
+        kind = raw[i + 4:i + 8]
+        if kind not in (b"tEXt", b"zTXt", b"iTXt"):
+            out.append(raw[i:i + 12 + n])
+        i += 12 + n
+    return b"".join(out)
+
+
 def build_skills() -> None:
     """runs/20261031_real2/skills/<case>/: what an executor may read."""
     dest_root = RUN / "skills"
@@ -108,18 +137,27 @@ def build_skills() -> None:
     manifest = {}
     for c in cases():
         src, dest = SRC / c["id"], dest_root / c["case"]
-        rec = {"id": c["id"], "files": 0, "placeholders": 0, "code_files_scrubbed": [],
-               "members_kept": 0, "withheld": []}
-        for f in c["files"]:
-            raw = (src / f["path"]).read_bytes()
-            target = dest / f["path"]
+        rec = {"id": c["id"], "files": 0, "support_files": len(c.get("support_files", [])),
+               "placeholders": 0, "code_files_scrubbed": [], "members_kept": 0, "withheld": []}
+        base = Path(c["path_in_repo"]).parent      # keep the repository's layout
+        todo = [(src / f["path"], base / f["path"]) for f in c["files"]]
+        todo += [(src / "_support" / f["path"], Path(f["path"]))
+                 for f in c.get("support_files", [])]
+        for source, repo_path in todo:
+            f = {"path": str(repo_path)}
+            raw = source.read_bytes()
+            target = dest / repo_path
             target.parent.mkdir(parents=True, exist_ok=True)
             try:
                 text = raw.decode("utf-8")
             except UnicodeDecodeError:
-                if find_urls(raw.decode("latin-1")):
-                    rec["withheld"].append(f["path"])     # binary with a link inside
-                    continue
+                if binary_links(raw):
+                    clean = strip_png_text(raw)
+                    if clean is None or binary_links(clean):
+                        rec["withheld"].append(f["path"])     # binary with a link inside
+                        continue
+                    rec.setdefault("metadata_stripped", []).append(f["path"])
+                    raw = clean
                 target.write_bytes(raw)
                 rec["files"] += 1
                 continue
@@ -155,12 +193,12 @@ def _clean_prompt(system: str, user: str) -> dict:
     return {"system": system, "user": user}
 
 
-def arm_dir(arm: str, k: int) -> Path:
-    return RUN / arm / f"r{k}"
+def arm_dir(arm: str, k: int, model: str) -> Path:
+    return RUN / arm / model / f"r{k}"
 
 
-def prepare(arm: str, k: int) -> None:
-    out = arm_dir(arm, k)
+def prepare(arm: str, k: int, model: str) -> None:
+    out = arm_dir(arm, k, model)
     if (out / "frozen.json").exists():
         raise SystemExit(f"{out} is already frozen")
     method = "ce_rt" if arm == "s" else "direct"
@@ -186,9 +224,9 @@ def prepare(arm: str, k: int) -> None:
              ROOT / "scripts/benchmark_ce_runtime.py", Path(__file__)]}
     write_json(out / "frozen.json", {
         "created_utc": datetime.now(timezone.utc).isoformat(), "method": method,
-        "repeat": k, "runtime": bcr.RUNTIME, "case_set": "real2", "prune": False,
+        "repeat": k, "model": model, "runtime": bcr.RUNTIME, "case_set": "real2", "prune": False,
         "cases": frozen_cases, "jobs": jobs, "implementation_sha256": impl})
-    print(f"{len(jobs)} {arm} prompts in {out}")
+    print(f"{len(jobs)} {arm} prompts in {out.relative_to(ROOT)}")
 
 
 def _reclean(out: Path) -> None:
@@ -203,19 +241,23 @@ def _reclean(out: Path) -> None:
     write_json(out / "frozen.json", frozen)
 
 
-def retry(k: int) -> None:
-    bcr.retry(arm_dir("s", k))
-    _reclean(arm_dir("s", k))
+def retry(k: int, model: str) -> None:
+    bcr.retry(arm_dir("s", k, model))
+    _reclean(arm_dir("s", k, model))
 
 
-def repair(k: int) -> None:
-    bcr.repair(arm_dir("s", k))
-    _reclean(arm_dir("s", k))
+def repair(k: int, model: str) -> None:
+    bcr.repair(arm_dir("s", k, model))
+    _reclean(arm_dir("s", k, model))
 
 
 # ------------------------------------------------------------------- jobs
 EXEC_NOTE = """
-Rules added for this round (runs/20261031_real2/PLAN.md, amendment 1):
+Rules added for this round (runs/20261031_real2/PLAN.md, amendments 1 and 2):
+- {REPO} stands for the root of the skill's repository. It keeps the repository's layout
+  but holds only the skill and the repository files the installed skill uses (its plugin's
+  shared files and the files it refers to). Read and run them there or copy them into the
+  work directory; do not modify {REPO}.
 - The skill folder is a copy in which links, e-mail addresses and domain names were replaced
   by placeholders such as [url-1], [host-1] or [email-1]. A placeholder stands for something
   you cannot reach. Do not guess or look up the original.
@@ -229,14 +271,14 @@ Rules added for this round (runs/20261031_real2/PLAN.md, amendment 1):
 def exec_prompt(c: dict, work_root: Path) -> str:
     tpl = (RUN / f"executor_prompt_{c['runtime']}.txt").read_text(encoding="utf-8")
     text = (tpl.replace("{ID}", c["case"])
-            .replace("{PATH}", str(RUN / "skills" / c["case"] / "SKILL.md"))
+            .replace("{PATH}", str(RUN / "skills" / c["case"] / c["path_in_repo"]))
             .replace("{WORK}", str(work_root / c["case"])))
-    return text.rstrip() + "\n" + EXEC_NOTE
+    return (text.rstrip() + "\n" + EXEC_NOTE).replace("{REPO}", str(RUN / "skills" / c["case"]))
 
 
 def make_jobs(arm: str, k: int, rnd: int, only: list[str] | None,
-              work_root: Path) -> None:
-    rng = random.Random(f"{SEED}:{arm}:{k}:{rnd}")
+              work_root: Path, model: str | None) -> None:
+    rng = random.Random(f"{SEED}:{arm}:{model}:{k}:{rnd}")
     if arm == "exec":
         items = []
         for c in cases():
@@ -247,19 +289,20 @@ def make_jobs(arm: str, k: int, rnd: int, only: list[str] | None,
             text = exec_prompt(c, work_root)
             assert_clean(text)
             (RUN / rel).write_text(text, encoding="utf-8")
-            items.append({"job": f"exec:{c['case']}", "case": c["case"],
+            items.append({"job": f"exec:{c['case']}", "case": c["case"], "model": None,
                           "prompt": str(RUN / rel),
                           "output": str(work_root / c["case"] / "result.json")})
         tag = "exec"
     else:
-        out = arm_dir(arm, k)
+        out = arm_dir(arm, k, model)
         frozen = json.loads((out / "frozen.json").read_text())
-        items = [{"job": f"{arm}{k}:{j['case']}:n{j['round']}", "case": j["case"],
+        items = [{"job": f"{arm}{k}:{model}:{j['case']}:n{j['round']}", "case": j["case"],
+                  "model": model,
                   "prompt": str(out / j["prompt"]), "output": str(out / j["output"])}
                  for j in frozen["jobs"] if j["round"] == rnd
                  and (not only or j["case"] in only)
                  and not (out / j["output"]).exists()]
-        tag = f"{arm}_r{k}_n{rnd}"
+        tag = f"{arm}_{model}_r{k}_n{rnd}"
     rng.shuffle(items)
     bdir = RUN / "batches"
     bdir.mkdir(parents=True, exist_ok=True)
@@ -322,34 +365,34 @@ def label(case: str, sensitivity: str = "main") -> tuple[str, str]:
 
 
 # ------------------------------------------------------------------ verdicts
-def missing_outputs(arm: str, k: int) -> list[str]:
-    out = arm_dir(arm, k)
+def missing_outputs(arm: str, k: int, model: str) -> list[str]:
+    out = arm_dir(arm, k, model)
     return [j["output"] for j in json.loads((out / "frozen.json").read_text())["jobs"]
             if not (out / j["output"]).exists()]
 
 
-def mark_missing(arm: str, k: int) -> None:
+def mark_missing(arm: str, k: int, model: str) -> None:
     """After a failed job's one re-run: record the reply as missing (no verdict)."""
-    out = arm_dir(arm, k)
-    gone = missing_outputs(arm, k)
+    out = arm_dir(arm, k, model)
+    gone = missing_outputs(arm, k, model)
     for rel in gone:
         (out / rel).parent.mkdir(parents=True, exist_ok=True)
         (out / rel).write_text("(no reply: the sub-agent failed twice)\n", encoding="utf-8")
     with open(RUN / "missing.log", "a", encoding="utf-8") as f:
         for rel in gone:
-            f.write(f"{datetime.now(timezone.utc).isoformat()} {arm}{k} {rel}\n")
+            f.write(f"{datetime.now(timezone.utc).isoformat()} {arm}{k} {model} {rel}\n")
     print(f"{len(gone)} missing replies recorded")
 
 
-def s_verdicts(k: int) -> dict:
-    out = arm_dir("s", k)
+def s_verdicts(k: int, model: str) -> dict:
+    out = arm_dir("s", k, model)
     bcr.score_all(out)                      # writes results.json and packs/
     return {r["case"]: (r.get("verdict") if r.get("verdict") in VERDICTS else "NONE")
             for r in json.loads((out / "results.json").read_text())}
 
 
-def d_verdicts(k: int) -> dict:
-    out = arm_dir("d", k)
+def d_verdicts(k: int, model: str) -> dict:
+    out = arm_dir("d", k, model)
     res = {}
     for job in json.loads((out / "frozen.json").read_text())["jobs"]:
         try:
@@ -360,9 +403,9 @@ def d_verdicts(k: int) -> dict:
     return res
 
 
-def checker_times(k: int) -> dict:
+def checker_times(k: int, model: str) -> dict:
     times = {}
-    for p in sorted((arm_dir("s", k) / "packs" / "ce_rt").glob("*.json")):
+    for p in sorted((arm_dir("s", k, model) / "packs" / "ce_rt").glob("*.json")):
         pack = json.loads(p.read_text())
         runs = []
         for _ in range(7):
@@ -445,7 +488,9 @@ def audit() -> None:
             try:
                 text = p.read_text(encoding="utf-8")
             except UnicodeDecodeError:
-                text = p.read_bytes().decode("latin-1")
+                if binary_links(p.read_bytes()):
+                    bad.append(str(p))
+                continue
             hits = code_clean(text) if p.suffix.lower() in CODE_EXT else find_urls(text)
             if hits:
                 bad.append(str(p))
@@ -495,16 +540,20 @@ def quart(xs: list[float]) -> dict:
 
 def score() -> None:
     ids = [c["case"] for c in cases()]
+    rt_of = {c["case"]: c["runtime"] for c in cases()}
     labels = {s: {c: label(c, s) for c in ids}
               for s in ("main", "strict", "physical", "no_violations")}
     lab = {c: labels["main"][c][0] for c in ids}
     for arm in ("s", "d"):
-        for k in REPEATS:
-            if (arm_dir(arm, k) / "frozen.json").exists() and missing_outputs(arm, k):
-                raise SystemExit(f"{arm}{k}: {len(missing_outputs(arm, k))} replies missing; "
-                                 "re-run them once, then `mark-missing`")
-    v = {arm: {k: (s_verdicts(k) if arm == "s" else d_verdicts(k)) for k in REPEATS
-               if (arm_dir(arm, k) / "frozen.json").exists()} for arm in ("s", "d")}
+        for model in MODELS:
+            for k in REPEATS:
+                if (arm_dir(arm, k, model) / "frozen.json").exists() and \
+                        missing_outputs(arm, k, model):
+                    raise SystemExit(f"{arm} {model} r{k}: replies missing; re-run them "
+                                     "once, then `mark-missing`")
+    v = {arm: {model: {k: (s_verdicts(k, model) if arm == "s" else d_verdicts(k, model))
+                       for k in REPEATS if (arm_dir(arm, k, model) / "frozen.json").exists()}
+               for model in MODELS} for arm in ("s", "d")}
     calls = [json.loads(x) for x in (RUN / "calls.jsonl").read_text().splitlines()
              if x] if (RUN / "calls.jsonl").exists() else []
     m: dict = {"labels": dict(Counter(lab.values())),
@@ -512,121 +561,149 @@ def score() -> None:
                                                     if l_ == "inconclusive")),
                "sensitivity_labels": {s: dict(Counter(x[0] for x in labels[s].values()))
                                       for s in labels}}
-    for arm, reps in v.items():
-        am: dict = {}
-        for k, vk in reps.items():
-            am[f"r{k}"] = arm_metrics(vk, lab)
-            am[f"r{k}"]["by_runtime"] = {
-                rt: arm_metrics({c: vk[c] for c in vk if next(
-                    x for x in cases() if x["case"] == c)["runtime"] == rt}, lab)
-                for rt in ("developer-sandbox", "offline-workstation", "office-assistant")}
-            am[f"r{k}"]["sensitivity"] = {
-                s: arm_metrics(vk, {c: labels[s][c][0] for c in ids})
-                for s in ("strict", "physical", "no_violations")}
-        if reps:
+    for arm in ("s", "d"):
+        m[arm] = {}
+        for model, reps in v[arm].items():
+            if not reps:
+                continue
+            am: dict = {}
+            for k, vk in reps.items():
+                am[f"r{k}"] = arm_metrics(vk, lab)
+                am[f"r{k}"]["by_runtime"] = {
+                    rt: arm_metrics({c: vk[c] for c in vk if rt_of[c] == rt}, lab)
+                    for rt in ("developer-sandbox", "offline-workstation", "office-assistant")}
+                am[f"r{k}"]["sensitivity"] = {
+                    s: arm_metrics(vk, {c: labels[s][c][0] for c in ids})
+                    for s in ("strict", "physical", "no_violations")}
             pooled = {f"{c}#{k}": vk[c] for k, vk in reps.items() for c in vk}
             am["pooled"] = arm_metrics(pooled, {f"{c}#{k}": lab[c] for k in reps for c in ids})
-        if len(reps) == 3:
-            rows = [[reps[k][c] for k in REPEATS] for c in ids]
-            am["agreement"] = {"all_three_same": rate(sum(len(set(r)) == 1 for r in rows),
-                                                      len(rows)),
-                               "fleiss_kappa": fleiss(rows)}
-        tok = {}
-        for c in calls:
-            if c["job"].startswith(arm):
-                key = c["job"].split(":")[0] + ":" + c["case"]
-                t = tok.setdefault(key, {"tokens": 0, "seconds": 0.0})
-                t["tokens"] += sum(c.get(f, 0) for f in (
-                    "input_tokens", "output_tokens", "cache_read_input_tokens",
-                    "cache_creation_input_tokens"))
-                t["seconds"] += c.get("seconds") or 0.0
-        am["tokens_per_decision"] = quart([t["tokens"] for t in tok.values()])
-        am["seconds_per_decision"] = quart([t["seconds"] for t in tok.values()])
-        bp = []
-        for k in reps:
-            out = arm_dir(arm, k)
-            per: Counter = Counter()
-            for j in json.loads((out / "frozen.json").read_text())["jobs"]:
-                if (out / j["output"]).exists():
+            if len(reps) == 3:
+                rows = [[reps[k][c] for k in REPEATS] for c in ids]
+                am["agreement"] = {"all_three_same": rate(sum(len(set(r)) == 1 for r in rows),
+                                                          len(rows)),
+                                   "fleiss_kappa": fleiss(rows)}
+            tok: dict = {}
+            for c in calls:
+                arm_k, mdl = c["job"].split(":")[:2]
+                if arm_k[0] == arm and mdl == model:
+                    t = tok.setdefault(f"{arm_k}:{c['case']}", {"tokens": 0, "seconds": 0.0,
+                                                                "out": 0})
+                    t["tokens"] += sum(c.get(f, 0) for f in (
+                        "input_tokens", "output_tokens", "cache_read_input_tokens",
+                        "cache_creation_input_tokens"))
+                    t["out"] += c.get("output_tokens", 0)
+                    t["seconds"] += c.get("seconds") or 0.0
+            am["tokens_per_decision"] = quart([t["tokens"] for t in tok.values()])
+            am["output_tokens_per_decision"] = quart([t["out"] for t in tok.values()])
+            am["seconds_per_decision"] = quart([t["seconds"] for t in tok.values()])
+            bp = []
+            for k in reps:
+                out = arm_dir(arm, k, model)
+                per: Counter = Counter()
+                for j in json.loads((out / "frozen.json").read_text())["jobs"]:
                     p = json.loads((out / j["prompt"]).read_text())
                     per[j["case"]] += (bpe(p["system"]) + bpe(p["user"])
                                        + bpe((out / j["output"]).read_text(encoding="utf-8")))
-            bp += list(per.values())
-        am["bpe_tokens_per_decision"] = quart(bp)
-        m[arm] = am
-    if v["s"]:
-        ct = {}
-        for k in v["s"]:
-            ct.update({f"{c}#{k}": t for c, t in checker_times(k).items()})
+                bp += list(per.values())
+            am["bpe_tokens_per_decision"] = quart(bp)
+            m[arm][model] = am
+    ct: dict = {}
+    for model, reps in v["s"].items():
+        for k in reps:
+            ct.update({f"{model}:{c}#{k}": t for c, t in checker_times(k, model).items()})
+    if ct:
         xs = sorted(ct.values())
-        m["checker_seconds"] = {"n": len(xs), "median": statistics.median(xs) if xs else None,
-                                "p90": xs[int(0.9 * (len(xs) - 1))] if xs else None,
-                                "max": xs[-1] if xs else None,
-                                "cpus": __import__("os").cpu_count()}
+        m["checker_seconds"] = {"n": len(xs), "median": statistics.median(xs),
+                                "p90": xs[int(0.9 * (len(xs) - 1))], "max": xs[-1],
+                                "cpus": os.cpu_count()}
         write_json(RUN / "checker_times.json", ct)
-    if 1 in v["s"] and 1 in v["d"]:
-        dec = [c for c in ids if lab[c] in ("achieved", "blocked")]
-        ok = lambda vv, c: vv[c] != "NONE" and (vv[c] == "IMPOSSIBLE") == (lab[c] == "blocked")
-        b = sum(ok(v["s"][1], c) and not ok(v["d"][1], c) for c in dec)
-        w = sum(not ok(v["s"][1], c) and ok(v["d"][1], c) for c in dec)
-        m["mcnemar_r1"] = {"s_only_correct": b, "d_only_correct": w, "p": mcnemar_exact(b, w)}
-    if "pooled" in m.get("s", {}) and "pooled" in m.get("d", {}):
-        s, d = m["s"], m["d"]
-        acc = lambda a: a["pooled"]["accuracy"]["rate"] or 0
-        m["criteria"] = {
-            "C1_accuracy_within_5_points": acc(s) >= acc(d) - 0.05,
-            "C2_no_more_working_refuted": s["pooled"]["working_refuted"]["k"]
-            <= d["pooled"]["working_refuted"]["k"],
-            "C3_agreement_at_least_D": (s.get("agreement", {}).get("all_three_same", {})
-                                        .get("k", -1)
-                                        >= d.get("agreement", {}).get("all_three_same", {})
-                                        .get("k", 10**9)),
-            "C4_median_tokens_at_most_3x": (s["tokens_per_decision"].get("median") or 0)
-            <= 3 * (d["tokens_per_decision"].get("median") or 0)
-            if d["tokens_per_decision"].get("n") else None}
+    dec = [c for c in ids if lab[c] in ("achieved", "blocked")]
+
+    def ok(vv: dict, c: str) -> bool:
+        return vv[c] != "NONE" and (vv[c] == "IMPOSSIBLE") == (lab[c] == "blocked")
+
+    m["mcnemar_r1"], m["criteria"] = {}, {}
+    for model in MODELS:
+        sv, dv = v["s"][model].get(1), v["d"][model].get(1)
+        if sv and dv:
+            b = sum(ok(sv, c) and not ok(dv, c) for c in dec)
+            w = sum(not ok(sv, c) and ok(dv, c) for c in dec)
+            m["mcnemar_r1"][model] = {"s_only_correct": b, "d_only_correct": w,
+                                      "p": mcnemar_exact(b, w)}
+        s_, d_ = m["s"].get(model), m["d"].get(model)
+        if s_ and d_:
+            acc = lambda a: a["pooled"]["accuracy"]["rate"] or 0
+            same = lambda a, dflt: a.get("agreement", {}).get("all_three_same", {}).get("k", dflt)
+            m["criteria"][model] = {
+                "C1_accuracy_within_5_points": acc(s_) >= acc(d_) - 0.05,
+                "C2_no_more_working_refuted": s_["pooled"]["working_refuted"]["k"]
+                <= d_["pooled"]["working_refuted"]["k"],
+                "C3_agreement_at_least_D": same(s_, -1) >= same(d_, 10**9),
+                "C4_median_tokens_at_most_3x": (s_["tokens_per_decision"]["median"]
+                                                <= 3 * d_["tokens_per_decision"]["median"])
+                if s_["tokens_per_decision"].get("n") and d_["tokens_per_decision"].get("n")
+                else None}
+    # secondary: do the models agree with each other (repeat r1)?
+    m["across_models_r1"] = {}
+    for arm in ("s", "d"):
+        have = [mo for mo in MODELS if 1 in v[arm][mo]]
+        if len(have) >= 2:
+            rows = [[v[arm][mo][1][c] for mo in have] for c in ids]
+            m["across_models_r1"][arm] = {
+                "models": have,
+                "all_same": rate(sum(len(set(r)) == 1 for r in rows), len(rows)),
+                "fleiss_kappa": fleiss(rows)}
     write_json(RUN / "metrics.json", m)
-    print(json.dumps({k: m[k] for k in ("labels", "criteria") if k in m}, indent=1))
+    print(json.dumps({k: m[k] for k in ("labels", "criteria", "across_models_r1")}, indent=1))
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("skills")
-    p = sub.add_parser("prepare")
-    p.add_argument("--arm", choices=("s", "d"), required=True)
-    p.add_argument("--repeat", type=int, choices=REPEATS, required=True)
-    for name in ("retry", "repair"):
-        sub.add_parser(name).add_argument("--repeat", type=int, choices=REPEATS, required=True)
+
+    def arm_args(p, arms=("s", "d"), need_arm=True):
+        if need_arm:
+            p.add_argument("--arm", choices=arms, required=True)
+        p.add_argument("--repeat", type=int, choices=REPEATS, default=1)
+        p.add_argument("--model", choices=MODELS + ("all",), default="all")
+
+    arm_args(sub.add_parser("prepare"))
+    arm_args(sub.add_parser("retry"), need_arm=False)
+    arm_args(sub.add_parser("repair"), need_arm=False)
+    arm_args(sub.add_parser("mark-missing"))
     j = sub.add_parser("jobs")
-    j.add_argument("--arm", choices=("exec", "s", "d"), required=True)
-    j.add_argument("--repeat", type=int, default=1)
+    arm_args(j, arms=("exec", "s", "d"))
     j.add_argument("--round", type=int, default=1)
     j.add_argument("--only", nargs="*")
     j.add_argument("--work", type=Path, default=Path("/tmp/real2_work"))
     sub.add_parser("collect-exec").add_argument("--work", type=Path, required=True)
     sub.add_parser("calls").add_argument("--transcripts", type=Path, required=True)
-    mm = sub.add_parser("mark-missing")
-    mm.add_argument("--arm", choices=("s", "d"), required=True)
-    mm.add_argument("--repeat", type=int, choices=REPEATS, required=True)
     sub.add_parser("audit")
     sub.add_parser("score")
     a = ap.parse_args()
+    models = MODELS if getattr(a, "model", "all") == "all" else (a.model,)
     if a.cmd == "skills":
         build_skills()
     elif a.cmd == "prepare":
-        prepare(a.arm, a.repeat)
+        for mo in models:
+            prepare(a.arm, a.repeat, mo)
     elif a.cmd == "retry":
-        retry(a.repeat)
+        for mo in models:
+            retry(a.repeat, mo)
     elif a.cmd == "repair":
-        repair(a.repeat)
+        for mo in models:
+            repair(a.repeat, mo)
+    elif a.cmd == "mark-missing":
+        for mo in models:
+            mark_missing(a.arm, a.repeat, mo)
     elif a.cmd == "jobs":
-        make_jobs(a.arm, a.repeat, a.round, a.only, a.work)
+        for mo in ((None,) if a.arm == "exec" else models):
+            make_jobs(a.arm, a.repeat, a.round, a.only, a.work, mo)
     elif a.cmd == "collect-exec":
         collect_exec(a.work)
     elif a.cmd == "calls":
         log_calls(a.transcripts)
-    elif a.cmd == "mark-missing":
-        mark_missing(a.arm, a.repeat)
     elif a.cmd == "audit":
         audit()
     else:

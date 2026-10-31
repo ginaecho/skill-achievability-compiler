@@ -2,7 +2,8 @@
 
     python benchmark/real2/verify_real2.py /path/to/clones
 
-Checks: 300 unique ids, names and hashes; every copied file matches the pinned commit;
+Checks: 300 unique ids; every case is a real skill (not a test fixture or a blank
+template); every support file matches the pinned commit;, names and hashes; every copied file matches the pinned commit;
 every file of the skill folder is copied or listed; every skill is user-facing; no id,
 name or hash of an earlier test or training document; Jaccard of 5-word shingles below
 0.5 against every earlier document (the gc/data_train_test corpora and the
@@ -37,6 +38,16 @@ for c in cases:
         h = hashlib.sha256(local).hexdigest()
         if h != f["sha256"] or hashlib.sha256(pinned).hexdigest() != h:
             prob["file_hash"].append((c["case"], f["path"]))
+    for f in c.get("support_files", []):           # outside the folder, repository paths
+        nfiles += 1
+        local = (src / "_support" / f["path"]).read_bytes()
+        pinned = subprocess.run(["git", "show", f'{c["commit"]}:{f["path"]}'], cwd=cdir,
+                                capture_output=True).stdout
+        h = hashlib.sha256(local).hexdigest()
+        if h != f["sha256"] or hashlib.sha256(pinned).hexdigest() != h:
+            prob["support_hash"].append((c["case"], f["path"]))
+    if S.not_a_skill(c["path_in_repo"], (src / "SKILL.md").read_text(errors="replace")):
+        prob["not_a_skill"].append(c["case"])
     if not any(f["path"] == "SKILL.md" and f["sha256"] == c["sha256"] for f in c["files"]):
         prob["skill_hash"].append(c["case"])
     # every file in the pinned folder is either copied or listed
@@ -72,6 +83,9 @@ print("max Jaccard vs used", round(max(worst), 3), "max within set", round(wmax,
 print("licences", collections.Counter(c["license"] for c in cases))
 print("runtimes", collections.Counter(c["runtime"] for c in cases))
 print("repos", len({c["repo_url"] for c in cases}), "max per repo", max(collections.Counter(c["repo_url"] for c in cases).values()))
+print("support files", sum(len(c.get("support_files", [])) for c in cases), "in",
+      sum(bool(c.get("support_files")) for c in cases), "skills; skipped while drawing",
+      d.get("skipped_while_drawing"))
 print("fenced", sum(c["fenced"] for c in cases), "bundled", sum(len(c["files"]) > 1 for c in cases),
       "not_copied", sum(bool(c["files_not_copied"]) for c in cases))
 print("runtime rule ok", all(c["runtime"] == S.runtime_for(c["id"]) for c in cases))
