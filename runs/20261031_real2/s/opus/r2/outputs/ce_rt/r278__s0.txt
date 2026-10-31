@@ -1,0 +1,32 @@
+```ce
+Skill `dependency-upgrade`.
+Roles: `agent`, `user`.
+Tool `audit_deps` (owner `agent`): via `bash`; needs `package_registries`; adds `deps_audited`.
+Tool `analyze_tree` (owner `agent`): via `bash`; requires `deps_audited`; adds `tree_analyzed`.
+Tool `fetch_changelog` (owner `agent`): via `web_fetch`; needs `public_internet`; requires `tree_analyzed`; adds `breaking_changes_identified`.
+Tool `write_plan` (owner `agent`): via `write`; requires `breaking_changes_identified`; adds `plan_created`.
+Tool `upgrade_package` (owner `agent`): via `bash`; needs `package_registries`; requires `plan_created`; adds `package_upgraded`; removes `tests_pass`, `build_passes`, `committed`.
+Tool `run_codemod` (owner `agent`): via `bash`; requires `package_upgraded`; adds `codemod_applied`.
+Tool `run_tests` (owner `agent`): via `bash`; requires `package_upgraded`; adds `tests_pass`.
+Tool `run_build` (owner `agent`): via `bash`; requires `package_upgraded`; adds `build_passes`.
+Tool `rollback` (owner `agent`): via `bash`; removes `package_upgraded`, `tests_pass`, `build_passes`.
+Tool `git_commit` (owner `agent`): via `bash`; requires `tests_pass` and `build_passes`; adds `committed`.
+Initially true: none.
+Goal: `package_upgraded` and `tests_pass` and `build_passes` and `committed`.
+Protocol:
+  - `agent` uses `audit_deps`.
+  - `agent` uses `analyze_tree`.
+  - `agent` uses `fetch_changelog`.
+  - `agent` uses `write_plan`.
+  - loop `stage`:
+    - `agent` uses `upgrade_package`.
+    - `agent` uses `run_codemod`.
+    - `agent` uses `run_tests`.
+    - `agent` chooses one of (external):
+      - branch `passed`: none.
+      - branch `failed`:
+        - `agent` uses `rollback`.
+        - repeat `stage`.
+  - `agent` uses `run_build`.
+  - `agent` uses `git_commit`.
+```

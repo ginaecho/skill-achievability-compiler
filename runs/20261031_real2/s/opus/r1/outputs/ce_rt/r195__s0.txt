@@ -1,0 +1,31 @@
+```ce
+Skill `intercom-incident-runbook`.
+Roles: `agent`, `user`.
+Tool `probe_api` (owner `agent`): via `bash`; needs `intercom_token`; adds `api_code_known`.
+Tool `check_status` (owner `agent`): via `web_fetch`; needs `public_internet`; requires `api_code_known`; adds `fault_verdict`.
+Tool `rotate_token` (owner `agent`): via `bash`; needs `aws_account`, `cluster_access`; requires `fault_verdict`; adds `mitigation_applied`.
+Tool `grant_scope` (owner `agent`): via `developer_hub`; needs `intercom_admin`; requires `fault_verdict`; adds `mitigation_applied`.
+Tool `throttle` (owner `agent`): via `bash`; needs `cluster_access`; requires `fault_verdict`; adds `mitigation_applied`.
+Tool `enable_fallback` (owner `agent`): via `bash`; needs `cluster_access`; requires `fault_verdict`; adds `mitigation_applied`.
+Tool `enable_degradation` (owner `agent`): via `bash`; needs `cluster_access`; requires `fault_verdict`; adds `mitigation_applied`.
+Tool `post_slack` (owner `agent`): via `slack`; needs `slack_workspace`; requires `fault_verdict`; adds `comms_sent`.
+Tool `write_postmortem` (owner `agent`): via `write`; needs `local_filesystem`; requires `mitigation_applied`; adds `postmortem_written`.
+Initially true: none.
+Goal: `fault_verdict` and `mitigation_applied` and `comms_sent` and `postmortem_written`.
+Protocol:
+  - `agent` uses `probe_api`.
+  - `agent` uses `check_status`.
+  - `agent` chooses one of (external):
+    - branch `intercom_incident`:
+      - `agent` uses `enable_degradation`.
+    - branch `auth_401`:
+      - `agent` uses `rotate_token`.
+    - branch `scope_403`:
+      - `agent` uses `grant_scope`.
+    - branch `rate_429`:
+      - `agent` uses `throttle`.
+    - branch `server_5xx`:
+      - `agent` uses `enable_fallback`.
+  - `agent` uses `post_slack`.
+  - `agent` uses `write_postmortem`.
+```

@@ -1,0 +1,35 @@
+```ce
+Skill `pva-spec`.
+Roles: `agent`, `user`.
+Tool `verify_references` (owner `agent`): via `bash`; requires `doctor_report_ready`; adds `references_verified`.
+Tool `fetch_reference_url` (owner `agent`): via `web_fetch`; requires `references_verified`; adds `sources_read`.
+Tool `read_sources` (owner `agent`): via `read`; requires `references_verified`; adds `sources_read`.
+Tool `write_spec` (owner `agent`): via `write`; requires `sources_read` and not `blocking_requirement`; adds `spec_written`, `configured`.
+Tool `write_matrix` (owner `agent`): via `write`; requires `spec_written`; adds `matrix_written`.
+Tool `write_evidence` (owner `agent`): via `write`; requires `sources_read`; adds `evidence_written`.
+Tool `link_test` (owner `agent`): via `edit`; requires `matrix_written`; adds `test_linked`.
+Tool `finalize_handoff` (owner `agent`): via `bash`; requires `spec_written` and `matrix_written` and `evidence_written` and `doctor_report_ready`; adds `handoff_finalized`.
+Tool `check_handoff` (owner `agent`): via `bash`; requires `handoff_finalized`; adds `handoff_checked`.
+Tool `write_report` (owner `agent`): via `write`; requires `handoff_checked`; adds `report_written`.
+Initially true: `doctor_report_ready`.
+Goal: all of (`references_verified`, `sources_read`, `spec_written`, `matrix_written`, `evidence_written`, `handoff_finalized`, `handoff_checked`, `report_written`, `configured`).
+Protocol:
+  - `agent` uses `verify_references`.
+  - `agent` chooses one of (observed):
+    - branch `public_url`:
+      - `agent` uses `fetch_reference_url`.
+    - branch `local_sources`:
+      - `agent` uses `read_sources`.
+  - `agent` uses `write_spec`.
+  - `agent` uses `write_matrix`.
+  - `agent` uses `write_evidence`.
+  - loop `finalize`:
+    - `agent` uses `finalize_handoff`.
+    - `agent` chooses one of (external):
+      - branch `missing_test`:
+        - `agent` uses `link_test`.
+        - repeat `finalize`.
+      - branch `ready`: none.
+  - `agent` uses `check_handoff`.
+  - `agent` uses `write_report`.
+```
