@@ -122,15 +122,15 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
   <p class="sub">What can an agent do on this machine, and what can a graph answer?
     <span id="modelStatus">Reading model configuration…</span></p>
   <nav>
-    <button class="on" data-tab="env">1 · My environment</button>
+    <button class="on" data-tab="env">1 · Basic skillc</button>
     <button data-tab="graph">2 · A graph</button>
     <button data-tab="why">3 · Why skillc</button>
   </nav>
 </header>
 <main>
 <section id="env" class="tab on">
-  <div class="panel" id="environmentGuide" style="margin-bottom:16px">
-    <h2>How to read the comparison: rows are environments, columns are checkers</h2>
+  <details class="panel" id="environmentGuide" style="margin-bottom:16px">
+    <summary>How to read the saved/reference profile comparison</summary>
     <p>Every row asks the same question: <b>could this skill run with this environment's tools?</b>
       The row names are not the models answering the question.</p>
     <div style="overflow-x:auto"><table>
@@ -138,7 +138,7 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
       <tr><td>Local Copilot CLI</td><td>Your local saved setup in this repository</td><td>Built-in inventory plus your saved Copilot configuration, approvals and MCP configuration; not an inspection of this running session</td></tr>
       <tr><td>Copilot CLI reference</td><td>A standard Copilot CLI setup for comparison</td><td>A JSON tool profile bundled with SkillC, not your local configuration</td></tr>
       <tr><td>VS Code Copilot</td><td>A reference VS Code Copilot environment</td><td>A bundled JSON tool profile; no live VS Code session is inspected</td></tr>
-      <tr><td>Claude Code</td><td>A reference Claude Code environment</td><td>A bundled JSON tool profile; Claude Code is not running or answering</td></tr>
+      <tr><td>Claude Code</td><td>A reference Claude Code environment</td><td>A bundled JSON tool profile, separate from the actual native sessions below</td></tr>
       <tr><td>claude.ai</td><td>A reference Claude chat environment</td><td>A bundled JSON tool profile; no Claude chat session is contacted</td></tr>
     </table></div>
     <p><b>Why two Copilot rows?</b> One represents your saved local setup; the other is a reference setup.
@@ -151,7 +151,7 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
       Reference lists are saved in repository files; local discovery is cached by the app until you press
       <b>Read again</b>. Neither is an LLM remembering your environment.
       After a check, expand a row's <b>Tool list supplied to the checkers</b> to inspect the actual list.</p>
-  </div>
+  </details>
   <div class="grid">
     <div class="panel">
       <h2><span class="step">1</span>What skillc found here</h2>
@@ -177,11 +177,14 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
     <div class="panel">
       <h2><span class="step">2</span>Pick or paste a skill</h2>
       <div class="row" id="samples"></div>
+      <p class="muted">Selecting an example launches installed Copilot CLI and Claude Code in isolated workspaces.
+        Each native session gets its own predictions before execution. This adds paid model calls.
+        No real booking or Slack message is sent; unconfirmed completion stays NOT VERIFIED.</p>
       <textarea id="skill" placeholder="Paste a SKILL.md, an agent file or a prompt"></textarea>
-      <div class="row"><button class="act" id="check">Check it here</button><span class="muted" id="checkNote"></span></div>
       <div id="result"></div>
     </div>
   </div>
+  <div class="panel" id="exampleExecution" hidden style="margin-top:16px" aria-live="polite"></div>
 </section>
 
 <section id="graph" class="tab">
@@ -192,10 +195,6 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
       <input type="file" id="file" accept=".ttl,.trig,.nt,.nq,.rdf,.owl,.xml,.n3,.txt,.sketch,.png,.jpg,.jpeg,.webp,.svg">
       <input type="text" id="tenant" placeholder="tenant (only if the file holds several)" style="max-width:260px">
     </div>
-    <div id="graphName" class="muted">A building graph in any of four forms: an RDF file (Turtle, TriG, N-Triples, N-Quads, RDF/XML), a scribble of arrows, a plain description (.txt), or a picture of a sketch. Ontology graphs only name classes; they never count as evidence.</div>
-    <p class="muted"><b>No model needed for graph checks.</b> RDF graphs and text sketches are read
-      and checked locally. A model is used only when you choose to read a picture; that action
-      costs tokens. Editing the extracted text or evidence requirements never calls a model.</p>
     <div id="caseIntro"></div>
     <details id="sketchBox" hidden><summary>The sketch, as text: edits update the graph automatically</summary>
       <div class="muted">One fact per line or sentence: <code>AHU-1 -> VAV-11 -> Zone 11</code>, <code>Zone 11 in Floor 1</code>, <code>SP-11 on VAV-11: 16..26 degC, priority 9, BACnet analog-value,11</code>, <code>Schedule S-11 for VAV-11: Mon-Fri 07:00-19:00</code>, <code>Policy P for Zone 11: hours 06:00-20:00</code>, <code>HQ timezone Europe/Berlin</code>. Read without a model; a line it cannot read is listed, never guessed.</div>
@@ -311,7 +310,7 @@ Full request: blocked; partial plan: report + ZIP + inventory.</pre>
 <script>
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
-const state = { env: null, off: new Set(), added: new Set(), graph: null, graphName: "", samples: null };
+const state = { env: null, off: new Set(), added: new Set(), graph: null, graphName: "", samples: null, example: null };
 
 document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
   document.querySelectorAll("nav button, .tab").forEach((x) => x.classList.remove("on"));
@@ -363,14 +362,20 @@ function drawEnv() {
 
 async function loadEnv(refresh) {
   $("envStatus").textContent = "Reading this machine…";
-  try { state.env = await api("/api/environment" + (refresh ? "?refresh=1" : "")); drawEnv(); }
+  try { state.env = await api("/api/environment" + (refresh ? "?refresh=1" : "")); drawEnv(); recheck(); }
   catch (err) { $("envStatus").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
 }
 
 function verdictCell(v) { return `<span class="v ${esc(v)}">${esc(v)}</span>`; }
 
+let checkRevision = 0, skillTimer;
 async function check(askLlm = true) {
+  clearTimeout(skillTimer);
+  const revision = ++checkRevision;
   const text = $("skill").value;
+  const example = state.example;
+  let predictions = null;
+  $("exampleExecution").hidden = true;
   if (!text.trim()) return;
   if (!state.env) { $("result").innerHTML = '<p class="err">The environment has not loaded yet. Wait for discovery, or press Read again, before checking.</p>'; return; }
   $("result").innerHTML = '<p class="muted">Checking…</p>';
@@ -379,6 +384,9 @@ async function check(askLlm = true) {
   try {
     const body = {text, machine: state.env ? machineGrants() : undefined};
     const r = await api("/api/check", body);
+    if (revision !== checkRevision) return;
+    const localIndex = r.rows.findIndex(x => x.setting === "this machine");
+    predictions = {skillc: r.rows[localIndex], plain: null, guided: null};
     const label = (s) => {
       const local = s === "this machine";
       const tools = local ? machineGrants() : state.env.settings[s];
@@ -392,10 +400,12 @@ async function check(askLlm = true) {
     const rows = r.rows.map((x, i) => `<tr><td>${label(x.setting)}</td>
       <td>${verdictCell(x.verdict)}<div class="muted">${x.verdict === "IMPOSSIBLE" && x.missing.length ? "missing: <code>" + x.missing.map(esc).join("</code>, <code>") + "</code>"
            : x.verdict === "UNKNOWN" ? esc(x.detail) : x.verdict === "ACHIEVABLE" ? "every tool it needs is here" : esc(x.detail)}</div>${x.matched.length ? `<div class="muted">same tool, other name: ${x.matched.map(([a, b]) => `<code>${esc(a)}</code> = <code>${esc(b)}</code>`).join(", ")}</div>` : ""}${cost(0, x.ms)}</td>
-      ${llmCell(`plain-${i}`)}${llmCell(`guided-${i}`)}</tr>`).join("");
+      ${llmCell(`plain-${i}`)}${llmCell(`guided-${i}`)}
+      <td${x.setting === "this machine" ? ' id="observedLocal"' : ""}>${x.setting !== "this machine" ? "NOT RUN — reference profile only"
+        : "Saved/what-if configuration, not the isolated native run"}</td></tr>`).join("");
     $("result").innerHTML = `<p><b>${esc(r.name)}</b> needs ${r.needs.length ? "<code>" + r.needs.map(esc).join("</code>, <code>") + "</code>" : "no tool skillc could read"}.</p>
-      <p class="muted">Each <b>row</b> is a place the skill could run. Each <b>column</b> is a checker: skillc (no model), an LLM asked directly, and an LLM given a guiding skill.</p>
-      <div style="overflow-x:auto"><table><tr><th>where it would run</th><th>skillc</th><th>LLM</th><th>LLM + guiding skill</th></tr>${rows}</table></div>
+      <p><b>Saved/reference profiles: predictions only.</b> Actual native sessions and their own predictions appear separately below.</p>
+      <div style="overflow-x:auto"><table><tr><th>where it would run</th><th>skillc</th><th>LLM</th><th>LLM + guiding skill</th><th>Observed execution</th></tr>${rows}</table></div>
       <div id="llmFoot" class="muted"></div>
       <details><summary>What the guiding skill tells the LLM</summary><pre>${esc(state.env ? state.env.llm.guide : "")}</pre>
         <p class="muted">Both LLMs get the same skill and the same facts (tool names; for this machine also which tools ask first, the MCP servers and the credential names that are set). Only the guided one gets these instructions.</p></details>
@@ -403,15 +413,17 @@ async function check(askLlm = true) {
       <p class="muted">"This machine" is what a Copilot CLI agent started in this folder would have: its built-in tools, the approvals you saved for this repository, and its MCP servers. It cannot see options a running session was started with (<code>--deny-tool</code>, <code>--excluded-tools</code>), and MCP servers' tools are not listed. Tools marked "asks first" count as possible, conditional on your approval. Credential presence is not authentication. A tool that does the same job under another name counts (for example <code>ask_user_input_v0</code> = <code>ask_user</code>), from a reviewed list; the cell says which. Use the measured benchmark in tab 3 for independently executed outcomes.</p>`;
     if (!llm) {
       $("llmFoot").innerHTML = llmOn
-        ? "The LLMs are not asked again for a what-if edit (each ask costs tokens); press <b>Check it here</b> to ask them."
+        ? "SkillC updated automatically. LLM comparisons run only when you select an example; text and tool edits do not call a model."
         : `LLM columns are off: no model is called. ${esc(state.env ? state.env.llm.why : "")}.`;
       return;
     }
     const sk = r.rows.map((x) => x.verdict);
     const l = await api("/api/llm-check", body);
+    if (revision !== checkRevision) return;
     const foot = [];
     for (const arm of ["plain", "guided"]) {
       const a = l.arms[arm];
+      predictions[arm] = a.rows[localIndex];
       a.rows.forEach((x, i) => {
         const cell = $("result").querySelector(`td[data-i="${arm}-${i}"]`);
         if (!cell) return;
@@ -424,15 +436,87 @@ async function check(askLlm = true) {
     }
     const skMs = r.rows.reduce((t, x) => t + x.ms, 0);
     $("llmFoot").innerHTML = `${esc(l.provider)} · ${esc(l.model)} · each LLM cell is its own model call (input + output tokens, and its time); the ${r.rows.length * 2} calls ran side by side in ${(l.wall_ms / 1000).toFixed(1)} s · ${foot.join(" · ")} · skillc: 0 tokens, ${Math.round(skMs)} ms for all rows after reading the skill once (${Math.round(r.compile_ms)} ms). A cell outlined in amber differs from skillc.`;
-  } catch (err) { $("result").innerHTML += `<p class="err">${esc(err.message)}</p>`; }
+  } catch (err) {
+    if (revision === checkRevision) {
+      $("result").innerHTML += `<p class="err">${esc(err.message)}</p>`;
+      if (predictions) {
+        for (const arm of ["plain", "guided"]) {
+          predictions[arm] = {verdict: "UNKNOWN", error: err.message};
+          $("result").querySelectorAll(`td[data-i^="${arm}-"]`).forEach(cell => {
+            cell.innerHTML = '<span class="err">Model comparison failed; not graded</span>';
+          });
+        }
+      }
+    }
+  }
+  finally {
+    if (revision === checkRevision && predictions && example && askLlm && !edited()) {
+      $("exampleExecution").hidden = false;
+      $("exampleExecution").textContent = `Launching actual native agents for ${example}; predicting from their actual tools, then executing and independently verifying…`;
+      try {
+        const observed = await api("/api/local-runs/run", {id: example, text, predictions});
+        if (revision === checkRevision) renderExampleExecution(observed);
+      } catch (error) {
+        if (revision === checkRevision) {
+          $("exampleExecution").innerHTML = `<p class="err">Execution not verified: ${esc(error.message)}</p>`;
+        }
+      }
+    }
+  }
 }
 function recheck() { if ($("skill").value.trim() && $("result").innerHTML) check(false); }
 
-$("check").onclick = () => check(true);
+$("skill").oninput = () => {
+  state.example = null;
+  $("exampleExecution").hidden = true;
+  ++checkRevision;
+  clearTimeout(skillTimer);
+  $("result").innerHTML = $("skill").value.trim() ? '<p class="muted">Waiting for your edits…</p>' : "";
+  skillTimer = setTimeout(() => check(false), 350);
+};
 $("refresh").onclick = () => loadEnv(true);
 $("reset").onclick = () => { state.off.clear(); state.added.clear(); drawEnv(); recheck(); };
 $("addBtn").onclick = () => { const t = $("addTool").value.trim(); if (t) { state.added.add(t); $("addTool").value = ""; drawEnv(); recheck(); } };
 $("addTool").onkeydown = (e) => { if (e.key === "Enter") $("addBtn").click(); };
+
+// --- execution evidence for the selected example, not a separate task catalog ---
+function renderExampleExecution(r) {
+  const names = {copilot: "Copilot CLI", claude: "Claude Code", vscode: "VS Code Copilot", "claude-chat": "Claude consumer chat"};
+  const rows = Object.entries(r.native_runs).map(([host, n]) => {
+    const prediction = arm => {
+      const p = (n.predictions || {})[arm];
+      if (!p) return '<td class="muted">Not run</td>';
+      const compared = !n.verified ? "Not graded: task completion unverified"
+        : p.error ? "Judge error; not graded" : p.verdict === "UNKNOWN" ? "Abstained"
+        : p.verdict === "ACHIEVABLE" ? "Consistent with this completed run" : "Disagrees with this completed run";
+      const tokens = (p.input_tokens || 0) + (p.output_tokens || 0);
+      return `<td>${verdictCell(p.verdict)}<div class="muted">${esc(p.detail || p.reason || "")}</div>`
+        + `<div class="cost">${tokens.toLocaleString("en-US")} tokens · ${Math.round(p.ms || 0)} ms</div>`
+        + `<div>${esc(compared)}</div>${p.error ? `<div class="err">${esc(p.error)}</div>` : ""}</td>`;
+    };
+    const trace = (n.events || []).map(e => `<li><code>${esc(e.tool)}</code>: ${esc(e.status)}</li>`).join("");
+    return `<tr><td><b>${esc(names[host] || host)}</b><div class="muted">${esc(n.version || "")}</div>`
+      + (n.attempted ? `<div>Native agent · ${esc(n.model)}</div><details><summary>Actual tools and run scope</summary>`
+        + `<code>${esc(((n.predictions || {}).tools || []).join(", "))}</code><p>${esc(n.scope)}</p></details>` : "") + "</td>"
+      + ["skillc", "plain", "guided"].map(prediction).join("")
+      + `<td><b>${n.verified ? "VERIFIED — native execution" : n.attempted ? "ATTEMPTED — NOT VERIFIED" : "NOT RUN"}</b>`
+      + `<p>${esc(n.reason)}</p>${trace ? `<details><summary>Actual tool completions</summary><ul>${trace}</ul></details>` : ""}</td></tr>`;
+  }).join("");
+  const artifacts = r.artifacts.map(a => `<li><a href="/api/local-runs/artifact?run=${encodeURIComponent(r.run)}&amp;file=${encodeURIComponent(a.name)}" download="${esc(a.name)}">${esc(a.name)}</a>`
+    + ` · ${a.bytes.toLocaleString("en-US")} bytes<br><span class="mono">SHA-256 ${esc(a.sha256)}</span></li>`).join("");
+  $("exampleExecution").hidden = false;
+  $("exampleExecution").innerHTML = `<h2>Real native runs: ${esc(r.example)}</h2>`
+    + `<p>${esc(r.reason)} The coding example uses a prepared failing fixture; the native agent—not a scripted fix—must repair it.</p>`
+    + (r.error ? `<p class="err">${esc(r.error)}</p>` : "")
+    + `<p class="muted">${esc(r.scope)}</p>`
+    + `<p>Native agents and both LLM judges use the configured Azure model. Claude Code here means the actual Claude Code program, not a Claude model.
+       Predictions use each session's actual tool list before its first inference; saved/reference predictions above are not reused.
+       SkillC validates authored tool effects, not real reservations or messages.
+       It uses reviewed tool aliases; the LLMs infer aliases. These runs are not a general ranking of the judges.</p>`
+    + `<div style="overflow-x:auto"><table><tr><th>Actual runtime</th><th>SkillC</th><th>LLM</th><th>LLM + guiding skill</th><th>Observed execution</th></tr>${rows}</table></div>`
+    + `<details><summary>Execution artifacts (${r.artifacts.length})</summary><ul>${artifacts}</ul></details>`
+    + `<p class="muted">${esc(r.created_at)} · ${esc(r.run)}</p>`;
+}
 
 // --- graph tab ---
 const G = { data: null, pos: {}, results: [], workflows: [], sel: null,
@@ -672,7 +756,6 @@ async function loadGraph(text, name, revision) {
   const controller = new AbortController(); G.controller = controller;
   state.graph = text; state.graphName = name;
   clearGraphReport();
-  $("graphName").textContent = `${name} · ${(text.length / 1024).toFixed(1)} KB`;
   $("twinStatus").textContent = "Reading graph…";
   const body = {graph: text, filename: name, tenant: $("tenant").value.trim()};
   try {
@@ -741,7 +824,6 @@ async function showSketch(text, name) {
 function showPicture(blob, name) {
   cancelGraphUpdate(); clearGraphReport();
   state.graph = null; state.graphName = name;
-  $("graphName").textContent = name;
   $("gHint").textContent = "Read the picture and review the extracted sketch before a graph can be drawn.";
   $("twinOut").textContent = "This picture has not been read or checked yet.";
   $("twinStatus").textContent = "Picture selected. Reading it uses a model; graph checks afterwards are automatic and model-free.";
@@ -973,9 +1055,12 @@ $("benchRefresh").onclick = benchmarkShow;
   $("samples").innerHTML = '<span class="muted">Examples:</span>' + state.samples.skills.map((s, i) =>
     `<button class="ghost" data-i="${i}">${esc(s.name)}</button>`).join("");
   $("samples").querySelectorAll("button").forEach((b) => b.onclick = () => {
-    $("skill").value = state.samples.skills[b.dataset.i].text; check();
+    const sample = state.samples.skills[b.dataset.i];
+    state.example = sample.name; $("skill").value = sample.text; check();
   });
   loadEnv(false);
+  const history = await api("/api/local-runs");
+  if (!state.example && history.latest.available) renderExampleExecution(history.latest);
 })();
 </script>
 </body>

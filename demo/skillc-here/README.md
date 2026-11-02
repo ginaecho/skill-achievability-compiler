@@ -13,11 +13,12 @@ pip install -e ".[twin]"          # skillc, plus rdflib for the graph tab
 python demo/skillc-here/app.py    # opens http://127.0.0.1:8770/
 ```
 
-Offline by default: no model call, no network check, nothing is executed. The server binds to
+Offline by default: no model call or native agent execution. With the Azure LLM configuration
+enabled, selecting a built-in skill launches native agents; opening the page only loads saved
+evidence and never executes an example. The server binds to
 127.0.0.1 and answers only requests addressed to `127.0.0.1` or `localhost`.
 
-**With the LLM columns** (tab 1 then also asks a plain LLM and a guided LLM; each check calls a
-model twice and costs tokens), opt in for this run only:
+**With the LLM columns and native runs** (paid model calls), opt in for this run only:
 
 ```powershell
 $env:SKILLC_ALLOW_MODEL_CALLS = '1'
@@ -55,7 +56,55 @@ Azure CLI sign-in or `AZURE_OPENAI_API_KEY` authenticates; `--llm-provider anthr
    you review before skillc reads it.
 9. Open **3 · Why skillc**. Pick a tool setup, then a case, and compare the three columns (below).
 
-## 1 · My environment: what can an agent do here?
+## 1 · Basic skillc: what can an agent do here?
+
+### Execute the same selected example
+
+Selecting **book-a-table**, **fix-failing-test** or **post-release-note** first gets the
+saved/reference predictions, then launches the installed **Copilot CLI** and **Claude Code**
+programs in separate, isolated configurations. A loopback gateway captures each native
+request's actual tools, obtains new predictions from all three checkers, then forwards the
+native request. Judge refusals do not prevent execution. Neither a Python agent loop nor a
+scripted repair substitutes for a native agent.
+
+The **Real native runs** table compares these new predictions with actual execution. It does
+not reuse predictions for a different saved/reference tool inventory. Both native agents
+and LLM judges use the configured Azure deployment: Claude Code is the real program, **not
+a claim to be running a Claude model**.
+
+* **fix-failing-test:** establish a failing two-test fixture, let each native agent inspect
+  and repair it using its own tools, then independently rerun the unchanged trusted tests.
+  `VERIFIED` requires a successful native edit and shell tool completion, a changed source,
+  a successful agent exit and both independent tests passing. The verifier never repairs
+  source. This checks the selected example against a prepared fixture, not this repository's
+  production suite.
+* **book-a-table:** launch the native agent, but keep external completion `NOT VERIFIED`.
+  No evening was collected and no reservation was made.
+  The example's declaration that `web_search` marks a table booked is a modelling assumption,
+  not a reservation API or confirmation. No fake booking service supplies a success result.
+* **post-release-note:** launch the native agent, but keep posting `NOT VERIFIED`.
+  No authenticated merged pull-request query or Slack posting occurs, and no receipt is fabricated.
+
+VS Code Copilot has no controlled session connected to this app; consumer Claude chat needs
+an actual manual session. Both remain **NOT RUN**, never substituted with another CLI.
+Unverified external completion is **not graded** as agreement or disagreement. A native run
+does not verify a different saved configuration or the bundled reference profiles.
+Pasted/edited skills and what-if tool changes perform static validation only and cannot execute
+arbitrary code or cause external actions.
+
+Runs persist under `runs/*_example_run_*/` with the exact selected skill hash, supplied judge
+predictions saved before execution, executable versions, actual native JSONL transcripts,
+tool completion events, test logs and downloadable artifacts with SHA-256 hashes.
+Native model requests pass through `skillc.frontend.providers.azure_openai_chat` and its URL
+guard. The gateway rejects file access outside the fixture, writes to tests, unsafe source
+and every shell command except the exact trusted test command. Only pure arithmetic source
+may run; native agents receive no service credentials or MCP connections. This is constrained
+execution, not a claim that the programs are running in an OS container. Each agent has a
+four-minute deadline and at most 16 native inference requests; reference and native prediction
+calls cost additional tokens. Native execution currently requires Windows installations at
+the standard per-user Copilot CLI and npm Claude Code paths.
+
+### Reference tool-profile comparison
 
 On load the page reads this folder as a GitHub Copilot CLI agent started here would see it
 (`skillc.env.copilot.probe`):
@@ -70,7 +119,7 @@ On load the page reads this folder as a GitHub Copilot CLI agent started here wo
 
 One line under the panel says what was read and when (hover it for the files).
 
-Pick an example skill or paste your own, and press **Check it here**. skillc compiles the text once
+Pick an example skill or paste your own; SkillC updates automatically after edits. It compiles the text once
 (no tool is assumed) and checks it against this machine and four published profiles side by side:
 
 | skill | this machine | Copilot CLI | VS Code Copilot | Claude Code | claude.ai |
@@ -100,8 +149,8 @@ The guiding skill is shown on the page under the table. Neither LLM sees skillc'
 outlined in amber differs from skillc. **Every cell shows its own tokens and time**: each LLM cell
 is a separate model call for that one row (input plus output tokens as the provider reports them,
 and that call's time; the calls run side by side), and each skillc cell is 0 tokens and the time of
-its check, after skillc has read the skill once. A what-if edit re-runs only skillc; press
-**Check it here** to ask the LLMs again. Tab 3 has the measured comparison, with each task really
+its check, after skillc has read the skill once. Text and what-if tool edits re-run only SkillC;
+selecting an example also runs the LLM comparisons when enabled. Tab 3 has the measured comparison, with each task really
 executed.
 
 **Use it in your own Copilot sessions** (the panel's last section):
@@ -266,6 +315,11 @@ the benchmark must report that rather than assume SkillC wins.
 * `POST /api/llm-check` (same body; only with `--llm` and the opt-in): `provider`, `model`,
   `guide`, and `arms.plain` / `arms.guided`, each with `rows` (`setting`, `verdict`, `missing`,
   `reason`), `input_tokens`, `output_tokens`, `ms` and `error`.
+* `GET /api/local-runs`: the three displayed example IDs/hashes and latest execution record.
+* `POST /api/local-runs/run` `{"id", "text", "predictions"?}`: execute permitted local steps
+  of the unchanged built-in example, regardless of its predictions. Arbitrary/edited text
+  is refused. No model call, reservation or Slack post occurs in this endpoint.
+* `GET /api/local-runs/artifact?run=<run>&file=<artifact>`: an allowlisted local output.
 * `GET /api/why`: the arms, setups and cases. `POST /api/why/run` `{"id"}`: the live skillc column
   (`mode` static: `verdict`, `missing`; `mode` runtime: `plan_decision`, `plan_reason`, `steps`).
 * `GET /api/benchmark`: latest local benchmark aggregates and case outcomes, or an explicit

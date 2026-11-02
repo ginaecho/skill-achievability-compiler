@@ -92,6 +92,8 @@ def build_request(skill: str, settings: dict[str, list[str]], machine: dict) -> 
     for sid, name in ids.items():
         entry = {"id": sid, "runtime": DESCRIBE.get(name, "a runtime"),
                  "tools": sorted(settings[name])}
+        if machine.get("execution_scope"):
+            entry["execution_scope"] = machine["execution_scope"]
         if name == "this machine":
             entry.update({"tools_that_ask_first": sorted(machine.get("asks_first", [])),
                           "mcp_servers_tools_not_listed": sorted(machine.get("mcp_servers", [])),

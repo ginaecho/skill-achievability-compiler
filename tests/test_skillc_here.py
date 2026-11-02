@@ -28,6 +28,142 @@ def _verdicts(result):
     return {r["setting"]: (r["verdict"], r["missing"]) for r in result["rows"]}
 
 
+def _local_run(tmp_path, example="fix-failing-test"):
+    return app.local_runs.run(
+        example, _skill(example), runs=tmp_path / "runs")
+
+
+def test_example_execution_never_uses_a_scripted_fix_or_launches_models_by_default(
+        tmp_path, monkeypatch):
+    local = app.local_runs
+    monkeypatch.setattr(local.native_runs, "execute",
+                        lambda *_a, **_kw: pytest.fail("native runs require explicit opt-in"))
+    predictions = {arm: {"verdict": "IMPOSSIBLE"} for arm in ("skillc", "plain", "guided")}
+    result = local.run("fix-failing-test", _skill("fix-failing-test"),
+                       predictions=predictions, runs=tmp_path / "runs")
+    assert result["example"] == "fix-failing-test"
+    assert result["status"] == "complete" and result["outcome"] == "NOT_VERIFIED"
+    assert all(not n["attempted"] for n in result["native_runs"].values())
+    assert result["predictions"] == predictions
+    assert local.latest(tmp_path / "runs")["run"] == result["run"]
+    assert not list((tmp_path / "runs").rglob("calculator.py"))
+
+
+@pytest.mark.parametrize("example", ["book-a-table", "post-release-note"])
+def test_external_examples_never_fabricate_success_or_invoke_accounts(
+        example, tmp_path, monkeypatch):
+    local = app.local_runs
+    calls = []
+
+    def native_stub(host, output, text, *args, **kwargs):
+        assert text == _skill(example)
+        assert kwargs["example"] == example
+        calls.append(host)
+        return {"runtime": host, "attempted": True, "verified": False,
+                "reason": "Unit-test native runtime double; no external action."}
+
+    monkeypatch.setattr(local.native_runs, "execute", native_stub)
+    result = local.run(example, _skill(example), runs=tmp_path / "runs", enabled=True)
+    assert result["status"] == "complete" and result["outcome"] == "NOT_VERIFIED"
+    assert calls == ["copilot", "claude"]
+    assert not list((tmp_path / "runs").rglob("calculator.py"))
+
+
+def test_example_execution_accepts_only_exact_displayed_skills_and_safe_artifacts(tmp_path):
+    local = app.local_runs
+    with pytest.raises(ValueError, match="three displayed examples"):
+        local.run("release-archive", "", runs=tmp_path / "runs")
+    with pytest.raises(ValueError, match="unchanged selected example"):
+        local.run("fix-failing-test", "edited or arbitrary code", runs=tmp_path / "runs")
+    assert not (tmp_path / "runs").exists()
+    for run, name in (("../outside", "report.md"), ("anything", "../secret"),
+                      ("20261102_080000_000000Z_example_run_safe", "environment.local.json")):
+        with pytest.raises(ValueError, match="unknown run or artifact"):
+            local.artifact(run, name, tmp_path / "runs")
+
+
+def test_native_failure_does_not_skip_other_hosts_and_releases_lock(tmp_path, monkeypatch):
+    local = app.local_runs
+    calls = []
+
+    def fail(host, *_a, **_kw):
+        calls.append(host)
+        raise RuntimeError("controlled native launch failure")
+
+    monkeypatch.setattr(local.native_runs, "execute", fail)
+    result = local.run("fix-failing-test", _skill("fix-failing-test"),
+                       runs=tmp_path / "runs", enabled=True)
+    assert calls == ["copilot", "claude"]
+    assert result["outcome"] == "NOT_VERIFIED"
+    assert "controlled native launch failure" in result["native_runs"]["copilot"]["reason"]
+    assert _local_run(tmp_path)["status"] == "complete"
+
+
+def test_actual_native_copilot_tool_names_bind_to_the_authored_workflow():
+    result = app.check_skill(_skill("fix-failing-test"), {
+        "native": ["rg", "view", "apply_patch", "powershell"]})
+    assert result["rows"][0]["verdict"] == "ACHIEVABLE"
+    assert ["edit", "apply_patch"] in result["rows"][0]["matched"]
+
+
+def test_example_execution_http_roundtrip_and_artifacts(tmp_path, monkeypatch):
+    import threading
+    import urllib.error
+    import urllib.request
+
+    local = app.local_runs
+    run, latest, artifact = local.run, local.latest, local.artifact
+    runs = tmp_path / "runs"
+    monkeypatch.setattr(local, "run", lambda *a, **kw: run(*a, **kw, runs=runs))
+    monkeypatch.setattr(local, "latest", lambda: latest(runs))
+    monkeypatch.setattr(local, "artifact", lambda *a: artifact(*a, runs=runs))
+    monkeypatch.setitem(app.LLM, "enabled", True)
+    monkeypatch.setitem(app.LLM, "provider", "azure-openai")
+
+    def native_stub(host, output, *_a, **_kw):
+        (output / "runtime" / f"{host}-transcript.jsonl").write_text(
+            '{"unit_test_stub":true}\n', encoding="utf-8")
+        return {"runtime": host, "attempted": True, "verified": False,
+                "reason": "Unit-test native runtime double."}
+
+    monkeypatch.setattr(local.native_runs, "execute", native_stub)
+    server = app.ThreadingHTTPServer(("127.0.0.1", 0), app.Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}"
+
+        def post(body):
+            return urllib.request.urlopen(urllib.request.Request(
+                base + "/api/local-runs/run", data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json"}), timeout=10)
+
+        with urllib.request.urlopen(base + "/api/local-runs", timeout=5) as response:
+            assert json.load(response)["latest"]["available"] is False
+        for body in ({"id": "release-archive"}, {"id": "fix-failing-test", "text": "edited"}):
+            with pytest.raises(urllib.error.HTTPError) as error:
+                post(body)
+            assert error.value.code == 400
+        assert not runs.exists()
+        with post({"id": "fix-failing-test", "text": _skill("fix-failing-test")}) as response:
+            result = json.load(response)
+        assert result["outcome"] == "NOT_VERIFIED"
+        with urllib.request.urlopen(base + "/api/local-runs", timeout=5) as response:
+            assert json.load(response)["latest"]["run"] == result["run"]
+        path = f"/api/local-runs/artifact?run={result['run']}&file=copilot-transcript.jsonl"
+        with urllib.request.urlopen(base + path, timeout=5) as response:
+            assert response.read() == artifact(
+                result["run"], "copilot-transcript.jsonl", runs).read_bytes()
+        with pytest.raises(urllib.error.HTTPError) as error:
+            urllib.request.urlopen(base + "/api/local-runs/artifact?run=..&file=report.md",
+                                   timeout=5)
+        assert error.value.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
 def test_environment_lists_copilot_tools_and_grants(env):
     names = {t["name"] for t in env["tools"]}
     assert {"view", "edit", "grep"} <= names

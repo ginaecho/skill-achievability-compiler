@@ -103,6 +103,38 @@ def test_azure_openai_legacy_api_version(monkeypatch):
     assert "model" not in seen["body"]
 
 
+def test_native_tool_messages_are_guarded_and_structured_arguments_restored(monkeypatch):
+    from skillc.frontend import providers
+
+    original = "https://example.org/private"
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "not-a-real-key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
+    monkeypatch.delenv("AZURE_OPENAI_API_VERSION", raising=False)
+    payload = {"model": "client-model", "messages": [
+        {"role": "user", "content": original},
+        {"role": "tool", "tool_call_id": "previous", "content": "Contact a@example.org"}],
+        "tools": [{"type": "function", "function": {"name": "view",
+                   "description": "Open example.org", "parameters": {"type": "object"}}}]}
+
+    def fake_urlopen(req, timeout):
+        raw = req.data.decode()
+        assert "example.org" not in raw
+        assert json.loads(raw)["model"] == "deployment"
+        return Response(json.dumps({"choices": [{"message": {
+            "role": "assistant", "content": None, "tool_calls": [
+                {"id": "next", "type": "function", "function": {
+                    "name": "view", "arguments": '{"path":"[url-1]"}'}}]}}],
+            "usage": {"prompt_tokens": 20, "completion_tokens": 5}}).encode())
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    with providers.metered() as usage:
+        result = providers.azure_openai_chat(payload, "deployment", 5)
+    args = result["choices"][0]["message"]["tool_calls"][0]["function"]["arguments"]
+    assert json.loads(args)["path"] == original
+    assert payload["model"] == "client-model"
+    assert usage[0]["input_tokens"] == 20
+
+
 def test_azure_openai_reports_missing_configuration(monkeypatch):
     for name in ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT",
                  "AZURE_OPENAI_DEPLOYMENT"):
