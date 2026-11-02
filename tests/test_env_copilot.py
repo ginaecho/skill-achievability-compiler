@@ -113,7 +113,9 @@ def test_copilot_is_the_default_profile(tmp_path, capsys):
     assert main(["check", str(skill)]) == 0
     capsys.readouterr()
     assert main(["check", str(skill), "--profile", "claude-code"]) == 1
-    assert "apply_patch" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "missing: list_agents" in output
+    assert "missing: apply_patch" not in output
 
 
 def test_reach_and_env_probe_default_to_copilot(tmp_path, monkeypatch, capsys):
