@@ -7,19 +7,65 @@ was declared; `ACHIEVABLE` means nothing blocks the goal, not that the run will 
 
 ![SkillC static validation and runtime verification](docs/images/skillc-live-walkthrough-20261103.gif)
 
-**Watch it run:** [Captioned walkthrough (MP4, 2m32s)](docs/images/skillc-live-walkthrough-20261103.mp4)
-or [animated preview (GIF)](docs/images/skillc-live-walkthrough-20261103.gif).
-The recording shows actual compiler stages and live runtime-monitor decisions; runtime agent and
-tool actions are safe replays. No model or cloud calls were made; waiting pauses were trimmed.
+To try it yourself, see [Run the recorded demos](#run-the-recorded-demos).
 
 ## Contents
 
-1. [What skillc is](#what-skillc-is)
-2. [The problem it solves](#the-problem-it-solves)
-3. [Tools](#tools)
-4. [Benchmark: performance and cost](#benchmark-performance-and-cost)
-5. [Limitations](#limitations)
-6. [Learn more](#learn-more)
+1. [Run the recorded demos](#run-the-recorded-demos)
+2. [What skillc is](#what-skillc-is)
+3. [The problem it solves](#the-problem-it-solves)
+4. [Tools](#tools)
+5. [Benchmark: performance and cost](#benchmark-performance-and-cost)
+6. [Limitations](#limitations)
+7. [Learn more](#learn-more)
+
+## Run the recorded demos
+
+The recording shows **two browser apps implemented on `main`**: Execution Atlas for static
+validation, and With skillc. Without skillc. for runtime verification. Only the Atlas example
+intents and their environments come from `gc/data_train_test`; no checkout of that branch is needed.
+
+With Python 3.10+ and Git installed, run these commands from the cloned repository's root:
+
+```powershell
+git switch main
+python -m pip install -e .
+git fetch origin refs/heads/gc/data_train_test:refs/remotes/origin/gc/data_train_test
+```
+
+Then start the apps in **two separate terminals**, both in the repository root:
+
+```powershell
+# Terminal 1: Execution Atlas
+python demo\skillc-architecture-app\app.py --port 8768 --environment-refresh-seconds 0
+
+# Terminal 2: runtime-monitor replay
+python demo\skillc-a365-demo\app.py --port 8769
+```
+
+Each command opens a browser tab. If needed, open <http://127.0.0.1:8768> for Atlas or
+<http://127.0.0.1:8769> for the runtime replay. Keep the terminals running; press Ctrl+C to stop.
+
+To follow the recording:
+
+1. In Atlas, keep **Deterministic frontend**, select **Book a flight and send confirmation**
+   (`book_flight_ok`), include only **SKILL.md**, and choose **Selected case** as the environment.
+   Click **Run SkillC** for `ACHIEVABLE`, then click each of the nine evidence-graph nodes to inspect
+   its input, output and Python functions. Switch to **Current environment** and rerun to compare
+   with your machine; its tools and approvals may differ from the recording.
+2. Select **Book a flight and send email confirmation** (`hallucinated_email`) with **Selected case**
+   to see `IMPOSSIBLE [MISSING_CAPABILITY]`. For `UNKNOWN [INCOMPLETE_COMPACTION]`, include only
+   **prompt.md**, open the **Prompt** editor, replace its text with
+   `Find a sensible way to help this team.`, and run again.
+3. In the runtime app, select the **Copilot Studio / Agent Framework** email-approval case
+   (`copilot-studio-email-approval`) and click **Run both** to compare the unguarded replay with the
+   monitor's refusal. Tick **Benign twin** and run again to see the legitimate draft-only workflow
+   allowed, with sending left for user approval.
+
+No model or cloud access is needed. Runtime agent steps and tool outputs are replays; the monitor
+decisions are live, and no messages are sent. Full guides:
+[Execution Atlas](demo/skillc-architecture-app/README.md) and
+[runtime replay](demo/skillc-a365-demo/README.md).
 
 ## What skillc is
 
