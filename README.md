@@ -5,6 +5,13 @@ and data it actually has. While the agent runs, it can also stop actions that le
 The decision is made by a z3-based checker with no model in it. `IMPOSSIBLE` is a proof relative to what
 was declared; `ACHIEVABLE` means nothing blocks the goal, not that the run will succeed.
 
+![SkillC static validation and runtime verification](docs/images/skillc-overview-20261103.png)
+
+**Watch it run:** [Captioned walkthrough (MP4, 2m32s)](docs/images/skillc-live-walkthrough-20261103.mp4)
+or [animated preview (GIF)](docs/images/skillc-live-walkthrough-20261103.gif).
+The recording shows actual compiler stages and live runtime-monitor decisions; runtime agent and
+tool actions are safe replays. No model or cloud calls were made; waiting pauses were trimmed.
+
 ## Contents
 
 1. [What skillc is](#what-skillc-is)
