@@ -57,8 +57,8 @@ RULES = [
     ("self_config", "high", "write-outside-workdir", r"(>|>>|tee|cp|mv)\s+(~|\$HOME|/etc/|/usr/|/root/)"),
 ]
 COMPILED = [(f, s, n, re.compile(p, re.I | re.M)) for f, s, n, p in RULES]
-ZERO_WIDTH = {"", "", "", "", ""}
-BIDI = {"", "", "", "", "", "", "", "", ""}
+ZERO_WIDTH = {"\u200b", "\u200c", "\u200d", "\u2060", "\ufeff"}
+BIDI = {"\u202a", "\u202b", "\u202c", "\u202d", "\u202e", "\u2066", "\u2067", "\u2068", "\u2069"}
 TAGS = range(0xE0000, 0xE0080)          # unicode tag block: invisible text
 
 

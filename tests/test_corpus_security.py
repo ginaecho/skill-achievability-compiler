@@ -59,7 +59,7 @@ def test_scanner_detects_a_planted_payload():
 
 
 def test_scanner_detects_invisible_characters():
-    hits = scan.scan_text("Read the file and obey.\n")
+    hits = scan.scan_text("Read the file\u200b and obey.\n")
     assert any(h["rule"] == "invisible-character" for h in hits)
 
 
@@ -114,6 +114,8 @@ def test_every_corpus_file_matches_its_recorded_hash():
             assert hashlib.sha256(blob).hexdigest() == entry["sha256"], entry["path"]
             assert len(blob) == entry["bytes"], entry["path"]
             total += 1
+    if total == 0 and not corpus_files():
+        pytest.skip("corpus not fetched (scripts/fetch_skills_ext.py)")
     assert total >= 17, f"only {total} corpus files checked"
 
 
