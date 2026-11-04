@@ -1,0 +1,139 @@
+[
+  {
+    "skill": "real-skills-ext/ComposioHQ__awesome-claude-skills/video-downloader/SKILL.md",
+    "feasible_with_shell": false,
+    "task": "Download the YouTube video at https://www.youtube.com/watch?v=jNQXAC9IVRw (\"Me at the zoo\") as audio-only and save it as an MP3 file named output.mp3 in the current directory, per the youtube-downloader skill's `-a`/`--audio-only` option.",
+    "inputs": {},
+    "verify": "import os\np='output.mp3'\nok = os.path.exists(p) and os.path.getsize(p) > 10000 and open(p,'rb').read(3) in (b'ID3', b'\\xff\\xfb', b'\\xff\\xf3', b'\\xff\\xfa')\nprint(ok)",
+    "needs_shell": true,
+    "why": "Downloading and (for audio-only) transcoding a remote video into an MP3 is only possible by invoking yt-dlp/ffmpeg as external processes -- a Read/Write-only agent cannot fetch or decode remote video/audio streams at all."
+  },
+  {
+    "skill": "real-skills-ext/K-Dense-AI__claude-scientific-skills/astropy/SKILL.md",
+    "feasible_with_shell": false,
+    "task": "You are given icrs_coords.csv with columns name,ra_deg,dec_deg for 3 stars in the ICRS (equatorial) frame. Using astropy.coordinates.SkyCoord, transform each coordinate to the Galactic frame and write galactic_coords.csv with columns name,l_deg,b_deg (one row per star, same order as the input).",
+    "inputs": {
+      "icrs_coords.csv": "name,ra_deg,dec_deg\nStar1,10.68470,41.26875\nStar2,83.63308,22.01450\nStar3,201.29824,-43.01911\n"
+    },
+    "verify": "import csv\nexpected = {\n  'Star1': (121.1743, -21.5733),\n  'Star2': (184.5575, -5.7844),\n  'Star3': (309.4646, 19.4241),\n}\nrows = list(csv.DictReader(open('galactic_coords.csv')))\nok = len(rows) == 3\nfor r in rows:\n    name = r['name']\n    l, b = float(r['l_deg']), float(r['b_deg'])\n    el, eb = expected.get(name, (None, None))\n    ok = ok and el is not None and abs(l - el) < 0.05 and abs(b - eb) < 0.05\nprint(ok)",
+    "needs_shell": true,
+    "why": "Frame transformations (ICRS->Galactic) require running astropy.coordinates code; there is no way to produce numerically correct output by writing a text file directly."
+  },
+  {
+    "skill": "real-skills-ext/K-Dense-AI__claude-scientific-skills/bulk-rnaseq/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "You have Salmon-style per-transcript quantification for two samples (quant_sampleA.sf, quant_sampleB.sf; tab-separated with header Name/Length/EffectiveLength/TPM/NumReads) and a transcript-to-gene map (tx2gene.tsv, columns transcript_id/gene_id). Following the bulk-rnaseq skill's counts-matrix bridge step, aggregate NumReads to gene level per sample (sum NumReads of all transcripts belonging to a gene), round each sum to the nearest integer, and write a gene x sample counts matrix to counts.csv with header gene_id,sampleA,sampleB, one row per gene.",
+    "inputs": {
+      "tx2gene.tsv": "transcript_id\tgene_id\nTX1\tGENE_A\nTX2\tGENE_B\nTX3\tGENE_C\nTX4\tGENE_D\nTX5\tGENE_A\nTX6\tGENE_B\nTX7\tGENE_C\nTX8\tGENE_D\nTX9\tGENE_A\nTX10\tGENE_B\n",
+      "quant_sampleA.sf": "Name\tLength\tEffectiveLength\tTPM\tNumReads\nTX1\t1000\t950\t1.0\t195.4\nTX2\t1000\t950\t1.0\t89.8\nTX3\t1000\t950\t1.0\t223.6\nTX4\t1000\t950\t1.0\t268.7\nTX5\t1000\t950\t1.0\t132.4\nTX6\t1000\t950\t1.0\t73.4\nTX7\t1000\t950\t1.0\t17.7\nTX8\t1000\t950\t1.0\t198.5\nTX9\t1000\t950\t1.0\t73.9\nTX10\t1000\t950\t1.0\t244.7\n",
+      "quant_sampleB.sf": "Name\tLength\tEffectiveLength\tTPM\tNumReads\nTX1\t1000\t950\t1.0\t17.3\nTX2\t1000\t950\t1.0\t74.7\nTX3\t1000\t950\t1.0\t206.2\nTX4\t1000\t950\t1.0\t35.2\nTX5\t1000\t950\t1.0\t18.6\nTX6\t1000\t950\t1.0\t156.6\nTX7\t1000\t950\t1.0\t67.7\nTX8\t1000\t950\t1.0\t168.0\nTX9\t1000\t950\t1.0\t180.9\nTX10\t1000\t950\t1.0\t11.9\n"
+    },
+    "verify": "import csv\nexpected = {\n  'GENE_A': (402, 217),\n  'GENE_B': (408, 243),\n  'GENE_C': (241, 274),\n  'GENE_D': (467, 203),\n}\nrows = {r['gene_id']: (int(round(float(r['sampleA']))), int(round(float(r['sampleB'])))) for r in csv.DictReader(open('counts.csv'))}\nok = all(rows.get(g) == v for g, v in expected.items())\nprint(ok)",
+    "needs_shell": true,
+    "why": "The full FASTQ-to-DE pipeline needs STAR/Salmon/FastQC which are not installed, but the skill's own novel contribution -- aggregating already-produced quant output into a counts matrix -- only needs pandas/csv; reliably summing and rounding 10 decimal values per gene across 2 samples is impractical to get exactly right without running code."
+  },
+  {
+    "skill": "real-skills-ext/K-Dense-AI__claude-scientific-skills/cobrapy/SKILL.md",
+    "feasible_with_shell": false,
+    "task": "Load COBRApy's bundled 'textbook' E. coli core metabolic model, run standard flux balance analysis (model.optimize()), and write the growth rate to growth.json as {\"objective_value\": <float>}.",
+    "inputs": {},
+    "verify": "import json\nd = json.load(open('growth.json'))\nv = d.get('objective_value')\nok = isinstance(v, (int, float)) and 0.5 < v < 1.5\nprint(ok)",
+    "needs_shell": true,
+    "why": "FBA requires building and solving a linear program via the cobra package and a solver (GLPK/swiglpk), which only code execution can do -- there is no way to fake a correct growth-rate value by hand."
+  },
+  {
+    "skill": "real-skills-ext/K-Dense-AI__claude-scientific-skills/esm/SKILL.md",
+    "feasible_with_shell": false,
+    "task": "Using ESM C (esmc_300m), compute the per-sequence embedding for the protein in protein.fasta and save it as a JSON list of floats to embedding.json.",
+    "inputs": {
+      "protein.fasta": ">query\nMPRTKEINDAGLIVHSP\n"
+    },
+    "verify": "import json\nd = json.load(open('embedding.json'))\nok = isinstance(d, list) and len(d) > 0 and all(isinstance(x, (int, float)) for x in d)\nprint(ok)",
+    "needs_shell": true,
+    "why": "Producing a real embedding requires loading a transformer checkpoint and running a forward pass via the esm package -- unavoidably code execution, not something a Read/Write-only agent could approximate."
+  },
+  {
+    "skill": "real-skills-ext/K-Dense-AI__claude-scientific-skills/generate-image/SKILL.md",
+    "feasible_with_shell": false,
+    "task": "Generate an image of \"a red bicycle against a white wall\" via the OpenRouter Image API (google/gemini-3.1-flash-image) and save it as bicycle.png in the current directory.",
+    "inputs": {},
+    "verify": "import os\np = 'bicycle.png'\nok = os.path.exists(p) and os.path.getsize(p) > 2000 and open(p,'rb').read(8) == b'\\x89PNG\\r\\n\\x1a\\n'\nprint(ok)",
+    "needs_shell": true,
+    "why": "Calling the OpenRouter API and writing back the returned image bytes requires executing an HTTP request and decoding a response -- impossible through Read/Write alone."
+  },
+  {
+    "skill": "real-skills-ext/alirezarezvani__claude-skills/data-quality-auditor/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "Audit employees.csv (columns id,name,age,salary; missing values encoded as the string 'N/A') per the data-quality-auditor skill and write quality_report.json with these exact keys: age_null_count (int), salary_null_count (int), duplicate_row_count (int -- count of rows that are an exact duplicate of an earlier row on name+age+salary, ignoring id), and salary_outlier_ids (list of int ids) -- ids whose salary falls outside [Q1 - 1.5*IQR, Q3 + 1.5*IQR] computed over all non-null salaries using the standard IQR method.",
+    "inputs": {
+      "employees.csv": "id,name,age,salary\n1,Alice,29,55000\n2,Bob,34,62000\n3,Charlie,N/A,58000\n4,Diana,41,59000\n5,Eve,38,61000\n6,Frank,45,600000\n7,Grace,31,57000\n8,Heidi,29,N/A\n9,Ivan,50,63000\n10,Judy,27,54000\n11,Judy,27,54000\n12,Karl,33,56000\n"
+    },
+    "verify": "import json\nd = json.load(open('quality_report.json'))\nok = (d.get('age_null_count') == 1 and d.get('salary_null_count') == 1 and d.get('duplicate_row_count') == 1 and sorted(d.get('salary_outlier_ids', [])) == [6])\nprint(ok)",
+    "needs_shell": true,
+    "why": "Computing quartiles/IQR over 11 non-null values and classifying outliers reliably requires running pandas/stdlib code; a Read/Write-only agent has no way to execute the statistical method and would have to guess."
+  },
+  {
+    "skill": "real-skills-ext/alirezarezvani__claude-skills/google-workspace-cli/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "Run the google-workspace-cli skill's Workflow-4 security audit in offline/demo mode (no gws CLI install, OAuth, or network access -- like `workspace_audit.py --demo`) against the settings in demo_data.json. Apply these 7 checks (FAIL condition given): drive_external_sharing (FAIL if drive_external_sharing_domains is non-empty), gmail_auto_forwarding (FAIL if gmail_auto_forward_rules is non-empty), gmail_email_auth (FAIL if gmail_dmarc_configured, gmail_spf_configured, or gmail_dkim_configured is false), calendar_default_sharing (FAIL if calendar_default_visibility == 'public'), oauth_third_party_grants (FAIL if oauth_full_access_apps is non-empty), admin_super_admin_count (FAIL if super_admin_count > 2), admin_2sv_enforcement (FAIL if two_step_verification_enforced is false). Write audit_report.json as {\"checks\": {<check_name>: \"PASS\"|\"FAIL\", ...}, \"fail_count\": <int>}.",
+    "inputs": {
+      "demo_data.json": "{\n  \"drive_external_sharing_domains\": [\n    \"contractor.example.com\"\n  ],\n  \"gmail_auto_forward_rules\": [],\n  \"gmail_dmarc_configured\": true,\n  \"gmail_spf_configured\": true,\n  \"gmail_dkim_configured\": false,\n  \"calendar_default_visibility\": \"public\",\n  \"oauth_full_access_apps\": [\n    \"LegacyCRM\"\n  ],\n  \"super_admin_count\": 4,\n  \"two_step_verification_enforced\": true\n}\n"
+    },
+    "verify": "import json\nd = json.load(open('audit_report.json'))\nc = d.get('checks', {})\nexpected = {\n  'drive_external_sharing': 'FAIL',\n  'gmail_auto_forwarding': 'PASS',\n  'gmail_email_auth': 'FAIL',\n  'calendar_default_sharing': 'FAIL',\n  'oauth_third_party_grants': 'FAIL',\n  'admin_super_admin_count': 'FAIL',\n  'admin_2sv_enforcement': 'PASS',\n}\nok = all(c.get(k) == v for k, v in expected.items()) and d.get('fail_count') == 5\nprint(ok)",
+    "needs_shell": true,
+    "why": "The full skill needs the gws CLI plus Google OAuth credentials (none available), but its own --demo audit mode runs entirely offline against local JSON; applying 7 boolean rules and tallying fail_count reliably still requires executing the rule logic rather than eyeballing it."
+  },
+  {
+    "skill": "real-skills-ext/alirezarezvani__claude-skills/kubernetes-operator/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "crd.json holds a Custom Resource Definition, JSON-formatted (JSON is valid YAML). Per the kubernetes-operator skill's crd_validator checks, evaluate these 7 rules and write crd_report.json as {\"checks\": {<name>: \"PASS\"|\"FAIL\", ...}, \"pass_count\": <int>, \"fail_count\": <int>} using exactly these check names: status_subresource (PASS iff spec.versions[0].subresources has a 'status' key), scope_namespaced (PASS iff spec.scope == 'Namespaced'), names_defined (PASS iff spec.names.singular and spec.names.listKind are both set), schema_typed (PASS iff versions[0].schema.openAPIV3Schema.type == 'object' and there is no top-level x-kubernetes-preserve-unknown-fields: true), served_and_storage (PASS iff some version has both served=true and storage=true), conditions_in_schema (PASS iff a property named 'conditions' exists anywhere under the status schema), printer_columns_age_status (PASS iff additionalPrinterColumns includes a column named 'Age' AND a column named 'Status' or 'Phase').",
+    "inputs": {
+      "crd.json": "{\n  \"spec\": {\n    \"group\": \"apps.example.com\",\n    \"names\": {\n      \"kind\": \"Widget\",\n      \"singular\": \"widget\",\n      \"listKind\": \"WidgetList\"\n    },\n    \"scope\": \"Cluster\",\n    \"versions\": [\n      {\n        \"name\": \"v1alpha1\",\n        \"served\": true,\n        \"storage\": true,\n        \"subresources\": {},\n        \"schema\": {\n          \"openAPIV3Schema\": {\n            \"type\": \"object\",\n            \"properties\": {\n              \"spec\": {\n                \"type\": \"object\"\n              },\n              \"status\": {\n                \"type\": \"object\",\n                \"properties\": {\n                  \"phase\": {\n                    \"type\": \"string\"\n                  }\n                }\n              }\n            }\n          }\n        },\n        \"additionalPrinterColumns\": [\n          {\n            \"name\": \"Age\",\n            \"type\": \"date\",\n            \"jsonPath\": \".metadata.creationTimestamp\"\n          }\n        ]\n      }\n    ]\n  }\n}\n"
+    },
+    "verify": "import json\nd = json.load(open('crd_report.json'))\nc = d.get('checks', {})\nexpected = {\n  'status_subresource': 'FAIL',\n  'scope_namespaced': 'FAIL',\n  'names_defined': 'PASS',\n  'schema_typed': 'PASS',\n  'served_and_storage': 'PASS',\n  'conditions_in_schema': 'FAIL',\n  'printer_columns_age_status': 'FAIL',\n}\nok = (all(c.get(k) == v for k, v in expected.items()) and d.get('pass_count') == 3 and d.get('fail_count') == 4)\nprint(ok)",
+    "needs_shell": true,
+    "why": "No live cluster is needed for these 7 checks -- they are static analysis over the CRD's JSON/YAML structure -- but applying 7 nested-field rules correctly and tallying pass/fail counts is only reliable when the logic is actually executed rather than eyeballed."
+  },
+  {
+    "skill": "real-skills-ext/obra__superpowers/writing-skills/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "Three draft skill files (draft1.md, draft2.md, draft3.md) are in the current directory, each with YAML frontmatter delimited by '---' lines. Per the writing-skills rules, check each file against 3 rules: (a) name_ok -- the 'name' field contains only letters, digits, and hyphens; (b) desc_ok -- the 'description' field starts with the literal text 'Use when'; (c) length_ok -- the frontmatter block (the text strictly between the two '---' lines) is at most 1024 characters. Write skill_check.json as {\"<filename>\": {\"name_ok\": bool, \"desc_ok\": bool, \"length_ok\": bool}, ...} for all three files.",
+    "inputs": {
+      "draft1.md": "---\nname: Async Testing (Helper)\ndescription: For async testing\n---\n\n# Async Testing Helper\nSome content.\n",
+      "draft2.md": "---\nname: condition-based-waiting\ndescription: Use when tests have race conditions, timing dependencies, or pass/fail inconsistently\n---\n\n# Condition Based Waiting\nSome content.\n",
+      "draft3.md": "---\nname: root_cause_tracing\ndescription: Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging. Use when debugging is taking multiple iterations without converging.\n---\n\n# Root Cause Tracing\nSome content.\n"
+    },
+    "verify": "import json\nd = json.load(open('skill_check.json'))\nexpected = {\n  'draft1.md': {'name_ok': False, 'desc_ok': False, 'length_ok': True},\n  'draft2.md': {'name_ok': True, 'desc_ok': True, 'length_ok': True},\n  'draft3.md': {'name_ok': False, 'desc_ok': True, 'length_ok': False},\n}\nok = all(d.get(f) == v for f, v in expected.items())\nprint(ok)",
+    "needs_shell": true,
+    "why": "The regex/character-count checks (e.g. draft3's frontmatter is exactly 1072 characters, 4 characters into a hard 1024 limit that is impossible to spot by eye) are only reliable if actually computed by running code."
+  },
+  {
+    "skill": "real-skills/skills/pdf/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "Two single-page PDF cover sheets, a.pdf and b.pdf, are in the current directory. Merge them into one file, merged.pdf, with a.pdf's page first followed by b.pdf's page, per the pdf skill's pypdf merge recipe.",
+    "inputs": {
+      "generate_with_python": "from reportlab.pdfgen import canvas\nfrom reportlab.lib.pagesizes import letter\nc = canvas.Canvas('a.pdf', pagesize=letter)\nc.drawString(100, 700, 'ALPHA-COVER-SHEET')\nc.save()\nc = canvas.Canvas('b.pdf', pagesize=letter)\nc.drawString(100, 700, 'BETA-COVER-SHEET')\nc.save()\n"
+    },
+    "verify": "from pypdf import PdfReader\nr = PdfReader('merged.pdf')\nok = (len(r.pages) == 2 and 'ALPHA-COVER-SHEET' in r.pages[0].extract_text() and 'BETA-COVER-SHEET' in r.pages[1].extract_text())\nprint(ok)",
+    "needs_shell": true,
+    "why": "A merged PDF is a binary file with its own object/xref structure; only running pypdf (or an equivalent library) can produce a valid one -- the Write tool can only emit text."
+  },
+  {
+    "skill": "real-skills/skills/xlsx/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "Create a spreadsheet workbook budget.xlsx with one sheet named 'Budget'. Row 1: A1='Item', B1='Cost'. Rows 2-4: item names and numeric costs -- Rent/1200, Utilities/150, Supplies/75 (A2:A4 the names, B2:B4 the numbers). Row 5: A5='Total', and B5 must be a live Excel formula (never a hardcoded number) that sums B2:B4, per the xlsx skill's 'formulas, never hardcoded results' rule.",
+    "inputs": {},
+    "verify": "from openpyxl import load_workbook\nwb = load_workbook('budget.xlsx')\nws = wb['Budget']\nformula = str(ws['B5'].value or '').strip().upper().replace(' ', '')\nok = (ws['A1'].value == 'Item' and ws['B1'].value == 'Cost' and\n      ws['A2'].value == 'Rent' and float(ws['B2'].value) == 1200 and\n      ws['A3'].value == 'Utilities' and float(ws['B3'].value) == 150 and\n      ws['A4'].value == 'Supplies' and float(ws['B4'].value) == 75 and\n      ws['A5'].value == 'Total' and formula == '=SUM(B2:B4)')\nprint(ok)",
+    "needs_shell": true,
+    "why": "A .xlsx is a zip of XML parts; there is no way to hand-author a valid one as plain text -- producing it requires actually running openpyxl."
+  },
+  {
+    "skill": "real-skills/skills/docx/SKILL.md",
+    "feasible_with_shell": true,
+    "task": "Create a Word document report.docx containing a Heading 1 paragraph with the exact text 'Quarterly Report', followed by a body paragraph with the exact sentence 'Revenue grew 12% year over year.'",
+    "inputs": {},
+    "verify": "from docx import Document\ndoc = Document('report.docx')\nparas = doc.paragraphs\nhas_heading = any(p.style.name.startswith('Heading') and p.text.strip() == 'Quarterly Report' for p in paras)\nhas_body = any(p.text.strip() == 'Revenue grew 12% year over year.' for p in paras)\nprint(has_heading and has_body)",
+    "needs_shell": true,
+    "why": "A .docx is a zip of XML parts (styles, document.xml, relationships); it can only be produced correctly by executing a library such as python-docx, not by writing text directly. (The skill's own suggested docx-js/npm route is not confirmed available in this sandbox; python-docx, which is preinstalled, accomplishes the same outcome.)"
+  }
+]
