@@ -49,6 +49,8 @@ def gen_pack(rng: random.Random, idx: int) -> dict:
     def act():
         return {"act": {"cap": rng.choice(names), "by": "agent"}}
 
+    loop_id = [0]
+
     def steps(depth: int, in_loop: bool) -> list:
         out = []
         for _ in range(rng.randint(1, 3)):
@@ -63,12 +65,14 @@ def gen_pack(rng: random.Random, idx: int) -> dict:
                     ch["guards"] = {l: rng.choice(atoms) if rng.random() < 0.7
                                     else {"not": rng.choice(atoms)} for l in branches}
                 out.append({"choice": ch})
-            elif not in_loop and depth == 0:
+            elif not in_loop and depth == 0 and loop_id[0] == 0:
+                loop_id[0] += 1
+                name = "L"
                 body = steps(depth + 1, True)
                 if rng.random() < 0.6:
                     body.append({"choice": {"by": "agent", "branches": {
-                        "again": [{"continue": "L"}], "stop": [act()]}}})
-                out.append({"rec": {"name": "L", "body": body}})
+                        "again": [{"continue": name}], "stop": [act()]}}})
+                out.append({"rec": {"name": name, "body": body}})
             else:
                 out.append(act())
         return out
@@ -119,6 +123,18 @@ def main() -> int:
     res = {"generated": args.n, "compared": agree + disagree, "agree": agree, "disagree": disagree,
            "outside_fragment": skipped, "kmax": args.kmax, "seed": args.seed,
            "seconds": round(time.time() - t0, 1), "failures": fails[:20]}
+    prev = ({} if args.reset else
+            (json.load(open(OUT / "differential.json"))
+             if (OUT / "differential.json").exists() else {}))
+    pc = prev.get("cumulative", {})
+    res["cumulative"] = {
+        "compared": res["compared"] + pc.get("compared", prev.get("compared", 0)),
+        "agree": res["agree"] + pc.get("agree", prev.get("agree", 0)),
+        "disagree": res["disagree"] + pc.get("disagree", prev.get("disagree", 0)),
+        "runs": pc.get("runs", ([{"n": prev["generated"], "kmax": prev["kmax"], "seed": prev["seed"],
+                                  "agree": prev["agree"], "disagree": prev["disagree"]}] if prev else []))
+                + [{"n": args.n, "kmax": args.kmax, "seed": args.seed,
+                    "agree": res["agree"], "disagree": res["disagree"]}]}
     json.dump(res, open(OUT / "differential.json", "w"), indent=1)
     if fails:
         json.dump(fails, open(OUT / "differential_failures.json", "w"), indent=1)
