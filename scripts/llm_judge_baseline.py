@@ -21,6 +21,12 @@ Ground truth comes from two sources, never from the checker:
 
 Outputs paper/WIP/results/llm_judge.json and a table in docs/USEFULNESS.md's
 sibling docs/LLM_JUDGE.md.
+
+Since 2026-11 the judge's prompt is URL-scrubbed (skillc.benchguard, CLAUDE.md)
+and the CLI runs in an empty directory under $SKILLC_BENCH_WORK with an
+allow-listed environment; `--bare` is replaced by the same isolation flags
+(no MCP, no settings, no slash commands) because `--bare` accepts only an API
+key. Real calls need SKILLC_ALLOW_MODEL_CALLS=1.
 """
 from __future__ import annotations
 import argparse, json, re, subprocess, sys, time
@@ -33,6 +39,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from skillc.profiles import load_profile
 from skillc.frontend.markdown import compile_file
 from skillc.checker import check
+from skillc import benchguard
 
 OUT = ROOT / "paper" / "WIP" / "results"
 CACHE = OUT / "llm_judge_runs.jsonl"
@@ -81,12 +88,14 @@ def ask(skill_text: str, runtime: str, model: str) -> dict:
             f"PROCEDURE (a skill document):\n<skill>\n{skill_text}\n</skill>\n\n"
             f"Can an agent carry out this procedure as written, in that runtime? "
             f"First line: ACHIEVABLE or IMPOSSIBLE.")
-    cmd = ["claude", "-p", "--bare", "--tools", "", "--no-session-persistence",
-           "--system-prompt", SYSTEM, "--model", model, "--output-format", "json", user]
+    user, _ = benchguard.scrub_prompt(user)
+    cmd = benchguard.cli_cmd(model, user, tools="", system=SYSTEM)
+    cwd = benchguard.work_dir("judge_")
     t0 = time.time()
     for attempt in range(3):
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=cwd,
+                               env=benchguard.agent_env())
             d = json.loads(r.stdout)
             if d.get("is_error"):
                 raise RuntimeError(d.get("result"))
@@ -97,6 +106,7 @@ def ask(skill_text: str, runtime: str, model: str) -> dict:
                        v.get("cacheReadInputTokens", 0) + v.get("cacheCreationInputTokens", 0)
                        for v in u.values())
             return {"verdict": (m.group(1).upper() if m else None), "text": text[:300],
+                    "served_models": sorted(u),
                     "tokens": toks, "cost_usd": round(d.get("total_cost_usd", 0.0) or 0.0, 5),
                     "seconds": round(time.time() - t0, 1)}
         except Exception as e:                                    # noqa: BLE001
@@ -139,6 +149,7 @@ def main():
             if (it["skill"], it["runtime"], m, s) not in cache]
     print(f"{len(items)} ground-truth configurations; {len(todo)} judge calls to make", file=sys.stderr)
     if not args.report_only and todo:
+        benchguard.require_opt_in()
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
             futs = {}
             for it, m, s in todo:

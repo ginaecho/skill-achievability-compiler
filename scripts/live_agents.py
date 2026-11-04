@@ -19,7 +19,10 @@ Conditions
              the discipline is about.
 
 The agent is invoked through the Claude Code CLI in print mode with no
-tools and a two-sentence system prompt.  Runs are cached in
+tools and a two-sentence system prompt.  Since 2026-11 every prompt is
+URL-scrubbed and the CLI runs in an empty directory under $SKILLC_BENCH_WORK
+with an allow-listed environment (skillc.benchguard, CLAUDE.md); real calls
+need SKILLC_ALLOW_MODEL_CALLS=1.  Runs are cached in
 paper/WIP/results/live_agents_runs.jsonl so the experiment resumes.
 
 Outputs: paper/WIP/results/live_agents.json, docs/LIVE_AGENTS.md
@@ -36,6 +39,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from skillc.severity import SeverityAnalyzer, analyze, BENIGN, FUTILE, CATASTROPHIC
 from skillc.pack import Pack
 from skillc.checker import initial_state, _mk_state, apply_effect, guard_satisfiable
+from skillc import benchguard
 
 DATA = ROOT / "src" / "skillc" / "data"
 OUT = ROOT / "paper" / "WIP" / "results"
@@ -118,20 +122,27 @@ def prompt_for(pack: dict, st_preds, body: dict, rest: list, cond: str) -> str:
 
 # ---------------------------------------------------------------- the agent
 def ask(model: str, user: str) -> tuple[str, dict]:
-    cmd = ["claude", "-p", "--tools", "", "--no-session-persistence",
-           "--system-prompt", SYSTEM, "--model", model, "--output-format", "json", user]
+    user, table = benchguard.scrub_prompt(user)
+    cmd = benchguard.cli_cmd(model, user, tools="", system=SYSTEM)
+    cwd = benchguard.work_dir("live_")
     for attempt in range(3):
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=240, cwd=cwd,
+                               env=benchguard.agent_env())
             d = json.loads(r.stdout)
             if d.get("is_error"):
                 raise RuntimeError(d.get("result"))
-            return d["result"].strip(), {"cost": d.get("total_cost_usd"),
+            return benchguard_restore(d["result"].strip(), table), {"cost": d.get("total_cost_usd"),
                                           "models": sorted((d.get("modelUsage") or {}).keys())}
         except Exception as e:                       # noqa: BLE001
             err = e
             time.sleep(3 * (attempt + 1))
     raise RuntimeError(f"agent call failed: {err}")
+
+
+def benchguard_restore(text: str, table: dict) -> str:
+    from skillc.frontend.urlguard import restore
+    return restore(text, table)
 
 
 def parse_label(reply: str, labels: list[str]) -> str | None:
@@ -156,6 +167,7 @@ def simulate(entry: dict, model: str, cond: str, seed: int, chooser=None) -> dic
     an = SeverityAnalyzer(p, kmax=KMAX, irreversible=irreversible)
     rng = random.Random(seed)
     choices, calls, cost = [], 0, 0.0
+    served: set = set()
     outcome, pnr = None, None
 
     def run(steps, st, recenv, node_path, loops):
@@ -206,6 +218,7 @@ def simulate(entry: dict, model: str, cond: str, seed: int, chooser=None) -> dic
                     else:
                         reply, meta = ask(model, prompt_for(pack, cur.true_preds, body, rest, cond))
                         calls += 1; cost += meta["cost"] or 0.0
+                        served.update(meta["models"])
                     label = parse_label(reply, labels)
                     choices.append({"node": node, "by": body["by"], "external": False,
                                     "label": label, "reply": reply[:80],
@@ -221,7 +234,7 @@ def simulate(entry: dict, model: str, cond: str, seed: int, chooser=None) -> dic
     return {"pack": entry["id"], "model": model, "cond": cond, "seed": seed,
             "choices": choices, "outcome": outcome, "pnr": pnr,
             "misselections": sum(1 for c in choices if c.get("misselection")),
-            "agent_calls": calls, "cost_usd": round(cost, 5)}
+            "agent_calls": calls, "cost_usd": round(cost, 5), "served_models": sorted(served)}
 
 
 # ---------------------------------------------------------------- experiment
@@ -257,6 +270,8 @@ def main():
             if (e["id"], m, c, s) not in runs]
     print(f"{len(todo)} runs to do, {len(runs)} cached", file=sys.stderr)
     chooser = None
+    if todo and not args.dry:
+        benchguard.require_opt_in()
     if args.dry:
         def chooser(labels, intended):   # a scripted agent: wrong 1 in 3
             bad = [l for l in labels if not intended[l]]

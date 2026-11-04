@@ -23,6 +23,12 @@ is a wrong result nobody detects.
 
 Cached in paper/WIP/results/usefulness_runs.jsonl; outputs
 paper/WIP/results/usefulness.json and docs/USEFULNESS.md.
+
+Since 2026-11 every call goes through skillc.benchguard (CLAUDE.md: no URL may
+reach a model): the prompt and every file placed in the agent's directory are
+URL-scrubbed, the directory lives under $SKILLC_BENCH_WORK, the CLI gets an
+allow-listed environment with no credentials, and the agent's shell runs in the
+CLI's sandbox. Real calls need SKILLC_ALLOW_MODEL_CALLS=1.
 """
 from __future__ import annotations
 import argparse, json, os, re, shutil, subprocess, sys, tempfile, time
@@ -32,6 +38,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+from skillc import benchguard  # noqa: E402
 OUT = ROOT / "paper" / "WIP" / "results"
 RUNS = OUT / "usefulness_runs.jsonl"
 TASKS = ROOT / "scripts" / "usefulness_tasks.json"
@@ -55,8 +62,8 @@ def checker_verdict(skill_path: str, profile_name: str) -> dict:
             "ms": round(dt * 1000, 1)}
 
 
-def prepare_sandbox(task: dict) -> str:
-    d = tempfile.mkdtemp(prefix="usefulness_")
+def prepare_sandbox(task: dict) -> tuple[str, dict]:
+    d = benchguard.work_dir("usefulness_")
     if task.get("assets_dir"):
         shutil.copytree(ROOT / task["assets_dir"], d, dirs_exist_ok=True)
     shutil.copy(ROOT / task["skill"], os.path.join(d, "SKILL.md"))
@@ -67,7 +74,8 @@ def prepare_sandbox(task: dict) -> str:
             fh.write(content)
     if gen:
         subprocess.run([sys.executable, "-c", gen], cwd=d, check=False, capture_output=True, timeout=120)
-    return d
+    table = benchguard.scrub_tree(d)          # every file the agent will see, URL-free
+    return d, table
 
 
 def verify(task: dict, d: str) -> bool:
@@ -81,19 +89,21 @@ def verify(task: dict, d: str) -> bool:
 
 def run_agent(task: dict, runtime: str, model: str, seed: int, max_turns: int, budget: float) -> dict:
     rt = RUNTIMES[runtime]
-    d = prepare_sandbox(task)
-    skill_text = open(os.path.join(d, "SKILL.md"), encoding="utf-8").read()
+    d, table = prepare_sandbox(task)
+    skill_text = open(os.path.join(d, "SKILL.md"), encoding="utf-8").read()   # already scrubbed
     prompt = (f"You are an agent with the following skill loaded (it is also saved as ./SKILL.md):\n\n"
               f"<skill>\n{skill_text}\n</skill>\n\n"
               f"Task: {task['task']}\n\nWork only inside the current directory. Use only the tools you actually have. "
               f"When you are finished, end your reply with exactly one line `STATUS: done` if the task was completed "
               f"as requested, or `STATUS: failed` if it was not, followed by one line of justification.")
-    cmd = ["claude", "-p", "--permission-mode", "acceptEdits", "--allowedTools", rt["allowed"],
-           "--tools", rt["tools"], "--no-session-persistence", "--max-turns", str(max_turns),
-           "--max-budget-usd", str(budget), "--model", model, "--output-format", "json", prompt]
+    prompt, table = benchguard.scrub_prompt(prompt, table)
+    cmd = benchguard.cli_cmd(model, prompt, tools=rt["tools"], allowed=rt["allowed"],
+                             max_turns=max_turns, budget=budget)
+    cmd[2:2] = ["--permission-mode", "acceptEdits"]
     t0 = time.time()
     try:
-        r = subprocess.run(cmd, cwd=d, capture_output=True, text=True, timeout=900)
+        r = subprocess.run(cmd, cwd=d, capture_output=True, text=True, timeout=1800,
+                           env=benchguard.agent_env())
         data = json.loads(r.stdout)
     except Exception as e:                                       # noqa: BLE001
         data = {"result": f"<agent error: {e}>", "num_turns": 0, "total_cost_usd": 0.0, "modelUsage": {}}
@@ -118,6 +128,7 @@ def run_agent(task: dict, runtime: str, model: str, seed: int, max_turns: int, b
             "claim": claim, "verified": ok, "outcome": outcome, "turns": data.get("num_turns", 0),
             "cost_usd": round(data.get("total_cost_usd", 0.0) or 0.0, 5), "tokens": toks,
             "served_models": served, "max_turns": max_turns, "budget_usd": budget,
+            "scrubbed_placeholders": len(table), "stop_reason": data.get("subtype") or data.get("terminal_reason"),
             "seconds": round(elapsed, 1), "tail": text[-300:]}
 
 
@@ -161,7 +172,8 @@ def main():
     todo = [(t, rt, m, s) for t in tasks for rt in rts(t) for m in models for s in range(args.n)
             if (t["id"], rt, m, s) not in runs]
     print(f"{len(tasks)} tasks; {len(todo)} agent runs to do, {len(runs)} cached", file=sys.stderr)
-    if not args.report_only:
+    if not args.report_only and todo:
+        benchguard.require_opt_in()
         with ProcessPoolExecutor(max_workers=args.workers) as ex:
             futs = {ex.submit(run_agent, t, rt, m, s, args.max_turns, args.budget): (t["id"], rt, m, s)
                     for t, rt, m, s in todo}

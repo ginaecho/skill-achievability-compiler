@@ -21,7 +21,14 @@ Three quantities, measured or estimated separately and never mixed:
      the run: the saving is B - A. For a certified one the check is overhead:
      the share A/B. Both are reported, per skill and in aggregate.
 
-Outputs paper/WIP/results/token_economics.json and docs/TOKEN_ECONOMICS.md.
+Outputs paper/WIP/results/token_economics.json and docs/TOKEN_ECONOMICS_CENSUS.md
+(docs/TOKEN_ECONOMICS.md is the hand-written report and is not touched).
+
+The compaction input is URL-scrubbed: `compact_one` checks that the skill text
+scrubs clean (skillc.benchguard.scrub_prompt) before the call, and the call
+itself goes through skillc.frontend.providers.claude_cli_complete, which sends
+only `guarded_body` output and runs the CLI isolated (skillc.benchguard).
+`--compact N` needs SKILLC_ALLOW_MODEL_CALLS=1; the census half needs nothing.
 """
 from __future__ import annotations
 import argparse, glob, json, os, statistics, sys, time
@@ -37,6 +44,7 @@ from skillc.frontend import llm as llmmod
 from skillc.checker import check
 from skillc.autollm import needs_llm
 from skillc.tokens import RuntimeModel, estimate_tokens, Price
+from skillc import benchguard
 
 OUT = ROOT / "paper" / "WIP" / "results"
 CACHE = OUT / "compaction_runs.jsonl"
@@ -74,6 +82,7 @@ def survey(files: list[str]) -> list[dict]:
 
 def compact_one(path: str, model: str) -> dict:
     text = open(ROOT / path, encoding="utf-8").read()
+    benchguard.scrub_prompt(text)          # refuses if the scrubbed input is not URL-free
     t0 = time.time()
     try:
         pack = llmmod.compact(text, model=model, runtime_abilities=llmmod.RUNTIME_ABILITY_PROFILES["developer"],
@@ -121,6 +130,7 @@ def main():
     cache = load_cache()
     todo = [r["path"] for r in esc if (r["path"], args.model) not in cache][: args.compact]
     if todo:
+        benchguard.require_opt_in()
         with ThreadPoolExecutor(max_workers=args.workers) as ex:
             futs = {ex.submit(compact_one, p, args.model): p for p in todo}
             for f in as_completed(futs):
@@ -242,7 +252,9 @@ def main():
         md.append(f"| `{r['path']}` | {'ok' if r['claude-ai']['achievable'] else r['claude-ai']['reason']} | "
                   f"{'ok' if r['no-shell']['achievable'] else r['no-shell']['reason']} | {'yes' if r['escalate'] else 'no'} | "
                   f"{r['compaction_tokens']}{'' if r['compaction_measured'] else ' (est)'} | {r['run_tokens_est']} | {r['check_share_pct']}% |")
-    (ROOT / "docs" / "TOKEN_ECONOMICS.md").write_text("\n".join(md) + "\n")
+    # docs/TOKEN_ECONOMICS.md is the hand-written measurement report since 2026-10;
+    # this script's generated tables go to their own file so a re-run cannot clobber it
+    (ROOT / "docs" / "TOKEN_ECONOMICS_CENSUS.md").write_text("\n".join(md) + "\n")
     print(json.dumps(agg, indent=1))
 
 

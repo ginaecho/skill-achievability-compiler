@@ -159,10 +159,11 @@ def claude_cli_complete(system: str, user: str, model: str, timeout: int) -> str
         raise RuntimeError("the claude CLI is not on PATH; the claude-cli provider is opt-in")
     body, table = guarded_body({"system": system, "user": user})
     clean = json.loads(body)
-    cmd = [exe, "-p", "--tools", "", "--no-session-persistence",
-           "--system-prompt", clean["system"], "--model", model,
-           "--output-format", "json", clean["user"]]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    from .. import benchguard     # isolation: no MCP, no settings, no credentials, empty cwd
+    cmd = benchguard.cli_cmd(model, clean["user"], tools="", system=clean["system"])
+    cmd[0] = exe
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                       cwd=benchguard.work_dir("compact_"), env=benchguard.agent_env())
     data = json.loads(r.stdout)
     if data.get("is_error"):
         raise RuntimeError(f"claude-cli compaction failed: {data.get('result')}")
