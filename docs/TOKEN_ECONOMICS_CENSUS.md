@@ -1,6 +1,6 @@
 # Tokens with the checker and without it
 
-157 real skills. The deterministic check spends **no model tokens**; median 22.4 ms per skill, 4444 ms for the corpus.
+157 real skills. The deterministic check spends **no model tokens**; median 23.7 ms per skill, 5101 ms for the corpus.
 
 ## When is an LLM needed?
 

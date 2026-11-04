@@ -215,6 +215,14 @@ def main():
            "check_share_of_runtime_pct": round(100.0 * total_check_tokens / max(total_run_tokens, 1), 3),
            "check_share_median_pct": round(statistics.median([r["check_share_pct"] for r in rows]), 3),
            "measured": measured, "model": args.model}
+    # Two figures the paper prints (Finding 6) and the numbers manifest reads:
+    # skills settled with no model, and one compaction as a share of the
+    # measured median agent run.
+    agg["free_skills"] = agg["skills"] - agg["escalate"]
+    med_run = (measured or {}).get("median_run_tokens")
+    med_cmp = agg.get("compaction_tokens_median")
+    agg["escalated_share_of_measured_run_pct"] = (
+        round(100.0 * med_cmp / med_run, 3) if med_run and med_cmp else None)
     OUT.mkdir(parents=True, exist_ok=True)
     json.dump({"aggregate": agg, "rows": rows}, open(OUT / "token_economics.json", "w"), indent=1)
 
