@@ -19,6 +19,7 @@ BLOCKING = {"injection", "exfiltration", "obfuscation", "self_config"}
 # reviewed and judged benign in docs/CORPUS_SECURITY.md
 ALLOWED = {
     ("real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/16-ai-llm-security/SKILL.md", "ignore-previous"),
+    ("real-skills-ext/Masriyan__Claude-Code-CyberSecurity-Skill/16-ai-llm-security/SKILL.md", "disclose-secrets"),
     ("real-skills-ext/Security-Phoenix-demo__security-skills-claude-code/cti-search-skill/SKILL.md", "read-credentials"),
     ("real-skills-ext/glebis__claude-skills/firecrawl-research/SKILL.md", "read-credentials"),
     ("real-skills-ext/microsoft__skills/azure-compliance/SKILL.md", "disclose-secrets"),

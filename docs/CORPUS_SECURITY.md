@@ -45,6 +45,7 @@ Nine files raised at least one flag; every one is benign in context:
 | `openai__skills/sentry` | `curl https://cli.sentry.dev/install -fsS \| bash` | **Real, low.** A genuine remote-code-execution instruction, to the vendor's own domain. Standard industry practice; still means an agent following the skill executes code it did not read. The only finding we would act on. |
 | `ComposioHQ__awesome-claude-skills/langsmith-fetch` | appends an API key to `~/.bashrc` | **Hygiene.** Persists a secret in plaintext outside the working directory. Not an attack. |
 | `Masriyan__…/16-ai-llm-security` | "ignore previous instructions and …" | Benign: a *defensive* skill listing injection payload families to test against. |
+| `Masriyan__…/16-ai-llm-security` (re-fetch of 2026-11-03) | "I cannot reveal my system prompt" | Benign: the same defensive skill, quoting a model's refusal as the example its judge must not score as a leak. The line was added upstream after 2026-09-02; reviewed 2026-11-04. |
 | `Masriyan__…/10-cloud-security`, `alirezarezvani__…/docker-development` | `rm -rf /var/lib/apt/lists/*`, `chmod 777` | Benign: Dockerfile examples, the `chmod 777` shown as the insecure "before". |
 | `Security-Phoenix-demo__…/cti-search-skill`, `glebis__…/firecrawl-research` | `cp .env.example .env` | Benign: ordinary setup. The rule is deliberately broad. |
 | `microsoft__skills/azure-compliance`, `azure-kubernetes` | "show me expired keys/secrets" | Benign: Key Vault compliance queries. |

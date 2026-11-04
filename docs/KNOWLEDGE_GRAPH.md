@@ -717,6 +717,7 @@ The HTML directory also shows internal imports and reverse import relationships.
 | [`tokens.py`](../src/skillc/tokens.py) | Usage costs and modeled economics; measured vs modeled kept separate | `frontend.providers` |
 | [`severity.py`](../src/skillc/severity.py) | `analyze` (`skillc severity`): Benign/Futile/Catastrophic wrong choices, tolerance degree k*, narrowing repairs, bystander conflicts | `checker`, `kernel` |
 | [`kernel.py`](../src/skillc/kernel.py) | Export a boolean-fragment pack to the Coq-extracted kernel (`paper/WIP/proof/kernel`) and run it | `severity` |
+| [`benchguard.py`](../src/skillc/benchguard.py) | Guarded Claude Code CLI calls for the evaluation scripts: URL-scrubbed prompts and sandbox files, allow-listed environment, sandboxed tools, `SKILLC_ALLOW_MODEL_CALLS` opt-in | `frontend.urlguard` |
 
 ### Supporting code and data outside the package
 
