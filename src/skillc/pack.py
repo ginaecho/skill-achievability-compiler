@@ -281,8 +281,15 @@ def _check_steps(steps: Any, path: str, goal: Any,
                     and _is_name(body["by"])
                     and isinstance(body.get("branches"), dict)
                     and set(body) <= {"by", "branches", "external", "observed",
-                                      "assumes"}):
+                                      "assumes", "to", "guards"}):
                 raise PackError(f"{p}: choice needs by+branches")
+            # optional recipient of the choice (`by -> to : {...}`, severity analysis)
+            if "to" in body and not (_is_name(body["to"]) and body["to"] != body["by"]):
+                raise PackError(f"{p}: choice recipient 'to' must be a role other than 'by'")
+            # optional per-branch guards (formulas), read by `skillc.severity`
+            if "guards" in body and not (isinstance(body["guards"], dict)
+                                         and set(body["guards"]) <= set(body["branches"])):
+                raise PackError(f"{p}: choice 'guards' must map branch labels to formulas")
             if not body["branches"]:
                 raise PackError(f"{p}: choice needs at least one branch")
             if "assumes" in body:

@@ -191,6 +191,12 @@ def _sat(constraints: list, on_unknown: Callable[[], None] | None = None) -> boo
     return res != z3.unsat
 
 
+def guard_satisfiable(st: State, cap: Capability,
+                      on_unknown: Callable[[], None] | None = None) -> bool:
+    """Whether `cap`'s guard can hold in `st` (used by `skillc.severity`)."""
+    return _sat(list(st.arith) + [eval_formula(cap.pre, st)], on_unknown)
+
+
 def apply_effect(st: State, cap: Capability) -> State:
     new_true = set(st.true_preds)
     for a in cap.add:
