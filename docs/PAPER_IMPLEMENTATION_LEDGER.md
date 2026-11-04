@@ -1,15 +1,17 @@
 # Paper-to-implementation ledger: "Affordable Mistakes"
 
-**Status, 2026-11-04: every claim of the paper is implemented and verified in this branch.**
-The 28-page paper (`paper/WIP/main.tex`) builds with 0 errors; all 189 Coq results are closed
-under the global context in ten harnesses; all 144 results the paper cites are defined and
-harnessed; `skillc severity` prints the paper's Section 2 listing byte for byte; the extracted
-kernel agrees with the analyser on 500 of 500 random protocols. Every deterministic number of
-Section 10 reproduces exactly. The model-backed numbers were re-measured on 2026-11-03/04 with
+**Status, 2026-11-04: the paper and the implementation agree.** The 28-page paper
+(`paper/WIP/main.tex`) builds with 0 errors and 0 overfull boxes; all 189 Coq results are closed
+under the global context; all 144 results the paper cites are defined and harnessed;
+`skillc severity` prints the paper's Section 2 listing byte for byte; the extracted kernel agrees
+with the analyser on 500 of 500 random protocols; and all 136 numbers in `results/CLAIMS.json`
+agree with the shipped results (`make check`). The evaluation was re-run on 2026-11-03/04 with
 the current haiku and sonnet models, URL-scrubbed prompts and a 157-skill corpus
-(`docs/BENCHMARK_RERUN_2026-11.md`); 54 of the 104 numbers in `results/CLAIMS.json` differ, and
-two findings no longer hold as written (D1, D3 below). Those are paper decisions, not
-implementation gaps: `make check` names each sentence whose number changed.
+(`docs/BENCHMARK_RERUN_2026-11.md`). Section 10, the abstract, C5 and the conclusion were rewritten
+to what that re-run shows: Finding 4 no longer establishes non-vacuity (no agent took a
+Catastrophic branch), and in Finding 5, 5 of 16 refuted realistic file-only runs still produced a
+correct artifact by hand. The status column below gives the September value beside the re-run
+value where they differ; the paper now states the re-run value.
 
 
 Every claim the paper makes that a reader could check against the repository, with its
