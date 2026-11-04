@@ -1068,13 +1068,53 @@ correct (\coqok{kernel\_first\_spec}); goal reachability, used to derive
 rational guards and hazard bits, is proved correct
 (\coqok{goal\_reachable\_correct}); the decision procedure itself was
 replaced by a deduplicating, early-exiting variant proved sound and complete
-(\coqok{decide'\_sound}, \coqok{decide'\_complete}). The elaboration from
+(\coqok{decide'\_sound}, \coqok{decide'\_complete}).
+
+The kernel's goal notion is not the theory's, and the two are
+\emph{incomparable} rather than one being safely stronger. It requires the
+protocol to run to completion, where $\Phi$-reachability fires at any
+$\Phi$-world (\coqok{goal\_reach\_strictly\_stronger}), and it spends no
+budget, where $\Phi$-reachability is budgeted
+(\coqok{goal\_reach\_ignores\_the\_budget}); only the first direction has an
+implication, and it reads the budget off the witness path
+(\coqok{goal\_reach\_implies\_reach\_mu}). This matters beyond the severity
+labels: the elaboration derives the \emph{rational default guard} and the
+\emph{derived hazard bit} from the same notion, so it is a front-end convention
+the theory does not fix, and $\kstar$ is computed against it. Both the analyzer
+and the kernel implement that convention, independently; what the agreement
+below establishes is that they agree, not that the convention is the paper's
+$\Phi$-reachability. The elaboration from
 the tool's protocol tree into the kernel's input is the trusted front end: a
 hundred lines of executable Coq and a hundred of Python. The kernel is
 extracted to OCaml and run by \texttt{skillc severity --verified}. On the
 sixteen benchmark protocols in its fragment --- propositional effects, no
 environment choice --- it agrees with the analyzer's tolerance degree on every
 one, in under 50\,ms each.
+
+Sixteen hand-picked protocols are a weak test of that agreement, so we also
+compare the two on random ones (\texttt{scripts/differential\_test.py}). The
+generator samples packs inside the shared fragment and is otherwise
+unconstrained: nested choices, explicit and rational guards, named recursion,
+irreversible tools, unreachable goals. The analyzer and the extracted kernel
+share no code, so a disagreement is a defect in one of them.
+Across two seeds ($150$ at \texttt{20260902} and $350$ at \texttt{4242}, both
+at $k_{\max}=2$), 500 protocols were generated, 500 compared, and the two agree
+on the tolerance degree 500 times and disagree none. An earlier campaign at the
+same seeds compared 499: one generated pack carried two recursions with the same
+name and was rejected by the pack schema, a generator bug rather than a tool
+one, since fixed. Two thirds of the sampled protocols have no reachable hazard
+at all, so most agreements are agreements that nothing is there; the
+discriminating cases are the third that carry a finite tolerance degree, and
+$k_{\max}=2$ means no degree above two is ever distinguished.
+
+This is the strongest evidence we can offer that two independent
+implementations --- a hand-written symbolic analyzer and an extraction of the
+mechanized decision procedure, sharing no code --- compute the same tolerance
+degree, and it is a test the discipline makes possible: without a decision
+procedure proved correct there is nothing to differ from. What it does not
+establish is that the goal convention both of them use (above) is the
+$\Phi$-reachability of \S\ref{sec:severity}; that gap is a front-end one and we
+leave it open.
 
 \subparagraph*{Finding 1: existing corpora cannot pose the question.}
 Over the compiler's achievability corpus (15 packs), its extension (6) and the
@@ -1108,16 +1148,14 @@ thinnest on, and Finding~4 tests it with $n=1$.
 
 \emph{Which results the benchmark exercises.} A choice is a communication
 $\mathsf p{\to}\mathsf q$ with $\mathsf p\neq\mathsf q$, so a protocol whose
-choices name no recipient has no conforming session at all --- \textsc{CT-Comm}
-requires the two roles to differ. Six of the seventeen protocols have a second
-role and their eight choices name it; the other eleven model a lone agent
-choosing, with nobody to tell. The condition, $\kstar$, the severity classes
-and the repairs are about the protocol alone and apply to all seventeen; the
-bridge, progress, budget distribution and the bystander results are about
-sessions and apply to five of the six. The sixth, \texttt{order\_fulfilment},
-is outside them twice over: two of its three choices are the environment's, and
-its two choices run in opposite directions between the same pair, which the
-inhabitation construction's fixed direction rules out. That is a real limit of this benchmark rather
+choices name no recipient has no conforming session --- \textsc{CT-Comm} wants
+the roles to differ. Six protocols have a second role and their eight choices
+name it; the other eleven model a lone agent, with nobody to tell. The
+condition, $\kstar$, the severity classes and the repairs are about the protocol
+and apply to all seventeen; the bridge, progress, budget distribution and the
+bystander results are about sessions and apply to five of the six ---
+\texttt{order\_fulfilment} is out twice over, since two of its choices are the
+environment's and its choices run in both directions between one pair. That is a real limit of this benchmark rather
 than of the theory, and the two release protocols were built to exercise the
 bystander half. $\kstar$ distribution $9\times 0$,
 $2\times 1$, $6\times{\ge}5$; the nine distinct point-of-no-return actions it
@@ -1146,27 +1184,27 @@ work.
 \begin{table}[t]
 \centering\small
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}lccclccc@{}}
+\begin{tabular}{@{}llccclccc@{}}
 \toprule
-protocol & choices & loops & irreversible & $\kstar$ & \Ben & \Fut & \Cat\\
+protocol & guards & choices & loops & irreversible & $\kstar$ & \Ben & \Fut & \Cat\\
 \midrule
-booking\_fastpath & 1 & 0 & purchase & 0 & 1 & 0 & 1\\
-booking\_reordered (repair: hoist) & 1 & 0 & purchase & $\ge$5 & 2 & 0 & 0\\
-booking\_narrowed (repair: narrow) & 1 & 0 & purchase & $\ge$5 & 1 & 0 & 0\\
-migration\_backup & 2 & 0 & drop\_old & 1 & 3 & 1 & 2\\
-email\_campaign & 1 & 0 & send (declared) & 0 & 1 & 0 & 1\\
-email\_campaign\_guarded (repair: hoist) & 1 & 0 & send & $\ge$5 & 2 & 0 & 0\\
-deploy\_with\_rollback & 1 & 0 & --- & $\ge$5 & 1 & 1 & 0\\
-deploy\_no\_rollback & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
-file\_cleanup & 1 & 0 & delete & 0 & 1 & 0 & 1\\
-order\_fulfilment (environment choice) & 3 & 0 & ship & 0 & 1 & 0 & 1\\
-retry\_then\_purge & 2 & 1 & purge & 0 & 6 & 0 & 2\\
-shipping\_detour (explicit guards) & 1 & 0 & --- & $\ge$5 & 2 & 0 & 0\\
-claim\_eligible & 1 & 0 & refund & $\ge$5 & 1 & 1 & 0\\
-claim\_ineligible (same protocol) & 1 & 0 & refund & 0 & 0 & 0 & 1\\
-staged\_commit & 3 & 0 & commit & 1 & 3 & 4 & 7\\
-release\_with\_audit (bystander, exact) & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
-release\_with\_cache (bystander, serialize) & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
+booking\_fastpath & default & 1 & 0 & purchase & 0 & 1 & 0 & 1\\
+booking\_reordered (repair: hoist) & default & 1 & 0 & purchase & $\ge$5 & 2 & 0 & 0\\
+booking\_narrowed (repair: narrow) & default & 1 & 0 & purchase & $\ge$5 & 1 & 0 & 0\\
+migration\_backup & default & 2 & 0 & drop\_old & 1 & 3 & 1 & 2\\
+email\_campaign & declared & 1 & 0 & send & 0 & 1 & 0 & 1\\
+email\_campaign\_guarded (repair: hoist) & declared & 1 & 0 & send & $\ge$5 & 2 & 0 & 0\\
+deploy\_with\_rollback & default & 1 & 0 & --- & $\ge$5 & 1 & 1 & 0\\
+deploy\_no\_rollback & default & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
+file\_cleanup & default & 1 & 0 & delete & 0 & 1 & 0 & 1\\
+order\_fulfilment (environment choice) & declared & 3 & 0 & ship & 0 & 1 & 0 & 1\\
+retry\_then\_purge & default & 2 & 1 & purge & 0 & 6 & 0 & 2\\
+shipping\_detour (explicit guards) & explicit & 1 & 0 & --- & $\ge$5 & 2 & 0 & 0\\
+claim\_eligible & explicit & 1 & 0 & refund & $\ge$5 & 1 & 1 & 0\\
+claim\_ineligible (same protocol) & explicit & 1 & 0 & refund & 0 & 1 & 0 & 1\\
+staged\_commit & default & 3 & 0 & commit & 1 & 3 & 4 & 7\\
+release\_with\_audit (bystander, exact) & default & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
+release\_with\_cache (bystander, serialize) & default & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
 \bottomrule
 \end{tabular}}
 \caption{The severity benchmark ($k_{\max}=4$; $\ge$5 means no hazard within
@@ -1194,20 +1232,26 @@ whole-system \emph{complete} enumeration of hazard-free terminations
 (like-for-like with computing an interface), modular checking with the
 \emph{concrete} exit set, modular checking with exits \emph{projected} onto
 the cone of influence of the remaining segments, and the cost of re-checking
-after the last segment is replaced by its unsafe variant. On the
-two-decision migration segment, whole-system analysis grows about fourfold
-per segment; the concrete interface also grows exponentially (256 points at
-$n=6$) because each segment's choices leave distinct atoms behind; the
-projected interface has two points at every $n$ and the analysis is linear.
-At $n=6$ the whole-system analysis asks 566
-goal-reachability queries and the projected modular one asks
-48; the concrete interface asks
-1149, more than the whole system, because computing
-an exponential interface is worse than not abstracting at all. Wall-clock on
-one machine follows the counters (37.2\,s against 0.15\,s) but we
-report the counters, which reproduce exactly. Re-checking after a change costs
-whole-system analysis the full run and modular analysis the last segment
-alone, constant in $n$.
+after the last segment is replaced by its unsafe variant.
+
+State first what modularity does \emph{not} buy, because the natural comparison
+is the wrong one. Deciding whether a hazard is reachable in the whole chain is
+already linear for the tool: on the migration segment it asks $7$
+goal-reachability queries at $n=1$ and $22$ at $n=6$, fewer than the projected
+modular analysis' $48$. Nobody needs to decompose that. What is exponential is
+computing an \emph{interface} --- enumerating the hazard-free terminations a
+segment leaves behind --- and that is the like-for-like comparison, because it
+is what a boundary contract costs. There the complete whole-system enumeration
+asks $566$ queries at $n=6$ against $48$ ($22.4$\,s against $0.083$\,s; we
+report the counters, which reproduce exactly). The concrete interface asks
+$1149$, more than the whole system, because it grows exponentially ($256$ points
+at $n=6$) --- computing an unabstracted interface is worse than not abstracting
+at all, and the projected one has two points at every $n$.
+
+The win that survives is the practical one: re-checking after a change costs
+whole-system analysis the full run ($22$ queries, $109$\,ms at $n=6$, growing
+with $n$) and modular analysis the last segment alone ($8$ queries,
+$13$\,ms, constant in $n$).
 
 \begin{table}[t]
 \centering\small
@@ -1225,9 +1269,9 @@ $n$ & whole, goal queries & exits & modular concrete, queries & interface & modu
 \bottomrule
 \end{tabular}}
 \caption{Chains of the migration segment, $k=2$. Re-check after replacing the
-last segment: whole-system 16--172\,ms growing with $n$; modular 19--25\,ms,
+last segment: whole-system 15--109\,ms growing with $n$; modular 12--16\,ms,
 constant. The deployment segment gives the same shape at smaller scale
-(728\,ms vs 59\,ms at $n=6$).}
+(470\,ms vs 40\,ms at $n=6$).}
 \label{tab:mod}
 \end{table}
 
