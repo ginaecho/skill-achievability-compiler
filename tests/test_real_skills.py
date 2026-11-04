@@ -48,8 +48,11 @@ def test_every_real_skill_compiles_to_a_valid_pack(path):
 # false alarm: the document really does instruct the agent to call a tool the
 # profile does not provide, so the pair below asserts the refutation *and* the
 # capability it must name.  Everything else in the corpus must be achievable.
+# (examples/chrome-browser was listed here for tabs_context_mcp; the claude-ai
+# profile now grants the browser tools, see test_markdown_frontend's
+# test_claude_ai_grants_the_browser_tools_but_no_api_parameters, so it is
+# checked by the home-runtime test instead.)
 CONNECTOR_DEPENDENT = {
-    "examples/chrome-browser": "tabs_context_mcp",
     "examples/computer-use": "computer_request_access",
 }
 
