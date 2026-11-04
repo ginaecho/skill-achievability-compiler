@@ -212,10 +212,18 @@ def test_grep_baseline_is_weaker_than_the_checker():
     spec = importlib.util.spec_from_file_location("grepb", root / "scripts" / "grep_baseline.py")
     mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
     res = json.load(open(root / "paper" / "WIP" / "results" / "grep_baseline.json"))
-    assert res["checker_correct"] == res["n"]
-    assert res["grep_correct"] < res["checker_correct"]
-    # every case the grep misses is a refutation that needs reachability
-    assert all(not r["truth"] for r in res["grep_wrong"])
+    assert res["grep_correct"] < res["checker_correct"] <= res["n"]
+    constructed = [r for r in res["rows"] if r["source"] == "constructed"]
+    assert constructed and all(r["checker_correct"] for r in constructed)
+    # every constructed case the grep misses is a refutation that needs
+    # reachability
+    assert all(not r["truth"] for r in res["grep_wrong"] if r["source"] == "constructed")
+    # the checker's misses (2 of 34 in the 2026-11 re-run) are observed
+    # file-only rows it refutes because the skill's procedure needs a shell,
+    # where an agent computed the artifact by hand anyway
+    assert all(r["source"] == "observed" and r["runtime"] == "no-shell"
+               and r["truth"] and not r["checker"]
+               for r in res["rows"] if not r["checker_correct"])
 
 
 def test_tolerance_degree_is_a_threshold_on_every_benchmark():

@@ -28,12 +28,12 @@ four TikZ figures, and the conventional structure.
 | `results/live_agents.json`, `results/live_agents_runs.jsonl` | the live-agent experiment (every run, every reply) |
 | `../../docs/LIVE_AGENTS.md` | live-agent tables |
 | `../../scripts/live_agents.py` | the live-agent experiment (`claude -p`, no tools) |
-| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 162 real skills surveyed, 8 + 5 run as tasks at two input scales, 4 specification pairs, two runtimes, artifacts verified |
+| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 157 real skills surveyed, 8 + 5 run as tasks at two input scales, 4 specification pairs, two runtimes, artifacts verified |
 | `../../scripts/token_economics.py`, `results/token_economics.json`, `../../docs/TOKEN_ECONOMICS.md` | tokens with and without the checker; when LLM compaction is needed and what it costs |
 | `../../scripts/scan_skills.py`, `results/security_scan.json`, `../../docs/CORPUS_SECURITY.md` | static security review of the third-party corpus (read-only; gated by `tests/test_corpus_security.py`) |
 | `../../src/skillc/autollm.py` | the escalation rule (`skillc autocheck`) |
 | `../../benchmarks/spec-cases/` | nine authored achievable/not-achievable pairs with mock tools; eight of the nine refutations need reachability, not a capability set-difference |
-| `../../scripts/grep_baseline.py`, `results/grep_baseline.json` | the regular-expression baseline (25/34 against the checker's 34/34) |
+| `../../scripts/grep_baseline.py`, `results/grep_baseline.json` | the regular-expression baseline (22/34 against the checker's 32/34) |
 | `../../scripts/llm_judge_baseline.py` | the LLM-judge baseline (scripted; the model calls did not complete in this environment) |
 | `../../real-skills-ext/PROVENANCE.json`, `../../scripts/fetch_skills_ext.py` | the 28 third-party skills (re-fetchable; files not committed) |
 | `../../docs/SEVERITY_RESULTS.md` | evaluation tables |
@@ -139,41 +139,48 @@ that every citation resolves and is covered by a harness (a test runs it);
   1/7/19; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase, send,
   deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
   pre-stated expectations; the exception was a benchmark authoring error, fixed.
-- Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
-  violations; 6 of 19 Catastrophic verdicts taken by a real agent, 17 times;
-  repairs remove the catastrophes. **No rate claim is supported** — 0/120 on
-  the tolerant protocols is arithmetically forced, the low-`k*` counts invert,
-  and 10 of the 11 misselections on tolerant protocols are one Benign branch
-  whose guard the pressure prompt asserts.
-- Corpus census (162 skills, 13 repositories, no model tokens, 2.1 s):
-  149 certified at home, 108 refuted in a file-only runtime, 95 flip.
-- Usefulness (134 agent runs over 16 documents — 8 corpus skills and 8
-  specification cases): certified 67/68 verified artifacts (64 of them
-  also reached the status line and 3 did not; of the 68, 1 was a silent wrong
-  result); refuted, where the
-  skill's procedure is the only route, 0 verified out of 46 with 7
-  fabrications; the five "computed by hand" skills reverse at realistic input
-  size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
+All figures below are from the 2026-11 re-run
+(`../../docs/BENCHMARK_RERUN_2026-11.md`); timings were taken on a different,
+slower machine than the original run.
+
+- Live agents (340 runs, two models, plain vs pressured, $0.62): 0 theorem
+  violations, but also 0 catastrophes: 0 of 19 Catastrophic verdicts taken by an agent,
+  and 0 of 7 Futile ones. All 11 misselections are the one Benign detour
+  (10 pressured, 1 plain). The run is consistent with the theorem but no
+  longer shows non-vacuity, and **no rate claim is supported** (0/180, 0/40,
+  0/120 by `k*` class; the last is arithmetically forced).
+- Corpus census (157 skills, 12 repositories, 5 removed upstream since the
+  first fetch, no model tokens, 5.1 s): 143 certified at home, 103 refuted in
+  a file-only runtime, 89 flip.
+- Usefulness (136 agent runs over 16 documents — 8 corpus skills and 8
+  specification cases): certified 68/76 verified artifacts (4 of the 8
+  failures are ledger-verify A, whose input reached the agents malformed; 1 is
+  a silent wrong result); refuted, where the skill's procedure is the only
+  route, 0 verified out of 28 and no fabrications; at realistic input size the
+  refuted runs no longer all fail: 5/16 verified (google-workspace-cli 4/4,
+  kubernetes-operator 1/4), computed by hand, against 20/20 in the shell
+  runtime.
 - Differential testing: the analyzer and the Coq-extracted kernel agree on the
   tolerance degree for 500 of 500 random protocols across two seeds, 0
   disagreements (`scripts/differential_test.py`).
-- False refutations: of 13 skills refuted in their home runtime, 6 are genuine
-  and 7 are front-end misextractions, audited one by one in
-  `benchmarks/home_refutation_audit.json` (4.3% of the corpus, and 46%
+- False refutations: of 14 skills refuted in their home runtime, 6 are genuine
+  and 8 are front-end misextractions, audited one by one in
+  `benchmarks/home_refutation_audit.json` (5.1% of the corpus, and 43%
   precision on the refutations themselves — the number to carry).
-- Corpus security: 162 documents scanned statically, no malicious skill and no
-  injection payload aimed at an agent; 9 benign flags reviewed in
+- Corpus security: 157 documents scanned statically, no malicious skill and no
+  injection payload aimed at an agent; 8 flagged files reviewed in
   `docs/CORPUS_SECURITY.md`; a test fails on any unreviewed hit.
-- Token economics: escalation to LLM compaction fires on 130/162 skills at
-  home and 49/162 in the file-only runtime (108 free refutations);
-  median compaction 22440 tokens = 27.9% of one agent run (20 of 24
-  attempts returned a pack; the other four are counted as failures).
+- Token economics: escalation to LLM compaction fires on 126/157 skills at
+  home and 50/157 in the file-only runtime (103 free refutations);
+  median compaction 10711 tokens ($0.003) = 24.9% of the tokens of one agent
+  run (20 of 21 attempts returned a pack; the other one is counted as a
+  failure); the 39 refuted runs that produced nothing cost $2.533.
 - Modularity: the tool's own hazard decision is already linear (22 queries at
   n=6), so the like-for-like comparison is computing an *interface*: complete
-  whole-system enumeration 566 queries / 22.4 s at n=6 against the projected
-  modular 48 / 0.083 s; the concrete interface is worse than not abstracting
-  (1149 queries, 256 points). The win that survives is re-check: 109 ms
-  growing with n against 13 ms constant.
+  whole-system enumeration 566 queries / 53.7 s at n=6 against the projected
+  modular 48 / 0.173 s; the concrete interface is worse than not abstracting
+  (1149 queries, 256 points). The win that survives is re-check: 238 ms
+  growing with n against 24 ms, not growing.
 
 ## Before submission
 

@@ -121,10 +121,12 @@ def test_every_corpus_file_matches_its_recorded_hash():
 
 
 def test_the_corpus_is_the_size_and_shape_the_paper_says():
-    """"162 skills from thirteen public repositories", "the seventeen of the
-    vendor's skills repository and 145 more from twelve third-party
-    collections".  The manifest cannot express a directory count, so the
-    arithmetic behind those three sentences is checked here."""
+    """"157 skills from twelve public repositories", "the seventeen of the
+    vendor's skills repository and 140 more from eleven third-party
+    collections", "5 skills ... among them every skill of a twelfth
+    collection, were removed upstream".  The manifest cannot express a
+    directory count, so the arithmetic behind those sentences is checked
+    here.  PROVENANCE.json keeps the removed entries, marked with a status."""
     import json
     from pathlib import Path
 
@@ -139,8 +141,14 @@ def test_the_corpus_is_the_size_and_shape_the_paper_says():
     repos = sorted(d.name for d in ext.iterdir() if d.is_dir())
     ext_prov = json.loads((ext / "PROVENANCE.json").read_text())
 
+    live = [e for e in ext_prov if not str(e.get("status", "")).startswith("removed")]
+    live_repos = {e["repo"] for e in live}
+    removed_repos = {e["repo"] for e in ext_prov} - live_repos
     assert len(vendor_skills) == 17, len(vendor_skills)
     assert len(repos) == 12, repos
     assert len(ext_prov) == 145, len(ext_prov)
-    assert len(vendor_skills) + len(ext_prov) == 162
-    assert 1 + len(repos) == 13
+    assert len(ext_prov) - len(live) == 5
+    assert len(live) == 140, len(live)
+    assert len(live_repos) == 11 and len(removed_repos) == 1, removed_repos
+    assert len(vendor_skills) + len(live) == 157
+    assert 1 + len(live_repos) == 12
