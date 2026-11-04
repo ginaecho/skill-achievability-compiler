@@ -1,0 +1,27 @@
+```ce
+Skill `brightdata-debug-bundle`.
+Roles: `agent`, `user`.
+Tool `inventory_inputs` (owner `agent`): via `bash`; adds `inputs_reviewed`.
+Tool `create_manifest` (owner `agent`): via `write`; requires `inputs_reviewed`; adds `manifest_created`.
+Tool `redact_bundle` (owner `agent`): via `edit`; requires `manifest_created`; adds `redacted`.
+Tool `secret_scan` (owner `agent`): via `bash`; requires `redacted`; adds `secret_scan_passed`.
+Tool `seal_evidence` (owner `agent`): via `bash`; requires `secret_scan_passed`; adds `sealed`, `hashes_recorded`.
+Tool `transmit_bundle` (owner `agent`): via `private_support_channel`; needs `support_channel_access`; requires `sealed`; adds `transmitted`.
+Initially true: none.
+Goal: `manifest_created` and `redacted` and `secret_scan_passed` and `sealed` and `hashes_recorded`.
+Protocol:
+  - `agent` uses `inventory_inputs`.
+  - `agent` uses `create_manifest`.
+  - loop `redact_validate`:
+    - `agent` uses `redact_bundle`.
+    - `agent` uses `secret_scan`.
+    - `agent` chooses one of (observed):
+      - branch `clean`: none.
+      - branch `incomplete`:
+        - repeat `redact_validate`.
+  - `agent` uses `seal_evidence`.
+  - `agent` chooses one of (observed):
+    - branch `transmit`:
+      - `agent` uses `transmit_bundle`.
+    - branch `hold`: none.
+```

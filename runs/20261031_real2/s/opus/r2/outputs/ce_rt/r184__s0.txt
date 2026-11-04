@@ -1,0 +1,33 @@
+```ce
+Skill `cohere-deploy-integration`.
+Roles: `agent`, `owner`.
+Tool `inspect_platform` (owner `agent`): via `read`; adds `platform_inspected`.
+Tool `check_availability` (owner `agent`): via `web_fetch`; adds `availability_reviewed`.
+Tool `inject_secret` (owner `agent`): via `platform_secret_manager`; needs `cohere_account`, `secret_manager`; requires `platform_inspected`; adds `server_side_secrets`, `key_injected`.
+Tool `set_deploy_config` (owner `agent`): via `write`; requires `availability_reviewed`; adds `config_set`, `model_selected`, `health_checks`.
+Tool `deploy_nonprod` (owner `agent`): via `platform_deploy`; needs `platform_account`; requires `config_set`, `key_injected`; adds `deployed_nonprod`.
+Tool `test_resilience` (owner `agent`): via `bash`; requires `deployed_nonprod`; adds `streaming_tested`, `resilience_tested`.
+Tool `canary_prod` (owner `agent`): via `platform_deploy`; needs `platform_account`, `production_access`; requires `resilience_tested`, `streaming_tested`; adds `canary_deployed`.
+Tool `promote` (owner `agent`): via `platform_deploy`; needs `production_access`; requires `canary_deployed`; adds `promoted`.
+Tool `rollback` (owner `agent`): via `platform_deploy`; needs `production_access`; requires `canary_deployed`; adds `rolled_back`.
+Tool `record_evidence` (owner `agent`): via `write`; adds `evidence_preserved`.
+Initially true: none.
+Goal: `server_side_secrets` and `health_checks` and `streaming_tested` and `canary_deployed` and `promoted` and `evidence_preserved`.
+Protocol:
+  - `agent` uses `inspect_platform`.
+  - `agent` uses `check_availability`.
+  - `owner` chooses one of (observed):
+    - branch `approve`:
+      - `agent` uses `inject_secret`.
+      - `agent` uses `set_deploy_config`.
+      - `agent` uses `deploy_nonprod`.
+      - `agent` uses `test_resilience`.
+      - `agent` uses `canary_prod`.
+      - `agent` chooses one of (external):
+        - branch `healthy`:
+          - `agent` uses `promote`.
+        - branch `unhealthy`:
+          - `agent` uses `rollback`.
+      - `agent` uses `record_evidence`.
+    - branch `decline`: none.
+```

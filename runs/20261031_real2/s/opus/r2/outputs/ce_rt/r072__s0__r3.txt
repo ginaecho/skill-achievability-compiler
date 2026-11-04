@@ -1,0 +1,45 @@
+```ce
+Skill `tao-run-deft-pas`.
+Roles: `agent`, `user`.
+Tool `discover_inputs` (owner `agent`): via `bash`; adds `inputs_discovered`.
+Tool `materialize_config` (owner `agent`): via `write`; requires `inputs_discovered`; adds `config_ready`.
+Tool `init_state` (owner `agent`): via `write`; requires `config_ready`; adds `state_initialized`.
+Tool `dataset_setup` (owner `agent`): via `bash`; requires `state_initialized`; adds `dataset_ready`.
+Tool `pool_embed` (owner `agent`): via `bash`; needs `gpu`; requires `dataset_ready`; adds `pool_embedded`.
+Tool `evaluate` (owner `agent`): via `bash`; needs `gpu`, `tao_platform`; requires `pool_embedded`; adds `evaluated`.
+Tool `gap_analysis` (owner `agent`): via `bash`; requires `evaluated`; adds `gaps_ready`.
+Tool `mine_and_select` (owner `agent`): via `bash`; needs `gpu`; requires `gaps_ready`; adds `selected`.
+Tool `train` (owner `agent`): via `bash`; needs `gpu`, `tao_platform`; requires `selected`; adds `trained`.
+Tool `commit_loop_stop` (owner `agent`): via `bash`; requires `evaluated`; adds `loop_stopped`.
+Tool `final_audit` (owner `agent`): via `bash`; requires `loop_stopped`; adds `audit_complete`.
+Tool `render_report` (owner `agent`): via `bash`; requires `loop_stopped`; adds `report_rendered`.
+Initially true: none.
+Goal: `loop_stopped` and `audit_complete` and `report_rendered`.
+Protocol:
+  - `agent` uses `discover_inputs`.
+  - `user` chooses one of (observed):
+    - branch `approve`:
+      - `agent` uses `materialize_config`.
+      - `agent` uses `init_state`.
+      - `agent` uses `dataset_setup`.
+      - `agent` uses `pool_embed`.
+      - `agent` uses `evaluate`.
+      - `agent` chooses one of (external):
+        - branch `kpi_met_baseline`:
+          - `agent` uses `commit_loop_stop`.
+        - branch `continue`:
+          - `agent` uses `gap_analysis`.
+          - loop `iteration`:
+            - `agent` uses `mine_and_select`.
+            - `agent` uses `train`.
+            - `agent` uses `evaluate`.
+            - `agent` chooses one of (external):
+              - branch `stop`:
+                - `agent` uses `commit_loop_stop`.
+              - branch `next`:
+                - `agent` uses `gap_analysis`.
+                - repeat `iteration`.
+      - `agent` uses `final_audit`.
+      - `agent` uses `render_report`.
+    - branch `decline`: none.
+```

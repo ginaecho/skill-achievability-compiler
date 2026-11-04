@@ -1,0 +1,37 @@
+```ce
+Skill `generate-dockerfile`.
+Roles: `agent`, `user`.
+Tool `analyze_project` (owner `agent`): via `read`; adds `project_analyzed`.
+Tool `ask_user_detail` (owner `agent`): via `ask_user`; adds `project_analyzed`.
+Tool `lookup_version` (owner `agent`): via `web_search`; needs `public_internet`; adds `version_resolved`.
+Tool `write_dockerfile` (owner `agent`): via `write`; requires `project_analyzed`; adds `dockerfile_written`.
+Tool `write_dockerignore` (owner `agent`): via `write`; requires `dockerfile_written`; adds `dockerignore_written`.
+Tool `fix_files` (owner `agent`): via `edit`; requires `dockerfile_written`; removes `build_succeeds`, `container_runs_ok`.
+Tool `build_image` (owner `agent`): via `docker`; requires `dockerfile_written` and `dockerignore_written`; adds `build_succeeds`.
+Tool `run_container` (owner `agent`): via `docker`; requires `build_succeeds`; adds `container_runs_ok`.
+Tool `cleanup` (owner `agent`): via `docker`; requires `build_succeeds`; adds `cleaned_up`.
+Initially true: none.
+Goal: `dockerfile_written` and `dockerignore_written` and `build_succeeds` and `container_runs_ok`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `confident`:
+      - `agent` uses `analyze_project`.
+    - branch `needs_clarification`:
+      - `agent` uses `analyze_project`.
+      - `agent` uses `ask_user_detail`.
+  - `agent` chooses one of (external):
+    - branch `version_in_project`: none.
+    - branch `lookup_online`:
+      - `agent` uses `lookup_version`.
+  - `agent` uses `write_dockerfile`.
+  - `agent` uses `write_dockerignore`.
+  - loop `validate`:
+    - `agent` uses `build_image`.
+    - `agent` uses `run_container`.
+    - `agent` chooses one of (observed):
+      - branch `passed`: none.
+      - branch `fix_and_retry`:
+        - `agent` uses `fix_files`.
+        - repeat `validate`.
+  - `agent` uses `cleanup`.
+```

@@ -1,0 +1,35 @@
+```ce
+Skill `tao-generate-anomalies`.
+Roles: `agent`, `user`.
+Tool `launch_container` (owner `agent`): via `docker`; needs `cuda_gpu`, `container_registry`; adds `container_running`.
+Tool `check_checkpoints` (owner `agent`): via `bash`; adds `checkpoints_present`.
+Tool `download_checkpoints` (owner `agent`): via `huggingface_hub`; needs `hf_token`; adds `checkpoints_present`.
+Tool `finetune` (owner `agent`): via `gpu_container`; needs `cuda_gpu`; requires `container_running` and `checkpoints_present`; adds `model_trained`.
+Tool `prep_testcase` (owner `agent`): via `bash`; requires `container_running` and `model_trained`; adds `jsonl_ready`.
+Tool `run_sdg` (owner `agent`): via `gpu_container`; needs `cuda_gpu`; requires `container_running` and `jsonl_ready` and `model_trained`; adds `original_generated`.
+Tool `run_eval` (owner `agent`): via `gpu_container`; needs `cuda_gpu`; requires `original_generated`; adds `original_evaluated`.
+Tool `run_round` (owner `agent`): via `gpu_container`; needs `cuda_gpu`; requires `original_evaluated`; adds `round_done`.
+Tool `assemble_searched` (owner `agent`): via `bash`; requires `original_evaluated`; adds `searched_assembled`.
+Tool `filter_with_regen` (owner `agent`): via `gpu_container`; needs `cuda_gpu`; requires `searched_assembled`; adds `searched_filtered`, `searched_evaluated`.
+Initially true: none.
+Goal: `searched_filtered` and `searched_evaluated`.
+Protocol:
+  - `agent` uses `launch_container`.
+  - `agent` chooses one of (external):
+    - branch `already_present`:
+      - `agent` uses `check_checkpoints`.
+    - branch `missing`:
+      - `agent` uses `download_checkpoints`.
+  - `agent` uses `finetune`.
+  - `agent` uses `prep_testcase`.
+  - `agent` uses `run_sdg`.
+  - `agent` uses `run_eval`.
+  - `agent` chooses one of (observed):
+    - branch `search`:
+      - loop `rounds`:
+        - `agent` uses `run_round`.
+        - repeat `rounds`.
+    - branch `no_search`: none.
+  - `agent` uses `assemble_searched`.
+  - `agent` uses `filter_with_regen`.
+```

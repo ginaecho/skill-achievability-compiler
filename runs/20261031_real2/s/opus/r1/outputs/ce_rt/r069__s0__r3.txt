@@ -1,0 +1,32 @@
+```ce
+Skill `runai-diagnose-failed-workload`.
+Roles: `agent`, `user`.
+Tool `list_workloads` (owner `agent`): via `runai_mcp`; needs `runai_account`; adds `workload_resolved`.
+Tool `get_workload_status` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `workload_resolved`; adds `status_checked`.
+Tool `get_workload_spec` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `status_checked`; adds `spec_inspected`.
+Tool `get_workload_pods` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `status_checked`; adds `pods_inspected`.
+Tool `get_workload_history` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `spec_inspected` and `pods_inspected`; adds `history_inspected`, `recurrence_identified`.
+Tool `get_workload_metrics` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `pods_inspected`; adds `metrics_collected`.
+Tool `kubectl_pod_evidence` (owner `agent`): via `kubectl`; needs `k8s_credentials`; requires `pods_inspected`; adds `container_evidence`.
+Tool `kubectl_describe_node` (owner `agent`): via `kubectl`; needs `k8s_credentials`; requires `pods_inspected`; adds `node_evidence`.
+Initially true: `workload_resolved`.
+Goal: `status_checked` and `spec_inspected` and `pods_inspected` and `history_inspected` and `recurrence_identified`.
+Protocol:
+  - `user` chooses one of (observed):
+    - branch `by_workload_id`: none.
+    - branch `by_name_project`:
+      - `agent` uses `list_workloads`.
+  - `agent` uses `get_workload_status`.
+  - `agent` uses `get_workload_spec`.
+  - `agent` uses `get_workload_pods`.
+  - `agent` uses `get_workload_history`.
+  - `agent` chooses one of (observed):
+    - branch `deeper_evidence_needed`:
+      - `agent` uses `get_workload_metrics`.
+      - `agent` uses `kubectl_pod_evidence`.
+      - `agent` chooses one of (observed):
+        - branch `node_failure_signal`:
+          - `agent` uses `kubectl_describe_node`.
+        - branch `no_node_signal`: none.
+    - branch `tier1_sufficient`: none.
+```

@@ -1,0 +1,39 @@
+```ce
+Skill `tao-generate-anomalies`.
+Roles: `agent`, `user`.
+Tool `ensure_checkpoints` (owner `agent`): via `bash`; needs `hf_token`; adds `checkpoints_ready`.
+Tool `validate_dataset` (owner `agent`): via `bash`; requires `checkpoints_ready`; adds `dataset_valid`.
+Tool `gen_validation_jsonl` (owner `agent`): via `bash`; requires `dataset_valid`; adds `validation_ready`.
+Tool `gen_training_config` (owner `agent`): via `write`; requires `dataset_valid`; adds `config_ready`.
+Tool `finetune` (owner `agent`): via `bash`; needs `cuda_gpu`; requires `config_ready` and `validation_ready` and `checkpoints_ready`; adds `finetuned`.
+Tool `prep_testcase` (owner `agent`): via `bash`; requires `finetuned`; adds `jsonl_ready`.
+Tool `run_sdg` (owner `agent`): via `bash`; needs `cuda_gpu`; requires `jsonl_ready`; adds `sdg_generated`.
+Tool `run_eval` (owner `agent`): via `bash`; requires `sdg_generated`; adds `original_evaluated`.
+Tool `write_draws` (owner `agent`): via `write`; requires `original_evaluated`; adds `draws_ready`.
+Tool `run_round` (owner `agent`): via `bash`; needs `cuda_gpu`; requires `draws_ready`; adds `round_done`.
+Tool `assemble_searched` (owner `agent`): via `bash`; requires `original_evaluated`; adds `searched_assembled`.
+Tool `filter_with_regen` (owner `agent`): via `bash`; needs `cuda_gpu`; requires `searched_assembled`; adds `searched_complete`.
+Initially true: none.
+Goal: all of (`finetuned`, `sdg_generated`, `original_evaluated`, `searched_assembled`, `searched_complete`).
+Protocol:
+  - `agent` uses `ensure_checkpoints`.
+  - `agent` uses `validate_dataset`.
+  - `agent` uses `gen_validation_jsonl`.
+  - `user` chooses one of (observed):
+    - branch `approve_config`:
+      - `agent` uses `gen_training_config`.
+      - `agent` uses `finetune`.
+      - `agent` uses `prep_testcase`.
+      - `agent` uses `run_sdg`.
+      - `agent` uses `run_eval`.
+      - `agent` chooses one of (observed):
+        - branch `search`:
+          - loop `rounds`:
+            - `agent` uses `write_draws`.
+            - `agent` uses `run_round`.
+            - repeat `rounds`.
+        - branch `no_search`: none.
+      - `agent` uses `assemble_searched`.
+      - `agent` uses `filter_with_regen`.
+    - branch `reject_config`: none.
+```

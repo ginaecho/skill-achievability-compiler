@@ -1,0 +1,42 @@
+```ce
+Skill `patching-bugs`.
+Roles: `agent`, `user`, `reproduce_bug`, `validate_bug`, `implement_patch`, `prove_patch`, `regression_hunt`.
+Tool `preflight` (owner `agent`): via `bash`; adds `regression_hunt_installed`, `worktree_clean`, `build_runs`, `baseline_pinned`.
+Tool `write_finding` (owner `agent`): via `write`; requires `baseline_pinned`; adds `finding_written`.
+Tool `start_run` (owner `agent`): via `write`; requires `finding_written`; adds `run_started`.
+Tool `check_records` (owner `agent`): via `bash`; requires `run_started`; adds `records_valid`.
+Tool `check_before_repair` (owner `agent`): via `bash`; requires `records_valid`; adds `repair_allowed`.
+Tool `write_regression` (owner `agent`): via `write`; requires `records_valid`; adds `regression_checked`.
+Tool `manifest_regression` (owner `agent`): via `bash`; requires `regression_checked`; adds `regression_manifested`.
+Tool `render_reports` (owner `agent`): via `bash`; requires `records_valid`; adds `reports_rendered`.
+Initially true: none.
+Goal: `patch_committed` and `patch_proven` and `regression_checked` and `reports_rendered`.
+Protocol:
+  - `agent` uses `preflight`.
+  - `agent` chooses one of (observed):
+    - branch `blocked`: none.
+    - branch `ready`:
+      - `agent` uses `write_finding`.
+      - `agent` uses `start_run`.
+      - spawn `reproduce_bug`.
+      - `agent` uses `check_records`.
+      - spawn `validate_bug`.
+      - `agent` uses `check_records`.
+      - `agent` chooses one of (observed):
+        - branch `not_confirmed`:
+          - `agent` uses `render_reports`.
+        - branch `confirmed`:
+          - loop `attempts`:
+            - `agent` uses `check_before_repair`.
+            - spawn `implement_patch`.
+            - `agent` chooses one of (observed):
+              - branch `patched`:
+                - spawn `prove_patch`.
+                - `agent` uses `check_records`.
+              - branch `reattempt`:
+                - repeat `attempts`.
+          - spawn `regression_hunt`.
+          - `agent` uses `write_regression`.
+          - `agent` uses `manifest_regression`.
+          - `agent` uses `render_reports`.
+```

@@ -1,0 +1,36 @@
+```ce
+Skill `runai-diagnose-failed-workload`.
+Roles: `agent`.
+Tool `list_workloads` (owner `agent`): via `runai_mcp`; needs `runai_account`; adds `workload_resolved`.
+Tool `get_workload_status` (owner `agent`): via `runai_mcp`; needs `runai_account`; adds `status_known`.
+Tool `get_workload_spec` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `status_known`; adds `spec_known`.
+Tool `get_workload_pods` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `status_known`; adds `pods_known`.
+Tool `get_workload_history` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `spec_known` and `pods_known`; adds `history_known`.
+Tool `get_workload_metrics` (owner `agent`): via `runai_mcp`; needs `runai_account`; requires `history_known`; adds `metrics_known`.
+Tool `kubectl_inspect_pod` (owner `agent`): via `kubectl`; needs `kube_credentials`; requires `history_known`; adds `container_evidence`.
+Tool `kubectl_describe_node` (owner `agent`): via `kubectl`; needs `kube_credentials`; requires `history_known`; adds `node_evidence`.
+Initially true: none.
+Goal: `status_known` and `spec_known` and `pods_known` and `history_known`.
+Protocol:
+  - `agent` chooses one of (observed):
+    - branch `option_a_workload_id`:
+      - `agent` uses `get_workload_status`.
+    - branch `option_b_name_project`:
+      - `agent` uses `list_workloads`.
+      - `agent` uses `get_workload_status`.
+  - `agent` uses `get_workload_spec`.
+  - `agent` uses `get_workload_pods`.
+  - `agent` uses `get_workload_history`.
+  - `agent` chooses one of (external):
+    - branch `oom_or_exit137`:
+      - `agent` uses `get_workload_metrics`.
+    - branch `no_memory_signal`: none.
+  - `agent` chooses one of (external):
+    - branch `container_evidence_needed`:
+      - `agent` uses `kubectl_inspect_pod`.
+    - branch `tier1_sufficient`: none.
+  - `agent` chooses one of (external):
+    - branch `node_failure_signal`:
+      - `agent` uses `kubectl_describe_node`.
+    - branch `no_node_signal`: none.
+```

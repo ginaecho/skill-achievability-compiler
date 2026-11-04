@@ -1,0 +1,38 @@
+```ce
+Skill `generate-dockerfile`.
+Roles: `agent`, `user`.
+Tool `analyze_project` (owner `agent`): via `read`; adds `project_analyzed`.
+Tool `lookup_version` (owner `agent`): via `web_search`; requires `project_analyzed`; adds `version_known`.
+Tool `write_dockerfile` (owner `agent`): via `write`; requires `project_analyzed`; adds `dockerfile_written`.
+Tool `improve_dockerfile` (owner `agent`): via `edit`; requires `project_analyzed`; adds `dockerfile_written`.
+Tool `write_dockerignore` (owner `agent`): via `write`; requires `dockerfile_written`; adds `dockerignore_written`.
+Tool `build_image` (owner `agent`): via `docker`; needs `docker_daemon`; requires `dockerfile_written`; adds `image_built`.
+Tool `run_container` (owner `agent`): via `docker`; needs `docker_daemon`; requires `image_built`; adds `container_started`.
+Tool `check_logs` (owner `agent`): via `docker`; needs `docker_daemon`; requires `container_started`; adds `validated`.
+Tool `fix_dockerfile` (owner `agent`): via `edit`; requires `dockerfile_written`; removes `validated`.
+Tool `cleanup` (owner `agent`): via `docker`; needs `docker_daemon`; requires `image_built`; removes `image_built`, `container_started`.
+Initially true: none.
+Goal: `dockerfile_written` and `dockerignore_written` and `validated`.
+Protocol:
+  - `agent` uses `analyze_project`.
+  - `agent` chooses one of (observed):
+    - branch `version_in_project`: none.
+    - branch `lookup_needed`:
+      - `agent` uses `lookup_version`.
+  - `agent` chooses one of (observed):
+    - branch `new_dockerfile`:
+      - `agent` uses `write_dockerfile`.
+    - branch `improve_existing`:
+      - `agent` uses `improve_dockerfile`.
+  - `agent` uses `write_dockerignore`.
+  - loop `iterate`:
+    - `agent` uses `build_image`.
+    - `agent` uses `run_container`.
+    - `agent` uses `check_logs`.
+    - `agent` chooses one of (observed):
+      - branch `pass`: none.
+      - branch `fix`:
+        - `agent` uses `fix_dockerfile`.
+        - repeat `iterate`.
+  - `agent` uses `cleanup`.
+```

@@ -1,0 +1,33 @@
+```ce
+Skill `brightdata-debug-bundle`.
+Roles: `agent`, `user`.
+Tool `read_receipt` (owner `agent`): via `read`; requires `receipt_available`; adds `inputs_read`.
+Tool `scan_logs` (owner `agent`): via `bash`; requires `inputs_read`; adds `logs_scanned`.
+Tool `write_manifest` (owner `agent`): via `write`; requires `logs_scanned` and `output_dir_ready`; adds `manifest_written`.
+Tool `redact_bundle` (owner `agent`): via `edit`; requires `manifest_written` and `redaction_policy_defined`; adds `redacted`.
+Tool `quarantine_bundle` (owner `agent`): via `bash`; requires `redacted`; removes `redacted`; adds `quarantined`.
+Tool `scan_secrets` (owner `agent`): via `bash`; requires `redacted`; adds `secrets_scanned`, `no_secrets_remain`.
+Tool `hash_files` (owner `agent`): via `bash`; requires `no_secrets_remain`; adds `hashes_computed`.
+Tool `seal_bundle` (owner `agent`): via `write`; requires `hashes_computed`; adds `bundle_sealed`.
+Tool `transmit_bundle` (owner `agent`): via `support_channel`; needs `support_channel`; requires `bundle_sealed`; adds `transmitted`.
+Initially true: `receipt_available`, `output_dir_ready`, `redaction_policy_defined`.
+Goal: `manifest_written` and `redacted` and `no_secrets_remain` and `hashes_computed` and `bundle_sealed`.
+Protocol:
+  - `agent` uses `read_receipt`.
+  - `agent` uses `scan_logs`.
+  - `agent` uses `write_manifest`.
+  - loop `redaction`:
+    - `agent` uses `redact_bundle`.
+    - `agent` chooses one of (external):
+      - branch `incomplete`:
+        - `agent` uses `quarantine_bundle`.
+        - repeat `redaction`.
+      - branch `complete`:
+        - `agent` uses `scan_secrets`.
+  - `agent` uses `hash_files`.
+  - `agent` uses `seal_bundle`.
+  - `agent` chooses one of (observed):
+    - branch `transmit`:
+      - `agent` uses `transmit_bundle`.
+    - branch `hold`: none.
+```

@@ -1,0 +1,35 @@
+```ce
+Skill `quarkus-native-and-container`.
+Roles: `agent`, `user`.
+Tool `check_quarkus_version` (owner `agent`): via `read`; adds `version_checked`.
+Tool `native_build` (owner `agent`): via `bash`; needs `docker`; requires `version_checked`; adds `native_built`.
+Tool `register_reflection` (owner `agent`): via `write`; adds `reflection_registered`.
+Tool `run_native_test` (owner `agent`): via `bash`; requires `native_built`; adds `native_tests_pass`.
+Tool `add_container_image_extension` (owner `agent`): via `bash`; adds `container_extension_added`.
+Tool `build_container_image` (owner `agent`): via `bash`; needs `docker`; requires `container_extension_added`; adds `image_built`.
+Tool `add_kubernetes_extension` (owner `agent`): via `bash`; adds `kubernetes_extension_added`.
+Tool `generate_manifests` (owner `agent`): via `bash`; requires `kubernetes_extension_added`; adds `manifests_generated`.
+Initially true: none.
+Goal: `native_built` and `native_tests_pass`.
+Protocol:
+  - `agent` uses `check_quarkus_version`.
+  - `agent` uses `native_build`.
+  - loop `fix_native`:
+    - `agent` chooses one of (external):
+      - branch `build_failed`:
+        - `agent` uses `register_reflection`.
+        - `agent` uses `native_build`.
+        - repeat `fix_native`.
+      - branch `build_ok`: none.
+  - `agent` uses `run_native_test`.
+  - `user` chooses one of (observed):
+    - branch `containerize`:
+      - `agent` uses `add_container_image_extension`.
+      - `agent` uses `build_container_image`.
+    - branch `skip_container`: none.
+  - `user` chooses one of (observed):
+    - branch `deploy_manifests`:
+      - `agent` uses `add_kubernetes_extension`.
+      - `agent` uses `generate_manifests`.
+    - branch `skip_manifests`: none.
+```

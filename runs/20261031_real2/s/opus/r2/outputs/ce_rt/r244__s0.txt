@@ -1,0 +1,32 @@
+```ce
+Skill `away-mode`.
+Roles: `agent`, `user`, `buddy`.
+Tool `create_away_log` (owner `agent`): via `write`; adds `away_log_created`.
+Tool `arm_timer` (owner `agent`): via `scheduler`; requires `away_log_created`; adds `timer_armed`.
+Tool `check_state` (owner `agent`): via `read`; requires `away_log_created`.
+Tool `append_log` (owner `agent`): via `edit`; requires `away_log_created`.
+Tool `execute_action` (owner `agent`): via `bash`; requires `away_log_created`; adds `action_done`.
+Tool `delete_timer` (owner `agent`): via `scheduler`; requires `timer_armed`; removes `timer_armed`.
+Initially true: none.
+Goal: `away_log_created` and `timer_armed`.
+Protocol:
+  - `agent` uses `create_away_log`.
+  - `agent` uses `arm_timer`.
+  - loop `watch`:
+    - `agent` uses `check_state`.
+    - `agent` tells `buddy` `propose`.
+    - `buddy` chooses one of:
+      - branch `co_sign`:
+        - `buddy` tells `agent` `approve`.
+        - `agent` uses `execute_action`.
+        - `agent` uses `append_log`.
+      - branch `hold`:
+        - `buddy` tells `agent` `block`.
+        - `agent` uses `append_log`.
+    - `user` chooses one of (external):
+      - branch `return`:
+        - `agent` uses `delete_timer`.
+        - `agent` uses `check_state`.
+      - branch `still_away`:
+        - `repeat` `watch`.
+```

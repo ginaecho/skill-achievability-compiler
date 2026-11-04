@@ -325,3 +325,13 @@ changed, so the pilot outputs stay in the round. Two implementation fixes:
    job list). The rule of each round is unchanged.
 2. `calls` identifies a call's job from the frozen prompt path in its task, not from the batch
    files (a retry or repair job is not in a batch file).
+
+**Amendment 6 (2026-11-03; no change of method).** The user paused the run on 2026-10-31
+during the S and D calls (executions and adjudications were complete) and resumed it on
+2026-11-03. Sub-agents that were cut off by the pause wrote nothing; every reply file left was
+checked to be complete (each D reply parses, no S reply has an unclosed code block). On resume
+only the missing calls run, from the same frozen prompts and the same model; the retry and
+repair rounds are rebuilt incrementally as before. The adjudication prompts and batches of the
+main run, whose names would reveal which cases were achieved, were moved out of the
+repository with the executor reports until every S and D call has finished (the pilot's five
+had already been committed with the pilot).

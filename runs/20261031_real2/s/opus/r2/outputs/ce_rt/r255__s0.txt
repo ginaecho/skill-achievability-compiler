@@ -1,0 +1,31 @@
+```ce
+Skill `generate-dockerfile`.
+Roles: `agent`, `user`.
+Tool `analyze_project` (owner `agent`): via `read`; adds `project_analyzed`, `existing_checked`.
+Tool `write_dockerfile` (owner `agent`): via `write`; requires `project_analyzed`; adds `dockerfile_written`.
+Tool `edit_dockerfile` (owner `agent`): via `edit`; requires `project_analyzed` and `existing_checked`; adds `dockerfile_written`.
+Tool `write_dockerignore` (owner `agent`): via `write`; requires `dockerfile_written`; adds `dockerignore_written`.
+Tool `build_image` (owner `agent`): via `bash`; requires `dockerfile_written`; adds `image_built`.
+Tool `run_container` (owner `agent`): via `bash`; requires `image_built`; adds `container_started`.
+Tool `analyze_logs` (owner `agent`): via `bash`; requires `container_started`; adds `validated`.
+Tool `cleanup` (owner `agent`): via `bash`; requires `image_built`; adds `cleaned_up`.
+Initially true: none.
+Goal: `dockerfile_written` and `dockerignore_written` and `validated` and `cleaned_up`.
+Protocol:
+  - `agent` uses `analyze_project`.
+  - `agent` chooses one of (observed):
+    - branch `new_file`:
+      - `agent` uses `write_dockerfile`.
+    - branch `improve_existing`:
+      - `agent` uses `edit_dockerfile`.
+  - `agent` uses `write_dockerignore`.
+  - loop `validate`:
+    - `agent` uses `build_image`.
+    - `agent` uses `run_container`.
+    - `agent` uses `analyze_logs`.
+    - `agent` chooses one of (external):
+      - branch `pass`: none.
+      - branch `retry`:
+        - repeat `validate`.
+  - `agent` uses `cleanup`.
+```

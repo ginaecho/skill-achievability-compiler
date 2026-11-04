@@ -1,0 +1,37 @@
+```ce
+Skill `regression-hunt`.
+Roles: `coordinator`, `user`, `stage_agent`.
+Tool `obtain_inputs` (owner `coordinator`): via `ask_user`; adds `inputs_obtained`.
+Tool `save_scope` (owner `coordinator`): via `write`; requires `inputs_obtained`; adds `scope_saved`.
+Tool `init_registry` (owner `coordinator`): via `bash`; requires `scope_saved`; adds `registry_initialized`.
+Tool `create_campaign` (owner `coordinator`): via `write`; requires `registry_initialized`; adds `campaign_created`.
+Tool `resolve_guidance` (owner `coordinator`): via `bash`; adds `guidance_resolved`.
+Tool `save_guidance` (owner `coordinator`): via `write`; requires `guidance_resolved`; adds `guidance_saved`.
+Tool `reserve_stage` (owner `coordinator`): via `bash`; requires `campaign_created`; requires `guidance_saved`; adds `stage_reserved`.
+Tool `bind_launch_record` (owner `coordinator`): via `bash`; requires `stage_reserved`; adds `launch_bound`.
+Tool `accept_record` (owner `coordinator`): via `bash`; requires `launch_bound`; adds `record_accepted`.
+Tool `update_ledger` (owner `coordinator`): via `write`; requires `record_accepted`; adds `ledger_updated`.
+Tool `retry_stage` (owner `coordinator`): via `bash`; requires `launch_bound`; adds `previous_agent_stopped`.
+Tool `compile_reports` (owner `coordinator`): via `write`; requires `ledger_updated`; adds `reports_produced`.
+Initially true: none.
+Goal: `reports_produced` and `ledger_updated`.
+Protocol:
+  - `coordinator` uses `obtain_inputs`.
+  - `coordinator` uses `save_scope`.
+  - `coordinator` uses `init_registry`.
+  - `coordinator` uses `create_campaign`.
+  - `coordinator` uses `resolve_guidance`.
+  - `coordinator` uses `save_guidance`.
+  - loop `dispatch`:
+    - `coordinator` uses `reserve_stage`.
+    - `coordinator` uses `bind_launch_record`.
+    - spawn `stage_agent`.
+    - `coordinator` chooses one of (external):
+      - branch `accept`:
+        - `coordinator` uses `accept_record`.
+        - `coordinator` uses `update_ledger`.
+      - branch `retry`:
+        - `coordinator` uses `retry_stage`.
+    - repeat `dispatch`.
+  - `coordinator` uses `compile_reports`.
+```

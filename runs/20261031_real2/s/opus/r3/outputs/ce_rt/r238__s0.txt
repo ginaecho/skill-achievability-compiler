@@ -1,0 +1,33 @@
+```ce
+Skill `regression-hunt`.
+Roles: `coordinator`, `stage_agent`.
+Tool `obtain_inputs` (owner `coordinator`): via `ask_user`; adds `inputs_obtained`.
+Tool `save_scope` (owner `coordinator`): via `write`; requires `inputs_obtained`; adds `scope_saved`.
+Tool `init_registry` (owner `coordinator`): via `bash`; requires `scope_saved`; adds `campaign_initialized`.
+Tool `freeze_guidance` (owner `coordinator`): via `bash`; needs `network_access`; requires `campaign_initialized`; adds `guidance_frozen`.
+Tool `reserve_assignment` (owner `coordinator`): via `bash`; requires `guidance_frozen`; adds `assignment_reserved`.
+Tool `bind_launch_record` (owner `coordinator`): via `bash`; requires `assignment_reserved`; adds `launch_recorded`.
+Tool `accept_record` (owner `coordinator`): via `bash`; requires `launch_recorded`; adds `stage_accepted`.
+Tool `stop_agent` (owner `coordinator`): via `bash`; requires `launch_recorded`; adds `agent_stopped`; removes `launch_recorded`.
+Tool `retry_registry` (owner `coordinator`): via `bash`; requires `agent_stopped`; adds `assignment_reserved`.
+Tool `request_reports` (owner `coordinator`): via `bash`; requires `stage_accepted`; adds `reports_produced`.
+Initially true: none.
+Goal: `reports_produced`.
+Protocol:
+  - `coordinator` uses `obtain_inputs`.
+  - `coordinator` uses `save_scope`.
+  - `coordinator` uses `init_registry`.
+  - `coordinator` uses `freeze_guidance`.
+  - loop `dispatch`:
+    - `coordinator` uses `reserve_assignment`.
+    - `coordinator` uses `bind_launch_record`.
+    - spawn `stage_agent`.
+    - `coordinator` chooses one of (external):
+      - branch `accept`:
+        - `coordinator` uses `accept_record`.
+      - branch `retry`:
+        - `coordinator` uses `stop_agent`.
+        - `coordinator` uses `retry_registry`.
+        - repeat `dispatch`.
+  - `coordinator` uses `request_reports`.
+```

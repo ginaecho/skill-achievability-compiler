@@ -1,0 +1,37 @@
+```ce
+Skill `pva-build-test`.
+Roles: `build_test`, `caller`.
+Tool `validate_inputs` (owner `build_test`): via `read`; adds `inputs_valid`, `references_verified`.
+Tool `write_manifest_before` (owner `build_test`): via `bash`; requires `inputs_valid`; adds `manifest_before_written`.
+Tool `emu_build` (owner `build_test`): via `bash`; requires `references_verified`; adds `emu_built`.
+Tool `emu_test` (owner `build_test`): via `bash`; requires `emu_built`; adds `emu_tested`.
+Tool `l4t_build` (owner `build_test`): via `bash`; requires `references_verified`, `manifest_before_written`; adds `build_done`, `listing_available`.
+Tool `inspect_listing` (owner `build_test`): via `read`; requires `listing_available`; adds `vectorization_confirmed`.
+Tool `target_probe` (owner `build_test`): via `bash`; needs `tegra_hardware`; requires `build_done`; adds `target_ready`.
+Tool `deploy` (owner `build_test`): via `bash`; needs `tegra_hardware`; requires `target_ready`, `build_done`; adds `deployed`.
+Tool `hardware_test` (owner `build_test`): via `bash`; needs `tegra_hardware`; requires `deployed`; adds `hardware_correctness_passed`.
+Tool `performance_test` (owner `build_test`): via `bash`; needs `tegra_hardware`; requires `hardware_correctness_passed`; adds `performance_measured`.
+Tool `freshness` (owner `build_test`): via `bash`; requires `manifest_before_written`, `hardware_correctness_passed`; adds `source_unchanged`.
+Tool `write_reports` (owner `build_test`): via `write`; requires `hardware_correctness_passed`, `vectorization_confirmed`, `source_unchanged`; adds `reports_written`.
+Initially true: none.
+Goal: `hardware_correctness_passed` and `vectorization_confirmed` and `source_unchanged` and `reports_written`.
+Protocol:
+  - `build_test` uses `validate_inputs`.
+  - `build_test` uses `write_manifest_before`.
+  - `caller` chooses one of (observed):
+    - branch `run_emu`:
+      - `build_test` uses `emu_build`.
+      - `build_test` uses `emu_test`.
+    - branch `skip_emu`: none.
+  - `build_test` uses `l4t_build`.
+  - `build_test` uses `inspect_listing`.
+  - `build_test` uses `target_probe`.
+  - `build_test` uses `deploy`.
+  - `build_test` uses `hardware_test`.
+  - `caller` chooses one of (observed):
+    - branch `correctness_and_performance`:
+      - `build_test` uses `performance_test`.
+    - branch `correctness_only`: none.
+  - `build_test` uses `freshness`.
+  - `build_test` uses `write_reports`.
+```

@@ -1,0 +1,37 @@
+```ce
+Skill `tao-generate-anomalies`.
+Roles: `agent`, `user`.
+Tool `download_checkpoints` (owner `agent`): via `bash`; needs `hf_token`; adds `checkpoints_ready`.
+Tool `validate_dataset` (owner `agent`): via `bash`; requires `checkpoints_ready`; adds `dataset_valid`.
+Tool `generate_config` (owner `agent`): via `write`; requires `dataset_valid`; adds `config_written`.
+Tool `finetune` (owner `agent`): via `gpu_container`; requires `config_written`; adds `model_finetuned`.
+Tool `prep_testcase` (owner `agent`): via `bash`; requires `model_finetuned`; adds `jsonl_ready`.
+Tool `run_sdg` (owner `agent`): via `gpu_container`; requires `jsonl_ready`; adds `original_generated`.
+Tool `run_eval` (owner `agent`): via `gpu_container`; requires `original_generated`; adds `original_evaluated`.
+Tool `write_draws` (owner `agent`): via `write`; requires `original_evaluated`; adds `draws_written`.
+Tool `run_round` (owner `agent`): via `gpu_container`; requires `draws_written`; adds `round_done`.
+Tool `assemble_searched` (owner `agent`): via `bash`; requires `original_evaluated`; adds `searched_assembled`.
+Tool `filter_regen` (owner `agent`): via `gpu_container`; requires `searched_assembled`; adds `searched_final`.
+Initially true: none.
+Goal: `model_finetuned` and `original_generated` and `original_evaluated` and `searched_assembled` and `searched_final`.
+Protocol:
+  - `agent` uses `download_checkpoints`.
+  - `agent` uses `validate_dataset`.
+  - `user` chooses one of (observed):
+    - branch `confirm`:
+      - `agent` uses `generate_config`.
+      - `agent` uses `finetune`.
+      - `agent` uses `prep_testcase`.
+      - `agent` uses `run_sdg`.
+      - `agent` uses `run_eval`.
+      - `agent` chooses one of (observed):
+        - branch `search`:
+          - loop `search`:
+            - `agent` uses `write_draws`.
+            - `agent` uses `run_round`.
+            - repeat `search`.
+        - branch `skip`: none.
+      - `agent` uses `assemble_searched`.
+      - `agent` uses `filter_regen`.
+    - branch `revise`: none.
+```
