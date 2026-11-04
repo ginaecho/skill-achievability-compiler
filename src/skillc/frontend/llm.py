@@ -23,7 +23,8 @@ from .ce import CEError, ParseResult, compile_ce, extract_ce, parse_ce_detailed
 from .prompts import (CE_REPAIR_PROMPT, CE_RETRY_PROMPT, REPAIR_PROMPT,
                       RUNTIME_ABILITIES_NOTE, SYSTEM, ce_messages, ce_runtime_messages,
                       explain_refutation, vocabulary_note)
-from .providers import metered
+from .prompts import RUNTIME_ABILITY_PROFILES  # noqa: F401  (re-exported for autollm, scripts)
+from .providers import LAST_USAGE, metered  # noqa: F401  (LAST_USAGE: claude-cli usage)
 from .runtime import bind_runtime, repair_violations
 
 # The default CE prompt of `compact_ce` and `check --llm --via-ce` with a runtime
@@ -42,7 +43,7 @@ def compact(nl: str, model: str | None = None, timeout: int = 600,
     compactor under-grants and refutes deployed skills that assume a phone,
     a browser, or a user to talk to.
 
-    provider: ``anthropic`` or ``azure-openai``. If omitted,
+    provider: ``anthropic``, ``azure-openai`` or ``claude-cli``. If omitted,
     SKILLC_LLM_PROVIDER is used, then ``anthropic``.
 
     vocabulary: an environment manifest whose tool and state names the pack

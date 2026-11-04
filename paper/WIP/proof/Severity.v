@@ -214,9 +214,289 @@ Qed.
 End Reach.
 
 (* ================================================================= *)
+(*  Reachability is monotone in the budget: a bigger allowance can only  *)
+(*  reach more.  Both severity predicates are instances (P := Haz for    *)
+(*  the hazard, P := Phi for the goal), which is what makes the          *)
+(*  trichotomy ORDERED rather than an arbitrary carve-up.                *)
+(* ================================================================= *)
+Lemma reach_mono_budget :
+  forall (E : Ctx) (P : World -> Prop) b G W,
+    reach_haz E P b G W -> forall b', b <= b' -> reach_haz E P b' G W.
+Proof.
+  intros E P b G W H.
+  induction H as [ b G W Hh | b a p G W W' HE H IH | b phi G W H IH
+                 | b p q brs l psi Gl W Hin Hpsi H IH
+                 | b p q brs l psi Gl W Hin Hpsi H IH ]; intros b' Hle.
+  - apply RH_here. exact Hh.
+  - eapply RH_act; [ exact HE | apply IH; exact Hle ].
+  - apply RH_goal. apply IH. exact Hle.
+  - eapply RH_comm_ok; [ exact Hin | exact Hpsi | apply IH; exact Hle ].
+  - destruct b' as [ | b'' ]; [ lia | ].
+    eapply RH_comm_dev; [ exact Hin | exact Hpsi | apply IH; lia ].
+Qed.
+
+(* ================================================================= *)
 (*  The severity partition.  Given a goal predicate as well, every    *)
 (*  residual configuration falls in exactly one class.               *)
 (* ================================================================= *)
+
+(* ================================================================= *)
+(*  THE OTHER QUANTIFIER.                                              *)
+(*                                                                     *)
+(*  reach_haz is EXISTENTIAL: some affordable path arrives.  For the    *)
+(*  HAZARD that is the right reading -- a possible catastrophe is a     *)
+(*  catastrophe.  For the GOAL it says only that the goal is still      *)
+(*  POSSIBLE, and possible over the future choices of exactly the       *)
+(*  participant the discipline says you cannot rely on.  assuredP gives *)
+(*  the universal reading: whatever the agent picks and whatever the    *)
+(*  environment returns, within budget b the run arrives at P.  A       *)
+(*  choice must have an intended branch -- otherwise a budget of 0      *)
+(*  would discharge the obligation vacuously -- every intended branch   *)
+(*  must deliver, and so must every misselection the budget can pay     *)
+(*  for.                                                                *)
+(* ================================================================= *)
+(* ================================================================= *)
+(*  PRINCIPAL BUDGET.  k* is not merely where a scan stopped: it is     *)
+(*  THE largest tolerated budget, and the set of tolerated budgets is   *)
+(*  exactly the interval below it.  So the tolerance degree is a        *)
+(*  principal solution in the type-theoretic sense -- every derivation  *)
+(*  of the condition for this residual is a derivation at some b <= k*, *)
+(*  and the one at k* subsumes them all by T-Sub.                       *)
+(* ================================================================= *)
+Section Principal.
+Variable E : Ctx.
+Variable Haz : World -> Prop.
+
+Definition principal (k : nat) (G : Gt) (W : World) : Prop :=
+  safeT E Haz k G W /\ ~ safeT E Haz (S k) G W.
+
+Theorem principal_characterises : forall k G W,
+  principal k G W -> forall b, safeT E Haz b G W <-> b <= k.
+Proof.
+  intros k G W [Hk Hnk] b. split.
+  - intro Hb. destruct (Nat.le_gt_cases b k) as [Hle | Hgt]; [ exact Hle | ].
+    exfalso. apply Hnk. apply (TC_complete E Haz (Gt_size G)); [ apply le_n | ].
+    intro Hr. apply (TC_sound E Haz b G W Hb).
+    eapply reach_mono_budget; [ exact Hr | lia ].
+  - intro Hle. apply (TC_complete E Haz (Gt_size G)); [ apply le_n | ].
+    intro Hr. apply (TC_sound E Haz k G W Hk).
+    eapply reach_mono_budget; [ exact Hr | exact Hle ].
+Qed.
+
+Theorem principal_unique : forall k k' G W,
+  principal k G W -> principal k' G W -> k = k'.
+Proof.
+  intros k k' G W Hp Hp'.
+  destruct Hp as [Hk Hnk]. destruct Hp' as [Hk' Hnk'].
+  assert (Hle : k <= k').
+  { apply (principal_characterises k' G W (conj Hk' Hnk')). exact Hk. }
+  assert (Hle' : k' <= k).
+  { apply (principal_characterises k G W (conj Hk Hnk)). exact Hk'. }
+  lia.
+Qed.
+
+(* and it exists exactly when tolerance is finite: if some budget is not
+   tolerated, there is a largest one that is *)
+Theorem principal_exists : forall n G W,
+  (forall b, safeT E Haz b G W \/ ~ safeT E Haz b G W) ->
+  safeT E Haz 0 G W -> ~ safeT E Haz n G W -> exists k, principal k G W.
+Proof.
+  intros n G W Hdec H0. induction n as [ | n IH ]; intro Hn.
+  - contradiction.
+  - destruct (Hdec n) as [Hy | Hn'].
+    + exists n. split; assumption.
+    + apply IH. exact Hn'.
+Qed.
+
+End Principal.
+
+(* ================================================================= *)
+(*  THE CONE OF INFLUENCE.                                             *)
+(*                                                                     *)
+(*  Modular checking (TC_seq_interface) is only cheap if the interface  *)
+(*  can be made coarse, and the principled coarsening is to project     *)
+(*  exit worlds onto the state variables the remaining protocol reads.  *)
+(*  The paper used to argue that soundness in prose.  Here it is: if    *)
+(*  the hazard, the capabilities and every guard of G look only at a    *)
+(*  set V of variables, then worlds agreeing on V are interchangeable   *)
+(*  for G at every budget -- so one representative per V-class suffices. *)
+(* ================================================================= *)
+Section Cone.
+Variable E : Ctx.
+Variable Haz : World -> Prop.
+Variable V : Var -> Prop.                    (* the cone *)
+
+Definition agree (W1 W2 : World) : Prop := forall x, V x -> W1 x = W2 x.
+
+Lemma agree_refl : forall W, agree W W.
+Proof. intros W x _. reflexivity. Qed.
+Lemma agree_sym : forall W1 W2, agree W1 W2 -> agree W2 W1.
+Proof. intros W1 W2 H x Hx. symmetry. apply H. exact Hx. Qed.
+
+(* the hazard reads only the cone *)
+Hypothesis haz_cone : forall W1 W2, agree W1 W2 -> (Haz W1 <-> Haz W2).
+
+(* The capability condition is NOT a blanket hypothesis over the whole
+   capability context.  It is required only of the tools the protocol at
+   hand actually invokes, because those are the only ones its runs can
+   use -- and that matters: a modular interface is checked against a
+   residual, not against the whole system, so quantifying over all of
+   Gamma would be a hypothesis the construction that uses it refutes. *)
+Definition cap_in_cone (a : CapN) : Prop :=
+  forall W1 W2 W1', agree W1 W2 -> E a W1 W1' ->
+    exists W2', E a W2 W2' /\ agree W1' W2'.
+
+Fixpoint uses (U : CapN -> Prop) (G : Gt) : Prop :=
+  match G with
+  | GEnd => True
+  | GAct a _ G0 => U a /\ uses U G0
+  | GGoal _ G0 => uses U G0
+  | GComm _ _ brs => fold_right (fun b acc => uses U (snd b) /\ acc) True brs
+  end.
+
+(* and so do the guards of the protocol at hand *)
+Fixpoint guards_in_cone (G : Gt) : Prop :=
+  match G with
+  | GEnd => True
+  | GAct _ _ G0 => guards_in_cone G0
+  | GGoal _ G0 => guards_in_cone G0
+  | GComm _ _ brs =>
+      fold_right (fun b acc =>
+        ((forall W1 W2, agree W1 W2 -> (snd (fst b) W1 <-> snd (fst b) W2))
+         /\ guards_in_cone (snd b)) /\ acc) True brs
+  end.
+
+Lemma guards_in_cone_br : forall (brs : list (Lab * (World -> Prop) * Gt)) l psi Gl,
+  fold_right (fun b acc =>
+    ((forall W1 W2, agree W1 W2 -> (snd (fst b) W1 <-> snd (fst b) W2))
+     /\ guards_in_cone (snd b)) /\ acc) True brs ->
+  In (l, psi, Gl) brs ->
+  (forall W1 W2, agree W1 W2 -> (psi W1 <-> psi W2)) /\ guards_in_cone Gl.
+Proof.
+  induction brs as [ | b tl IH ]; simpl; intros l psi Gl Hf Hin; [ contradiction | ].
+  destruct Hf as [Hb Htl]. destruct Hin as [Heq | Hin].
+  - subst b. simpl in Hb. exact Hb.
+  - eapply IH; eauto.
+Qed.
+
+Lemma uses_br : forall U (brs : list (Lab * (World -> Prop) * Gt)) l psi Gl,
+  fold_right (fun b acc => uses U (snd b) /\ acc) True brs ->
+  In (l, psi, Gl) brs -> uses U Gl.
+Proof.
+  induction brs as [ | b tl IH ]; simpl; intros l psi Gl Hf Hin; [ contradiction | ].
+  destruct Hf as [Hb Htl]. destruct Hin as [Heq | Hin].
+  - subst b. simpl in Hb. exact Hb.
+  - eapply IH; eauto.
+Qed.
+
+Theorem reach_cone : forall (U : CapN -> Prop) b G W1 W2,
+  (forall a, U a -> cap_in_cone a) ->
+  guards_in_cone G -> uses U G -> agree W1 W2 ->
+  reach_haz E Haz b G W1 -> reach_haz E Haz b G W2.
+Proof.
+  intros U b G W1 W2 HU Hg Hu Hag Hr. revert W2 Hg Hu Hag.
+  induction Hr as [ b G W Hh | b a p G W W' HE Hr IH | b phi G W Hr IH
+                  | b p q brs l psi Gl W Hin Hpsi Hr IH
+                  | b p q brs l psi Gl W Hin Hpsi Hr IH ];
+    intros W2 Hg Hu Hag.
+  - apply RH_here. apply (haz_cone W W2 Hag). exact Hh.
+  - simpl in Hg, Hu. destruct Hu as [Hua Hu0].
+    destruct (HU a Hua W W2 W' Hag HE) as [W2' [HE2 Hag']].
+    eapply RH_act; [ exact HE2 | apply IH; assumption ].
+  - simpl in Hg, Hu. apply RH_goal. apply IH; assumption.
+  - simpl in Hg, Hu. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
+    eapply RH_comm_ok; [ exact Hin | apply (Hpc W W2 Hag); exact Hpsi | ].
+    apply IH; try assumption. eapply uses_br; eauto.
+  - simpl in Hg, Hu. destruct (guards_in_cone_br brs l psi Gl Hg Hin) as [Hpc Hgl].
+    eapply RH_comm_dev; [ exact Hin | | apply IH; try assumption ].
+    + intro Hp2. apply Hpsi. apply (Hpc W W2 Hag). exact Hp2.
+    + eapply uses_br; eauto.
+Qed.
+
+(* worlds that agree on the cone are interchangeable for the condition *)
+Theorem safeT_cone : forall (U : CapN -> Prop) b G W1 W2,
+  (forall a, U a -> cap_in_cone a) ->
+  guards_in_cone G -> uses U G -> agree W1 W2 ->
+  (safeT E Haz b G W1 <-> safeT E Haz b G W2).
+Proof.
+  intros U b G W1 W2 HU Hg Hu Hag. split; intro Hs;
+    apply (TC_complete E Haz (Gt_size G)); try apply le_n;
+    intro Hr; apply (TC_sound E Haz b G _ Hs).
+  - eapply reach_cone; try eassumption. apply agree_sym; exact Hag.
+  - eapply reach_cone; eassumption.
+Qed.
+
+(* THE INTERFACE CONSEQUENCE: an interface need only contain one
+   representative of each cone-class, not one world per concrete exit *)
+Corollary interface_projection : forall (U : CapN -> Prop) b G (I : list World) W,
+  (forall a, U a -> cap_in_cone a) ->
+  guards_in_cone G -> uses U G ->
+  (exists W0, In W0 I /\ agree W0 W) ->
+  (forall W0, In W0 I -> safeT E Haz b G W0) ->
+  safeT E Haz b G W.
+Proof.
+  intros U b G I W HU Hg Hu [W0 [Hin Hag]] Hall.
+  apply (safeT_cone U b G W0 W HU Hg Hu Hag). apply Hall. exact Hin.
+Qed.
+
+End Cone.
+
+Section AssuredS.
+Variable E : Ctx.
+Variable P : World -> Prop.
+
+Inductive assuredP : nat -> Gt -> World -> Prop :=
+| AS_here : forall b G W,
+    P W -> assuredP b G W
+| AS_act : forall b a p G W,
+    (exists W', E a W W') ->
+    (forall W', E a W W' -> assuredP b G W') ->
+    assuredP b (GAct a p G) W
+| AS_goal : forall b phi G W,
+    assuredP b G W -> assuredP b (GGoal phi G) W
+| AS_comm : forall b p q brs W l0 psi0 Gl0,
+    In (l0, psi0, Gl0) brs -> psi0 W ->
+    (forall l psi Gl, In (l, psi, Gl) brs -> psi W -> assuredP b Gl W) ->
+    (forall l psi Gl c, In (l, psi, Gl) brs -> ~ psi W -> b = S c ->
+                        assuredP c Gl W) ->
+    assuredP b (GComm p q brs) W.
+
+(* what is assured is reachable: the universal reading refines the
+   existential one, so it strengthens the classes rather than changing
+   them *)
+Theorem assured_reach : forall b G W, assuredP b G W -> reach_haz E P b G W.
+Proof.
+  intros b G W H.
+  induction H as [ b G W Hp | b a p G W Hex Hall IH | b phi G W H IH
+                 | b p q brs W l0 psi0 Gl0 Hin Hpsi Hok IHok Hdev IHdev ].
+  - apply RH_here. exact Hp.
+  - destruct Hex as [W' HE]. eapply RH_act; [ exact HE | apply IH; exact HE ].
+  - apply RH_goal. exact IH.
+  - eapply RH_comm_ok; [ exact Hin | exact Hpsi | ].
+    exact (IHok l0 psi0 Gl0 Hin Hpsi).
+Qed.
+
+(* and it is monotone in the budget in the direction one expects: more
+   affordable mistakes is a STRONGER obligation, so assurance at a larger
+   budget implies assurance at a smaller one *)
+Lemma assured_downward : forall b b' G W,
+  assuredP b G W -> b' <= b -> assuredP b' G W.
+Proof.
+  intros b b' G W H. revert b'.
+  induction H as [ b G W Hp | b a p G W Hex Hall IH | b phi G W H IH
+                 | b p q brs W l0 psi0 Gl0 Hin Hpsi Hok IHok Hdev IHdev ];
+    intros b' Hle.
+  - apply AS_here. exact Hp.
+  - apply AS_act; [ exact Hex | ]. intros W' HE. apply IH; [ exact HE | exact Hle ].
+  - apply AS_goal. apply IH. exact Hle.
+  - eapply AS_comm; [ exact Hin | exact Hpsi | | ].
+    + intros l psi Gl Hin' Hp'. exact (IHok l psi Gl Hin' Hp' b' Hle).
+    + intros l psi Gl c Hin' Hnp Hb. subst b'.
+      destruct b as [ | b0 ]; [ lia | ].
+      exact (IHdev l psi Gl b0 Hin' Hnp eq_refl c ltac:(lia)).
+Qed.
+
+End AssuredS.
 
 Section Severity.
 Variable E : Ctx.
@@ -229,6 +509,21 @@ Definition Futile (b : nat) (G : Gt) (W : World) : Prop :=
   ~ reach_haz E Haz b G W /\ ~ reach_haz E Phi b G W.
 Definition Benign (b : nat) (G : Gt) (W : World) : Prop :=
   ~ reach_haz E Haz b G W /\ reach_haz E Phi b G W.
+
+(* The goal side, read universally.  Benign says the goal is still
+   POSSIBLE; Robust says it is still GUARANTEED -- no affordable
+   misselection, and no environment answer, can talk the run out of it.
+   Robust implies Benign and is strictly stronger (Bridge.v exhibits the
+   gap), so the two readings are kept apart rather than conflated. *)
+Definition Assured (b : nat) (G : Gt) (W : World) : Prop := assuredP E Phi b G W.
+
+Definition Robust (b : nat) (G : Gt) (W : World) : Prop :=
+  ~ reach_haz E Haz b G W /\ Assured b G W.
+
+Theorem robust_benign : forall b G W, Robust b G W -> Benign b G W.
+Proof.
+  intros b G W [Hnh Ha]. split; [ exact Hnh | apply assured_reach; exact Ha ].
+Qed.
 
 (* Failure is not disaster.  The three classes are pairwise disjoint,
    and (given decidability of the two reachability questions, which the
@@ -255,6 +550,124 @@ Theorem severity_exhaustive :
     Catastrophic b G W \/ Futile b G W \/ Benign b G W.
 Proof.
   intros b G W [Hh | Hh] [Hg | Hg]; unfold Catastrophic, Futile, Benign; tauto.
+Qed.
+
+(* ================================================================= *)
+(*  THE TRICHOTOMY IS ORDERED.  Put Futile < Benign < Catastrophic.    *)
+(*  As the budget grows the class of a residual moves UP this chain    *)
+(*  and never down: the goal, once reachable within a budget, stays    *)
+(*  reachable, and a hazard once reachable is absorbing.  So the three *)
+(*  classes are not an arbitrary carve-up of two predicates -- they    *)
+(*  are three INTERVALS of budgets, in this order, and the tolerance   *)
+(*  degree is the boundary of the last one.                            *)
+(* ================================================================= *)
+
+(* Catastrophic is upward closed: a hazard affordable at b is affordable
+   at any larger budget. *)
+Theorem catastrophic_upward :
+  forall b b' G W, b <= b' -> Catastrophic b G W -> Catastrophic b' G W.
+Proof. intros b b' G W Hle H. eapply reach_mono_budget; eassumption. Qed.
+
+(* Futile is downward closed. *)
+Theorem futile_downward :
+  forall b b' G W, b <= b' -> Futile b' G W -> Futile b G W.
+Proof.
+  intros b b' G W Hle [Hh Hg]. split; intro H; [ apply Hh | apply Hg ];
+    eapply reach_mono_budget; eassumption.
+Qed.
+
+(* Benign never degrades to Futile: more budget cannot lose the goal. *)
+Theorem benign_no_regress :
+  forall b b' G W, b <= b' -> Benign b G W -> ~ Futile b' G W.
+Proof.
+  intros b b' G W Hle [_ Hg] [_ Hng]. apply Hng.
+  eapply reach_mono_budget; eassumption.
+Qed.
+
+(* Raising the budget moves a Benign residual to Benign or Catastrophic,
+   and never anywhere else. *)
+(* Decidability of the two reachability questions is a hypothesis, exactly
+   as in severity_exhaustive: the QF-LIA fragment supplies it and the
+   development stays axiom-free. *)
+Theorem benign_step_up :
+  forall b b' G W, b <= b' ->
+    (reach_haz E Haz b' G W \/ ~ reach_haz E Haz b' G W) ->
+    Benign b G W -> Benign b' G W \/ Catastrophic b' G W.
+Proof.
+  intros b b' G W Hle Hdec [Hh Hg].
+  destruct Hdec as [Hc | Hc].
+  - right. exact Hc.
+  - left. split; [ exact Hc | eapply reach_mono_budget; eassumption ].
+Qed.
+
+(* Lowering the budget moves a Benign residual to Benign or Futile. *)
+Theorem benign_step_down :
+  forall b b' G W, b <= b' ->
+    (reach_haz E Phi b G W \/ ~ reach_haz E Phi b G W) ->
+    Benign b' G W -> Benign b G W \/ Futile b G W.
+Proof.
+  intros b b' G W Hle Hdec [Hh Hg].
+  assert (Hnh : ~ reach_haz E Haz b G W).
+  { intro H. apply Hh. eapply reach_mono_budget; eassumption. }
+  destruct Hdec as [Hp | Hp].
+  - left. split; assumption.
+  - right. split; assumption.
+Qed.
+
+(* THE INTERVAL THEOREM.  Rank Futile 0, Benign 1, Catastrophic 2; the
+   rank of a residual is a monotone non-decreasing function of its
+   budget.  Equivalently: the budgets at which a residual is Futile, then
+   Benign, then Catastrophic form three consecutive intervals of N in
+   that order (any of them possibly empty). *)
+Definition sev_rank (b : nat) (G : Gt) (W : World) (r : nat) : Prop :=
+  (r = 0 /\ Futile b G W) \/ (r = 1 /\ Benign b G W) \/ (r = 2 /\ Catastrophic b G W).
+
+Theorem severity_monotone_in_budget :
+  forall b b' G W r r', b <= b' ->
+    sev_rank b G W r -> sev_rank b' G W r' -> r <= r'.
+Proof.
+  intros b b' G W r r' Hle Hr Hr'.
+  destruct Hr as [[-> Hf] | [[-> Hb] | [-> Hc]]].
+  - lia.
+  - destruct Hr' as [[-> Hf'] | [[-> _] | [-> _]]]; [ | lia | lia ].
+    exfalso. eapply benign_no_regress; eassumption.
+  - destruct Hr' as [[-> Hf'] | [[-> Hb'] | [-> _]]]; [ | | lia ].
+    + exfalso. destruct Hf' as [Hnh _]. apply Hnh.
+      eapply reach_mono_budget; eassumption.
+    + exfalso. destruct Hb' as [Hnh _]. apply Hnh.
+      eapply reach_mono_budget; eassumption.
+Qed.
+
+(* The tolerance degree is a genuine THRESHOLD, not merely the first
+   budget the search happened to stop at: below it nothing catastrophic
+   is affordable, above it everything is. *)
+Theorem tolerance_degree_is_a_threshold :
+  forall k G W,
+    ~ Catastrophic k G W -> Catastrophic (S k) G W ->
+    (forall b, b <= k -> ~ Catastrophic b G W) /\
+    (forall b, S k <= b -> Catastrophic b G W).
+Proof.
+  intros k G W Hnk Hk. split.
+  - intros b Hb Hc. apply Hnk. eapply catastrophic_upward; eassumption.
+  - intros b Hb. eapply catastrophic_upward; eassumption.
+Qed.
+
+(* ... and the classes it separates are inhabited by different budgets of
+   the SAME residual, which is what makes the trichotomy informative: a
+   residual can be Futile at 0, Benign at 1 and Catastrophic at 2. *)
+Theorem severity_classes_are_separated :
+  forall k G W,
+    ~ Catastrophic k G W -> Catastrophic (S k) G W ->
+    forall b, b <= k ->
+      (reach_haz E Haz b G W \/ ~ reach_haz E Haz b G W) ->
+      (reach_haz E Phi b G W \/ ~ reach_haz E Phi b G W) ->
+      (Futile b G W \/ Benign b G W).
+Proof.
+  intros k G W Hnk Hk b Hb Hd1 Hd2.
+  destruct (severity_exhaustive b G W Hd1 Hd2) as [Hc | [Hf | Hbn]].
+  - exfalso. apply Hnk. eapply catastrophic_upward; [ exact Hb | exact Hc ].
+  - left. exact Hf.
+  - right. exact Hbn.
 Qed.
 
 (* T-F.  Catastrophe is EXACTLY the failure of the typing judgment.

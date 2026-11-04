@@ -1,10 +1,14 @@
-# Mechanized audit of the WIP deviation-layer paper
+# Mechanized audit of the superseded deviation-layer draft
 
 `DeviationLayer.v` (650 lines, Coq 8.18, stdlib only, **axiom-free**) encodes the
-definitions of `paper/WIP/main.tex` as literally as possible and then *tries* to
-prove the theorem statements. It assumes none of them. Where a statement is
-provable it is proved; where it is not, a concrete counterexample is constructed
-and proved.
+definitions of the **superseded** deviation-layer draft --- trust modes, taint
+propagation, staleness grades --- as literally as possible and then *tries* to
+prove its theorem statements. That draft is not the paper in `main.tex`, which
+was reframed around severity precisely because this audit refuted it; the audit
+is kept because Section 13 of the present paper says why it exists.
+
+It assumes none of those statements. Where one is provable it is proved; where
+it is not, a concrete counterexample is constructed and proved.
 
 ```
 coqc DeviationLayer.v && coqc check_dev.v && coqc check_co.v
@@ -113,3 +117,109 @@ words, WF-Loop should be split into WF-Loop-Taint and WF-Loop-Grade.
 game-theoretic/probabilistic and out of scope for this development; they are
 paper-proof targets. Note that thm:graded depends on thm:isr and thm:noninterf,
 so it inherits Findings 1 and 2 until those are repaired.
+
+
+---
+
+# Developments added after the audit (the reframed design)
+
+All axiom-free; `make` in this directory runs every `Print Assumptions` harness.
+
+## `Severity.v` — the severity discipline, finite fragment (18 results)
+
+| Result | Coq |
+|---|---|
+| T-Choice-Safe sound / complete / exact | `TC_sound`, `TC_complete`, `TC_exact` |
+| Severity is a partition | `severity_disjoint`, `severity_exhaustive` |
+| Catastrophe ⟺ untypability | `catastrophe_implies_untypable`, `untypable_implies_catastrophe` |
+| Budget downward-closed | `tolerance_downward_closed` |
+| Reachability monotone in Γ ⇒ tolerance anti-monotone | `reach_monotone_in_ctx`, `tolerance_antitone_in_ctx` |
+| Narrowing repair sound | `repair_narrow_sound` |
+| Modular sequential composition, interface form | `TC_seq`, `TC_seq_interface`, `ends_budget_le` |
+| Worked instance | `Gbad_is_0_tolerant`, `Gbad_not_1_tolerant`, `Ggood_is_k_tolerant`, `Ggood_by_narrowing` |
+
+### Added to `Severity.v`: the trichotomy is ordered (9 further results)
+
+| Result | Coq |
+|---|---|
+| Budgeted reachability is monotone in the budget | `reach_mono_budget` |
+| Catastrophic upward closed, Futile downward closed, Benign never regresses to Futile | `catastrophic_upward`, `futile_downward`, `benign_no_regress` |
+| Raising the budget: Benign → Benign or Catastrophic; lowering it: Benign → Benign or Futile | `benign_step_up`, `benign_step_down` |
+| **Severity rank is monotone in the budget along Futile < Benign < Catastrophic**, so the classes are three consecutive intervals | `severity_monotone_in_budget` |
+| k* is a genuine threshold, and below it every residual is Benign or Futile | `tolerance_degree_is_a_threshold`, `severity_classes_are_separated` |
+
+Decidability of the two reachability questions is a hypothesis, as in
+`severity_exhaustive`; no classical axiom is used.
+
+### Added to `Mu.v`: budgeted reachability is operational (2 further results)
+
+| Result | Coq |
+|---|---|
+| A hazard is reachable within budget b iff some run with at most b misselections ends in a hazard state | `reach_msteps`, `reach_mu_iff_run` |
+
+## `Bridge.v` — from protocols to PROGRAMS (9 results)
+
+| Result | Coq |
+|---|---|
+| **Non-vacuity**: explicit conforming sessions for the running example and its narrowed repair, and the bridge instantiated on one | `Gbad_inhabited`, `Ggood_inhabited`, `Gbad_bridge_nonvacuous` |
+
+
+| Result | Coq |
+|---|---|
+| A typed session that has not finished can always step; every label the sender may pick, wrong ones included, is a step the receiver accepts | `progress`, `every_label_steps` |
+
+
+| Result | Coq |
+|---|---|
+| One instrumented head step preserves typing and debits the budget exactly | `bridge_step` |
+| A typed session of a k-tolerant protocol is hazard-free on every run of cost ≤ k | `bridge_run` |
+| Budgets distribute over participants (per-role allowances summing to ≤ k) | `budget_distributes`, `total_eq_sum_percost` |
+
+Scope: head-move semantics of the finite fragment, matching the base
+`DirectTyping.v`. `Mu.v` lifts the bridge to recursive sessions.
+
+## `Regular.v` — regular protocols (8 results)
+
+| Result | Coq |
+|---|---|
+| Budgeted reachability ⟺ reachability in the product Node × World × {0..k} | `product_correspondence` |
+| Budget is a monotone counter; a path with d misselection edges has d ≤ b (loop re-entry bounded) | `budget_never_increases`, `dev_edges_bounded`, `dev_edges_exact` |
+| Reachability witnessed by a path no longer than the reachable-state count (pigeonhole) | `reach_bounded_path` |
+| Executable decision procedure, sound and complete (node list need only be successor-closed) | `decide_sound`, `decide_complete`, `decide_reachb_correct` |
+
+## `Mu.v` — μ-types: the two developments connected (10 results)
+
+| Result | Coq |
+|---|---|
+| Unfolding is substitution; the substitution lemma behind finiteness | `subst_comp`, `unfold_close` |
+| The unfolding closure `cands` is finite and closed under every step; every reachable state is in it | `cands_closed`, `reach_in_cands` |
+| One typed session step simulates a protocol path of the same cost; the bridge for recursive sessions | `sim_step`, `bridge_mu` |
+| The finite fragment embeds; T-Choice-Safe = non-reachability in the product; the finite bridge recovered | `reach_embed`, `TC_regular`, `bridge_finite_via_mu` |
+| Decision procedure for μ-types, sound and complete | `decide_mu_correct` |
+
+## `Repairs.v` — the four repairs (13 results)
+
+| Result | Coq |
+|---|---|
+| Guard: sound, exact; a misselected guarded branch is stuck | `repair_guard_sound`, `repair_guard_exact`, `guard_absorbs_misselection` |
+| Reorder: sound under commutation + harmlessness; validations commute; exact forms; the PNR theorem | `repair_reorder_sound`, `validation_commutes`, `reorder_original_exact`, `reorder_reordered_exact`, `repair_reorder_pnr` |
+| Compensate: sound (TC_seq); Futile → Benign | `repair_compensate_sound`, `repair_compensate_restores_goal` |
+| Worked instance: purchase-before-verify is not 1-tolerant; verify/purchase commute; reordered is k-tolerant | `Gbad2_not_1_tolerant`, `commutes_verify_purchase`, `Greordered_is_k_tolerant` |
+
+## `Interleave.v` — bystander interleavings (10 results)
+
+| Result | Coq |
+|---|---|
+| Safe swaps (action/action, action/choice, action/goal in both directions, and two communications between disjoint role pairs) preserve the condition / typing; interleaved runs are hazard-free within budget | `swap_safe`, `swap_ctypes`, `swaps_safe`, `swaps_ctypes`, `bridge_interleaved` |
+| STRIPS variable disjointness discharges commutation, enabledness, guard preservation, hazard neutrality, and hence every side condition of an action swap | `strips_commute`, `strips_enables`, `strips_preserves`, `strips_neutral`, `strips_swap_act` |
+
+## `Kernel.v` — the verified kernel (3 results) and `Regular.v` additions
+
+| Result | Coq |
+|---|---|
+| Deduplicating, early-exiting reachability, sound and complete (Regular.v) | `decide'_sound`, `decide'_complete` (counted in Regular.v's 8 via the harness of `decide_reachb_fast_correct`) |
+| The kernel's budgeted decision is correct on bit-vector worlds with STRIPS actions | `kernel_correct`, `kernel_first_spec` |
+| Goal reachability used by the elaboration is correct | `goal_reachable_correct` |
+
+Trusted, not proved: the elaboration `elab` (Coq, executable) and the exporter
+`src/skillc/kernel.py` that turn a pack into the kernel's input.

@@ -21,7 +21,12 @@ from .urlguard import guarded_body, restore
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL = "claude-sonnet-5"
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
-PROVIDERS = ("anthropic", "azure-openai")
+PROVIDERS = ("anthropic", "azure-openai", "claude-cli")
+CLAUDE_CLI_DEFAULT_MODEL = "sonnet"
+
+# Usage of the most recent claude-cli call (input/output/cache tokens and
+# cost), updated in place so a caller can bill the compaction it just paid for.
+LAST_USAGE: dict = {}
 
 
 class ModelCallsDisabled(RuntimeError):
@@ -92,6 +97,10 @@ def complete(provider: str, system: str, user: str, model: str | None,
     """One completion from `provider` (already resolved). `image` is (bytes, media type),
     sent beside the text for a model that reads pictures; text inside a picture cannot be
     scrubbed of URLs, so callers send only pictures the user chose to send."""
+    if provider == "claude-cli":
+        if image is not None:
+            raise ValueError("the claude-cli provider does not send images")
+        return claude_cli_complete(system, user, model or CLAUDE_CLI_DEFAULT_MODEL, timeout)
     if provider == "anthropic":
         if image is None:
             return anthropic_complete(system, user, model or DEFAULT_MODEL, timeout)
@@ -138,6 +147,36 @@ def anthropic_complete(system: str, user: str, model: str,
     _record_usage(out.get("usage"))
     return restore("".join(b.get("text", "") for b in out.get("content", [])
                            if b.get("type") == "text").strip(), table)
+
+
+def claude_cli_complete(system: str, user: str, model: str, timeout: int) -> str:
+    """One completion through the Claude Code CLI in print mode (no tools, no
+    session).  Opt-in like every provider; the prompt is scrubbed of URLs with
+    `guarded_body` before it leaves.  Records the measured usage in LAST_USAGE."""
+    require_model_opt_in()
+    exe = shutil.which("claude")
+    if not exe:
+        raise RuntimeError("the claude CLI is not on PATH; the claude-cli provider is opt-in")
+    body, table = guarded_body({"system": system, "user": user})
+    clean = json.loads(body)
+    cmd = [exe, "-p", "--tools", "", "--no-session-persistence",
+           "--system-prompt", clean["system"], "--model", model,
+           "--output-format", "json", clean["user"]]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    data = json.loads(r.stdout)
+    if data.get("is_error"):
+        raise RuntimeError(f"claude-cli compaction failed: {data.get('result')}")
+    usage = {"input_tokens": 0, "output_tokens": 0, "cache_read_input_tokens": 0,
+             "cache_creation_input_tokens": 0, "cost_usd": data.get("total_cost_usd", 0.0)}
+    for u in (data.get("modelUsage") or {}).values():
+        usage["input_tokens"] += u.get("inputTokens", 0)
+        usage["output_tokens"] += u.get("outputTokens", 0)
+        usage["cache_read_input_tokens"] += u.get("cacheReadInputTokens", 0)
+        usage["cache_creation_input_tokens"] += u.get("cacheCreationInputTokens", 0)
+    LAST_USAGE.clear()
+    LAST_USAGE.update(usage)
+    _record_usage({k: v for k, v in usage.items() if k != "cost_usd"})
+    return restore((data.get("result") or "").strip(), table)
 
 
 def azure_openai_complete(system: str, user: str, model: str | None,

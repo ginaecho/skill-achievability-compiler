@@ -1,74 +1,175 @@
 # WIP: Affordable Mistakes
 
-Working draft: **severity-aware multiparty session types for agents that choose
-wrongly.** The type system does not prevent an agent from taking branch `B`
-when the task demanded `A`; it prevents wrong choices from being *catastrophic*
-and reports the rest as risk. **Not for submission** — grep for
+Working draft: **severity-aware multiparty session types for participants that
+choose wrongly.** The discipline does not prevent an agent from taking branch
+`B` when the task demanded `A`; it prevents wrong choices from being
+*catastrophic*, reports the rest as risk, and carries the guarantee from the
+protocol to the typed session. **Not for submission** — grep for
 `DO-NOT-SUBMIT-WHILE-THIS-LINE-EXISTS`.
 
-Already in ECOOP shape: LIPIcs class (`lipics-v2021`, `anonymous`), ECOOP front
-matter, and the conventional structure (contribution bullets, §2 overview with
-a worked example, formal sections, mechanized metatheory, related work).
+In ECOOP shape: LIPIcs class (`lipics-v2021`, `anonymous`), ECOOP front matter,
+four TikZ figures, and the conventional structure.
 
-## Files
+## What is in this directory
 
-- `main.tex` / `main.pdf` — the paper (13 LIPIcs pages, four TikZ figures in `fig/`).
-- `proof/Severity.v` — **mechanizes §5–§8**, axiom-free, finite fragment, including
-  the modular-composition theorem `TC_seq` that answers "why a type system".
-- `proof/DeviationLayer.v`, `proof/AUDIT.md` — the mechanized audit that
-  **refuted the predecessor draft** (modes/taint/grades) and motivated this
-  reframing. Retained deliberately; summarized in §9 of the paper.
-- `notes/blast-radius-reframing.md` — the design note behind the reframing.
-- `NOVELTY.md` — prior-art review of the *withdrawn* modes/taint/grades draft.
-- `NOVELTY-v2.md` — prior-art review of the *current* design: per-mechanism
-  verdicts, the Naik–Palsberg / Aineto / Bocchi positioning, the naming
-  collisions (now fixed), and the ECOOP 2022–2026 papers engaged in §13.
-- `lipics-v2021.cls` + assets — vendored so the paper builds anywhere.
+| path | content |
+|---|---|
+| `main.tex` / `main.pdf` | the paper |
+| `fig/` | figures (TikZ sources + PNG exports) |
+| `proof/Severity.v` | the condition, exactness, partition, monotonicity, narrowing, **modular composition** (18) |
+| `proof/Bridge.v` | **(A)** from protocols to programs: `bridge_step`, `bridge_run`, `budget_distributes` (4) |
+| `proof/Regular.v` | **(B)** regular protocols: product, loop/budget lemma, pigeonhole, executable decision procedure over a successor-closed node list (8) |
+| `proof/Mu.v` | **(B')** μ-types: unfolding as substitution, the unfolding closure is finite and step-closed, the finite fragment embeds, the bridge for recursive sessions, `decide_mu` sound+complete (10) |
+| `proof/Interleave.v` | bystander interleavings: the swap relation, `swap_safe`, `swap_ctypes`, `bridge_interleaved`, and the STRIPS variable-disjointness condition `strips_*` (10) |
+| `proof/Kernel.v`, `proof/extract.v`, `proof/kernel/` | the verified kernel: `decide_mu` on bit-vector worlds, `kernel_first_spec`, `goal_reachable_correct`; extracted to OCaml, driven by `skillc severity --verified` (3) |
+| `proof/Repairs.v` | guard, reorder, compensate (narrow is in Severity.v): soundness, exact characterizations, the point-of-no-return theorem, a worked instance (13) |
+| `proof/DeviationLayer.v` + `proof/AUDIT.md` | the mechanized audit that refuted the predecessor draft (14) |
+| `results/severity.json` | **(C)** raw evaluation output |
+| `results/live_agents.json`, `results/live_agents_runs.jsonl` | the live-agent experiment (every run, every reply) |
+| `../../docs/LIVE_AGENTS.md` | live-agent tables |
+| `../../scripts/live_agents.py` | the live-agent experiment (`claude -p`, no tools) |
+| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 45 real skills + 4 specification pairs, two runtimes, artifacts verified |
+| `../../benchmarks/spec-cases/` | nine authored achievable/not-achievable pairs with mock tools; eight of the nine refutations need reachability, not a capability set-difference |
+| `../../scripts/grep_baseline.py`, `results/grep_baseline.json` | the regular-expression baseline (25/34 against the checker's 34/34) |
+| `../../scripts/llm_judge_baseline.py` | the LLM-judge baseline (scripted; the model calls did not complete in this environment) |
+| `../../real-skills-ext/PROVENANCE.json`, `../../scripts/fetch_skills_ext.py` | the 28 third-party skills (re-fetchable; files not committed) |
+| `../../docs/SEVERITY_RESULTS.md` | evaluation tables |
+| `../../src/skillc/severity.py` | the implementation (`skillc severity <pack.json|SKILL.md>`) |
+| `../../src/skillc/data/severity_corpus.json` | the 17-protocol severity benchmark with pre-stated expected verdicts |
+| `../../scripts/severity_eval.py` | the evaluation, including the modularity experiment |
+| `../../tests/test_severity.py` | tool verdicts checked against the Coq instances |
+| `NOVELTY.md`, `NOVELTY-v2.md` | prior-art audits (withdrawn draft; current design) |
+| `notes/` | design notes |
 
-## The core idea in four lines
+## The core idea
 
 - **Guarded choice**: each branch carries the predicate making it *intended*;
-  taking a branch whose guard fails is a **misselection**.
-- **Severity**: a misselection is `Benign` (goal still reachable), `Futile`
-  (goal lost, nothing harmed), or `Catastrophic` (hazard reachable).
-  *Failure is not disaster.*
-- **k-misselection tolerance**: no run with ≤ k misselections reaches a
-  hazard. Possibilistic — **no probabilities anywhere**. (Renamed from
-  "k-resilience" after the second audit: that name collides with Lange–Yoshida
-  k-safety inside MPST and with Aineto et al.'s resilient planning.)
-- **T-Choice-Safe**: intended branches checked at the same budget,
-  misselectable ones at one less. Every affordable mistake is allowed; every
-  unaffordable one is structurally unreachable.
+  taking a branch whose guard fails is a **misselection**. Default guard when
+  none is written: the goal survives the branch (rational choice).
+- **Severity**: `Benign` (goal still reachable), `Futile` (goal lost, nothing
+  harmed), `Catastrophic` (hazard reachable). *Failure is not disaster.*
+  The classes are **ordered**: severity is monotone in the budget along
+  Futile < Benign < Catastrophic, so they are three consecutive intervals and
+  `k*` is a genuine threshold; and `Catastrophic` means an affordable **run**
+  reaches harm (`reach_mu_iff_run`), not merely that a predicate holds.
+  Default hazard: an irreversible tool fires after the goal is lost.
+  `Benign` is a **possibility**, not a guarantee: `Robust` is the universal
+  reading (every affordable misselection and every environment answer still
+  arrives at the goal), it implies `Benign` (`robust_benign`), and the
+  implication is strict (`benign_is_not_robust`). The tool reports `Benign`.
+- **k\* is principal**: the tolerated budgets are exactly those `<= k*`
+  (`principal_characterises`), `k*` is unique (`principal_unique`) and exists
+  whenever tolerance is finite (`principal_exists`), which is what licenses
+  computing it by a scan.
+- **k-misselection tolerance**: no run with ≤ k misselections reaches a hazard.
+  Possibilistic — no probabilities. The tolerance degree `k*` is the headline.
+- **T-Choice-Safe**: exact syntax-directed characterization.
+- **Non-vacuity**: explicit conforming sessions are exhibited for the worked
+  instances, so the bridge is not a guarantee about an empty class.
+- **Bridge**: a session typed against a k-tolerant protocol is hazard-free
+  within budget k; budgets distribute over participants; holds for recursive
+  sessions and protocols (`bridge_mu`).
+- **Regular protocols**: the μ-unfolding closure is finite (`cands_closed`),
+  the finite fragment embeds (`TC_regular`), `decide_mu` is sound and complete.
+  The recursive layer has its **own judgment**, `safeR` --- T-Choice-Safe read
+  coinductively --- exactly non-reachability (`TR_exact`), a conservative
+  extension of the finite one (`TC_is_TR`), decided by `decide_mu`
+  (`decide_mu_judgment`) and consumed by the bridge (`bridge_mu_safeR`).
+  **Guardedness** is mechanized and is needed in exactly one place: progress.
+  `μX.X` is typable (conformance is coinductive), unfinished and permanently
+  stuck (`contractiveness_is_necessary`); `progress_mu` holds under `gd`;
+  the decision procedure needs no guardedness at all.
+- **Repairs**: narrow, guard, reorder, compensate --- all proved sound;
+  guard and reorder characterized exactly, in an **aborting** model where the
+  validation always fires and a failed check diverts to an *inert* world
+  (everything enabled, nothing changes). `Abort.v` builds a runtime with such
+  worlds and provably no halted one, and exhibits a session that conforms to
+  the repaired protocol. The condition is a **congruence** for one-hole
+  contexts (`safeT_congruence`), so all four repairs apply at nested positions,
+  which is where the tool applies them.
+- **Bystanders**: every permutation of independent nodes (actions under
+  semantic independence, communications between disjoint role pairs
+  unconditionally) preserves the condition and typing; variable disjointness
+  of STRIPS footprints discharges the action conditions, which is what the
+  tool checks.
+- **Verified kernel**: on the boolean fragment the tool's k* is cross-checked
+  against a decision procedure extracted from the proof (16/16 agree). The
+  kernel's goal notion is the stronger one --- it requires the protocol to run
+  to completion (`goal_reach_implies_reach_mu`, `goal_reach_strictly_stronger`)
+  --- so the cross-check is evidence about `k*` and the hazard, not about the
+  severity labels.
+- **Cone of influence**: worlds agreeing on the variables the remaining
+  protocol reads are interchangeable at every budget (`safeT_cone`), so a
+  modular interface needs one representative per class
+  (`interface_projection`). This is what makes the projected column of the
+  modularity experiment sound.
 
-## Verified results (`make` in `proof/`)
+## Verified results — `make` in `proof/`
 
-32 results across both developments, every one axiom-free.
+**186 results, every one axiom-free** (`Print Assumptions` harnesses).
+`make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
-| Result | Coq |
-|---|---|
-| Soundness of T-Choice-Safe | `TC_sound` |
-| **Modular sequential composition** (typed against an interface) | `TC_seq`, `TC_seq_interface` |
-| **Completeness** (exact characterization) | `TC_complete`, `TC_exact` |
-| Severity is a partition | `severity_disjoint`, `severity_exhaustive` |
-| Catastrophe ⟺ untypability | `catastrophe_implies_untypable`, `untypable_implies_catastrophe` |
-| k-tolerance downward closed | `tolerance_downward_closed` |
-| Tolerance **anti**-monotone in Γ (least privilege) | `tolerance_antitone_in_ctx` |
-| Narrowing repair sound | `repair_narrow_sound` |
-| Worked instance: 0-resilient, not 1-resilient, repaired | `Gbad_is_0_tolerant`, `Gbad_not_1_tolerant`, `Ggood_is_k_tolerant` |
+`make check` at the repo root verifies both of the paper's mechanical
+claims: that every number Section 10 states still matches `results/`
+(`results/CLAIMS.json` is the manifest; `scripts/check_paper_numbers.py`
+evaluates it), and that every Coq result the paper cites exists and is
+covered by a `Print Assumptions` harness. `make results` regenerates the
+token-free half of the evaluation; the model-dependent runs ship as recorded.
+
+`proof/STATEMENTS.md` lists the Coq statement of every result the paper
+cites, so a reader can check that each one says what the paper says it says
+without opening the sources. `python3 scripts/check_paper_citations.py` checks
+that every citation resolves and is covered by a harness (a test runs it);
+`python3 scripts/dump_statements.py` regenerates STATEMENTS.md.
+
+## Evaluation headline (`python3 scripts/severity_eval.py`)
+
+- Existing corpora (15 + 6 achievability packs, 17 real skills): **no
+  irreversible effects, and the real skills have no choice points** — the
+  question is invisible to them.
+- Severity benchmark (17 protocols, 55 branch verdicts, 0.33 s): 29 Benign / 7 Futile /
+  19 Catastrophic; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase,
+  send, deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
+  pre-stated expectations; the exception was a benchmark authoring error, fixed.
+- Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
+  violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1 (one-sided Fisher
+  p = 0.046, not conventionally significant); 6 of 19
+  Catastrophic verdicts taken by a real agent; repairs remove the catastrophes.
+- Usefulness (96 verified agent runs): certified configurations 48/48 verified
+  artifacts, 0 silent wrong; refuted configurations where the procedure is the
+  only route (documents, spec pairs) 0/28 verified, 2 fabrications, 24 honest
+  failures; refuted configurations where the task reduces to hand arithmetic
+  20/20 verified by abandoning the skill's scripts (the verdict's precision limit).
+- Modularity: whole-system complete analysis 35.8 s at n=6 vs 0.13 s modular
+  with the cone-of-influence interface (concrete interface: 2.9 s, 256 points).
+  Re-check after a change: 172 ms vs 22 ms.
 
 ## Before submission
 
+- Run `make check` from the repository root: it fails if any number the paper
+  states has drifted from `results/`, if a sentence no longer contains the
+  figure it quotes, or if a `\coqok` name is not a proof covered by a harness.
+- `make results` regenerates the token-free half (census, differential
+  campaign, grep baseline, security scan, token economics) in about eight
+  minutes here and no model tokens. Re-running it reproduced every verdict,
+  count and cost in `results/` exactly; only the wall-clock timings moved, by
+  up to a quarter, which is why the manifest checks those proportionally and
+  everything else exactly. The model-dependent results (live agents,
+  usefulness runs, LLM compaction) ship as recorded.
 - Drop `anonymous`; fill authors, ORCIDs, funding, acknowledgements.
-- Convert the inline bibliography to `plainurl` + `.bib` (LIPIcs requirement)
-  and resolve entries marked `[to verify]`; add the citations `NOVELTY.md`
-  flags as missing (Derakhshan/Balzer/Yao ECOOP 2024 above all).
-- Remove the draft banner, `WIP:` boxes, and the `DO-NOT-SUBMIT` marker.
-- Mechanize recursion and the remaining three repairs, or scope them explicitly.
-- Run the three experiments in §8; no numbers are claimed until then.
+- Inline bibliography → `plainurl` + `.bib`.
+- Interleaving of communications between disjoint role pairs and asynchronous
+  buffering (the classical permutation lemma).
+- Environment choices and the arithmetic fragment in the verified kernel.
+- Scale the live-agent experiment (more models, more runs) if reviewers ask.
 
 ## Build
 
 ```
-pdflatex main.tex && pdflatex main.tex   # needs texlive-fonts-extra
-cd proof && make                          # Coq 8.18
+make -C ../.. check                        # numbers and Coq citations
+pdflatex main.tex && pdflatex main.tex     # needs texlive-fonts-extra
+cd proof && make && make binary             # Coq 8.18 + OCaml 4.14
+pip install -e ../.. && python3 ../../scripts/severity_eval.py
+python3 ../../scripts/live_agents.py       # needs the Claude Code CLI
+python3 ../../scripts/fetch_skills_ext.py && python3 ../../scripts/usefulness.py
 ```

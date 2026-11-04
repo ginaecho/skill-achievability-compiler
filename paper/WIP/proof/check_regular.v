@@ -1,0 +1,11 @@
+Require Import Regular.
+Print Assumptions product_correspondence.
+Print Assumptions budget_never_increases.
+Print Assumptions dev_edges_bounded.
+Print Assumptions dev_edges_exact.
+Print Assumptions reach_bounded_path.
+Print Assumptions decide_sound.
+Print Assumptions decide_complete.
+Print Assumptions decide_reachb_correct.
+Print Assumptions decide'_sound.
+Print Assumptions decide'_complete.

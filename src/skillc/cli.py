@@ -959,6 +959,83 @@ def _add_runtime_opts(sp) -> None:
                     help="do not send the egress requests")
 
 
+def cmd_severity(args) -> int:
+    """Severity of every wrong choice, and the tolerance degree k*."""
+    import json as _json
+    from .severity import analyze
+    from .pack import Pack
+    path = args.pack
+    if path.endswith(".md"):
+        from .profiles import load_profile
+        from .frontend.markdown import compile_file
+        pack = compile_file(path, load_profile(args.profile)).pack
+    else:
+        pack = _json.load(open(path))
+    rep = analyze(pack, kmax=args.kmax)
+    d = rep.to_dict()
+    if args.json:
+        print(_json.dumps(d, indent=1))
+        return 0
+    import textwrap
+    ks = f">={args.kmax + 1}" if rep.tolerance_degree is None else str(rep.tolerance_degree)
+    print(f"{rep.pack}: tolerance degree k* = {ks}")
+    print(f"  choice nodes {rep.choice_nodes}, branches {rep.branches}, "
+          f"irreversible {sorted(rep.irreversible_caps) or 'none'}")
+    by_node: dict = {}
+    for v in rep.verdicts:
+        by_node.setdefault(v.node, []).append(v)
+    for node in sorted(by_node, key=lambda n: (n.count("/"), n)):
+        print(f"  {node}")
+        for v in by_node[node]:
+            tag = "intended" if v.intended else "misselection"
+            extra = f"  PNR={v.pnr_action}" if v.pnr_action else ""
+            print(f"    {v.branch:18s} {v.severity:13s} {tag}{extra}")
+    if rep.pnr_action:
+        path = " > ".join("/".join(map(str, x)) for x in rep.hazard_witness)
+        print(f"  first catastrophe within budget {(rep.tolerance_degree or 0) + 1}:")
+        for line in textwrap.wrap(path, 70):
+            print(f"    {line}")
+    if rep.narrowing:
+        print("  repair (narrow):")
+        for n, b in rep.narrowing:
+            print(f"    remove {b} at {n}")
+    by = rep.bystander or {}
+    if by.get("exact"):
+        print(f"  bystander interleavings: exact ({by.get('pairs', 0)} independent pairs)")
+    elif by:
+        print(f"  bystander interleavings: serialize {len(by['conflicts'])} of {by['pairs']} pairs")
+        for c in by["conflicts"]:
+            print(f"    {c['action']} before {c['blocked_at']}: {c['reason']}")
+    return 0 if rep.tolerance_degree is None else 3
+
+
+def cmd_autocheck(args) -> int:
+    import json as _json
+    from .autollm import auto_check
+    out = auto_check(args.path, args.profile, args.llm_model, force_llm=args.force_llm)
+    if args.json:
+        o = dict(out)
+        if o.get("llm") and "pack" in o["llm"]:
+            o["llm"] = {k: v for k, v in o["llm"].items() if k != "pack"}
+        print(_json.dumps(o, indent=1))
+        return 0
+    d = out["deterministic"]
+    print(f"{out['path']}: deterministic {'ACHIEVABLE' if d['achievable'] else 'IMPOSSIBLE [' + str(d['reason']) + ']'} ({d['ms']} ms)")
+    e = out["escalation"]
+    if e["needed"]:
+        print("  LLM compaction needed: " + "; ".join(e["reasons"]))
+    else:
+        print("  LLM compaction not needed (deterministic pack carries the document's meaning)")
+    if out["llm"]:
+        l = out["llm"]
+        if "error" in l:
+            print(f"  LLM compaction failed: {l['error']}")
+        else:
+            print(f"  LLM ({l['model']}): {'ACHIEVABLE' if l['achievable'] else 'IMPOSSIBLE [' + str(l['reason']) + ']'}  "
+                  f"tokens={l['tokens']} (in {l['usage'].get('input_tokens')}, out {l['usage'].get('output_tokens')}, cache {l['usage'].get('cache_read_input_tokens', 0) + l['usage'].get('cache_creation_input_tokens', 0)}) {l['seconds']}s")
+    return 0
+
+
 def cmd_profiles(args) -> int:
     for name in builtin_profiles():
         p = load_profile(name)
@@ -1228,6 +1305,23 @@ def main(argv: list[str] | None = None) -> int:
         _add_gate_parser(sub)              # `skillc gate`: the deploy gate (docs/ENVIRONMENT.md)
     except ImportError:
         pass
+
+    sp = sub.add_parser("severity", help="severity of every wrong choice and the tolerance degree k*")
+    sp.add_argument("pack", help="pack JSON or SKILL.md")
+    sp.add_argument("--kmax", type=int, default=4)
+    sp.add_argument("--profile", default="claude-ai")
+    sp.add_argument("--json", action="store_true")
+    sp.add_argument("--verified", action="store_true",
+                    help="cross-check k* with the Coq-verified kernel (boolean fragment)")
+    sp.set_defaults(fn=cmd_severity)
+
+    sp = sub.add_parser("autocheck", help="deterministic check; escalate to LLM compaction only when the document carries meaning the deterministic reader cannot; report what it cost")
+    sp.add_argument("path", help="SKILL.md")
+    sp.add_argument("--profile", default="claude-ai")
+    sp.add_argument("--llm-model", default="haiku")
+    sp.add_argument("--force-llm", action="store_true")
+    sp.add_argument("--json", action="store_true")
+    sp.set_defaults(fn=cmd_autocheck)
 
     sp = sub.add_parser("profiles", help="list built-in capability profiles")
     sp.set_defaults(fn=cmd_profiles)
