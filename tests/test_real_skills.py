@@ -52,9 +52,12 @@ def test_every_real_skill_compiles_to_a_valid_pack(path):
 # profile now grants the browser tools, see test_markdown_frontend's
 # test_claude_ai_grants_the_browser_tools_but_no_api_parameters, so it is
 # checked by the home-runtime test instead.)
-CONNECTOR_DEPENDENT = {
-    "examples/computer-use": "computer_request_access",
-}
+# (examples/computer-use was listed here for computer_request_access. The
+# mounted copy of that skill was rewritten after 2026-09: it now names its
+# tools only in prose, behind an enable step that may not exist yet, so the
+# deterministic reader no longer extracts a required connector tool from it.
+# The skill is not part of the paper's corpus, which is real-skills/.)
+CONNECTOR_DEPENDENT: dict[str, str] = {}
 
 
 @pytest.mark.parametrize("path", all_skill_files(), ids=_id)
