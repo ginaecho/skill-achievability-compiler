@@ -28,7 +28,10 @@ four TikZ figures, and the conventional structure.
 | `results/live_agents.json`, `results/live_agents_runs.jsonl` | the live-agent experiment (every run, every reply) |
 | `../../docs/LIVE_AGENTS.md` | live-agent tables |
 | `../../scripts/live_agents.py` | the live-agent experiment (`claude -p`, no tools) |
-| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 45 real skills + 4 specification pairs, two runtimes, artifacts verified |
+| `../../scripts/usefulness.py`, `results/usefulness.json`, `../../docs/USEFULNESS.md` | the usefulness experiment: 162 real skills surveyed, 8 + 5 run as tasks at two input scales, 4 specification pairs, two runtimes, artifacts verified |
+| `../../scripts/token_economics.py`, `results/token_economics.json`, `../../docs/TOKEN_ECONOMICS.md` | tokens with and without the checker; when LLM compaction is needed and what it costs |
+| `../../scripts/scan_skills.py`, `results/security_scan.json`, `../../docs/CORPUS_SECURITY.md` | static security review of the third-party corpus (read-only; gated by `tests/test_corpus_security.py`) |
+| `../../src/skillc/autollm.py` | the escalation rule (`skillc autocheck`) |
 | `../../benchmarks/spec-cases/` | nine authored achievable/not-achievable pairs with mock tools; eight of the nine refutations need reachability, not a capability set-difference |
 | `../../scripts/grep_baseline.py`, `results/grep_baseline.json` | the regular-expression baseline (25/34 against the checker's 34/34) |
 | `../../scripts/llm_judge_baseline.py` | the LLM-judge baseline (scripted; the model calls did not complete in this environment) |
@@ -64,8 +67,11 @@ four TikZ figures, and the conventional structure.
 - **k-misselection tolerance**: no run with ≤ k misselections reaches a hazard.
   Possibilistic — no probabilities. The tolerance degree `k*` is the headline.
 - **T-Choice-Safe**: exact syntax-directed characterization.
-- **Non-vacuity**: explicit conforming sessions are exhibited for the worked
-  instances, so the bridge is not a guarantee about an empty class.
+- **Non-vacuity**: every two-role protocol is inhabited, over any runtime in
+  which a tool call always has an answer --- `canon` reads the global type as
+  a pair of processes and `canon_conforms` proves it conforms in every world,
+  so the bridge is never a guarantee about an empty class. Explicit sessions
+  are also exhibited for the worked instances and for the repairs.
 - **Bridge**: a session typed against a k-tolerant protocol is hazard-free
   within budget k; budgets distribute over participants; holds for recursive
   sessions and protocols (`bridge_mu`).
@@ -106,7 +112,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**186 results, every one axiom-free** (`Print Assumptions` harnesses).
+**189 audited names (187 theorems and two constructors), every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 `make check` at the repo root verifies both of the paper's mechanical
@@ -127,22 +133,47 @@ that every citation resolves and is covered by a harness (a test runs it);
 - Existing corpora (15 + 6 achievability packs, 17 real skills): **no
   irreversible effects, and the real skills have no choice points** — the
   question is invisible to them.
-- Severity benchmark (17 protocols, 55 branch verdicts, 0.33 s): 29 Benign / 7 Futile /
-  19 Catastrophic; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase,
-  send, deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
+- Severity benchmark (17 protocols, 55 branch verdicts, 0.21 s): 29 Benign / 7
+  Futile / 19 Catastrophic **over all branches** — 28 of the 29 Benign are
+  branches whose guard holds, so restricted to *misselections* the split is
+  1/7/19; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase, send,
+  deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
   pre-stated expectations; the exception was a benchmark authoring error, fixed.
 - Live agents (340 runs, two models, plain vs pressured, $1.59): 0 theorem
-  violations; catastrophes 0/120 on k*≥5 vs 7/220 on k*≤1 (one-sided Fisher
-  p = 0.046, not conventionally significant); 6 of 19
-  Catastrophic verdicts taken by a real agent; repairs remove the catastrophes.
-- Usefulness (96 verified agent runs): certified configurations 48/48 verified
-  artifacts, 0 silent wrong; refuted configurations where the procedure is the
-  only route (documents, spec pairs) 0/28 verified, 2 fabrications, 24 honest
-  failures; refuted configurations where the task reduces to hand arithmetic
-  20/20 verified by abandoning the skill's scripts (the verdict's precision limit).
-- Modularity: whole-system complete analysis 35.8 s at n=6 vs 0.13 s modular
-  with the cone-of-influence interface (concrete interface: 2.9 s, 256 points).
-  Re-check after a change: 172 ms vs 22 ms.
+  violations; 6 of 19 Catastrophic verdicts taken by a real agent, 17 times;
+  repairs remove the catastrophes. **No rate claim is supported** — 0/120 on
+  the tolerant protocols is arithmetically forced, the low-`k*` counts invert,
+  and 10 of the 11 misselections on tolerant protocols are one Benign branch
+  whose guard the pressure prompt asserts.
+- Corpus census (162 skills, 13 repositories, no model tokens, 2.1 s):
+  149 certified at home, 108 refuted in a file-only runtime, 95 flip.
+- Usefulness (134 agent runs over 16 documents — 8 corpus skills and 8
+  specification cases): certified 67/68 verified artifacts (64 of them
+  also reached the status line and 3 did not; of the 68, 1 was a silent wrong
+  result); refuted, where the
+  skill's procedure is the only route, 0 verified out of 46 with 7
+  fabrications; the five "computed by hand" skills reverse at realistic input
+  size: 20/20 verified at a dozen rows, 0/18 at a thousand (14.3 M tokens).
+- Differential testing: the analyzer and the Coq-extracted kernel agree on the
+  tolerance degree for 500 of 500 random protocols across two seeds, 0
+  disagreements (`scripts/differential_test.py`).
+- False refutations: of 13 skills refuted in their home runtime, 6 are genuine
+  and 7 are front-end misextractions, audited one by one in
+  `benchmarks/home_refutation_audit.json` (4.3% of the corpus, and 46%
+  precision on the refutations themselves — the number to carry).
+- Corpus security: 162 documents scanned statically, no malicious skill and no
+  injection payload aimed at an agent; 9 benign flags reviewed in
+  `docs/CORPUS_SECURITY.md`; a test fails on any unreviewed hit.
+- Token economics: escalation to LLM compaction fires on 130/162 skills at
+  home and 49/162 in the file-only runtime (108 free refutations);
+  median compaction 22440 tokens = 27.9% of one agent run (20 of 24
+  attempts returned a pack; the other four are counted as failures).
+- Modularity: the tool's own hazard decision is already linear (22 queries at
+  n=6), so the like-for-like comparison is computing an *interface*: complete
+  whole-system enumeration 566 queries / 22.4 s at n=6 against the projected
+  modular 48 / 0.083 s; the concrete interface is worse than not abstracting
+  (1149 queries, 256 points). The win that survives is re-check: 109 ms
+  growing with n against 13 ms constant.
 
 ## Before submission
 
@@ -172,4 +203,5 @@ cd proof && make && make binary             # Coq 8.18 + OCaml 4.14
 pip install -e ../.. && python3 ../../scripts/severity_eval.py
 python3 ../../scripts/live_agents.py       # needs the Claude Code CLI
 python3 ../../scripts/fetch_skills_ext.py && python3 ../../scripts/usefulness.py
+python3 ../../scripts/token_economics.py --compact 24    # measures LLM compaction
 ```
