@@ -664,6 +664,7 @@ The HTML directory also shows internal imports and reverse import relationships.
 | [`frontend/toolpolicy.py`](../src/skillc/frontend/toolpolicy.py) | Checked obligation library, software resolution and unmet requirements | `runtime`, `monitor` |
 | [`frontend/stance.py`](../src/skillc/frontend/stance.py) | Classify commitment, quotation, negation and anaphoric reasoning | `monitor` |
 | [`frontend/interaction.py`](../src/skillc/frontend/interaction.py) | Pattern-based action/interaction hazards and destination policy | `monitor` |
+| [`autollm.py`](../src/skillc/autollm.py) | `needs_llm`/`auto_check` (`skillc autocheck`): escalate from the deterministic reader to opt-in LLM compaction only when the weak pack under-reads the document | `frontend.markdown`, `frontend.llm` |
 
 ### Environments, reachability and evidence graphs
 
@@ -714,6 +715,8 @@ The HTML directory also shows internal imports and reverse import relationships.
 | [`baselines.py`](../src/skillc/baselines.py) | Planner-only and tool-lint comparison on the same pack | `evaluate` |
 | [`mutate.py`](../src/skillc/mutate.py) | Remove capabilities/establishers for mutation testing | `evaluate` |
 | [`tokens.py`](../src/skillc/tokens.py) | Usage costs and modeled economics; measured vs modeled kept separate | `frontend.providers` |
+| [`severity.py`](../src/skillc/severity.py) | `analyze` (`skillc severity`): Benign/Futile/Catastrophic wrong choices, tolerance degree k*, narrowing repairs, bystander conflicts | `checker`, `kernel` |
+| [`kernel.py`](../src/skillc/kernel.py) | Export a boolean-fragment pack to the Coq-extracted kernel (`paper/WIP/proof/kernel`) and run it | `severity` |
 
 ### Supporting code and data outside the package
 

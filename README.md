@@ -102,6 +102,8 @@ pip install -e ".[dev]"                # + tests and lint
 | `skillc monitor scout-install` | The same checks as MCP tools (cooperative, not enforced) | Microsoft Scout |
 | `skillc gate` | Packs, skills and topology against an azd project's `azure.yaml` | Before `azd deploy` |
 | `skillc compile` · `skillc ce` · `skillc audit` · `skillc cost` | The formal pack; Controlled English; a risky-pattern pre-pass; token economics | Reviewing or explaining a verdict |
+| `skillc severity PACK` | What each wrong choice costs (Benign, Futile, Catastrophic) and the tolerance degree k*; exit `3` when a catastrophe is reachable within `--kmax` | Protocols with irreversible tools |
+| `skillc autocheck SKILL.md` | The no-model verdict, and whether the document carries meaning only an (opt-in) LLM compaction could read | Deciding whether a model run is worth its tokens |
 
 **Try it in two minutes:** `python demo/skillc-here/app.py`. It reads this folder as GitHub Copilot
 CLI sees it and shows one skill's verdict here and in Copilot CLI, VS Code Copilot, Claude Code and
@@ -140,6 +142,20 @@ Set `SKILLC_DETERMINISTIC_VOCABULARY` to its path before starting SkillC.
 See the [example vocabulary](examples/deterministic-vocabulary.json) and
 [format and limitations](docs/KNOWLEDGE_GRAPH.md#editable-deterministic-vocabulary).
 These mappings extend extraction, not environment permissions or the CE grammar.
+
+### Severity of wrong choices and the verified kernel
+
+`skillc severity PACK` (a pack JSON or a SKILL.md) asks, at every choice the protocol offers, what
+happens if the agent takes the branch it should not: the goal is still reachable (Benign), lost
+with nothing irreversible done (Futile), or lost after an irreversible action (Catastrophic, a
+point of no return). The largest number of wrong choices that never reaches a catastrophe is the
+tolerance degree k*; the report also names the first catastrophe and the branches whose removal
+restores tolerance. The analysis is [`src/skillc/severity.py`](src/skillc/severity.py), its
+mechanized metatheory is in [`paper/WIP/proof`](paper/WIP/proof) (`make all`), and
+[`src/skillc/kernel.py`](src/skillc/kernel.py) runs the kernel extracted from `Kernel.v`
+(`make binary`) on the boolean fragment as a cross-check. Results on the benchmark protocols:
+[docs/SEVERITY_RESULTS.md](docs/SEVERITY_RESULTS.md); review of the skill corpus as untrusted
+input: [docs/CORPUS_SECURITY.md](docs/CORPUS_SECURITY.md).
 
 ### Using skillc with GitHub Copilot
 
