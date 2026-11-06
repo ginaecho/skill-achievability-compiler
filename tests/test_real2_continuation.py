@@ -20,7 +20,7 @@ def test_call_log_accepts_native_copilot_usage_and_deduplicates(tmp_path, monkey
         {"type": "user.message", "timestamp": "2026-11-06T09:00:00Z",
          "data": {"content": r"runs\20261031_real2\s\opus\r3\prompts\ce_rt\r001__s0__r3.json"}},
         {"type": "session.usage_record", "timestamp": "2026-11-06T09:00:02Z",
-         "data": {"usage": {"responseModel": "test-model", "inputTokens": 100,
+         "data": {"usage": {"model": "test-model", "inputTokens": 100,
                             "outputTokens": 5, "cacheReadTokens": 70, "cacheWriteTokens": 20}}},
     ]
     (transcripts / "agent-test.jsonl").write_text(
@@ -76,12 +76,12 @@ def test_isolated_job_restricts_context_and_never_reruns_existing_output(
         calls.append(args)
         assert sorted(p.name for p in cwd.iterdir()) == ["prompt.json"]
         home = Path(env["COPILOT_HOME"])
-        assert json.loads((home / "config.json").read_text())["memory"] is False
+        assert json.loads((home / "settings.json").read_text())["memory"] is False
         assert "--no-custom-instructions" in args
         assert "--sync-session=off" in args
         assert "--disallow-temp-dir" in args
         assert args[args.index("--available-tools") + 1:args.index("--allow-all-tools")] == [
-            "view", "apply_patch"]
+            "view", "create"]
         session = args[args.index("--session-id") + 1]
         events = home / "session-state" / session / "events.jsonl"
         events.parent.mkdir(parents=True)
@@ -91,6 +91,7 @@ def test_isolated_job_restricts_context_and_never_reruns_existing_output(
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(real2_copilot.subprocess, "run", run)
+    monkeypatch.setattr(real2_copilot.subprocess, "check_output", lambda *a, **kw: "false\n")
     if served_model != "test-model":
         with pytest.raises(RuntimeError, match="serving model"):
             real2_copilot.run_job(out, job, scratch, "test-model", 1, "stub")

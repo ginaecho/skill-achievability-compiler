@@ -369,3 +369,17 @@ repeat-3 S repair replies, not the approximately 67 stated in the handoff.
    opus`. The unused frozen prompts for the other model options are not failed calls.
    No truth is opened or restored until the missing S replies are complete or each
    genuinely failed twice. Restore the truth and date that step in a later amendment.
+
+**Amendment 9 (2026-11-06, after the first continuation attempt, before its retry).**
+The first attempt on r224 produced no output file: the installed CLI exposed only
+the view tool because its file-creation tool is named `create`, not `apply_patch`.
+Its settings file is `settings.json`; the legacy `config.json` is not sufficient
+to establish that memory is off. No reply from that attempt is accepted. Its native
+usage remains in the call log as a failed attempt.
+
+The runner now writes the canonical settings file, checks that the installed CLI
+reports `memory` as `false` before every model session, and exposes only `view` and
+`create`. Native usage reports use the `model` field when no separate response-model
+field is available; this is reported model provenance, not an independently observed
+backend identity. The affected job receives its one permitted fresh-session retry.
+All other jobs retain their first attempts. No truth has been opened.

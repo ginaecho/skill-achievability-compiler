@@ -566,7 +566,7 @@ def log_calls(transcripts: Path) -> None:
                 use.update(input_tokens=uncached, output_tokens=int(u["outputTokens"]),
                            cache_read_input_tokens=cached,
                            cache_creation_input_tokens=written)
-                models[u["responseModel"]] += 1
+                models[u.get("responseModel") or u["model"]] += 1
         stamps = [datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00"))
                   for r in rows if r.get("timestamp")]
         new.append({"transcript": str(t), "job": job["job"], "case": job["case"],

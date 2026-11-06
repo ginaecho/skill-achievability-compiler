@@ -35,7 +35,7 @@ def run_job(out: Path, job: dict, scratch: Path, model: str, attempt: int,
     work.mkdir(parents=True, exist_ok=False)
     home.mkdir()
     shutil.copyfile(prompt, work / "prompt.json")
-    (home / "config.json").write_text(json.dumps({
+    (home / "settings.json").write_text(json.dumps({
         "memory": False, "continueOnAutoMode": False,
     }), encoding="utf-8")
     session = str(uuid.uuid4())
@@ -54,10 +54,15 @@ def run_job(out: Path, job: dict, scratch: Path, model: str, attempt: int,
            and not k.startswith(("OTEL_", "COPILOT_OTEL_"))}
     env.update(COPILOT_HOME=str(home), COPILOT_GITHUB_TOKEN=token,
                COPILOT_ALLOW_ALL="false", USE_TGREP="false")
+    memory = subprocess.check_output(
+        ["copilot", "--no-auto-update", "config", "memory"],
+        cwd=work, env=env, text=True).strip()
+    if memory != "false":
+        raise RuntimeError(f"{job['case']}: memory is not disabled")
     args = [
         "copilot", "--no-auto-update", "--model", model, "--session-id", session,
         "--no-custom-instructions", "--sync-session=off", "--disable-builtin-mcps",
-        "--disallow-temp-dir", "--available-tools", "view", "apply_patch",
+        "--disallow-temp-dir", "--available-tools", "view", "create",
         "--allow-all-tools", "--no-ask-user", "--no-color", "-p", instruction,
     ]
     with (base / "console.txt").open("w", encoding="utf-8") as console:
@@ -74,7 +79,7 @@ def run_job(out: Path, job: dict, scratch: Path, model: str, attempt: int,
     if not events.exists():
         raise RuntimeError(f"{job['case']}: no native session events")
     rows = [json.loads(line) for line in events.read_text(encoding="utf-8").splitlines()]
-    served = {r["data"]["usage"]["responseModel"] for r in rows
+    served = {r["data"]["usage"].get("responseModel") or r["data"]["usage"]["model"] for r in rows
               if r.get("type") == "session.usage_record"}
     if served != {model}:
         raise RuntimeError(f"{job['case']}: unexpected or unreported serving model: {served}")
