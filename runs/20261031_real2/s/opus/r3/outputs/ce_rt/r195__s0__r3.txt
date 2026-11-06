@@ -1,0 +1,33 @@
+```ce
+Skill `intercom-incident-runbook`.
+Roles: `agent`.
+Tool `probe_api` (owner `agent`): via `bash`; needs `intercom_token`; adds `api_probed`.
+Tool `check_status` (owner `agent`): via `web_fetch`; needs `public_internet`; adds `status_checked`.
+Tool `rotate_token` (owner `agent`): via `bash`; needs `aws_account`; requires `api_probed`; adds `mitigated`.
+Tool `add_oauth_scope` (owner `agent`): via `intercom_dev_hub`; needs `intercom_admin`; requires `api_probed`; adds `mitigated`.
+Tool `apply_backoff` (owner `agent`): via `bash`; requires `api_probed`; adds `mitigated`.
+Tool `enable_cache_fallback` (owner `agent`): via `bash`; requires `api_probed`; adds `mitigated`.
+Tool `enable_degradation` (owner `agent`): via `bash`; requires `status_checked`; adds `mitigated`.
+Tool `post_slack` (owner `agent`): via `slack`; needs `slack_account`; adds `comms_posted`.
+Tool `write_postmortem` (owner `agent`): via `write`; needs `local_filesystem`; requires `mitigated`; adds `postmortem_written`.
+Initially true: none.
+Goal: `api_probed` and `status_checked` and `mitigated` and `comms_posted` and `postmortem_written`.
+Protocol:
+  - `agent` uses `probe_api`.
+  - `agent` uses `check_status`.
+  - `agent` chooses one of (external):
+    - branch `platform_incident`:
+      - `agent` uses `enable_degradation`.
+    - branch `our_integration`:
+      - `agent` chooses one of (external):
+        - branch `auth_401`:
+          - `agent` uses `rotate_token`.
+        - branch `scope_403`:
+          - `agent` uses `add_oauth_scope`.
+        - branch `rate_429`:
+          - `agent` uses `apply_backoff`.
+        - branch `server_5xx`:
+          - `agent` uses `enable_cache_fallback`.
+  - `agent` uses `post_slack`.
+  - `agent` uses `write_postmortem`.
+```

@@ -335,3 +335,11 @@ repair rounds are rebuilt incrementally as before. The adjudication prompts and 
 main run, whose names would reveal which cases were achieved, were moved out of the
 repository with the executor reports until every S and D call has finished (the pilot's five
 had already been committed with the pilot).
+
+**Amendment 7 (2026-11-06; no change of method).** The run was paused again with about 67
+repeat-3 repair calls left. To keep the ground truth safe beyond the session's scratchpad,
+the 300 executor reports, 140 adjudications and the held-out adjudication prompts and
+batches were pushed to the separate branch `gc/real2-truth` (outside this run directory,
+so S sub-agents still cannot read them). `calls.jsonl` was written from the sub-agent
+transcripts (3,139 calls); it includes attempts that failed at the subscription's weekly
+usage limit and were run again, so a job can have more than one line.
