@@ -15,13 +15,14 @@ names the formal result behind it: `coverage` for the goal and
 
 | Dimension | Label | Reason | `coverage` tag | What covers it |
 |---|---|---|---|---|
-| goal | IMPOSSIBLE | `MISSING_CAPABILITY`, `BLOCKED_GUARD`, `GOAL_UNSAT` (may semantics) | `thm1+lem3` | Theorem 1 (`refutation_sound_rel`) and Lemma 3 (`SymbolicInstance.symbolic_refutation_sound`), both mechanized in `proof/SkillAchievability.v`. Trusted, not proved: the QF-LIA denotation of pack formulas, and Z3. |
+| goal | IMPOSSIBLE | `MISSING_CAPABILITY` (only when every path to a goal point uses a missing tool, or the search finds that the paths avoiding it fail), `BLOCKED_GUARD`, `GOAL_UNSAT` (may semantics) | `thm1+lem3` | Theorem 1 (`refutation_sound_rel`) and Lemma 3 (`SymbolicInstance.symbolic_refutation_sound`), both mechanized in `proof/SkillAchievability.v`. Trusted, not proved: the QF-LIA denotation of pack formulas, and Z3. |
 | goal | IMPOSSIBLE | same, with `context_refuted` | `thm1+lem3+establisher` | The above, plus the establisher-closure lemma: no protocol over the same capabilities reaches the goal. That lemma is proved on paper only. |
 | goal | IMPOSSIBLE | `REQUIREMENT_UNAVAILABLE` | `deterministic-reader:manifest` | Not covered by Theorem 1. See "Refutations by the requirement reader" below. |
 | goal | IMPOSSIBLE | any (adversarial semantics) | `paper-only:adversarial` | Proved on paper only. The mechanized theorem covers may semantics. |
 | goal | UNKNOWN | `DYNAMIC_TOPOLOGY` | `thm-undec:abstention` | Abstention at the undecidability boundary. The undecidability result is proved on paper only. |
 | goal | UNKNOWN | `PROTOCOL_ONLY`, `INCOMPLETE_COMPACTION`, others | `abstention` | No claim is made. |
 | goal | ACHIEVABLE | `OK` | `none:witness-only` | No guarantee. A witness path exists in the abstraction (incompleteness proposition). Intent fidelity and payload faithfulness stay open. |
+| protocol | REJECTED | `MISSING_CAPABILITY` | `t-comm:side-conditions;sr+sf:single-label-mechanized` | The protocol names a tool the runtime lacks on a path the goal does not need. The premise caps(G) ⊆ dom(Γ) of rule Ach fails, but another path reaches the goal, so the goal is not refuted. See "A missing tool on a branch the goal does not need" below. |
 | protocol | REJECTED | `NON_PROJECTABLE`, `NON_CONFORMANT` | `t-comm:side-conditions;sr+sf:single-label-mechanized` | The checker decides the T-Comm side conditions (projection and conformance, then the whole-session T-Comm/T-Act/T-Goal search). Subject reduction and session fidelity are mechanized in `proof/DirectTypingSR.v`, for the single-label communication fragment only. Multi-branch choice is covered on paper. The equivalence of projection and the declarative direct judgment is an open proof obligation. |
 | protocol | WELL_TYPED | none | same tag | Same scope as the row above. |
 | protocol | NOT_CHECKED | none | `not-checked` | The goal was decided before the typing checks ran (missing capability, establisher-closure refutation, or dynamic spawning). |
@@ -53,6 +54,34 @@ alternative or example mention as a hard requirement (seven false refutations on
 `docs/COMPACTION_RELIABILITY.md`). For this reason the verdict always reports the requirement
 as `kind:name` in `frontier`, and the manifest entry and the evidence line from the text in
 `detail`, so a person can check it. `refutation_scope` is `runtime_manifest`.
+
+## A missing tool on a branch the goal does not need
+
+Until 2026-10-31 the checker answered `IMPOSSIBLE` / `MISSING_CAPABILITY` whenever the
+protocol named a tool the runtime lacks, anywhere. That claimed more than Theorem 1. In this
+pack the `card` branch reaches the goal and only `transfer` needs the missing tool:
+
+```text
+choice by sys:
+  card:     sys -> payer use_card;     payer uses pay_card       (granted)
+  transfer: sys -> payer use_transfer; payer uses pay_transfer   (not granted)
+goal: paid
+```
+
+The checker now decides it in three steps:
+
+1. If every path to a goal point (a goal marker or the end of the protocol) uses a missing
+   tool, the goal is refuted: `IMPOSSIBLE` / `MISSING_CAPABILITY`. The path check ignores
+   guards, so it over-approximates the runs, and a run cannot fire a tool the runtime lacks.
+2. Otherwise, if the establisher closure refutes the goal over every protocol, the verdict is
+   still `IMPOSSIBLE` / `MISSING_CAPABILITY`, with `context_refuted`.
+3. Otherwise the search decides the goal, treating each step with a missing tool as a dead
+   end. Here the `card` branch reaches `paid`: `ACHIEVABLE`, with `protocol: REJECTED`
+   (`MISSING_CAPABILITY`), so the plan is not admissible. If the paths that avoid the missing
+   tool fail too, the verdict is `IMPOSSIBLE` / `MISSING_CAPABILITY`, naming the missing tools.
+
+Tests: `tests/test_checker.py::test_missing_tool_on_an_unneeded_branch_does_not_refute_the_goal`
+and the three tests after it.
 
 ## Why a protocol rejection is not a goal refutation
 
@@ -97,7 +126,7 @@ The reason text says that the goal is not refuted.
 | Field | Values |
 |---|---|
 | `protocol` | `WELL_TYPED`, `REJECTED`, `NOT_CHECKED` |
-| `protocol_reason` | `""`, `NON_PROJECTABLE`, `NON_CONFORMANT` |
+| `protocol_reason` | `""`, `NON_PROJECTABLE`, `NON_CONFORMANT`, `MISSING_CAPABILITY` |
 | `protocol_detail` | the failing role and branch, or `""` |
 | `admissible` | `true` only for ACHIEVABLE and not REJECTED |
 | `coverage` | the goal coverage tag from the table above |

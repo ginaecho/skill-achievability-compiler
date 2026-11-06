@@ -35,7 +35,15 @@ A verdict has two orthogonal dimensions (verdict schema skillc.verdict/2):
     UNKNOWN reasons   : DYNAMIC_TOPOLOGY | PROTOCOL_ONLY (goal scope)
                         | INCOMPLETE_COMPACTION (front-end)
   Protocol       WELL_TYPED | REJECTED (+protocol_reason) | NOT_CHECKED
-    protocol reasons  : NON_PROJECTABLE | NON_CONFORMANT
+    protocol reasons  : NON_PROJECTABLE | NON_CONFORMANT | MISSING_CAPABILITY
+
+A tool the protocol names but Gamma lacks is a goal refutation
+(IMPOSSIBLE / MISSING_CAPABILITY) only when every path to a goal point uses
+such a tool.  When some path avoids every missing tool, the goal is still
+decided by the search, which treats each step with a missing tool as a dead
+end (World-Act cannot fire it), and the missing tool is recorded as a
+protocol rejection (protocol_reason MISSING_CAPABILITY): the typing premise
+caps(G) <= dom(Gamma) of rule Ach fails, which is not goal impossibility.
 
 Only the goal dimension is covered by the refutation soundness result
 (Theorem 1 + Lemma 3, proof/SkillAchievability.v).  A protocol rejection is
@@ -79,7 +87,7 @@ REASONS = ("OK", "MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT",
            "NON_PROJECTABLE", "NON_CONFORMANT", "DYNAMIC_TOPOLOGY",
            "PROTOCOL_ONLY", "INCOMPLETE_COMPACTION", "REQUIREMENT_UNAVAILABLE")
 PROTOCOL_STATUSES = ("WELL_TYPED", "REJECTED", "NOT_CHECKED")
-PROTOCOL_REASONS = ("", "NON_PROJECTABLE", "NON_CONFORMANT")
+PROTOCOL_REASONS = ("", "NON_PROJECTABLE", "NON_CONFORMANT", "MISSING_CAPABILITY")
 # reasons whose IMPOSSIBLE verdict is a may-reachability refutation (thm1)
 _REACHABILITY_REASONS = ("MISSING_CAPABILITY", "BLOCKED_GUARD", "GOAL_UNSAT")
 PROTOCOL_COVERAGE = "t-comm:side-conditions;sr+sf:single-label-mechanized"
@@ -263,7 +271,7 @@ class Verdict:
     decision_scope: str = "protocol"
     # The protocol-typing dimension, orthogonal to the goal label above.
     protocol: str = "WELL_TYPED"     # WELL_TYPED | REJECTED | NOT_CHECKED
-    protocol_reason: str = ""        # "" | NON_PROJECTABLE | NON_CONFORMANT
+    protocol_reason: str = ""        # "" | NON_PROJECTABLE | NON_CONFORMANT | MISSING_CAPABILITY
     protocol_detail: str = ""
 
     @property
@@ -403,6 +411,8 @@ class Checker:
         self.blocked: list[str] = []     # frontier accumulation
         self.defeated: list[str] = []    # external branches that defeat the goal
         self.loop_seen: set = set()      # (rec name, pred-state) at back edges
+        self.missing: set[str] = set()   # tools the protocol names but Gamma lacks
+        self.missing_hit: set[str] = set()  # missing tools the search ran into
         self.solver_unknown = False      # >=1 query hit the solver budget
         self.typing_fresh = 0            # branch-local post-state variables
         self.typing_condition: z3.BoolRef | None = None
@@ -503,7 +513,9 @@ class Checker:
             "available_definitions": sorted(self.p.capabilities),
             "missing": sorted(missing),
         })
-        if missing:
+        if missing and not self._avoids_missing(self.p.protocol, missing, {}):
+            # every path to a goal point fires a tool Gamma lacks, and
+            # World-Act cannot fire it: no run reaches the goal (thm1).
             goal_refutation = self._gamma_refutation()
             self._skip_traces(
                 "capability existence failed",
@@ -514,6 +526,30 @@ class Checker:
                            f"protocol invokes undeclared capabilities: {sorted(missing)}",
                            frontier=tuple(sorted(missing)),
                            context_refuted=goal_refutation is not None)
+        if missing and (goal_refutation := self._gamma_refutation()):
+            # a path avoids the missing tools, but no protocol over Gamma can
+            # reach the goal at all: report the missing tool, the actionable
+            # cause, with the protocol-independent certificate behind it.
+            self._skip_traces(
+                "capability existence failed",
+                interaction=True,
+                reachability=True,
+            )
+            return Verdict(False, "MISSING_CAPABILITY",
+                           f"protocol invokes undeclared capabilities: {sorted(missing)}; "
+                           f"{goal_refutation.detail}",
+                           frontier=tuple(sorted(missing)),
+                           context_refuted=True)
+        if missing:
+            # Some path avoids every missing tool, so the goal is decided by
+            # the search below.  The failed premise caps(G) <= dom(Gamma) is
+            # a typing failure, recorded in the protocol dimension.
+            self.missing = missing
+            self._reject_protocol(
+                "MISSING_CAPABILITY",
+                f"protocol invokes undeclared capabilities {sorted(missing)} "
+                f"on a path the goal does not need; an agent that takes that "
+                f"path cannot complete it")
         # 1b. establisher-closure refutation: protocol-independent, so it too
         #     survives autonomy and is decided before degrading to UNKNOWN.
         gamma = self._gamma_refutation()
@@ -546,7 +582,8 @@ class Checker:
         # so one bad branch rejects the protocol even when another branch
         # reaches the goal -- it is not a goal refutation (Theorem 1 covers
         # reachability refutations only).
-        self.protocol_status = "WELL_TYPED"
+        if self.protocol_status != "REJECTED":
+            self.protocol_status = "WELL_TYPED"
         # 3. realizability: projection G|p defined for every role (Proj-Sel /
         #    Proj-Brn / Proj-Mrg).  Undefined = deadlocking handoff.
         projections = {}
@@ -588,7 +625,8 @@ class Checker:
         # T-Comm quantifies over every protocol branch at the same pre-world;
         # T-Act and T-Goal then check guards/markers in lockstep.  Projection
         # alone only checks process shape, so decide these world premises too.
-        typing_condition = self._direct_typing_condition()
+        typing_condition = (self._direct_typing_condition()
+                            if self.protocol_status == "WELL_TYPED" else None)
         # 5. tolerant may-reachability of the goal
         ok, end_state = self._reach(self.p.protocol, initial_state(self.p), {})
         if ok:
@@ -640,6 +678,20 @@ class Checker:
             })
             return Verdict(False, "GOAL_UNSAT",
                            "adversarially unachievable: " + "; ".join(uniq),
+                           frontier=uniq)
+        if self.missing_hit:
+            # the search treated steps with a missing tool as dead ends, and
+            # the paths that avoid them do not reach the goal either
+            uniq = tuple(sorted(self.missing_hit))
+            trace_artifact("reachability", {
+                "status": "refuted",
+                "reason": "every goal-reaching path needs a missing tool or is blocked",
+                "frontier": list(uniq),
+            })
+            other = "; ".join(dict.fromkeys(self.blocked)) or "no other path reaches the goal"
+            return Verdict(False, "MISSING_CAPABILITY",
+                           f"protocol invokes undeclared capabilities: {list(uniq)}; "
+                           f"the paths that avoid them fail: {other}",
                            frontier=uniq)
         if self.blocked:
             uniq = tuple(dict.fromkeys(self.blocked))
@@ -747,6 +799,38 @@ class Checker:
             self.p.protocol, st, {}, frozenset())
         return z3.And(*initial, condition)
 
+    def _avoids_missing(self, steps: list[dict], missing: set[str],
+                        recenv: dict) -> bool:
+        """Is there a path through `steps` to a goal point (an explicit goal
+        marker or the end of the protocol) that fires no tool in `missing`?
+
+        Guards and effects are ignored, so this over-approximates the paths
+        a run can take: when it answers False, every run that reaches a goal
+        point fires a missing tool, which World-Act cannot do, so the goal is
+        unreachable.  A `continue` ends the path: a run that leaves a
+        tail-recursive loop does so from the loop head, so if any iteration
+        can leave without a missing tool, a single iteration can.  Under
+        adversarial semantics an external choice needs every branch."""
+        for i, s in enumerate(steps):
+            if "goal" in s:
+                return True
+            if "act" in s and s["act"]["cap"] in missing:
+                return False
+            if "continue" in s:
+                return False
+            if "rec" in s:
+                return self._avoids_missing(
+                    list(s["rec"]["body"]) + steps[i + 1:], missing, recenv)
+            if "choice" in s:
+                rest = steps[i + 1:]
+                body = s["choice"]
+                results = [self._avoids_missing(list(br) + rest, missing, recenv)
+                           for br in body["branches"].values()]
+                if self.semantics == "adversarial" and body.get("external", False):
+                    return all(results)
+                return any(results)
+        return True
+
     def _missing_caps(self, steps: list[dict]) -> set[str]:
         return {s["act"]["cap"] for s in iter_steps(steps)
                 if "act" in s and s["act"]["cap"] not in self.p.capabilities}
@@ -797,6 +881,10 @@ class Checker:
             if "msg" in s:
                 cur = _mk_state(cur.true_preds, cur.arith, cur.versions(),
                                 cur.path + (("msg", s["msg"]["label"]),))
+            elif "act" in s and s["act"]["cap"] not in self.p.capabilities:
+                # World-Act cannot fire a tool Gamma lacks: a dead end
+                self.missing_hit.add(s["act"]["cap"])
+                return False, cur
             elif "act" in s:
                 successor = self._act(cur, self.p.capabilities[s["act"]["cap"]])
                 if successor is None:

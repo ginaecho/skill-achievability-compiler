@@ -343,7 +343,10 @@ def _print_verdict(pack: dict, res: CompileResult | None, v: Verdict,
         print(f"  ACHIEVABLE  {v.detail}")
     if v.protocol == "REJECTED":
         print(f"  PROTOCOL REJECTED ({v.protocol_reason}): {v.protocol_detail}")
-        if v.achievable:
+        if v.achievable and v.protocol_reason == "MISSING_CAPABILITY":
+            print("  the goal is not refuted; a path the goal does not need uses "
+                  "a tool this runtime lacks, so this is not a passing check")
+        elif v.achievable:
             print("  the goal is not refuted; the coordination can deadlock, "
                   "so this is not a passing check")
     if v.refuted or v.achievable:

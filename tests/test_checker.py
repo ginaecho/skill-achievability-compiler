@@ -588,6 +588,64 @@ def test_one_nonconformant_branch_does_not_refute_a_goal_another_branch_reaches(
     assert v.witness
 
 
+def _payment(granted):
+    return pack(
+        roles=["sys", "payer"],
+        capabilities={c: {"owner": "payer", "add": ["paid"]} for c in granted},
+        protocol=[{"choice": {"by": "sys", "branches": {
+            "card": [{"msg": {"from": "sys", "to": "payer", "label": "use_card"}},
+                     act("pay_card", "payer")],
+            "transfer": [{"msg": {"from": "sys", "to": "payer", "label": "use_transfer"}},
+                         act("pay_transfer", "payer")]}}}],
+        goal="paid")
+
+
+def test_missing_tool_on_an_unneeded_branch_does_not_refute_the_goal():
+    """A tool missing only on the 'transfer' branch fails the typing premise
+    caps(G) <= dom(Gamma), but the 'card' branch still reaches the goal, so
+    the goal is not refuted (Theorem 1 would not cover it): ACHIEVABLE, with
+    the missing tool recorded as a protocol rejection, and not admissible."""
+    v = check(_payment(["pay_card"]))
+    assert v.label == "ACHIEVABLE" and not v.refuted
+    assert v.protocol == "REJECTED" and v.protocol_reason == "MISSING_CAPABILITY"
+    assert "pay_transfer" in v.protocol_detail
+    assert v.admissible is False
+    assert v.coverage == "none:witness-only"
+    assert ("act", "pay_card") in v.witness
+
+
+def test_missing_tool_on_every_path_still_refutes():
+    v = check(_payment([]))
+    assert v.label == "IMPOSSIBLE" and v.reason == "MISSING_CAPABILITY"
+    assert v.frontier == ("pay_card", "pay_transfer")
+    assert v.coverage.startswith("thm1+lem3")
+
+
+def test_missing_tool_refutes_when_the_avoiding_path_is_blocked():
+    """'card' avoids the missing tool but its guard can never hold, and
+    'transfer' needs the missing tool: the search refutes the goal and
+    names the missing tool."""
+    p = _payment(["pay_card"])
+    p["capabilities"]["pay_card"]["pre"] = "card_valid"
+    v = check(p)
+    assert v.label == "IMPOSSIBLE" and v.reason == "MISSING_CAPABILITY"
+    assert v.frontier == ("pay_transfer",)
+    assert v.coverage == "thm1+lem3"
+
+
+def test_missing_tool_inside_a_loop_body_that_can_be_left_does_not_refute():
+    p = pack(
+        roles=["agent"],
+        capabilities={"work": {"owner": "agent", "add": ["done"]}},
+        protocol=[{"rec": {"name": "X", "body": [{"choice": {"by": "agent", "branches": {
+            "again": [act("ghost_tool", "agent"), {"continue": "X"}],
+            "stop": [act("work", "agent")]}}}]}}],
+        goal="done")
+    v = check(p)
+    assert v.label == "ACHIEVABLE"
+    assert v.protocol == "REJECTED" and v.protocol_reason == "MISSING_CAPABILITY"
+
+
 def _unobserved(goal_cap_adds):
     return pack(
         roles=["planner", "worker"],

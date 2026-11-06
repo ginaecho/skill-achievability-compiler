@@ -42,7 +42,8 @@ Declared facts are taken at their word here: the gate refuses only what the
 declaration already rules out, and a probe (`--env`) replaces declarations by
 observations.  Exit codes: 0 every item ACHIEVABLE, 1 something IMPOSSIBLE,
 4 nothing impossible but a protocol is REJECTED (the goal is reachable, but
-the coordination can deadlock -- a typing failure, not a goal refutation),
+the coordination can deadlock or a path uses a missing tool -- a typing
+failure, not a goal refutation),
 3 nothing impossible or rejected but something rests on an assumption,
 2 an error.
 """
