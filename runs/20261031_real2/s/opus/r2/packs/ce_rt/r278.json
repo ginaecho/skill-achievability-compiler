@@ -1,0 +1,230 @@
+{
+  "name": "dependency-upgrade",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "audit_deps": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      },
+      "add": [
+        "deps_audited"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "analyze_tree": {
+      "owner": "agent",
+      "pre": "deps_audited",
+      "add": [
+        "tree_analyzed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "fetch_changelog": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          "tree_analyzed"
+        ]
+      },
+      "add": [
+        "breaking_changes_identified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_plan": {
+      "owner": "agent",
+      "pre": "breaking_changes_identified",
+      "add": [
+        "plan_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "upgrade_package": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "plan_created"
+        ]
+      },
+      "add": [
+        "package_upgraded"
+      ],
+      "del": [
+        "tests_pass",
+        "build_passes",
+        "committed"
+      ],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_codemod": {
+      "owner": "agent",
+      "pre": "package_upgraded",
+      "add": [
+        "codemod_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_tests": {
+      "owner": "agent",
+      "pre": "package_upgraded",
+      "add": [
+        "tests_pass"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_build": {
+      "owner": "agent",
+      "pre": "package_upgraded",
+      "add": [
+        "build_passes"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "rollback": {
+      "owner": "agent",
+      "pre": true,
+      "add": [],
+      "del": [
+        "package_upgraded",
+        "tests_pass",
+        "build_passes"
+      ],
+      "assigns": {},
+      "nondet": {}
+    },
+    "git_commit": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "tests_pass",
+          "build_passes"
+        ]
+      },
+      "add": [
+        "committed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "audit_deps",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "analyze_tree",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "fetch_changelog",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_plan",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "stage",
+        "body": [
+          {
+            "act": {
+              "cap": "upgrade_package",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "run_codemod",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "run_tests",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "passed": [],
+                "failed": [
+                  {
+                    "act": {
+                      "cap": "rollback",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "stage"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "run_build",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "git_commit",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "package_upgraded",
+      "tests_pass",
+      "build_passes",
+      "committed"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries",
+    "needs:public_internet"
+  ],
+  "init_constraints": []
+}

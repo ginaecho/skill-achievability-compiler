@@ -1,0 +1,142 @@
+{
+  "name": "brightdata-debug-bundle",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "inventory_inputs": {
+      "owner": "agent",
+      "pre": "receipt_available",
+      "add": [
+        "inputs_reviewed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_manifest": {
+      "owner": "agent",
+      "pre": "inputs_reviewed",
+      "add": [
+        "manifest_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "redact_bundle": {
+      "owner": "agent",
+      "pre": "manifest_created",
+      "add": [
+        "bundle_redacted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "scan_secrets": {
+      "owner": "agent",
+      "pre": "bundle_redacted",
+      "add": [
+        "secret_scan_clean"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "seal_evidence": {
+      "owner": "agent",
+      "pre": "secret_scan_clean",
+      "add": [
+        "evidence_sealed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inventory_inputs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "create_manifest",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "redaction",
+        "body": [
+          {
+            "act": {
+              "cap": "redact_bundle",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "scan_secrets",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "clean": [],
+                "secret_found": [
+                  {
+                    "continue": "redaction"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "seal_evidence",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "transmit": [
+            {
+              "act": {
+                "cap": "transmit_bundle",
+                "by": "agent"
+              }
+            }
+          ],
+          "hold_for_manual_delivery": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "inputs_reviewed",
+      "manifest_created",
+      "bundle_redacted",
+      "secret_scan_clean",
+      "evidence_sealed"
+    ]
+  },
+  "init_true": [
+    "receipt_available"
+  ],
+  "init_constraints": []
+}

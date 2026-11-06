@@ -1,0 +1,159 @@
+{
+  "name": "cohere-deploy-integration",
+  "roles": [
+    "agent",
+    "owner"
+  ],
+  "capabilities": {
+    "inspect_platform": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "platform_inspected"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_availability": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "availability_reviewed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "set_deploy_config": {
+      "owner": "agent",
+      "pre": "availability_reviewed",
+      "add": [
+        "config_set",
+        "model_selected",
+        "health_checks"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "test_resilience": {
+      "owner": "agent",
+      "pre": "deployed_nonprod",
+      "add": [
+        "streaming_tested",
+        "resilience_tested"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "record_evidence": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "evidence_preserved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inspect_platform",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_availability",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "owner",
+        "observed": true,
+        "branches": {
+          "approve": [
+            {
+              "act": {
+                "cap": "inject_secret",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "set_deploy_config",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "deploy_nonprod",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "test_resilience",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "canary_prod",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "healthy": [
+                    {
+                      "act": {
+                        "cap": "promote",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "unhealthy": [
+                    {
+                      "act": {
+                        "cap": "rollback",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "act": {
+                "cap": "record_evidence",
+                "by": "agent"
+              }
+            }
+          ],
+          "decline": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "server_side_secrets",
+      "health_checks",
+      "streaming_tested",
+      "canary_deployed",
+      "promoted",
+      "evidence_preserved"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

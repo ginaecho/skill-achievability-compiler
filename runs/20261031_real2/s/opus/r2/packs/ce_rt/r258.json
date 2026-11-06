@@ -1,0 +1,270 @@
+{
+  "name": "prd-done",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "finalize_prd": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "prd_archived",
+        "docs_accurate"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_main": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_write",
+          "prd_archived"
+        ]
+      },
+      "add": [
+        "pushed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_branch": {
+      "owner": "agent",
+      "pre": "prd_archived",
+      "add": [
+        "branch_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_push": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_write",
+          "branch_created"
+        ]
+      },
+      "add": [
+        "pushed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_pr": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_write",
+          "pushed"
+        ]
+      },
+      "add": [
+        "pr_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_reviews": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_write",
+          "pr_created"
+        ]
+      },
+      "add": [
+        "reviews_complete"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "merge_pr": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_write",
+          {
+            "and": [
+              "pr_created",
+              "reviews_complete"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "merged"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_deployment": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:production",
+          "merged"
+        ]
+      },
+      "add": [
+        "feature_live"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "close_issue": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_write",
+          "prd_archived"
+        ]
+      },
+      "add": [
+        "issue_closed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "cleanup_branch": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_write",
+          "merged"
+        ]
+      },
+      "add": [
+        "branch_cleaned"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "finalize_prd",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "documentation_only": [
+            {
+              "act": {
+                "cap": "commit_main",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "close_issue",
+                "by": "agent"
+              }
+            }
+          ],
+          "code_implementation": [
+            {
+              "act": {
+                "cap": "create_branch",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "commit_push",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "create_pr",
+                "by": "agent"
+              }
+            },
+            {
+              "rec": {
+                "name": "reviews",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "check_reviews",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "reviews"
+                  }
+                ]
+              }
+            },
+            {
+              "act": {
+                "cap": "merge_pr",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "verify_deployment",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "close_issue",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "notify_team",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "cleanup_branch",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "merged",
+      "feature_live",
+      "issue_closed",
+      "team_notified",
+      "docs_accurate"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

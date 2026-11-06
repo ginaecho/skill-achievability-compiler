@@ -1,0 +1,264 @@
+{
+  "name": "prd-done",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "validate_and_archive": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "prd_archived"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_to_main": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account"
+        ]
+      },
+      "add": [
+        "docs_pushed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_branch": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "branch_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "push_branch": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account",
+          "branch_created"
+        ]
+      },
+      "add": [
+        "branch_pushed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_pr": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account",
+          "branch_pushed"
+        ]
+      },
+      "add": [
+        "pr_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_reviews": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account",
+          "pr_created"
+        ]
+      },
+      "add": [
+        "checks_passed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "address_feedback": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account",
+          "pr_created"
+        ]
+      },
+      "add": [
+        "feedback_addressed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "merge_pr": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account",
+          "checks_passed"
+        ]
+      },
+      "add": [
+        "merged"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "close_issue": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account"
+        ]
+      },
+      "add": [
+        "issue_closed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "cleanup_branch": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account",
+          "merged"
+        ]
+      },
+      "add": [
+        "branch_cleaned"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "validate_and_archive",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "documentation_only": [
+            {
+              "act": {
+                "cap": "commit_to_main",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "close_issue",
+                "by": "agent"
+              }
+            }
+          ],
+          "code_implementation": [
+            {
+              "act": {
+                "cap": "create_branch",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "push_branch",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "create_pr",
+                "by": "agent"
+              }
+            },
+            {
+              "rec": {
+                "name": "reviews",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "check_reviews",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "agent",
+                      "external": true,
+                      "branches": {
+                        "changes_requested": [
+                          {
+                            "act": {
+                              "cap": "address_feedback",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "continue": "reviews"
+                          }
+                        ],
+                        "approved": []
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "act": {
+                "cap": "merge_pr",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "close_issue",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "cleanup_branch",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "prd_archived",
+      "merged",
+      "issue_closed"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

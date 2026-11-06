@@ -1,0 +1,157 @@
+{
+  "name": "workers-profiling",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "retrieve_guide": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet"
+        ]
+      },
+      "add": [
+        "guide_read"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "confirm_target": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "target_confirmed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_cf": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries"
+        ]
+      },
+      "add": [
+        "cf_available"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "capture_profile": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cloudflare_account",
+          {
+            "and": [
+              "guide_read",
+              "target_confirmed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "profile_captured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "analyze_profile": {
+      "owner": "agent",
+      "pre": "profile_captured",
+      "add": [
+        "hotspots_identified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "retrieve_guide",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "confirm_target",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "install_cli": [
+            {
+              "act": {
+                "cap": "install_cf",
+                "by": "agent"
+              }
+            }
+          ],
+          "cli_ready": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "capture_profile",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "analyze_profile",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "reprofile_with_sourcemaps": [
+            {
+              "act": {
+                "cap": "capture_profile",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "analyze_profile",
+                "by": "agent"
+              }
+            }
+          ],
+          "symbols_ok": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "guide_read",
+      "target_confirmed",
+      "profile_captured",
+      "hotspots_identified"
+    ]
+  },
+  "init_true": [
+    "needs:public_internet",
+    "needs:package_registries"
+  ],
+  "init_constraints": []
+}

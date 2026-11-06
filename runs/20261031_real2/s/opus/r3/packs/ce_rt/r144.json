@@ -1,0 +1,169 @@
+{
+  "name": "quarkus-native-and-container",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "build_native": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:docker"
+        ]
+      },
+      "add": [
+        "native_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "register_reflection": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "reflection_registered"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "test_native": {
+      "owner": "agent",
+      "pre": "native_built",
+      "add": [
+        "native_tests_pass"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "add_container_extension": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "container_extension_added"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "build_container_image": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:docker",
+          {
+            "and": [
+              "container_extension_added",
+              "native_built"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "image_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "add_kubernetes_extension": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "kubernetes_extension_added"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "generate_manifests": {
+      "owner": "agent",
+      "pre": "kubernetes_extension_added",
+      "add": [
+        "manifests_generated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "rec": {
+        "name": "build",
+        "body": [
+          {
+            "act": {
+              "cap": "build_native",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "native_failure": [
+                  {
+                    "act": {
+                      "cap": "register_reflection",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "build"
+                  }
+                ],
+                "native_ok": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "test_native",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "add_container_extension",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "build_container_image",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "add_kubernetes_extension",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "generate_manifests",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "native_built",
+      "native_tests_pass",
+      "image_built",
+      "manifests_generated"
+    ]
+  },
+  "init_true": [
+    "needs:docker"
+  ],
+  "init_constraints": []
+}

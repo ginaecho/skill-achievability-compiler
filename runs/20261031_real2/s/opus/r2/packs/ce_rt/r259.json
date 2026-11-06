@@ -1,0 +1,176 @@
+{
+  "name": "prd-full",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "scope_preflight": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "scope_evaluated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_worktree": {
+      "owner": "agent",
+      "pre": "scope_evaluated",
+      "add": [
+        "isolated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_branch": {
+      "owner": "agent",
+      "pre": "scope_evaluated",
+      "add": [
+        "isolated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prd_start": {
+      "owner": "agent",
+      "pre": "isolated",
+      "add": [
+        "prd_started"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prd_next": {
+      "owner": "agent",
+      "pre": "prd_started",
+      "add": [
+        "task_done"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prd_update_progress": {
+      "owner": "agent",
+      "pre": "task_done",
+      "add": [
+        "prd_complete"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_pr": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:github_account",
+          "prd_complete"
+        ]
+      },
+      "add": [
+        "pr_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "scope_preflight",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "stop": [],
+          "continue": [
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "worktree": [
+                    {
+                      "act": {
+                        "cap": "create_worktree",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "branch": [
+                    {
+                      "act": {
+                        "cap": "create_branch",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "act": {
+                "cap": "prd_start",
+                "by": "agent"
+              }
+            },
+            {
+              "rec": {
+                "name": "iterate",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "prd_next",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "prd_update_progress",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "choice": {
+                      "by": "agent",
+                      "observed": true,
+                      "branches": {
+                        "done": [],
+                        "again": [
+                          {
+                            "continue": "iterate"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "act": {
+                "cap": "create_pr",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": "pr_created",
+  "init_true": [],
+  "init_constraints": []
+}

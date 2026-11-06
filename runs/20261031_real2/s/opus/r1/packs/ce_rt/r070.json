@@ -1,0 +1,147 @@
+{
+  "name": "tao-generate-anomalies",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_checkpoints": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "checkpoints_present"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prep_testcase": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "container_running",
+          "model_trained"
+        ]
+      },
+      "add": [
+        "jsonl_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "assemble_searched": {
+      "owner": "agent",
+      "pre": "original_evaluated",
+      "add": [
+        "searched_assembled"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "launch_container",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "already_present": [
+            {
+              "act": {
+                "cap": "check_checkpoints",
+                "by": "agent"
+              }
+            }
+          ],
+          "missing": [
+            {
+              "act": {
+                "cap": "download_checkpoints",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "finetune",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "prep_testcase",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_sdg",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_eval",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "search": [
+            {
+              "rec": {
+                "name": "rounds",
+                "body": [
+                  {
+                    "act": {
+                      "cap": "run_round",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "rounds"
+                  }
+                ]
+              }
+            }
+          ],
+          "no_search": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "assemble_searched",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "filter_with_regen",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "searched_filtered",
+      "searched_evaluated"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

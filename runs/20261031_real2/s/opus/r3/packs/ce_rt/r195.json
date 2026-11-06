@@ -1,0 +1,135 @@
+{
+  "name": "intercom-incident-runbook",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "check_status": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet"
+        ]
+      },
+      "add": [
+        "status_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_postmortem": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "mitigated"
+        ]
+      },
+      "add": [
+        "postmortem_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "probe_api",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_status",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "platform_incident": [
+            {
+              "act": {
+                "cap": "enable_degradation",
+                "by": "agent"
+              }
+            }
+          ],
+          "our_integration": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "auth_401": [
+                    {
+                      "act": {
+                        "cap": "rotate_token",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "scope_403": [
+                    {
+                      "act": {
+                        "cap": "add_oauth_scope",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "rate_429": [
+                    {
+                      "act": {
+                        "cap": "apply_backoff",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "server_5xx": [
+                    {
+                      "act": {
+                        "cap": "enable_cache_fallback",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "post_slack",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_postmortem",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "api_probed",
+      "status_checked",
+      "mitigated",
+      "comms_posted",
+      "postmortem_written"
+    ]
+  },
+  "init_true": [
+    "needs:public_internet",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

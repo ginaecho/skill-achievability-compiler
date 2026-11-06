@@ -1,0 +1,150 @@
+{
+  "name": "quarkus-native-and-container",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_quarkus_version": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "version_known"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "build_native": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:docker",
+          "version_known"
+        ]
+      },
+      "add": [
+        "native_binary"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "register_reflection": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "reflection_registered"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "test_native": {
+      "owner": "agent",
+      "pre": "native_binary",
+      "add": [
+        "native_tested"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "build_container_image": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:docker",
+          "native_binary"
+        ]
+      },
+      "add": [
+        "container_image_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "generate_manifests": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "manifests_generated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_quarkus_version",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "native_build",
+        "body": [
+          {
+            "act": {
+              "cap": "build_native",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "succeeded": [],
+                "needs_reflection": [
+                  {
+                    "act": {
+                      "cap": "register_reflection",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "native_build"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "test_native",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "build_container_image",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "generate_manifests",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "native_binary",
+      "native_tested",
+      "container_image_built",
+      "manifests_generated"
+    ]
+  },
+  "init_true": [
+    "needs:docker"
+  ],
+  "init_constraints": []
+}

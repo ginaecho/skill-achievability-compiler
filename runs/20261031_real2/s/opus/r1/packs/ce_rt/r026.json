@@ -1,0 +1,236 @@
+{
+  "name": "rust-quality-gates",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "assess_repo": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "repo_assessed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_tools": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "repo_assessed"
+        ]
+      },
+      "add": [
+        "tools_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "baseline_build": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          "repo_assessed"
+        ]
+      },
+      "add": [
+        "baseline_compiles"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_clippy_config": {
+      "owner": "agent",
+      "pre": "repo_assessed",
+      "add": [
+        "clippy_configured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_rustfmt_config": {
+      "owner": "agent",
+      "pre": "repo_assessed",
+      "add": [
+        "rustfmt_configured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_check_sh": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "clippy_configured",
+          "rustfmt_configured"
+        ]
+      },
+      "add": [
+        "check_sh_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_precommit_config": {
+      "owner": "agent",
+      "pre": "check_sh_created",
+      "add": [
+        "prek_configured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_hooks": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "prek_configured",
+          "tools_installed"
+        ]
+      },
+      "add": [
+        "hooks_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_gates": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:package_registries",
+          {
+            "and": [
+              "check_sh_created",
+              "prek_configured",
+              "tools_installed",
+              "baseline_compiles"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "gates_pass"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "fix_issues": {
+      "owner": "agent",
+      "pre": "check_sh_created",
+      "add": [],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "assess_repo",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_tools",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "baseline_build",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_clippy_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_rustfmt_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_check_sh",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_precommit_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_hooks",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "first_run",
+        "body": [
+          {
+            "act": {
+              "cap": "run_gates",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "all_pass": [],
+                "fix": [
+                  {
+                    "act": {
+                      "cap": "fix_issues",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "first_run"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "clippy_configured",
+      "rustfmt_configured",
+      "check_sh_created",
+      "prek_configured",
+      "hooks_installed",
+      "gates_pass"
+    ]
+  },
+  "init_true": [
+    "needs:package_registries"
+  ],
+  "init_constraints": []
+}

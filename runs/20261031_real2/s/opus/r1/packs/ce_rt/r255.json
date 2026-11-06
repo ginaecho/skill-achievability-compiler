@@ -1,0 +1,192 @@
+{
+  "name": "generate-dockerfile",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "analyze_project": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "project_analyzed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "ask_user_detail": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "project_analyzed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "lookup_version": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet"
+        ]
+      },
+      "add": [
+        "version_resolved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_dockerfile": {
+      "owner": "agent",
+      "pre": "project_analyzed",
+      "add": [
+        "dockerfile_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_dockerignore": {
+      "owner": "agent",
+      "pre": "dockerfile_written",
+      "add": [
+        "dockerignore_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "fix_files": {
+      "owner": "agent",
+      "pre": "dockerfile_written",
+      "add": [],
+      "del": [
+        "build_succeeds",
+        "container_runs_ok"
+      ],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "confident": [
+            {
+              "act": {
+                "cap": "analyze_project",
+                "by": "agent"
+              }
+            }
+          ],
+          "needs_clarification": [
+            {
+              "act": {
+                "cap": "analyze_project",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "ask_user_detail",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "version_in_project": [],
+          "lookup_online": [
+            {
+              "act": {
+                "cap": "lookup_version",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_dockerfile",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_dockerignore",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "validate",
+        "body": [
+          {
+            "act": {
+              "cap": "build_image",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "run_container",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "passed": [],
+                "fix_and_retry": [
+                  {
+                    "act": {
+                      "cap": "fix_files",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "validate"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "cleanup",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "dockerfile_written",
+      "dockerignore_written",
+      "build_succeeds",
+      "container_runs_ok"
+    ]
+  },
+  "init_true": [
+    "needs:public_internet"
+  ],
+  "init_constraints": []
+}

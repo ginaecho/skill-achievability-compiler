@@ -1,0 +1,208 @@
+{
+  "name": "quarkus-native-and-container",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_quarkus_version": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "version_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "native_build": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:docker",
+          "version_checked"
+        ]
+      },
+      "add": [
+        "native_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "register_reflection": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "reflection_registered"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_native_test": {
+      "owner": "agent",
+      "pre": "native_built",
+      "add": [
+        "native_tests_pass"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "add_container_image_extension": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "container_extension_added"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "build_container_image": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:docker",
+          "container_extension_added"
+        ]
+      },
+      "add": [
+        "image_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "add_kubernetes_extension": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "kubernetes_extension_added"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "generate_manifests": {
+      "owner": "agent",
+      "pre": "kubernetes_extension_added",
+      "add": [
+        "manifests_generated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_quarkus_version",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "native_build",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "fix_native",
+        "body": [
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "build_failed": [
+                  {
+                    "act": {
+                      "cap": "register_reflection",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "native_build",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "fix_native"
+                  }
+                ],
+                "build_ok": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "run_native_test",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "containerize": [
+            {
+              "act": {
+                "cap": "add_container_image_extension",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "build_container_image",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_container": []
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "deploy_manifests": [
+            {
+              "act": {
+                "cap": "add_kubernetes_extension",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "generate_manifests",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_manifests": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "native_built",
+      "native_tests_pass"
+    ]
+  },
+  "init_true": [
+    "needs:docker"
+  ],
+  "init_constraints": []
+}

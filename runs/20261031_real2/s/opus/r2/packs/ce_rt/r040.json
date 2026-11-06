@@ -1,0 +1,146 @@
+{
+  "name": "nmrglue-1d-fid-processing",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "establish_acquisition": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:user_conversation"
+        ]
+      },
+      "add": [
+        "acquisition_established"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_settings": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "acquisition_established"
+        ]
+      },
+      "add": [
+        "settings_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "set_baseline": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "settings_ready"
+        ]
+      },
+      "add": [
+        "baseline_configured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "revise_phase": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "settings_ready"
+        ]
+      },
+      "add": [
+        "phase_revised"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "establish_acquisition",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_settings",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "fit_baseline": [
+            {
+              "act": {
+                "cap": "set_baseline",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_baseline": []
+        }
+      }
+    },
+    {
+      "rec": {
+        "name": "rephase",
+        "body": [
+          {
+            "act": {
+              "cap": "run_helper",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "phase_ok": [],
+                "revise": [
+                  {
+                    "act": {
+                      "cap": "revise_phase",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "rephase"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "spectrum_phased",
+      "peaks_found",
+      "regions_integrated",
+      "report_written"
+    ]
+  },
+  "init_true": [
+    "fid_available",
+    "needs:user_conversation",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

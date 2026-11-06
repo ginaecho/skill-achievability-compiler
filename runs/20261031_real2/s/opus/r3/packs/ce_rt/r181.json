@@ -1,0 +1,141 @@
+{
+  "name": "brightdata-debug-bundle",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "inventory_inputs": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "inputs_reviewed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_manifest": {
+      "owner": "agent",
+      "pre": "inputs_reviewed",
+      "add": [
+        "manifest_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "redact_bundle": {
+      "owner": "agent",
+      "pre": "manifest_created",
+      "add": [
+        "redacted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "secret_scan": {
+      "owner": "agent",
+      "pre": "redacted",
+      "add": [
+        "secret_scan_passed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "seal_evidence": {
+      "owner": "agent",
+      "pre": "secret_scan_passed",
+      "add": [
+        "sealed",
+        "hashes_recorded"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inventory_inputs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "create_manifest",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "redact_validate",
+        "body": [
+          {
+            "act": {
+              "cap": "redact_bundle",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "secret_scan",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "clean": [],
+                "incomplete": [
+                  {
+                    "continue": "redact_validate"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "seal_evidence",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "transmit": [
+            {
+              "act": {
+                "cap": "transmit_bundle",
+                "by": "agent"
+              }
+            }
+          ],
+          "hold": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "manifest_created",
+      "redacted",
+      "secret_scan_passed",
+      "sealed",
+      "hashes_recorded"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

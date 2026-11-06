@@ -1,0 +1,134 @@
+{
+  "name": "brightdata-local-search",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "clone_repo": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "repo_cloned"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "configure_env": {
+      "owner": "agent",
+      "pre": "repo_cloned",
+      "add": [
+        "env_configured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "start_server": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:docker",
+          "needs:local_servers",
+          "env_configured"
+        ]
+      },
+      "add": [
+        "server_running"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "submit_search": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:brightdata_account",
+          "server_running"
+        ]
+      },
+      "add": [
+        "job_submitted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "poll_results": {
+      "owner": "agent",
+      "pre": "job_submitted",
+      "add": [
+        "results_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "clone_repo",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "configure_env",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "start_server",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "submit_search",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "poll_loop",
+        "body": [
+          {
+            "act": {
+              "cap": "poll_results",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "still_running": [
+                  {
+                    "continue": "poll_loop"
+                  }
+                ],
+                "done": []
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "server_running",
+      "results_ready"
+    ]
+  },
+  "init_true": [
+    "needs:docker",
+    "needs:local_servers"
+  ],
+  "init_constraints": []
+}

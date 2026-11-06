@@ -1,0 +1,194 @@
+{
+  "name": "microsoft-store-publisher",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "reserve_product": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:partner_center_account"
+        ]
+      },
+      "add": [
+        "product_reserved",
+        "identity_captured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "upload_package": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:partner_center_account",
+          {
+            "and": [
+              "product_reserved",
+              "package_inspected",
+              "wack_passed",
+              "package_unsigned"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "package_uploaded",
+        "package_validated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "complete_sections": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:partner_center_account",
+          "package_uploaded"
+        ]
+      },
+      "add": [
+        "all_sections_complete"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "accept_agreement": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:partner_center_account"
+        ]
+      },
+      "add": [
+        "agreement_accepted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "submit_for_certification": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:partner_center_account",
+          {
+            "and": [
+              "all_sections_complete",
+              "package_validated",
+              "wack_passed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "submitted_for_certification"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "reserve_product",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "wack_loop",
+        "body": [
+          {
+            "act": {
+              "cap": "build_package",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "inspect_package",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "run_wack",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "passed": [],
+                "fix_and_retry": [
+                  {
+                    "continue": "wack_loop"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "upload_package",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "complete_sections",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "agreement_shown": [
+            {
+              "act": {
+                "cap": "accept_agreement",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_agreement": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "submit_for_certification",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "wack_passed",
+      "package_validated",
+      "all_sections_complete",
+      "submitted_for_certification"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

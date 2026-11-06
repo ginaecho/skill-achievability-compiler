@@ -1,0 +1,240 @@
+{
+  "name": "runapi-cli",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "install_cli": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:network"
+        ]
+      },
+      "add": [
+        "cli_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "import_token": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:runapi_account",
+          "cli_installed"
+        ]
+      },
+      "add": [
+        "authenticated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "browser_login": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:network",
+          "needs:runapi_account",
+          "cli_installed"
+        ]
+      },
+      "add": [
+        "authenticated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "inspect_help": {
+      "owner": "agent",
+      "pre": "cli_installed",
+      "add": [
+        "fields_known"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_request": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "request_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_model": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:runapi_account",
+          "needs:network",
+          {
+            "and": [
+              "cli_installed",
+              "authenticated",
+              "fields_known",
+              "request_ready"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "task_submitted",
+        "output_generated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_model_async": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:runapi_account",
+          "needs:network",
+          {
+            "and": [
+              "cli_installed",
+              "authenticated",
+              "fields_known",
+              "request_ready"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "task_submitted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "wait_task": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:network",
+          "task_submitted"
+        ]
+      },
+      "add": [
+        "output_generated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_output": {
+      "owner": "agent",
+      "pre": "output_generated",
+      "add": [
+        "success_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_cli",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "token_auth": [
+            {
+              "act": {
+                "cap": "import_token",
+                "by": "agent"
+              }
+            }
+          ],
+          "browser_auth": [
+            {
+              "act": {
+                "cap": "browser_login",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "inspect_help",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_request",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "sync": [
+            {
+              "act": {
+                "cap": "run_model",
+                "by": "agent"
+              }
+            }
+          ],
+          "async": [
+            {
+              "act": {
+                "cap": "run_model_async",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "wait_task",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_output",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "output_generated",
+      "success_verified"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,209 @@
+{
+  "name": "regression-hunt",
+  "roles": [
+    "coordinator",
+    "stage_agent"
+  ],
+  "capabilities": {
+    "obtain_inputs": {
+      "owner": "coordinator",
+      "pre": true,
+      "add": [
+        "inputs_obtained"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "save_scope": {
+      "owner": "coordinator",
+      "pre": "inputs_obtained",
+      "add": [
+        "scope_saved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "init_registry": {
+      "owner": "coordinator",
+      "pre": "scope_saved",
+      "add": [
+        "campaign_initialized"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "freeze_guidance": {
+      "owner": "coordinator",
+      "pre": {
+        "and": [
+          false,
+          "needs:network_access",
+          "campaign_initialized"
+        ]
+      },
+      "add": [
+        "guidance_frozen"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "reserve_assignment": {
+      "owner": "coordinator",
+      "pre": "guidance_frozen",
+      "add": [
+        "assignment_reserved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "bind_launch_record": {
+      "owner": "coordinator",
+      "pre": "assignment_reserved",
+      "add": [
+        "launch_recorded"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "accept_record": {
+      "owner": "coordinator",
+      "pre": "launch_recorded",
+      "add": [
+        "stage_accepted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "stop_agent": {
+      "owner": "coordinator",
+      "pre": "launch_recorded",
+      "add": [
+        "agent_stopped"
+      ],
+      "del": [
+        "launch_recorded"
+      ],
+      "assigns": {},
+      "nondet": {}
+    },
+    "retry_registry": {
+      "owner": "coordinator",
+      "pre": "agent_stopped",
+      "add": [
+        "assignment_reserved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "request_reports": {
+      "owner": "coordinator",
+      "pre": "stage_accepted",
+      "add": [
+        "reports_produced"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "obtain_inputs",
+        "by": "coordinator"
+      }
+    },
+    {
+      "act": {
+        "cap": "save_scope",
+        "by": "coordinator"
+      }
+    },
+    {
+      "act": {
+        "cap": "init_registry",
+        "by": "coordinator"
+      }
+    },
+    {
+      "act": {
+        "cap": "freeze_guidance",
+        "by": "coordinator"
+      }
+    },
+    {
+      "rec": {
+        "name": "dispatch",
+        "body": [
+          {
+            "act": {
+              "cap": "reserve_assignment",
+              "by": "coordinator"
+            }
+          },
+          {
+            "act": {
+              "cap": "bind_launch_record",
+              "by": "coordinator"
+            }
+          },
+          {
+            "spawn": {
+              "role": "stage_agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "coordinator",
+              "external": true,
+              "branches": {
+                "accept": [
+                  {
+                    "act": {
+                      "cap": "accept_record",
+                      "by": "coordinator"
+                    }
+                  }
+                ],
+                "retry": [
+                  {
+                    "act": {
+                      "cap": "stop_agent",
+                      "by": "coordinator"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "retry_registry",
+                      "by": "coordinator"
+                    }
+                  },
+                  {
+                    "continue": "dispatch"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "request_reports",
+        "by": "coordinator"
+      }
+    }
+  ],
+  "goal": "reports_produced",
+  "init_true": [],
+  "init_constraints": []
+}

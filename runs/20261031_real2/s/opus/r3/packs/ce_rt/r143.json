@@ -1,0 +1,123 @@
+{
+  "name": "quarkus-dev-services-and-testing",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_version": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "version_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "configure_devservices": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "devservices_configured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_test": {
+      "owner": "agent",
+      "pre": "version_checked",
+      "add": [
+        "test_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "fix_test": {
+      "owner": "agent",
+      "pre": "test_written",
+      "add": [
+        "test_fixed"
+      ],
+      "del": [
+        "tests_pass"
+      ],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "check_version",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "use_devservices": [
+            {
+              "act": {
+                "cap": "configure_devservices",
+                "by": "agent"
+              }
+            }
+          ],
+          "zero_config": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_test",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "testing",
+        "body": [
+          {
+            "act": {
+              "cap": "run_tests",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "passing": [],
+                "failing": [
+                  {
+                    "act": {
+                      "cap": "fix_test",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "testing"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "test_written",
+      "tests_pass"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

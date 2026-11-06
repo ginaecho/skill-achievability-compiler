@@ -1,0 +1,226 @@
+{
+  "name": "linkerd-patterns",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "install_cli": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "cli_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_pre": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:kubernetes_cluster",
+          "cli_installed"
+        ]
+      },
+      "add": [
+        "cluster_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_crds": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:kubernetes_cluster",
+          "cluster_ready"
+        ]
+      },
+      "add": [
+        "crds_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_control_plane": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:kubernetes_cluster",
+          "crds_installed"
+        ]
+      },
+      "add": [
+        "control_plane_installed",
+        "mtls_enabled"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_install": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:kubernetes_cluster",
+          "control_plane_installed"
+        ]
+      },
+      "add": [
+        "install_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_manifests": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "manifests_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_manifests": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:kubernetes_cluster",
+          {
+            "and": [
+              "manifests_written",
+              "control_plane_installed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "namespace_injected",
+        "policies_applied"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_proxy": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:kubernetes_cluster",
+          "policies_applied"
+        ]
+      },
+      "add": [
+        "policies_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_viz": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:kubernetes_cluster",
+          "control_plane_installed"
+        ]
+      },
+      "add": [
+        "viz_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_cli",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_pre",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_crds",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "install_control_plane",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_install",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_manifests",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "apply_manifests",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_proxy",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "install_monitoring": [
+            {
+              "act": {
+                "cap": "install_viz",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_monitoring": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "control_plane_installed",
+      "mtls_enabled",
+      "install_verified",
+      "namespace_injected",
+      "policies_applied",
+      "policies_verified"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

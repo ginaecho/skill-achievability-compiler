@@ -1,0 +1,185 @@
+{
+  "name": "tao-generate-anomalies",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "download_checkpoints": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:hf_token"
+        ]
+      },
+      "add": [
+        "checkpoints_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "validate_dataset": {
+      "owner": "agent",
+      "pre": "checkpoints_ready",
+      "add": [
+        "dataset_valid"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "generate_config": {
+      "owner": "agent",
+      "pre": "dataset_valid",
+      "add": [
+        "config_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prep_testcase": {
+      "owner": "agent",
+      "pre": "model_finetuned",
+      "add": [
+        "jsonl_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_draws": {
+      "owner": "agent",
+      "pre": "original_evaluated",
+      "add": [
+        "draws_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "assemble_searched": {
+      "owner": "agent",
+      "pre": "original_evaluated",
+      "add": [
+        "searched_assembled"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "download_checkpoints",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "validate_dataset",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "confirm": [
+            {
+              "act": {
+                "cap": "generate_config",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "finetune",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "prep_testcase",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_sdg",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_eval",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "search": [
+                    {
+                      "rec": {
+                        "name": "search",
+                        "body": [
+                          {
+                            "act": {
+                              "cap": "write_draws",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "run_round",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "continue": "search"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "skip": []
+                }
+              }
+            },
+            {
+              "act": {
+                "cap": "assemble_searched",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "filter_regen",
+                "by": "agent"
+              }
+            }
+          ],
+          "revise": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "model_finetuned",
+      "original_generated",
+      "original_evaluated",
+      "searched_assembled",
+      "searched_final"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,158 @@
+{
+  "name": "away-mode",
+  "roles": [
+    "agent",
+    "user",
+    "buddy"
+  ],
+  "capabilities": {
+    "create_away_log": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "away_log_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_state": {
+      "owner": "agent",
+      "pre": "away_log_created",
+      "add": [],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "append_log": {
+      "owner": "agent",
+      "pre": "away_log_created",
+      "add": [],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "execute_action": {
+      "owner": "agent",
+      "pre": "away_log_created",
+      "add": [
+        "action_done"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "create_away_log",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "arm_timer",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "watch",
+        "body": [
+          {
+            "act": {
+              "cap": "check_state",
+              "by": "agent"
+            }
+          },
+          {
+            "msg": {
+              "from": "agent",
+              "to": "buddy",
+              "label": "propose"
+            }
+          },
+          {
+            "choice": {
+              "by": "buddy",
+              "branches": {
+                "co_sign": [
+                  {
+                    "msg": {
+                      "from": "buddy",
+                      "to": "agent",
+                      "label": "approve"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "execute_action",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "append_log",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "hold": [
+                  {
+                    "msg": {
+                      "from": "buddy",
+                      "to": "agent",
+                      "label": "block"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "append_log",
+                      "by": "agent"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "choice": {
+              "by": "user",
+              "external": true,
+              "branches": {
+                "return": [
+                  {
+                    "act": {
+                      "cap": "delete_timer",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "check_state",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "still_away": [
+                  {
+                    "continue": "watch"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "away_log_created",
+      "timer_armed"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

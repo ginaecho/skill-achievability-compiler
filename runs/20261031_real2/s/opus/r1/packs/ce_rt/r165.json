@@ -1,0 +1,251 @@
+{
+  "name": "palmier-reels",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "prepare_style": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "style_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "knockout_art": {
+      "owner": "agent",
+      "pre": "art_generated",
+      "add": [
+        "art_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_spec": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "style_ready",
+          "art_ready",
+          "beats_detected"
+        ]
+      },
+      "add": [
+        "spec_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "generate_sfx": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:elevenlabs_account",
+          "spec_written"
+        ]
+      },
+      "add": [
+        "sfx_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "build_reel": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:palmier",
+          {
+            "and": [
+              "spec_written",
+              "palmier_connected"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "timeline_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_build": {
+      "owner": "agent",
+      "pre": "timeline_built",
+      "add": [
+        "timeline_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_jitter": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:palmier",
+          "timeline_verified"
+        ]
+      },
+      "add": [
+        "film_master"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "export_reel": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:palmier",
+          "timeline_verified"
+        ]
+      },
+      "add": [
+        "reel_exported"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inspect_palmier",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "prepare_style",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "generate_art",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "knockout_art",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "detect_beats",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_spec",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "with_sound": [
+            {
+              "act": {
+                "cap": "generate_sfx",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_sound": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "build_reel",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_build",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "film_master": [
+            {
+              "act": {
+                "cap": "apply_jitter",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_jitter": []
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "approve": [
+            {
+              "act": {
+                "cap": "export_reel",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "telegram": [
+                    {
+                      "act": {
+                        "cap": "send_telegram",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "no_telegram": []
+                }
+              }
+            }
+          ],
+          "request_changes": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "timeline_built",
+      "timeline_verified",
+      "reel_exported"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

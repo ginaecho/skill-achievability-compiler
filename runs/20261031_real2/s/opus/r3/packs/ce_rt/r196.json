@@ -1,0 +1,131 @@
+{
+  "name": "linear-install-auth",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "inspect_repo": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "repo_inspected"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "pin_sdk": {
+      "owner": "agent",
+      "pre": "repo_inspected",
+      "add": [
+        "sdk_pinned"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "configure_auth": {
+      "owner": "agent",
+      "pre": "repo_inspected",
+      "add": [
+        "auth_configured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_access": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:linear_credential",
+          {
+            "and": [
+              "sdk_pinned",
+              "auth_configured"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "access_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inspect_repo",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "personal_key": [
+            {
+              "act": {
+                "cap": "configure_auth",
+                "by": "agent"
+              }
+            }
+          ],
+          "oauth": [
+            {
+              "act": {
+                "cap": "configure_auth",
+                "by": "agent"
+              }
+            }
+          ],
+          "client_credentials": [
+            {
+              "act": {
+                "cap": "configure_auth",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "pin_sdk",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "live_verification": [
+            {
+              "act": {
+                "cap": "verify_access",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_verification": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "sdk_pinned",
+      "auth_configured"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

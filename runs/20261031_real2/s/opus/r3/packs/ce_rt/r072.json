@@ -1,0 +1,294 @@
+{
+  "name": "tao-run-deft-pas",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "discover_inputs": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "inputs_discovered"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "pull_images": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:container_registry"
+        ]
+      },
+      "add": [
+        "images_available"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "dataset_setup": {
+      "owner": "agent",
+      "pre": "inputs_discovered",
+      "add": [
+        "dataset_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "pool_embed": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:nvidia_gpu",
+          {
+            "and": [
+              "dataset_ready",
+              "images_available"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "pool_embedded"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "evaluate": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:nvidia_gpu",
+          "pool_embedded"
+        ]
+      },
+      "add": [
+        "evaluated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "gap_analysis": {
+      "owner": "agent",
+      "pre": "evaluated",
+      "add": [
+        "gaps_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "data_mining": {
+      "owner": "agent",
+      "pre": "gaps_ready",
+      "add": [
+        "mined"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "history_select": {
+      "owner": "agent",
+      "pre": "mined",
+      "add": [
+        "selected"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "train": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:nvidia_gpu",
+          "selected"
+        ]
+      },
+      "add": [
+        "trained"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "loop_stop": {
+      "owner": "agent",
+      "pre": "evaluated",
+      "add": [
+        "loop_stopped"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "render_report": {
+      "owner": "agent",
+      "pre": "loop_stopped",
+      "add": [
+        "report_rendered"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "discover_inputs",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "approve": [
+            {
+              "act": {
+                "cap": "pull_images",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "dataset_setup",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "pool_embed",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "evaluate",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "baseline_kpi_met": [
+                    {
+                      "act": {
+                        "cap": "loop_stop",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "baseline_kpi_unmet": [
+                    {
+                      "act": {
+                        "cap": "gap_analysis",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "rec": {
+                        "name": "iterations",
+                        "body": [
+                          {
+                            "act": {
+                              "cap": "data_mining",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "history_select",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "train",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "evaluate",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "choice": {
+                              "by": "agent",
+                              "external": true,
+                              "branches": {
+                                "kpi_met": [
+                                  {
+                                    "act": {
+                                      "cap": "loop_stop",
+                                      "by": "agent"
+                                    }
+                                  }
+                                ],
+                                "budget_exhausted": [
+                                  {
+                                    "act": {
+                                      "cap": "loop_stop",
+                                      "by": "agent"
+                                    }
+                                  }
+                                ],
+                                "continue": [
+                                  {
+                                    "act": {
+                                      "cap": "gap_analysis",
+                                      "by": "agent"
+                                    }
+                                  },
+                                  {
+                                    "continue": "iterations"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "act": {
+                "cap": "render_report",
+                "by": "agent"
+              }
+            }
+          ],
+          "reject": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "loop_stopped",
+      "report_rendered"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

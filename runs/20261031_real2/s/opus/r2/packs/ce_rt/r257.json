@@ -1,0 +1,213 @@
+{
+  "name": "prd-create",
+  "roles": [
+    "agent",
+    "user",
+    "reviewer"
+  ],
+  "capabilities": {
+    "detect_forge": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "forge_detected"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "create_issue": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:forge_account",
+          "forge_detected"
+        ]
+      },
+      "add": [
+        "issue_created"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_prd": {
+      "owner": "agent",
+      "pre": "issue_created",
+      "add": [
+        "prd_file_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "update_issue": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:forge_account",
+          "prd_file_written"
+        ]
+      },
+      "add": [
+        "issue_linked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_push": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:git_remote",
+          "prd_file_written"
+        ]
+      },
+      "add": [
+        "prd_pushed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "send_to_uzi": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:uzi",
+          "prd_pushed"
+        ]
+      },
+      "add": [
+        "sent_to_uzi"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "queue_sweep": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:forge_account",
+          "prd_pushed"
+        ]
+      },
+      "add": [
+        "queued_for_sweep"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "detect_forge",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "create_issue",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_prd",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "update_issue",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "review": [
+            {
+              "spawn": {
+                "role": "reviewer"
+              }
+            }
+          ],
+          "no_review": []
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "start_now": [
+            {
+              "act": {
+                "cap": "commit_push",
+                "by": "agent"
+              }
+            }
+          ],
+          "commit_later": [
+            {
+              "act": {
+                "cap": "commit_push",
+                "by": "agent"
+              }
+            }
+          ],
+          "send_uzi": [
+            {
+              "act": {
+                "cap": "commit_push",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "send_to_uzi",
+                "by": "agent"
+              }
+            }
+          ],
+          "queue_sweep": [
+            {
+              "act": {
+                "cap": "commit_push",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "queue_sweep",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "issue_created",
+      "prd_file_written",
+      "issue_linked"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

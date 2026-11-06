@@ -1,0 +1,178 @@
+{
+  "name": "commit-craft",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "plan_commits": {
+      "owner": "agent",
+      "pre": "mixed_tree",
+      "add": [
+        "plan_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "stage_group": {
+      "owner": "agent",
+      "pre": "plan_ready",
+      "add": [
+        "group_staged"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "secret_gate": {
+      "owner": "agent",
+      "pre": "group_staged",
+      "add": [
+        "gate_passed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "lint_message": {
+      "owner": "agent",
+      "pre": "gate_passed",
+      "add": [
+        "message_linted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_group": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "message_linted",
+          "gate_passed"
+        ]
+      },
+      "add": [
+        "group_committed",
+        "series_committed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "lint_series": {
+      "owner": "agent",
+      "pre": "group_committed",
+      "add": [
+        "series_linted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_builds": {
+      "owner": "agent",
+      "pre": "series_linted",
+      "add": [
+        "builds_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "install_hooks": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "hooks_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "plan_commits",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "groups",
+        "body": [
+          {
+            "act": {
+              "cap": "stage_group",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "secret_gate",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "lint_message",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "commit_group",
+              "by": "agent"
+            }
+          },
+          {
+            "continue": "groups"
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "lint_series",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_builds",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "install_git_hooks": [
+            {
+              "act": {
+                "cap": "install_hooks",
+                "by": "agent"
+              }
+            }
+          ],
+          "skip_hooks": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "series_committed",
+      "gate_passed",
+      "series_linted",
+      "builds_verified"
+    ]
+  },
+  "init_true": [
+    "mixed_tree"
+  ],
+  "init_constraints": []
+}

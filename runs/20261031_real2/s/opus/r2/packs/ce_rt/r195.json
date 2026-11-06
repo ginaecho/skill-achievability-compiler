@@ -1,0 +1,123 @@
+{
+  "name": "intercom-incident-runbook",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "check_status_page": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "status_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_postmortem": {
+      "owner": "agent",
+      "pre": "mitigation_applied",
+      "add": [
+        "postmortem_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "probe_api",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_status_page",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "intercom_incident": [
+            {
+              "act": {
+                "cap": "enable_degradation",
+                "by": "agent"
+              }
+            }
+          ],
+          "our_integration": [
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "auth_401": [
+                    {
+                      "act": {
+                        "cap": "rotate_token",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "scope_403": [
+                    {
+                      "act": {
+                        "cap": "add_oauth_scope",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "rate_429": [
+                    {
+                      "act": {
+                        "cap": "reduce_volume",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "server_5xx": [
+                    {
+                      "act": {
+                        "cap": "enable_cache_fallback",
+                        "by": "agent"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "post_slack",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_postmortem",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "api_probed",
+      "status_checked",
+      "mitigation_applied",
+      "comms_sent",
+      "postmortem_written"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,206 @@
+{
+  "name": "brightdata-debug-bundle",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "read_receipt": {
+      "owner": "agent",
+      "pre": "receipt_available",
+      "add": [
+        "inputs_read"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "scan_logs": {
+      "owner": "agent",
+      "pre": "inputs_read",
+      "add": [
+        "logs_scanned"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_manifest": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "logs_scanned",
+          "output_dir_ready"
+        ]
+      },
+      "add": [
+        "manifest_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "redact_bundle": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "manifest_written",
+          "redaction_policy_defined"
+        ]
+      },
+      "add": [
+        "redacted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "quarantine_bundle": {
+      "owner": "agent",
+      "pre": "redacted",
+      "add": [
+        "quarantined"
+      ],
+      "del": [
+        "redacted"
+      ],
+      "assigns": {},
+      "nondet": {}
+    },
+    "scan_secrets": {
+      "owner": "agent",
+      "pre": "redacted",
+      "add": [
+        "secrets_scanned",
+        "no_secrets_remain"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "hash_files": {
+      "owner": "agent",
+      "pre": "no_secrets_remain",
+      "add": [
+        "hashes_computed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "seal_bundle": {
+      "owner": "agent",
+      "pre": "hashes_computed",
+      "add": [
+        "bundle_sealed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "read_receipt",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "scan_logs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_manifest",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "redaction",
+        "body": [
+          {
+            "act": {
+              "cap": "redact_bundle",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "incomplete": [
+                  {
+                    "act": {
+                      "cap": "quarantine_bundle",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "redaction"
+                  }
+                ],
+                "complete": [
+                  {
+                    "act": {
+                      "cap": "scan_secrets",
+                      "by": "agent"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "hash_files",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "seal_bundle",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "transmit": [
+            {
+              "act": {
+                "cap": "transmit_bundle",
+                "by": "agent"
+              }
+            }
+          ],
+          "hold": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "manifest_written",
+      "redacted",
+      "no_secrets_remain",
+      "hashes_computed",
+      "bundle_sealed"
+    ]
+  },
+  "init_true": [
+    "receipt_available",
+    "output_dir_ready",
+    "redaction_policy_defined"
+  ],
+  "init_constraints": []
+}

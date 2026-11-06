@@ -1,0 +1,281 @@
+{
+  "name": "tao-generate-anomalies",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "ensure_checkpoints": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:hf_token"
+        ]
+      },
+      "add": [
+        "checkpoints_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "validate_dataset": {
+      "owner": "agent",
+      "pre": "checkpoints_ready",
+      "add": [
+        "dataset_valid"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "gen_validation_jsonl": {
+      "owner": "agent",
+      "pre": "dataset_valid",
+      "add": [
+        "validation_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "gen_training_config": {
+      "owner": "agent",
+      "pre": "dataset_valid",
+      "add": [
+        "config_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "finetune": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cuda_gpu",
+          {
+            "and": [
+              "config_ready",
+              "validation_ready",
+              "checkpoints_ready"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "finetuned"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prep_testcase": {
+      "owner": "agent",
+      "pre": "finetuned",
+      "add": [
+        "jsonl_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_sdg": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cuda_gpu",
+          "jsonl_ready"
+        ]
+      },
+      "add": [
+        "sdg_generated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_eval": {
+      "owner": "agent",
+      "pre": "sdg_generated",
+      "add": [
+        "original_evaluated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_draws": {
+      "owner": "agent",
+      "pre": "original_evaluated",
+      "add": [
+        "draws_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_round": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cuda_gpu",
+          "draws_ready"
+        ]
+      },
+      "add": [
+        "round_done"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "assemble_searched": {
+      "owner": "agent",
+      "pre": "original_evaluated",
+      "add": [
+        "searched_assembled"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "filter_with_regen": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cuda_gpu",
+          "searched_assembled"
+        ]
+      },
+      "add": [
+        "searched_complete"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "ensure_checkpoints",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "validate_dataset",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "gen_validation_jsonl",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "approve_config": [
+            {
+              "act": {
+                "cap": "gen_training_config",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "finetune",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "prep_testcase",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_sdg",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_eval",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "observed": true,
+                "branches": {
+                  "search": [
+                    {
+                      "rec": {
+                        "name": "rounds",
+                        "body": [
+                          {
+                            "act": {
+                              "cap": "write_draws",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "run_round",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "continue": "rounds"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "no_search": []
+                }
+              }
+            },
+            {
+              "act": {
+                "cap": "assemble_searched",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "filter_with_regen",
+                "by": "agent"
+              }
+            }
+          ],
+          "reject_config": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "finetuned",
+      "sdg_generated",
+      "original_evaluated",
+      "searched_assembled",
+      "searched_complete"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,193 @@
+{
+  "name": "repo-publish",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "file_issues": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "issues_filed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_quality_gates": {
+      "owner": "agent",
+      "pre": "issues_filed",
+      "add": [
+        "gates_passed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_changes": {
+      "owner": "agent",
+      "pre": "gates_passed",
+      "add": [
+        "committed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "bump_version": {
+      "owner": "agent",
+      "pre": "gates_passed",
+      "add": [
+        "version_bumped"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_release": {
+      "owner": "agent",
+      "pre": "version_bumped",
+      "add": [
+        "committed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "pull_rebase": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "synced"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "push": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:remote_write_access",
+          {
+            "and": [
+              "committed",
+              "synced"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "pushed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_push": {
+      "owner": "agent",
+      "pre": "pushed",
+      "add": [
+        "push_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "file_issues",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_quality_gates",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "release": [
+            {
+              "act": {
+                "cap": "bump_version",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "commit_release",
+                "by": "agent"
+              }
+            }
+          ],
+          "push": [
+            {
+              "act": {
+                "cap": "commit_changes",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "rec": {
+        "name": "push_loop",
+        "body": [
+          {
+            "act": {
+              "cap": "pull_rebase",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "push",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "rejected": [
+                  {
+                    "continue": "push_loop"
+                  }
+                ],
+                "accepted": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "verify_push",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "gates_passed",
+      "committed",
+      "pushed",
+      "push_verified"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

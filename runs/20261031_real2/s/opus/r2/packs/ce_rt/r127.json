@@ -1,0 +1,225 @@
+{
+  "name": "foundry-agentic-loop",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "ensure_foundry_skill": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:network"
+        ]
+      },
+      "add": [
+        "foundry_skill_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_mode_lock": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "mode_locked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "freeze_spec": {
+      "owner": "agent",
+      "pre": "mode_locked",
+      "add": [
+        "spec_frozen"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "preflight": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:azure_account",
+          {
+            "and": [
+              "foundry_skill_ready",
+              "spec_frozen"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "preflight_passed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "build_app": {
+      "owner": "agent",
+      "pre": "spec_frozen",
+      "add": [
+        "app_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "integration_checkpoint": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:azure_account",
+          {
+            "and": [
+              "agent_created",
+              "toolbox_ready"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "checkpoint_passed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "deploy_azd": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:azure_account",
+          {
+            "and": [
+              "checkpoint_passed",
+              "app_built",
+              "preflight_passed"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "deployed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "verify_deployment": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:azure_account",
+          "deployed"
+        ]
+      },
+      "add": [
+        "deployment_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "ensure_foundry_skill",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_mode_lock",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "freeze_spec",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "preflight",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "create_project",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "create_hosted_agent",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "configure_toolbox",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "integration_checkpoint",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "build_app",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "approve_deploy": [
+            {
+              "act": {
+                "cap": "deploy_azd",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "verify_deployment",
+                "by": "agent"
+              }
+            }
+          ],
+          "decline": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "agent_created",
+      "toolbox_ready",
+      "app_built",
+      "checkpoint_passed",
+      "deployed",
+      "deployment_verified"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

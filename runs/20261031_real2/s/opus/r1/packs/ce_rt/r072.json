@@ -1,0 +1,241 @@
+{
+  "name": "tao-run-deft-pas",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "discover_inputs": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "inputs_discovered"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_credentials": {
+      "owner": "agent",
+      "pre": "inputs_discovered",
+      "add": [
+        "credentials_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "materialize_config": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "config_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "dataset_setup": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "config_ready",
+          "runtime_ready"
+        ]
+      },
+      "add": [
+        "dataset_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "gap_analysis": {
+      "owner": "agent",
+      "pre": "evaluated",
+      "add": [
+        "gaps_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "mine_select": {
+      "owner": "agent",
+      "pre": "gaps_ready",
+      "add": [
+        "mined"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "commit_loop_stop": {
+      "owner": "agent",
+      "pre": "evaluated",
+      "add": [
+        "loop_stopped"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "render_report": {
+      "owner": "agent",
+      "pre": "loop_stopped",
+      "add": [
+        "report_rendered",
+        "run_complete"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "discover_inputs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_credentials",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "approve": [
+            {
+              "act": {
+                "cap": "materialize_config",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "prepare_runtime",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "dataset_setup",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "pool_embed",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "evaluate",
+                "by": "agent"
+              }
+            },
+            {
+              "choice": {
+                "by": "agent",
+                "external": true,
+                "branches": {
+                  "baseline_kpi_met": [
+                    {
+                      "act": {
+                        "cap": "commit_loop_stop",
+                        "by": "agent"
+                      }
+                    }
+                  ],
+                  "baseline_kpi_unmet": [
+                    {
+                      "act": {
+                        "cap": "gap_analysis",
+                        "by": "agent"
+                      }
+                    },
+                    {
+                      "rec": {
+                        "name": "iters",
+                        "body": [
+                          {
+                            "act": {
+                              "cap": "mine_select",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "train",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "act": {
+                              "cap": "evaluate",
+                              "by": "agent"
+                            }
+                          },
+                          {
+                            "choice": {
+                              "by": "agent",
+                              "external": true,
+                              "branches": {
+                                "stop": [
+                                  {
+                                    "act": {
+                                      "cap": "commit_loop_stop",
+                                      "by": "agent"
+                                    }
+                                  }
+                                ],
+                                "continue": [
+                                  {
+                                    "act": {
+                                      "cap": "gap_analysis",
+                                      "by": "agent"
+                                    }
+                                  },
+                                  {
+                                    "continue": "iters"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "act": {
+                "cap": "render_report",
+                "by": "agent"
+              }
+            }
+          ],
+          "reject": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "loop_stopped",
+      "report_rendered",
+      "run_complete"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,138 @@
+{
+  "name": "fathom-debug-bundle",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "record_env_differences": {
+      "owner": "agent",
+      "pre": "diagnostics_collected",
+      "add": [
+        "env_differences_recorded"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_bundle": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "diagnostics_collected",
+          {
+            "or": [
+              "reproduced",
+              "env_differences_recorded"
+            ]
+          },
+          "issue_owner_known",
+          "approved_destination"
+        ]
+      },
+      "add": [
+        "bundle_written",
+        "bundle_has_owner",
+        "bundle_has_scope",
+        "bundle_has_evidence",
+        "bundle_has_escalation"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "redact_bundle": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "bundle_written",
+          "redaction_policy"
+        ]
+      },
+      "add": [
+        "bundle_redacted"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "collect_diagnostics",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "reproduced": [
+            {
+              "act": {
+                "cap": "reproduce_synthetic",
+                "by": "agent"
+              }
+            }
+          ],
+          "cannot_reproduce": [
+            {
+              "act": {
+                "cap": "record_env_differences",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "credentials_present": [
+            {
+              "act": {
+                "cap": "rotate_credentials",
+                "by": "agent"
+              }
+            }
+          ],
+          "no_credentials": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_bundle",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "redact_bundle",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "bundle_written",
+      "bundle_redacted",
+      "bundle_has_owner",
+      "bundle_has_scope",
+      "bundle_has_evidence",
+      "bundle_has_escalation"
+    ]
+  },
+  "init_true": [
+    "issue_owner_known",
+    "environment_known",
+    "approved_destination",
+    "redaction_policy"
+  ],
+  "init_constraints": []
+}

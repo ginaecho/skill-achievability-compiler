@@ -1,0 +1,126 @@
+{
+  "name": "intercom-incident-runbook",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "check_status": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:public_internet",
+          "api_code_known"
+        ]
+      },
+      "add": [
+        "fault_verdict"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_postmortem": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "needs:local_filesystem",
+          "mitigation_applied"
+        ]
+      },
+      "add": [
+        "postmortem_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "probe_api",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_status",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "external": true,
+        "branches": {
+          "intercom_incident": [
+            {
+              "act": {
+                "cap": "enable_degradation",
+                "by": "agent"
+              }
+            }
+          ],
+          "auth_401": [
+            {
+              "act": {
+                "cap": "rotate_token",
+                "by": "agent"
+              }
+            }
+          ],
+          "scope_403": [
+            {
+              "act": {
+                "cap": "grant_scope",
+                "by": "agent"
+              }
+            }
+          ],
+          "rate_429": [
+            {
+              "act": {
+                "cap": "throttle",
+                "by": "agent"
+              }
+            }
+          ],
+          "server_5xx": [
+            {
+              "act": {
+                "cap": "enable_fallback",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "post_slack",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_postmortem",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "fault_verdict",
+      "mitigation_applied",
+      "comms_sent",
+      "postmortem_written"
+    ]
+  },
+  "init_true": [
+    "needs:public_internet",
+    "needs:local_filesystem"
+  ],
+  "init_constraints": []
+}

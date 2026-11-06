@@ -1,0 +1,208 @@
+{
+  "name": "cohere-deploy-integration",
+  "roles": [
+    "agent",
+    "owner"
+  ],
+  "capabilities": {
+    "inspect_platform": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "platform_inspected"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "fetch_cohere_docs": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "contract_resolved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "set_config": {
+      "owner": "agent",
+      "pre": "platform_inspected",
+      "add": [
+        "config_set"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "inject_secret": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:secret_manager",
+          "platform_inspected"
+        ]
+      },
+      "add": [
+        "secret_server_only"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "deploy_nonprod": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cloud_account",
+          "needs:cohere_api_key",
+          {
+            "and": [
+              "config_set",
+              "secret_server_only"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "nonprod_deployed",
+        "stream_pass"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "canary_prod": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cloud_account",
+          "needs:cohere_api_key",
+          {
+            "and": [
+              "nonprod_deployed",
+              "stream_pass"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "canary_healthy"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "promote": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cloud_account",
+          "canary_healthy"
+        ]
+      },
+      "add": [
+        "promoted",
+        "rollback_verified",
+        "evidence_preserved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "rollback": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cloud_account",
+          "canary_healthy"
+        ]
+      },
+      "add": [
+        "rolled_back",
+        "rollback_verified",
+        "evidence_preserved"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "inspect_platform",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "fetch_cohere_docs",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "set_config",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "inject_secret",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "deploy_nonprod",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "canary_prod",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "owner",
+        "observed": true,
+        "branches": {
+          "promote": [
+            {
+              "act": {
+                "cap": "promote",
+                "by": "agent"
+              }
+            }
+          ],
+          "rollback": [
+            {
+              "act": {
+                "cap": "rollback",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "secret_server_only",
+      "stream_pass",
+      "canary_healthy",
+      "rollback_verified"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

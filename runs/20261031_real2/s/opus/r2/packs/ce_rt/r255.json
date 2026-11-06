@@ -1,0 +1,148 @@
+{
+  "name": "generate-dockerfile",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "analyze_project": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "project_analyzed",
+        "existing_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_dockerfile": {
+      "owner": "agent",
+      "pre": "project_analyzed",
+      "add": [
+        "dockerfile_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "edit_dockerfile": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "project_analyzed",
+          "existing_checked"
+        ]
+      },
+      "add": [
+        "dockerfile_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_dockerignore": {
+      "owner": "agent",
+      "pre": "dockerfile_written",
+      "add": [
+        "dockerignore_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "analyze_project",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "new_file": [
+            {
+              "act": {
+                "cap": "write_dockerfile",
+                "by": "agent"
+              }
+            }
+          ],
+          "improve_existing": [
+            {
+              "act": {
+                "cap": "edit_dockerfile",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_dockerignore",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "validate",
+        "body": [
+          {
+            "act": {
+              "cap": "build_image",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "run_container",
+              "by": "agent"
+            }
+          },
+          {
+            "act": {
+              "cap": "analyze_logs",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "pass": [],
+                "retry": [
+                  {
+                    "continue": "validate"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "act": {
+        "cap": "cleanup",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "dockerfile_written",
+      "dockerignore_written",
+      "validated",
+      "cleaned_up"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

@@ -1,0 +1,152 @@
+{
+  "name": "nvshmem-enable-tma",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "read_source": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "source_read"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "confirm_redundancy": {
+      "owner": "agent",
+      "pre": "source_read",
+      "add": [
+        "redundancy_confirmed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_gmem_patch": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "source_read",
+          "nvshmem_ge_370"
+        ]
+      },
+      "add": [
+        "code_prepared"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "apply_smem_patch": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "source_read",
+          "nvshmem_ge_370",
+          "redundancy_confirmed"
+        ]
+      },
+      "add": [
+        "code_prepared"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "compile": {
+      "owner": "agent",
+      "pre": "code_prepared",
+      "add": [
+        "compiled"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_validation": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:sm90_gpu",
+          "compiled"
+        ]
+      },
+      "add": [
+        "validated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "read_source",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "gmem_staging": [
+            {
+              "act": {
+                "cap": "apply_gmem_patch",
+                "by": "agent"
+              }
+            }
+          ],
+          "direct_smem_optin": [
+            {
+              "act": {
+                "cap": "confirm_redundancy",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "apply_smem_patch",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "validate": [
+            {
+              "act": {
+                "cap": "compile",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "run_validation",
+                "by": "agent"
+              }
+            }
+          ],
+          "prepare_only": []
+        }
+      }
+    }
+  ],
+  "goal": "code_prepared",
+  "init_true": [
+    "nvshmem_ge_370"
+  ],
+  "init_constraints": []
+}

@@ -383,3 +383,19 @@ reports `memory` as `false` before every model session, and exposes only `view` 
 field is available; this is reported model provenance, not an independently observed
 backend identity. The affected job receives its one permitted fresh-session retry.
 All other jobs retain their first attempts. No truth has been opened.
+
+**Amendment 10 (2026-11-06, after all selected-model S and D calls finished).**
+Commit `ea8c907e` froze the 27 accepted continuation replies and the isolation audit
+before the truth was opened. Every accepted continuation job used a unique session,
+working directory and configuration home with memory verified off; its recorded tools
+read only its own prompt and created only its own reply. All six selected-model runs
+have every frozen output. No job needed a missing-reply placeholder.
+
+The original 3,139 call records are preserved; 28 native continuation sessions were
+appended, including the first failed attempt, for 3,167 records. Only after that
+commit, the detached worktree `..\truth` was created at truth commit `e20f319d`.
+Its 300 execution reports and 140 adjudications were collected through `collect-exec`,
+and its 140 held-out adjudication prompts and three batches were restored. The previous
+pilot adjudication batch was backed up outside the repository before its main-run
+replacement was copied. The checksum-verified download remains unopened outside the
+clone as a personal backup; the canonical source is still the separate truth branch.

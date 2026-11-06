@@ -1,0 +1,124 @@
+{
+  "name": "nv-reason-ct",
+  "roles": [
+    "agent",
+    "user"
+  ],
+  "capabilities": {
+    "install_env": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:package_registry"
+        ]
+      },
+      "add": [
+        "deps_installed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "check_setup": {
+      "owner": "agent",
+      "pre": "deps_installed",
+      "add": [
+        "setup_checked"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "download_model": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:hf_model_access",
+          "setup_checked"
+        ]
+      },
+      "add": [
+        "model_cached"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_inference": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:cuda_gpu",
+          {
+            "and": [
+              "ct_volume_available",
+              "deps_installed",
+              "model_cached"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "result_emitted",
+        "inference_succeeded",
+        "response_nonempty",
+        "not_truncated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "install_env",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "check_setup",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "download_model",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "user",
+        "observed": true,
+        "branches": {
+          "authorize": [
+            {
+              "act": {
+                "cap": "run_inference",
+                "by": "agent"
+              }
+            }
+          ],
+          "decline": []
+        }
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "result_emitted",
+      "inference_succeeded",
+      "response_nonempty",
+      "not_truncated"
+    ]
+  },
+  "init_true": [
+    "ct_volume_available"
+  ],
+  "init_constraints": []
+}

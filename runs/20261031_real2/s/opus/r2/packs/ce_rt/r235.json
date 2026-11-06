@@ -1,0 +1,203 @@
+{
+  "name": "patching-bugs",
+  "roles": [
+    "agent",
+    "user",
+    "reproduce_agent",
+    "validate_agent",
+    "patch_agent",
+    "prove_agent",
+    "regression_agent"
+  ],
+  "capabilities": {
+    "run_preflight": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "preflight_ok"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "ask_clarify": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "finding_clear"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_records": {
+      "owner": "agent",
+      "pre": "preflight_ok",
+      "add": [
+        "finding_recorded"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "run_checker": {
+      "owner": "agent",
+      "pre": "finding_recorded",
+      "add": [
+        "records_valid"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_report_input": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "report_input_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "render_report": {
+      "owner": "agent",
+      "pre": "report_input_written",
+      "add": [
+        "report_rendered"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "run_preflight",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "needs_clarification": [
+            {
+              "act": {
+                "cap": "ask_clarify",
+                "by": "agent"
+              }
+            }
+          ],
+          "clear": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_records",
+        "by": "agent"
+      }
+    },
+    {
+      "spawn": {
+        "role": "reproduce_agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_checker",
+        "by": "agent"
+      }
+    },
+    {
+      "spawn": {
+        "role": "validate_agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_checker",
+        "by": "agent"
+      }
+    },
+    {
+      "rec": {
+        "name": "repair",
+        "body": [
+          {
+            "act": {
+              "cap": "run_checker",
+              "by": "agent"
+            }
+          },
+          {
+            "spawn": {
+              "role": "patch_agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "observed": true,
+              "branches": {
+                "has_commit": [
+                  {
+                    "spawn": {
+                      "role": "prove_agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "run_checker",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "no_commit": []
+              }
+            }
+          },
+          {
+            "continue": "repair"
+          }
+        ]
+      }
+    },
+    {
+      "spawn": {
+        "role": "regression_agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "run_checker",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_report_input",
+        "by": "agent"
+      }
+    },
+    {
+      "act": {
+        "cap": "render_report",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "patch_committed",
+      "proven",
+      "regression_checked",
+      "report_rendered"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

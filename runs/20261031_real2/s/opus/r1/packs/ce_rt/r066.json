@@ -1,0 +1,282 @@
+{
+  "name": "pva-build-test",
+  "roles": [
+    "build_test",
+    "caller"
+  ],
+  "capabilities": {
+    "validate_inputs": {
+      "owner": "build_test",
+      "pre": true,
+      "add": [
+        "inputs_valid",
+        "references_verified"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_manifest_before": {
+      "owner": "build_test",
+      "pre": "inputs_valid",
+      "add": [
+        "manifest_before_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "emu_build": {
+      "owner": "build_test",
+      "pre": "references_verified",
+      "add": [
+        "emu_built"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "emu_test": {
+      "owner": "build_test",
+      "pre": "emu_built",
+      "add": [
+        "emu_tested"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "l4t_build": {
+      "owner": "build_test",
+      "pre": {
+        "and": [
+          "references_verified",
+          "manifest_before_written"
+        ]
+      },
+      "add": [
+        "build_done",
+        "listing_available"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "inspect_listing": {
+      "owner": "build_test",
+      "pre": "listing_available",
+      "add": [
+        "vectorization_confirmed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "target_probe": {
+      "owner": "build_test",
+      "pre": {
+        "and": [
+          false,
+          "needs:tegra_hardware",
+          "build_done"
+        ]
+      },
+      "add": [
+        "target_ready"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "deploy": {
+      "owner": "build_test",
+      "pre": {
+        "and": [
+          false,
+          "needs:tegra_hardware",
+          {
+            "and": [
+              "target_ready",
+              "build_done"
+            ]
+          }
+        ]
+      },
+      "add": [
+        "deployed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "hardware_test": {
+      "owner": "build_test",
+      "pre": {
+        "and": [
+          false,
+          "needs:tegra_hardware",
+          "deployed"
+        ]
+      },
+      "add": [
+        "hardware_correctness_passed"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "performance_test": {
+      "owner": "build_test",
+      "pre": {
+        "and": [
+          false,
+          "needs:tegra_hardware",
+          "hardware_correctness_passed"
+        ]
+      },
+      "add": [
+        "performance_measured"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "freshness": {
+      "owner": "build_test",
+      "pre": {
+        "and": [
+          "manifest_before_written",
+          "hardware_correctness_passed"
+        ]
+      },
+      "add": [
+        "source_unchanged"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_reports": {
+      "owner": "build_test",
+      "pre": {
+        "and": [
+          "hardware_correctness_passed",
+          "vectorization_confirmed",
+          "source_unchanged"
+        ]
+      },
+      "add": [
+        "reports_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "validate_inputs",
+        "by": "build_test"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_manifest_before",
+        "by": "build_test"
+      }
+    },
+    {
+      "choice": {
+        "by": "caller",
+        "observed": true,
+        "branches": {
+          "run_emu": [
+            {
+              "act": {
+                "cap": "emu_build",
+                "by": "build_test"
+              }
+            },
+            {
+              "act": {
+                "cap": "emu_test",
+                "by": "build_test"
+              }
+            }
+          ],
+          "skip_emu": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "l4t_build",
+        "by": "build_test"
+      }
+    },
+    {
+      "act": {
+        "cap": "inspect_listing",
+        "by": "build_test"
+      }
+    },
+    {
+      "act": {
+        "cap": "target_probe",
+        "by": "build_test"
+      }
+    },
+    {
+      "act": {
+        "cap": "deploy",
+        "by": "build_test"
+      }
+    },
+    {
+      "act": {
+        "cap": "hardware_test",
+        "by": "build_test"
+      }
+    },
+    {
+      "choice": {
+        "by": "caller",
+        "observed": true,
+        "branches": {
+          "correctness_and_performance": [
+            {
+              "act": {
+                "cap": "performance_test",
+                "by": "build_test"
+              }
+            }
+          ],
+          "correctness_only": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "freshness",
+        "by": "build_test"
+      }
+    },
+    {
+      "act": {
+        "cap": "write_reports",
+        "by": "build_test"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "hardware_correctness_passed",
+      "vectorization_confirmed",
+      "source_unchanged",
+      "reports_written"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

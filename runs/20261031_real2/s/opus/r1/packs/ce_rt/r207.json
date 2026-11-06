@@ -1,0 +1,141 @@
+{
+  "name": "agentic-verify",
+  "roles": [
+    "agent",
+    "user",
+    "reviewer"
+  ],
+  "capabilities": {
+    "write_test": {
+      "owner": "agent",
+      "pre": true,
+      "add": [
+        "tests_written"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "write_report": {
+      "owner": "agent",
+      "pre": "verdict_obtained",
+      "add": [
+        "evidence_reported"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "write_test",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "change_not_yet_written": [
+            {
+              "act": {
+                "cap": "see_test_fail",
+                "by": "agent"
+              }
+            }
+          ],
+          "change_exists": [
+            {
+              "act": {
+                "cap": "base_check",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "rec": {
+        "name": "verify_loop",
+        "body": [
+          {
+            "act": {
+              "cap": "run_verify",
+              "by": "agent"
+            }
+          },
+          {
+            "choice": {
+              "by": "agent",
+              "external": true,
+              "branches": {
+                "verified": [],
+                "gaps": [
+                  {
+                    "act": {
+                      "cap": "write_test",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "act": {
+                      "cap": "replay",
+                      "by": "agent"
+                    }
+                  },
+                  {
+                    "continue": "verify_loop"
+                  }
+                ],
+                "incomplete": [
+                  {
+                    "act": {
+                      "cap": "base_check",
+                      "by": "agent"
+                    }
+                  }
+                ],
+                "no_change": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "review_subagent": [
+            {
+              "spawn": {
+                "role": "reviewer"
+              }
+            }
+          ],
+          "skip_review": []
+        }
+      }
+    },
+    {
+      "act": {
+        "cap": "write_report",
+        "by": "agent"
+      }
+    }
+  ],
+  "goal": {
+    "and": [
+      "tests_written",
+      "verdict_obtained",
+      "evidence_reported"
+    ]
+  },
+  "init_true": [],
+  "init_constraints": []
+}

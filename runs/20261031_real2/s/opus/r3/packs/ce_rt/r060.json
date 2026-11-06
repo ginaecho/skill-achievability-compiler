@@ -1,0 +1,151 @@
+{
+  "name": "nvshmem-enable-tma",
+  "roles": [
+    "agent"
+  ],
+  "capabilities": {
+    "read_source": {
+      "owner": "agent",
+      "pre": "source_available",
+      "add": [
+        "source_inspected"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prepare_gmem": {
+      "owner": "agent",
+      "pre": "source_inspected",
+      "add": [
+        "prepared"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "ask_redundancy": {
+      "owner": "agent",
+      "pre": "source_inspected",
+      "add": [
+        "redundancy_proven"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "prepare_direct_smem": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          "source_inspected",
+          "redundancy_proven"
+        ]
+      },
+      "add": [
+        "prepared"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "compile": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:nvshmem_toolchain",
+          "prepared"
+        ]
+      },
+      "add": [
+        "compiled"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    },
+    "validate_run": {
+      "owner": "agent",
+      "pre": {
+        "and": [
+          false,
+          "needs:sm90_gpu",
+          "compiled"
+        ]
+      },
+      "add": [
+        "validated"
+      ],
+      "del": [],
+      "assigns": {},
+      "nondet": {}
+    }
+  },
+  "protocol": [
+    {
+      "act": {
+        "cap": "read_source",
+        "by": "agent"
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "gmem_staging": [
+            {
+              "act": {
+                "cap": "prepare_gmem",
+                "by": "agent"
+              }
+            }
+          ],
+          "direct_smem_optin": [
+            {
+              "act": {
+                "cap": "ask_redundancy",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "prepare_direct_smem",
+                "by": "agent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "choice": {
+        "by": "agent",
+        "observed": true,
+        "branches": {
+          "validate": [
+            {
+              "act": {
+                "cap": "compile",
+                "by": "agent"
+              }
+            },
+            {
+              "act": {
+                "cap": "validate_run",
+                "by": "agent"
+              }
+            }
+          ],
+          "report_only": []
+        }
+      }
+    }
+  ],
+  "goal": "prepared",
+  "init_true": [
+    "source_available"
+  ],
+  "init_constraints": []
+}
