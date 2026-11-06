@@ -122,3 +122,17 @@ def test_isolated_job_requires_explicit_model_permission(tmp_path, monkeypatch):
     monkeypatch.delenv("SKILLC_ALLOW_MODEL_CALLS", raising=False)
     with pytest.raises(RuntimeError, match="SKILLC_ALLOW_MODEL_CALLS"):
         real2_copilot.run_job(tmp_path, {}, tmp_path / "scratch", "test-model", 1, "stub")
+
+
+def test_isolated_job_refuses_to_launch_when_cli_memory_is_on(tmp_path, monkeypatch):
+    monkeypatch.setattr(real2_copilot, "ROOT", tmp_path)
+    prompt = tmp_path / "prompt.json"
+    prompt.write_text(json.dumps({"system": "Reply plainly.", "user": "Data."}))
+    job = {"case": "r001", "prompt": prompt.name, "output": "reply.txt",
+           "prompt_sha256": hashlib.sha256(prompt.read_bytes()).hexdigest()}
+    monkeypatch.setattr(real2_copilot.subprocess, "check_output", lambda *a, **kw: "true\n")
+    monkeypatch.setattr(real2_copilot.subprocess, "run",
+                        lambda *a, **kw: pytest.fail("Model launched with memory on"))
+    with pytest.raises(RuntimeError, match="memory is not disabled"):
+        real2_copilot.run_job(
+            tmp_path, job, tmp_path / "scratch", "test-model", 1, "stub")
