@@ -521,11 +521,11 @@ def checker_times(k: int, model: str) -> dict:
 def log_calls(transcripts: Path) -> None:
     """One line per sub-agent transcript: the job it ran (found by its prompt path),
     provider-reported usage summed over its turns, wall time, and the model."""
-    pat = re.compile(re.escape(str(RUN)) + r"/(?:(s|d)/([\w-]+)/r(\d)/prompts/(?:ce_rt|direct)/"
+    pat = re.compile(re.escape(RUN.relative_to(ROOT).as_posix()) + r"/(?:(s|d)/([\w-]+)/r(\d)/prompts/(?:ce_rt|direct)/"
                      r"(r\d{3})__s0(?:__r(\d))?\.json|(execution|adjudication)/prompts/(r\d{3})\.txt)")
 
     def job_of(text: str) -> dict | None:
-        m = pat.search(text)
+        m = pat.search(text.replace("\\\\", "/").replace("\\", "/"))
         if not m:
             return None
         if m.group(6):
@@ -542,8 +542,9 @@ def log_calls(transcripts: Path) -> None:
         if str(t) in seen:
             continue
         rows = [json.loads(line) for line in t.read_text().splitlines() if line.strip()]
-        first_user = next((json.dumps(r.get("message", {})) for r in rows
-                           if r.get("type") == "user"), "")
+        first_user = next((json.dumps(r.get("message", {})) if r["type"] == "user"
+                           else r["data"]["content"] for r in rows
+                           if r.get("type") in ("user", "user.message")), "")
         job = job_of(first_user)
         if job is None:
             continue
@@ -556,6 +557,16 @@ def log_calls(transcripts: Path) -> None:
                           "cache_creation_input_tokens"):
                     use[f] += int(m["usage"].get(f) or 0)
                 models[m.get("model")] += 1
+            elif r.get("type") == "session.usage_record":
+                u = r["data"]["usage"]
+                cached, written = int(u["cacheReadTokens"]), int(u["cacheWriteTokens"])
+                uncached = int(u["inputTokens"]) - cached - written
+                if uncached < 0:
+                    raise ValueError(f"{t}: cached tokens exceed total input")
+                use.update(input_tokens=uncached, output_tokens=int(u["outputTokens"]),
+                           cache_read_input_tokens=cached,
+                           cache_creation_input_tokens=written)
+                models[u["responseModel"]] += 1
         stamps = [datetime.fromisoformat(r["timestamp"].replace("Z", "+00:00"))
                   for r in rows if r.get("timestamp")]
         new.append({"transcript": str(t), "job": job["job"], "case": job["case"],
@@ -647,14 +658,14 @@ def quart(xs: list[float]) -> dict:
     return {"n": len(xs), "median": round(q[1], 4), "iqr": [round(q[0], 4), round(q[2], 4)]}
 
 
-def score() -> None:
+def score(models: tuple[str, ...] = MODELS) -> None:
     ids = [c["case"] for c in cases()]
     rt_of = {c["case"]: c["runtime"] for c in cases()}
     labels = {s: {c: label(c, s) for c in ids}
               for s in ("main", "strict", "physical", "no_violations")}
     lab = {c: labels["main"][c][0] for c in ids}
     for arm in ("s", "d"):
-        for model in MODELS:
+        for model in models:
             for k in REPEATS:
                 if (arm_dir(arm, k, model) / "frozen.json").exists() and \
                         missing_outputs(arm, k, model):
@@ -662,7 +673,7 @@ def score() -> None:
                                      "once, then `mark-missing`")
     v = {arm: {model: {k: (s_verdicts(k, model) if arm == "s" else d_verdicts(k, model))
                        for k in REPEATS if (arm_dir(arm, k, model) / "frozen.json").exists()}
-               for model in MODELS} for arm in ("s", "d")}
+               for model in models} for arm in ("s", "d")}
     calls = [json.loads(x) for x in (RUN / "calls.jsonl").read_text().splitlines()
              if x] if (RUN / "calls.jsonl").exists() else []
     m: dict = {"labels": dict(Counter(lab.values())),
@@ -732,7 +743,7 @@ def score() -> None:
         return vv[c] != "NONE" and (vv[c] == "IMPOSSIBLE") == (lab[c] == "blocked")
 
     m["mcnemar_r1"], m["criteria"] = {}, {}
-    for model in MODELS:
+    for model in models:
         sv, dv = v["s"][model].get(1), v["d"][model].get(1)
         if sv and dv:
             b = sum(ok(sv, c) and not ok(dv, c) for c in dec)
@@ -755,7 +766,7 @@ def score() -> None:
     # secondary: do the models agree with each other (repeat r1)?
     m["across_models_r1"] = {}
     for arm in ("s", "d"):
-        have = [mo for mo in MODELS if 1 in v[arm][mo]]
+        have = [mo for mo in models if 1 in v[arm][mo]]
         if len(have) >= 2:
             rows = [[v[arm][mo][1][c] for mo in have] for c in ids]
             m["across_models_r1"][arm] = {
@@ -790,7 +801,7 @@ def main() -> None:
     sub.add_parser("collect-exec").add_argument("--work", type=Path, required=True)
     sub.add_parser("calls").add_argument("--transcripts", type=Path, required=True)
     sub.add_parser("audit")
-    sub.add_parser("score")
+    sub.add_parser("score").add_argument("--model", choices=MODELS + ("all",), default="all")
     a = ap.parse_args()
     models = MODELS if getattr(a, "model", "all") == "all" else (a.model,)
     if a.cmd == "skills":
@@ -819,7 +830,7 @@ def main() -> None:
     elif a.cmd == "audit":
         audit()
     else:
-        score()
+        score(models)
 
 
 if __name__ == "__main__":

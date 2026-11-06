@@ -343,3 +343,29 @@ batches were pushed to the separate branch `gc/real2-truth` (outside this run di
 so S sub-agents still cannot read them). `calls.jsonl` was written from the sub-agent
 transcripts (3,139 calls); it includes attempts that failed at the subscription's weekly
 usage limit and were run again, so a job can have more than one line.
+
+**Amendment 8 (2026-11-06, before any continuation call).** The original exact model is
+not available in this Copilot session. The user explicitly authorized a successor model
+on the Copilot subscription. Its serving identity is retained in local transcripts and
+hashed in the call log; the paper names both models. Inspection found 27 missing frozen
+repeat-3 S repair replies, not the approximately 67 stated in the handoff.
+
+1. Only those missing replies run on the successor. All earlier prompts, replies and
+   3,139 call records stay unchanged. Repeat 3 and pooled S results are mixed-model
+   results, not estimates for either model alone. Report the affected cases and repeat
+   results separately; do not interpret repeat agreement as pure same-model stability.
+2. Each job, including a failed job's single retry, starts a new isolated Copilot session.
+   Its working directory contains only its frozen prompt copy. Its separate configuration
+   disables memory, automatic model fallback and history sync; no custom instructions,
+   earlier sessions or other jobs are loaded. Only file viewing and patch writing are
+   available, with access restricted to that job directory and no temporary-directory
+   exception. The agent writes only its reply. Model calls use the subscription, not a
+   direct provider API. Frozen prompt copies and the wrapper pass the URL guard.
+3. Keep the native session events outside the repository. Append their measured usage,
+   model hashes and wall time through `calls`; Copilot's input total includes cached
+   tokens, so subtract cache reads and writes before storing uncached input. Report the
+   changed harness and its costs separately; do not reuse the original overhead estimate.
+4. Score only the model-directory label selected in amendment 4, using `score --model
+   opus`. The unused frozen prompts for the other model options are not failed calls.
+   No truth is opened or restored until the missing S replies are complete or each
+   genuinely failed twice. Restore the truth and date that step in a later amendment.
