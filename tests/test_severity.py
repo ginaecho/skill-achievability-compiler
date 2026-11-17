@@ -340,3 +340,50 @@ def test_the_papers_verbatim_block_is_the_tools_output():
     block = tex.read_text(encoding="utf-8").split("\\begin{verbatim}")[1]
     block = block.split("\\end{verbatim}")[0]
     assert buf.getvalue().strip("\n") == block.strip("\n")
+
+
+# ---- the default instantiation after the point of no return ---------------
+def _a(c):
+    return {"act": {"cap": c, "by": "agent"}}
+
+
+def _c(**branches):
+    return {"choice": {"by": "agent", "branches": branches}}
+
+
+_CAPS = {"win": {"owner": "agent", "add": ["g"]}, "noop": {"owner": "agent"},
+         "noop2": {"owner": "agent"}, "wipe": {"owner": "agent"}}
+
+
+def test_choices_with_no_right_answer_are_free():
+    """One wrong choice dooms the goal; two choices with no right answer
+    follow, then an irreversible `wipe` (the hazard).  The old default
+    (intended iff the goal stays reachable) intended NO branch of the two
+    later choices, charged each a unit and reported k* = 2; the new default
+    makes them forced (no branch avoids the hazard), hence free: k* = 0."""
+    pack = {"name": "forced_after_loss", "roles": ["agent"], "capabilities": _CAPS,
+            "protocol": [_c(right=[_a("win")], wrong=[_a("noop")]),
+                         _c(x1=[_a("noop")], y1=[_a("noop2")]),
+                         _c(x2=[_a("noop")], y2=[_a("noop2")]),
+                         _a("wipe")],
+            "goal": "g", "init_true": [], "irreversible": ["wipe"]}
+    r = analyze(pack, kmax=3)
+    assert r.tolerance_degree == 0
+    after_loss = [v for v in r.verdicts if "/wrong/" in v.node]
+    assert after_loss and all(v.intended for v in after_loss)
+    assert {v.branch: v.intended for v in r.verdicts if v.node == "/choice@agent#0"} \
+        == {"right": True, "wrong": False}
+
+
+def test_after_goal_loss_the_right_choice_limits_harm():
+    """After the goal is lost, `abort` avoids the hazard and `proceed` fires
+    it: `abort` is intended, `proceed` is a misselection costing a unit, so
+    the hazard needs two wrong choices (k* = 1)."""
+    pack = {"name": "harm_after_loss", "roles": ["agent"], "capabilities": _CAPS,
+            "protocol": [_c(right=[_a("win")], wrong=[_a("noop")]),
+                         _c(abort=[_a("noop")], proceed=[_a("wipe")])],
+            "goal": "g", "init_true": [], "irreversible": ["wipe"]}
+    r = analyze(pack, kmax=3)
+    assert r.tolerance_degree == 1
+    lost = {v.branch: (v.intended, v.severity) for v in r.verdicts if "/wrong/" in v.node}
+    assert lost == {"abort": (True, BENIGN), "proceed": (False, CATASTROPHIC)}

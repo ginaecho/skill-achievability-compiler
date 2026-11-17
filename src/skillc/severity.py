@@ -15,8 +15,19 @@ catastrophe.  The largest such k is the pack's TOLERANCE DEGREE k*.
 
 Default instantiation (needs no annotation beyond what a pack already has):
 
-  * intended branch  := a branch from whose residual the goal is still
-                        reachable (the rational-choice guard);
+  * intended branch  := while the goal is still reachable from some branch
+                        of the choice, a branch from whose residual it is
+                        still reachable (keep the goal); once it is reachable
+                        from none, a branch from whose residual the hazard is
+                        AVOIDABLE -- some continuation avoids it, the agent's
+                        later choices taken freely and the environment's
+                        adversarially (limit the harm); and if no branch
+                        avoids the hazard, every branch (a choice with no
+                        right answer is free).  So the budget counts wrong
+                        choices, not protocol depth after the point of no
+                        return.  Avoidability is the simple variant: it does
+                        not restrict later choices to intended ones (see
+                        `hazard_avoidable`);
   * hazard           := an action that PERMANENTLY deletes an atom (no
                         capability in Gamma re-establishes it) fired from a
                         configuration after which the goal is unreachable
@@ -159,6 +170,7 @@ class SeverityAnalyzer:
         self.goal_queries = 0
         self.configs = 0
         self._goal_memo: dict = {}
+        self._avoid_memo: dict = {}
         self.verdicts: list[BranchVerdict] = []
         self._seen_verdict: set = set()
         self.choice_nodes: set = set()
@@ -247,7 +259,7 @@ class SeverityAnalyzer:
                     residual = list(br) + rest
                     bst = _mk_state(cur.true_preds, cur.arith, cur.versions(),
                                     cur.path + (("choose", label),))
-                    intended = self._intended(body, label, residual, bst, recenv)
+                    intended = self._intended(body, label, residual, bst, recenv, rest)
                     if intended:
                         found, wit, pnr = self.hazard_within(
                             residual, bst, recenv, budget, loop_seen,
@@ -268,14 +280,81 @@ class SeverityAnalyzer:
                 return first or (False, (), None)
         return False, (), None
 
+    # ---- hazard avoidability (existential, unbudgeted) ----------------------
+    def hazard_avoidable(self, steps: list, st: State, recenv: dict,
+                         loop_seen: frozenset = frozenset()) -> bool:
+        """Some maximal run from here fires no hazard: it ends, blocks, or
+        returns to a configuration it already visited, without an
+        irreversible action after which the goal is unreachable.  The agent's
+        later choices are taken freely (any branch, explicit guards ignored:
+        the simple variant of "avoidable under intended play"), environment
+        choices adversarially (every branch must avoid).  Mirrors `avoid` in
+        paper/WIP/proof/Kernel.v (maximal safe path in the skeleton)."""
+        key = (json.dumps(steps, sort_keys=True), st.true_preds,
+               tuple(sorted(recenv)), loop_seen)
+        if key in self._avoid_memo:
+            return self._avoid_memo[key]
+        res = self._avoid(steps, st, recenv, loop_seen)
+        self._avoid_memo[key] = res
+        return res
+
+    def _avoid(self, steps, st, recenv, loop_seen) -> bool:
+        cur = st
+        for i, s in enumerate(steps):
+            rest = steps[i + 1:]
+            if "goal" in s:
+                if self._chk._goal_sat(cur):
+                    continue
+                return True                      # stuck: nothing more fires
+            if "msg" in s:
+                continue
+            if "spawn" in s:
+                return True
+            if "act" in s:
+                cap = self.p.capabilities.get(s["act"]["cap"])
+                if cap is None or not guard_satisfiable(cur, cap):
+                    return True                  # blocked: nothing more fires
+                nxt = apply_effect(cur, cap)
+                if cap.name in self.perm and not self.goal_reachable(rest, nxt, recenv):
+                    return False                 # this run fires the hazard
+                cur = nxt
+                continue
+            if "rec" in s:
+                name = s["rec"]["name"]
+                unfolding = list(s["rec"]["body"]) + rest
+                return self.hazard_avoidable(unfolding, cur, {**recenv, name: unfolding},
+                                             loop_seen)
+            if "continue" in s:
+                name = s["continue"]
+                k = (name, cur.true_preds)
+                if k in loop_seen:
+                    return True                  # a hazard-free cycle
+                return self.hazard_avoidable(recenv[name], self._chk._widen(cur, name),
+                                             recenv, loop_seen | {k})
+            if "choice" in s:
+                body = s["choice"]
+                res = [self.hazard_avoidable(list(br) + rest, cur, recenv, loop_seen)
+                       for br in body["branches"].values()]
+                return all(res) if body.get("external") else any(res)
+        return True
+
     def _intended(self, body: dict, label: str, residual: list,
-                  st: State, recenv: dict) -> bool:
+                  st: State, recenv: dict, rest: list | None = None) -> bool:
         guards = body.get("guards")
         if guards is not None and label in guards:
             from .checker import eval_formula, _sat
             return _sat(list(st.arith) + [eval_formula(guards[label], st)])
-        # default: rational choice -- intended iff the goal survives it
-        return self.goal_reachable(residual, st, recenv)
+        # default instantiation.  Before the point of no return the right
+        # choice keeps the goal; after it, the right choice limits harm; a
+        # choice with no right answer is free.
+        if rest is None:
+            rest = residual[len(body["branches"][label]):]
+        res = {l: list(br) + rest for l, br in body["branches"].items()}
+        if any(self.goal_reachable(r, st, recenv) for r in res.values()):
+            return self.goal_reachable(residual, st, recenv)
+        if any(self.hazard_avoidable(r, st, recenv) for r in res.values()):
+            return self.hazard_avoidable(residual, st, recenv)
+        return True                              # forced: costs nothing
 
     def _record(self, node, label, st, intended, residual, recenv,
                 hazard_found, wit, pnr):
@@ -351,7 +430,7 @@ class SeverityAnalyzer:
                     if body.get("external"):
                         b2 = budget
                     else:
-                        intended = self._intended(body, label, residual, bst, recenv)
+                        intended = self._intended(body, label, residual, bst, recenv, rest)
                         if intended:
                             b2 = budget
                         elif budget > 0:
