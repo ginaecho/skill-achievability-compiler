@@ -1,0 +1,243 @@
+{
+ "name": "airline_baggage_update",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "update_reservation_baggages": {
+   "owner": "Agent",
+   "add": [
+    "baggage_updated"
+   ]
+  },
+  "req_add_bags": {
+   "owner": "User",
+   "add": [
+    "req_add_bags"
+   ]
+  },
+  "req_remove_bags": {
+   "owner": "User",
+   "add": [
+    "req_remove_bags"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "BaggageRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "User",
+    "to": "Agent",
+    "branches": {
+     "add_checked_bags": [
+      {
+       "msg": {
+        "from": "User",
+        "to": "Agent",
+        "label": "AddBags"
+       }
+      },
+      {
+       "act": {
+        "cap": "req_add_bags",
+        "by": "User"
+       }
+      }
+     ],
+     "remove_checked_bags": [
+      {
+       "msg": {
+        "from": "User",
+        "to": "Agent",
+        "label": "RemoveBags"
+       }
+      },
+      {
+       "act": {
+        "cap": "req_remove_bags",
+        "by": "User"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "proceed_request": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "ListDetailsAndAskConfirmation"
+       }
+      },
+      {
+       "choice": {
+        "by": "User",
+        "to": "Agent",
+        "branches": {
+         "yes": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "Yes"
+           }
+          },
+          {
+           "act": {
+            "cap": "say_yes",
+            "by": "User"
+           }
+          }
+         ],
+         "not_yes": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "NotYes"
+           }
+          },
+          {
+           "act": {
+            "cap": "say_no",
+            "by": "User"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "execute": [
+          {
+           "act": {
+            "cap": "update_reservation_baggages",
+            "by": "Agent"
+           }
+          },
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Done"
+           }
+          }
+         ],
+         "hold": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "NoActionTaken"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "execute": {
+          "and": [
+           "req_add_bags",
+           "confirmed"
+          ]
+         },
+         "hold": {
+          "not": {
+           "and": [
+            "req_add_bags",
+            "confirmed"
+           ]
+          }
+         }
+        }
+       }
+      }
+     ],
+     "deny_request": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "Denial"
+       }
+      }
+     ]
+    },
+    "guards": {
+     "proceed_request": "req_add_bags",
+     "deny_request": "req_remove_bags"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "req_add_bags",
+     {
+      "or": [
+       {
+        "and": [
+         "baggage_updated",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         "declined",
+         {
+          "not": "baggage_updated"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     "req_remove_bags",
+     {
+      "not": "baggage_updated"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "update_reservation_baggages"
+ ]
+}

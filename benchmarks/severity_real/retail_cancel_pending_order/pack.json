@@ -1,0 +1,430 @@
+{
+ "name": "retail_cancel_pending_order",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "cancel_pending_order": {
+   "owner": "Agent",
+   "pre": {
+    "and": [
+     "status_pending",
+     "reason_ok"
+    ]
+   },
+   "add": [
+    "cancelled"
+   ]
+  },
+  "rec_auth_ok": {
+   "owner": "System",
+   "add": [
+    "auth_ok"
+   ]
+  },
+  "rec_auth_failed": {
+   "owner": "System",
+   "add": [
+    "auth_failed"
+   ]
+  },
+  "rec_pending": {
+   "owner": "System",
+   "add": [
+    "status_pending"
+   ]
+  },
+  "rec_not_pending": {
+   "owner": "System",
+   "add": [
+    "status_other"
+   ]
+  },
+  "req_reason_nln": {
+   "owner": "User",
+   "add": [
+    "reason_ok"
+   ]
+  },
+  "req_reason_obm": {
+   "owner": "User",
+   "add": [
+    "reason_ok"
+   ]
+  },
+  "req_reason_other": {
+   "owner": "User",
+   "add": [
+    "reason_invalid"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "CancelOrderRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "branches": {
+     "user_located": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UserLocated"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_auth_ok",
+        "by": "System"
+       }
+      }
+     ],
+     "user_not_located": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UserNotLocated"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_auth_failed",
+        "by": "System"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "proceed_auth": [
+      {
+       "choice": {
+        "by": "System",
+        "to": "Agent",
+        "branches": {
+         "pending": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "OrderPending"
+           }
+          },
+          {
+           "act": {
+            "cap": "rec_pending",
+            "by": "System"
+           }
+          }
+         ],
+         "not_pending": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "OrderNotPending"
+           }
+          },
+          {
+           "act": {
+            "cap": "rec_not_pending",
+            "by": "System"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "proceed_status": [
+          {
+           "choice": {
+            "by": "User",
+            "to": "Agent",
+            "branches": {
+             "no_longer_needed": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "ReasonNoLongerNeeded"
+               }
+              },
+              {
+               "act": {
+                "cap": "req_reason_nln",
+                "by": "User"
+               }
+              }
+             ],
+             "ordered_by_mistake": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "ReasonOrderedByMistake"
+               }
+              },
+              {
+               "act": {
+                "cap": "req_reason_obm",
+                "by": "User"
+               }
+              }
+             ],
+             "other_reason": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "ReasonOther"
+               }
+              },
+              {
+               "act": {
+                "cap": "req_reason_other",
+                "by": "User"
+               }
+              }
+             ]
+            },
+            "external": true
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "proceed_reason": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "ListDetailsAndAskConfirmation"
+               }
+              },
+              {
+               "choice": {
+                "by": "User",
+                "to": "Agent",
+                "branches": {
+                 "yes": [
+                  {
+                   "msg": {
+                    "from": "User",
+                    "to": "Agent",
+                    "label": "Yes"
+                   }
+                  },
+                  {
+                   "act": {
+                    "cap": "say_yes",
+                    "by": "User"
+                   }
+                  }
+                 ],
+                 "not_yes": [
+                  {
+                   "msg": {
+                    "from": "User",
+                    "to": "Agent",
+                    "label": "NotYes"
+                   }
+                  },
+                  {
+                   "act": {
+                    "cap": "say_no",
+                    "by": "User"
+                   }
+                  }
+                 ]
+                },
+                "external": true
+               }
+              },
+              {
+               "choice": {
+                "by": "Agent",
+                "to": "User",
+                "branches": {
+                 "execute": [
+                  {
+                   "act": {
+                    "cap": "cancel_pending_order",
+                    "by": "Agent"
+                   }
+                  },
+                  {
+                   "msg": {
+                    "from": "Agent",
+                    "to": "User",
+                    "label": "Done"
+                   }
+                  }
+                 ],
+                 "hold": [
+                  {
+                   "msg": {
+                    "from": "Agent",
+                    "to": "User",
+                    "label": "NoActionTaken"
+                   }
+                  }
+                 ]
+                },
+                "guards": {
+                 "execute": {
+                  "and": [
+                   "auth_ok",
+                   "status_pending",
+                   "reason_ok",
+                   "confirmed"
+                  ]
+                 },
+                 "hold": {
+                  "not": {
+                   "and": [
+                    "auth_ok",
+                    "status_pending",
+                    "reason_ok",
+                    "confirmed"
+                   ]
+                  }
+                 }
+                }
+               }
+              }
+             ],
+             "ask_valid_reason": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "AskValidReason"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "proceed_reason": "reason_ok",
+             "ask_valid_reason": "reason_invalid"
+            }
+           }
+          }
+         ],
+         "deny_status": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "proceed_status": "status_pending",
+         "deny_status": "status_other"
+        }
+       }
+      }
+     ],
+     "deny_auth": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "Denial"
+       }
+      }
+     ]
+    },
+    "guards": {
+     "proceed_auth": "auth_ok",
+     "deny_auth": "auth_failed"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "auth_ok",
+     "status_pending",
+     "reason_ok",
+     {
+      "or": [
+       {
+        "and": [
+         "cancelled",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         "declined",
+         {
+          "not": "cancelled"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "auth_failed",
+       "status_other",
+       "reason_invalid"
+      ]
+     },
+     {
+      "not": "cancelled"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "cancel_pending_order"
+ ]
+}

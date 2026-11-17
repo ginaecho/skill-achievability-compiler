@@ -1,0 +1,305 @@
+{
+ "name": "telecom_overdue_payment_resume",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "rec_overdue": {
+   "owner": "System",
+   "add": [
+    "bill_overdue"
+   ]
+  },
+  "rec_not_overdue": {
+   "owner": "System",
+   "add": [
+    "bill_not_overdue"
+   ]
+  },
+  "rec_contract_ok": {
+   "owner": "System",
+   "add": [
+    "contract_ok"
+   ]
+  },
+  "rec_contract_ended": {
+   "owner": "System",
+   "add": [
+    "contract_ended"
+   ]
+  },
+  "send_payment_request": {
+   "owner": "Agent",
+   "add": [
+    "payment_request_sent"
+   ]
+  },
+  "make_payment": {
+   "owner": "User",
+   "add": [
+    "bill_paid"
+   ]
+  },
+  "decline_request": {
+   "owner": "User",
+   "add": [
+    "request_declined"
+   ]
+  },
+  "resume_line": {
+   "owner": "Agent",
+   "add": [
+    "resumed"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "NoServiceReport"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "branches": {
+     "overdue": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "BillStatusOverdue"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_overdue",
+        "by": "System"
+       }
+      }
+     ],
+     "not_overdue": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "BillStatusNotOverdue"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_not_overdue",
+        "by": "System"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "branches": {
+     "contract_valid": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "ContractEndInFuture"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_contract_ok",
+        "by": "System"
+       }
+      }
+     ],
+     "contract_ended": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "ContractEndInPast"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_contract_ended",
+        "by": "System"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "send_request": [
+      {
+       "act": {
+        "cap": "send_payment_request",
+        "by": "Agent"
+       }
+      },
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "PaymentRequestSent"
+       }
+      },
+      {
+       "choice": {
+        "by": "User",
+        "to": "Agent",
+        "branches": {
+         "accepts": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "RequestAccepted"
+           }
+          },
+          {
+           "act": {
+            "cap": "make_payment",
+            "by": "User"
+           }
+          },
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "BillStatusPaid"
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "resume": [
+              {
+               "act": {
+                "cap": "resume_line",
+                "by": "Agent"
+               }
+              },
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "RebootDevice"
+               }
+              }
+             ],
+             "refuse_resume": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "CannotLiftSuspension"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "resume": "contract_ok",
+             "refuse_resume": "contract_ended"
+            }
+           }
+          }
+         ],
+         "declines": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "RequestDeclined"
+           }
+          },
+          {
+           "act": {
+            "cap": "decline_request",
+            "by": "User"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      }
+     ],
+     "no_request": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "NoOverdueBill"
+       }
+      }
+     ]
+    },
+    "guards": {
+     "send_request": "bill_overdue",
+     "no_request": "bill_not_overdue"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "bill_overdue",
+     "contract_ok",
+     "bill_paid",
+     "resumed"
+    ]
+   },
+   {
+    "and": [
+     "bill_overdue",
+     "contract_ended",
+     "bill_paid",
+     {
+      "not": "resumed"
+     }
+    ]
+   },
+   {
+    "and": [
+     "bill_overdue",
+     "request_declined",
+     {
+      "not": "bill_paid"
+     }
+    ]
+   },
+   {
+    "and": [
+     "bill_not_overdue",
+     {
+      "not": "bill_paid"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "make_payment"
+ ]
+}
