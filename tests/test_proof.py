@@ -202,7 +202,7 @@ def _table_rows(tex: str, label: str):
     """The body rows of the table carrying \\label{label}, as cell lists."""
     block = tex.split("\\label{" + label + "}")[0].split("\\begin{tabular}")[-1]
     block = block.split("\\midrule", 1)[1].split("\\bottomrule")[0]
-    block = block.replace("\\midrule", "")   # tab:use groups its rows
+    block = block.replace("\\midrule", "")   # a table may group its rows
     out = []
     for line in block.strip().split("\\\\"):
         cells = [c.strip() for c in line.strip().split("&")]
@@ -272,44 +272,116 @@ def test_the_modularity_table_matches_the_shipped_measurements():
             r["modular_projected"]["final_interface"]], cells[0]
 
 
-def test_the_usefulness_table_matches_the_shipped_runs():
-    """Table 4's seven rows carry runs, outcomes, dollars and tokens; two of
-    its figures were wrong until they were checked against the runs."""
+def test_the_real_protocol_table_matches_the_shipped_results():
+    """The real-protocol table is 18 rows x 11 figures, and the numbers
+    manifest reaches only its totals.  Check every cell: roles from the pack,
+    choices, k*, irreversible action and misselection counts from
+    results/severity.json, and the two repaired k* from the repair summary."""
+    import json
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    res, tex = root / "paper/WIP/results/severity.json", root / "paper/WIP/main.tex"
+    rep = root / "benchmarks/severity_real/repairs_summary.json"
+    if not (res.exists() and tex.exists() and rep.exists()):
+        import pytest
+        pytest.skip("paper or results not present")
+
+    data = {r["id"]: r for r in json.load(open(res))["rows"] if r.get("set") == "severity_real"}
+    repairs = {r["case"]: r for r in json.load(open(rep))}
+    text = tex.read_text(encoding="utf-8")
+    rows = _table_rows(text, "tab:real")
+    assert len(rows) == len(data) == 18, (len(rows), len(data))
+    seen = set()
+
+    # the source is a group header above its rows, not a column: check that
+    # every row sits under the header naming its source
+    block = text.split("\\label{tab:real}")[0].split("\\begin{tabular}")[-1]
+    header, under = None, {}
+    for chunk in block.split("\\\\"):
+        if "\\multicolumn" in chunk:
+            header = chunk
+        elif "&" in chunk and header is not None:
+            under[chunk.strip().split("&")[0].strip().replace("\\_", "_")] = header
+    expect = {"awesome-copilot": "awesome-copilot", "anthropics/skills": "Anthropic's skills",
+              "tau airline": "airline policy, $\\tau$-bench", "tau2 airline": "$\\tau^2$-bench",
+              "tau retail": "retail policy, $\\tau$-bench", "tau2 telecom": "telecom policy, $\\tau^2$-bench"}
+
+    def k(printed, value):
+        printed = printed.replace("$\\ge$", ">=")
+        return value is None if printed == ">=5" else value == int(printed)
+
+    # under a policy header the row drops the domain prefix of the protocol id
+    prefix = {"airline policy": "airline_", "retail policy": "retail_", "telecom policy": "telecom_"}
+    for cells in rows:
+        short = cells[0].replace("\\_", "_")
+        name = next((p + short for h, p in prefix.items() if h in under[short]), short)
+        r, rp = data[name], repairs[name]
+        pack = json.load(open(root / "benchmarks/severity_real" / name / "pack.json"))
+        pack = pack.get("pack", pack)
+        assert expect[rp["source"]] in under[short], name
+        assert int(cells[1]) == len(pack["roles"]), name
+        assert (int(cells[2]), int(cells[3])) == (r["choices"] - r["external_choices"],
+                                                  r["external_choices"]), name
+        assert cells[4].replace("\\_", "_") == r["irreversible_caps"][0], name
+        assert k(cells[5], r["k_star"]), name
+        m = r["misselections"]
+        assert [int(c) for c in cells[6:9]] == [m["Benign"], m["Futile"], m["Catastrophic"]], name
+        assert k(cells[9], rp["k_enforced"]) and k(cells[10], rp["k_narrowed"]), name
+        assert rp["k_orig"] == r["k_star"], name
+        seen.add(name)
+    assert seen == set(data), set(data) - seen
+
+
+def test_the_live_agent_table_matches_the_recorded_runs():
+    """The live-agent table: every cell against the summary the manifest reads,
+    and the catastrophe and goal columns also against the matrix that
+    scripts/live_agents.py wrote independently from the same runs."""
     import json
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    res, tex = root / "paper/WIP/results/usefulness.json", root / "paper/WIP/main.tex"
-    if not (res.exists() and tex.exists()):
+    res = root / "paper/WIP/results"
+    tex = root / "paper/WIP/main.tex"
+    if not ((res / "live_agents_summary.json").exists() and tex.exists()):
         import pytest
         pytest.skip("paper or results not present")
 
-    rows = json.load(open(res))["rows"]
-    doc = lambda r: any(d in r["skill"] for d in ("/pdf/", "/xlsx/", "/docx/"))  # noqa: E731
-    spec = lambda r: "spec-cases" in r["skill"]                                  # noqa: E731
-    ref = lambda r: r["checker"].startswith("refuted")                           # noqa: E731
-    groups = [
-        lambda r: not ref(r) and r.get("size") is None and not spec(r),
-        lambda r: ref(r) and r.get("size") is None and doc(r),
-        lambda r: not ref(r) and "/A/" in r["skill"],
-        lambda r: ref(r) and "/B/" in r["skill"],
-        lambda r: ref(r) and r.get("size") is None and not doc(r) and not spec(r),
-        lambda r: not ref(r) and r.get("size") is not None,
-        lambda r: ref(r) and r.get("size") is not None,
-    ]
-    table = _table_rows(tex.read_text(encoding="utf-8"), "tab:use")
-    assert len(table) == len(groups) == 7, len(table)
-    for cells, keep in zip(table, groups):
-        g = [r for r in rows if keep(r)]
-        assert g, cells[0]
-        assert int(cells[2]) == sum(r["runs"] for r in g), cells[0]
-        # "20 (by hand)" in one row; the count is the leading integer.
-        assert int(cells[3].split()[0]) == sum(r["success"] + r["verified_no_status"]
-                                               for r in g), cells[0]
-        assert int(cells[4]) == sum(r["silent_wrong"] for r in g), cells[0]
-        assert int(cells[5]) == sum(r["honest_fail"] for r in g), cells[0]
-        assert int(cells[6]) == sum(r["no_status"] for r in g), cells[0]
-        usd = round(sum(r["cost_usd"] for r in g), 2)
-        assert abs(float(cells[7].replace("\\$", "")) - usd) <= 0.005, (cells[0], usd)
-        tok = sum(r["tokens"] for r in g) / 1e6
-        assert abs(float(cells[8].split("\\")[0]) - tok) <= 0.005, (cells[0], tok)
+    summary = json.load(open(res / "live_agents_summary.json"))
+    cell = {(c["group"], c["cond"], c["arm"]): c for c in summary["cells"]}
+    matrix = {(m["group"], m["cond"], m["arm"]): m for m in json.load(open(res / "live_agents.json"))["matrix"]}
+    rows = _table_rows(tex.read_text(encoding="utf-8"), "tab:live")
+    assert len(rows) == 10, len(rows)
+    for cells in rows:
+        g, c = cells[0], cells[1].replace("\\_", "_")
+        u, t = cell[(g, c, "ungated")], cell[(g, c, "gated")]
+        assert int(cells[2]) == u["runs"] == t["runs"], (g, c)
+        assert [int(x) for x in cells[3:9]] == [u["entered_catastrophic"], t["entered_catastrophic"],
+                                                u["catastrophes"], t["catastrophes"],
+                                                u["success"], t["success"]], (g, c)
+        for arm, x in (("ungated", u), ("gated", t)):
+            m = matrix[(g, c, arm)]
+            assert (m["runs"], m["catastrophe"], m["success"]) == (
+                x["runs"], x["catastrophes"], x["success"]), (g, c, arm)
+
+
+def test_the_live_agent_summary_is_current():
+    """results/live_agents_summary.json is what the manifest reads; it must be
+    what scripts/live_agents_summary.py computes from the shipped runs now."""
+    import importlib.util
+    import json
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    shipped = root / "paper/WIP/results/live_agents_summary.json"
+    if not shipped.exists():
+        import pytest
+        pytest.skip("summary not present")
+    sys.path.insert(0, str(root / "scripts"))
+    spec = importlib.util.spec_from_file_location("las", root / "scripts" / "live_agents_summary.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    fresh = json.loads(json.dumps(mod.summarize()))
+    assert fresh == json.load(open(shipped))
