@@ -161,7 +161,7 @@ def ask(model: str, user: str) -> tuple[str, dict]:
     cmd = benchguard.cli_cmd(pinned, user, tools="", system=SYSTEM)
     cwd = benchguard.work_dir("live_")
     err = None
-    for attempt in range(4):
+    for attempt in range(8):
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=240, cwd=cwd,
                                env=benchguard.agent_env())
@@ -175,7 +175,7 @@ def ask(model: str, user: str) -> tuple[str, dict]:
                                           "models": served}
         except Exception as e:                       # noqa: BLE001
             err = e
-            time.sleep(3 * (attempt + 1))
+            time.sleep(10 * (attempt + 1))
     raise RuntimeError(f"agent call failed: {err}")
 
 
