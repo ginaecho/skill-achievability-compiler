@@ -149,19 +149,30 @@ def prompt_for(pack: dict, st_preds, body: dict, rest: list, cond: str, offered=
 
 
 # ---------------------------------------------------------------- the agent
+# Each alias is pinned to one model id, and a call served (in part) by any other
+# model -- the CLI can fall back, e.g. from claude-opus-5-5 to claude-opus-4-8 --
+# is retried and, failing that, the run fails and is not recorded.
+PINNED = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5"}
+
+
 def ask(model: str, user: str) -> tuple[str, dict]:
     user, table = benchguard.scrub_prompt(user)
-    cmd = benchguard.cli_cmd(model, user, tools="", system=SYSTEM)
+    pinned = PINNED.get(model, model)
+    cmd = benchguard.cli_cmd(pinned, user, tools="", system=SYSTEM)
     cwd = benchguard.work_dir("live_")
-    for attempt in range(3):
+    err = None
+    for attempt in range(4):
         try:
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=240, cwd=cwd,
                                env=benchguard.agent_env())
             d = json.loads(r.stdout)
             if d.get("is_error"):
                 raise RuntimeError(d.get("result"))
+            served = sorted((d.get("modelUsage") or {}).keys())
+            if served != [pinned]:
+                raise RuntimeError(f"served by {served}, not {pinned}")
             return benchguard_restore(d["result"].strip(), table), {"cost": d.get("total_cost_usd"),
-                                          "models": sorted((d.get("modelUsage") or {}).keys())}
+                                          "models": served}
         except Exception as e:                       # noqa: BLE001
             err = e
             time.sleep(3 * (attempt + 1))
