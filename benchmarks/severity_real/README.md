@@ -93,7 +93,7 @@ real-world effect cannot be undone.
 
 Twelve protocols, one per policy procedure in which the agent decides before an action that
 moves money or changes a booking. Per case the same files as group 1 (`pack.json`,
-`PROVENANCE.md`, `EXPECTED.md`, `result.json`) plus `result_allworlds.json` (see below).
+`PROVENANCE.md`, `EXPECTED.md`, `result.json`).
 Pre-registration commit `2adce999` (packs, PROVENANCE.md, EXPECTED.md for all twelve and the
 `_sources` folder, before the tool was run on any of them; only schema validation was used);
 results and the comparison are in the following commits, `FINDINGS.md` classifies them.
@@ -121,10 +121,10 @@ was added where the policy is silent.
 ### Results (kmax = 4)
 
 "choice nodes" counts the static agent choices; "ext." the static external choices. "all worlds"
-is the verdict count with every environment branch recorded (`analyze_all_worlds.py`),
+is the verdict count with every environment branch recorded (the tool's `result.json`),
 "mis." the same restricted to misselections (branches the guard marks wrong), "stock" the
-count in the stock tool's `result.json` (it stops recording at the first hazardous environment
-branch, see FINDINGS.md).
+count the tool recorded before the recording defect was fixed (it stopped at the first hazardous
+environment branch; see FINDINGS.md, now resolved).
 
 | case | source | choice nodes | ext. | irreversible (declared) | k* | all worlds B / F / C | mis. B / F / C | stock B / F / C |
 |---|---|---|---|---|---|---|---|---|
@@ -214,7 +214,6 @@ Rule as for group 1, with the irreversible action stated by the policy or its to
 ## Reproduce
 
     PYTHONPATH=src python3 -m skillc.cli severity benchmarks/severity_real/<case>/pack.json --json
-    PYTHONPATH=src python3 benchmarks/severity_real/analyze_all_worlds.py     # group 2: result_allworlds.json
     python3 benchmarks/severity_real/compare_expected.py
     python3 scripts/severity_eval.py        # regenerates paper/WIP/results/severity.json, docs/SEVERITY_RESULTS.md
     PYTHONPATH=src python3 -m pytest -q -p no:cacheprovider tests/test_severity.py

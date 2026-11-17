@@ -148,9 +148,13 @@ all 180 rows observed, k* and PNR equal. The proposed fix to the tool is the sam
     +                            first_env = first_env or (True, wit, pnr)
     +                    return first_env or (False, (), None)
 
-(with `first_env = None` before the loop). Until the tool is changed, `scripts/severity_eval.py`
-uses the complete recorder for the group-2 packs, so `docs/SEVERITY_RESULTS.md` and
-`results/severity.json` count all worlds; the stock counts stay in `result.json`.
+(with `first_env = None` before the loop).
+
+**Resolved (2026-11-17).** The tool now carries exactly this change (`src/skillc/severity.py`,
+regression test `test_recording_visits_every_environment_branch`). Its output equals the former
+complete recording on all twelve packs, so `analyze_all_worlds.py` and `result_allworlds.json`
+were removed and every `result.json` was regenerated with the tool; all 180 EXPECTED rows are
+observed, 0 mismatches. k* and the point of no return never depended on the defect.
 
 There is no type (a) disagreement, so there is no fix commit, and no type (b) severity disagreement.
 How much that agreement is worth is as for group 1: an implementation check against hand

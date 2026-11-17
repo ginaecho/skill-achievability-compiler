@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Compare benchmarks/severity_real/<case>/result.json with <case>/EXPECTED.md.
 
-Reads only the two files (no analysis is run).  For a case with external choices there is also
-<case>/result_allworlds.json (analyze_all_worlds.py: the same analysis with every environment
-branch recorded); it is compared the same way and printed on a second line.  Prints per-case agreement and
+Reads only the two files (no analysis is run).  Prints per-case agreement and
 every disagreement; exit status is 0 regardless (disagreements are classified by hand
 in FINDINGS.md).  `--json` prints a machine-readable summary.
 """
@@ -72,8 +70,6 @@ def main(argv):
     for d in sorted(HERE.iterdir()):
         if (d / "EXPECTED.md").exists() and (d / "result.json").exists():
             rows.append(compare(d))
-            if (d / "result_allworlds.json").exists():
-                rows.append(compare(d, "result_allworlds.json"))
     if "--json" in argv:
         print(json.dumps(rows, indent=1)); return 0
     for r in rows:

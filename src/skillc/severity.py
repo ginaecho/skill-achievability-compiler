@@ -241,7 +241,12 @@ class SeverityAnalyzer:
                 body = s["choice"]
                 node = f"{node_path}/choice@{body['by']}#{i}"
                 if body.get("external"):
-                    # the environment moves: not an agent decision, no budget
+                    # the environment moves: not an agent decision, no budget.
+                    # When RECORDING, visit every environment branch even after
+                    # one reaches the hazard, so the agent choices behind the
+                    # later branches get their verdicts too (k* is unchanged:
+                    # the result is the first hazard, as before).
+                    first_env = None
                     for label, br in body["branches"].items():
                         bst = _mk_state(cur.true_preds, cur.arith, cur.versions(),
                                         cur.path + (("env", label),))
@@ -249,8 +254,10 @@ class SeverityAnalyzer:
                             list(br) + rest, bst, recenv, budget, loop_seen,
                             f"{node}/{label}", record)
                         if found:
-                            return True, wit, pnr
-                    return False, (), None
+                            if not record:
+                                return True, wit, pnr
+                            first_env = first_env or (True, wit, pnr)
+                    return first_env or (False, (), None)
                 self.choice_nodes.add(node)
                 # when RECORDING, visit every branch even after a hazard was
                 # found, so that each branch gets its verdict

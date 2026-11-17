@@ -74,14 +74,6 @@ def acting_roles(pack: dict) -> set:
     return {c.get("owner") for c in pack.get("capabilities", {}).values()} - {None}
 
 
-def _all_worlds():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "analyze_all_worlds", ROOT / "benchmarks" / "severity_real" / "analyze_all_worlds.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
 
 def run_sets(sets):
     rows = []
@@ -91,11 +83,7 @@ def run_sets(sets):
                 rows.append({"set": name, "id": pid, "error": "compile"}); continue
             st = structure(pack)
             try:
-                if name == "severity_real" and st["external_choices"]:
-                    # complete verdict recording over external choices (see analyze_all_worlds.py)
-                    r = _all_worlds().analyze_all_worlds(pack, KMAX)
-                else:
-                    r = analyze(pack, kmax=KMAX)
+                r = analyze(pack, kmax=KMAX)
                 d = r.to_dict()
                 rows.append({"set": name, "id": pid, **st,
                              "k_star": d["tolerance_degree"], "kmax": KMAX,
