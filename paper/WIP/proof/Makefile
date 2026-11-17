@@ -8,9 +8,9 @@ core: Severity.vo EnvSeverity.vo
 	$(COQC) check_sev.v
 bridge: Bridge.vo EnvBridge.vo
 	$(COQC) check_bridge.v
-regular: Regular.vo
+regular: Regular.vo EnvRegular.vo
 	$(COQC) check_regular.v
-mu: Mu.vo
+mu: Mu.vo EnvRegular.vo
 	$(COQC) check_mu.v
 repairs: Repairs.vo
 	$(COQC) check_repairs.v
@@ -37,6 +37,8 @@ EnvSeverity.vo: EnvSeverity.v Severity.vo
 	$(COQC) EnvSeverity.v
 EnvBridge.vo: EnvBridge.v Severity.vo Bridge.vo EnvSeverity.vo
 	$(COQC) EnvBridge.v
+EnvRegular.vo: EnvRegular.v Severity.vo Regular.vo Mu.vo EnvSeverity.vo
+	$(COQC) EnvRegular.v
 Mu.vo: Mu.v Severity.vo Regular.vo
 	$(COQC) Mu.v
 Repairs.vo: Repairs.v Severity.vo

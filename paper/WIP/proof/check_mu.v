@@ -26,3 +26,18 @@ Print Assumptions bridge_mu_safeR.
 Print Assumptions TC_is_TR.
 Print Assumptions decide_mu_judgment.
 Print Assumptions closed_unfold.
+
+(* environment choices at the mu layer: EnvRegular.v *)
+Require Import EnvRegular.
+Print Assumptions menv_step0.
+Print Assumptions menv_no_misselection.
+Print Assumptions reach_mu_env.
+Print Assumptions safeR_env.
+Print Assumptions env_hstep_costs_nothing.
+Print Assumptions bridge_mu_env.
+Print Assumptions decide_mu_env_correct.
+Print Assumptions decide_mu_env_judgment.
+Print Assumptions embE_env.
+Print Assumptions reach_embed_env.
+Print Assumptions TE_regular.
+Print Assumptions TE_is_TR.
