@@ -349,8 +349,13 @@ REAL = Path(__file__).resolve().parents[1] / "benchmarks" / "severity_real"
 REAL_CASES = sorted(p.parent for p in REAL.glob("*/pack.json"))
 
 
+def any_external(steps):
+    from skillc.severity import _has_external
+    return _has_external(steps)
+
+
 def test_real_benchmark_has_cases():
-    assert len(REAL_CASES) >= 6
+    assert len(REAL_CASES) >= 18
 
 
 def _volatile(d):
@@ -389,6 +394,12 @@ def test_every_real_pack_loads_and_result_json_is_current():
         stored = json.loads((case / "result.json").read_text())
         assert _volatile(stored) == _volatile(analyze(pack, kmax=4).to_dict()), \
             f"{case.name}: result.json is stale; rerun skillc severity --json"
+        aw = case / "result_allworlds.json"
+        assert aw.exists() == any_external(pack["protocol"]), case.name
+        if aw.exists():
+            assert _volatile(json.loads(aw.read_text())) == \
+                _volatile(_all_worlds().analyze_all_worlds(pack, 4).to_dict()), \
+                f"{case.name}: result_allworlds.json is stale; rerun analyze_all_worlds.py"
 
 
 def test_real_results_match_the_preregistered_expectations():
@@ -398,5 +409,36 @@ def test_real_results_match_the_preregistered_expectations():
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     for case in REAL_CASES:
+        aw = case / "result_allworlds.json"
         r = mod.compare(case)
-        assert r["all_ok"], f"{case.name}: {r}"
+        if not aw.exists():
+            assert r["all_ok"], f"{case.name}: {r}"
+            continue
+        # packs with external choices: the stock tool records verdicts only up to the first
+        # hazardous environment branch, so rows may stay unobserved there; what it does record
+        # must still match, and the complete recording must match every row of EXPECTED.md
+        assert not r["mismatches"] and not r["unmatched"] and r["k_ok"] and r["pnr_ok"], f"{case.name}: {r}"
+        r = mod.compare(case, "result_allworlds.json")
+        assert r["all_ok"], f"{case.name} (all worlds): {r}"
+
+
+def _all_worlds():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("analyze_all_worlds", REAL / "analyze_all_worlds.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_all_worlds_analyzer_equals_the_tool_on_packs_without_external_choices():
+    """analyze_all_worlds.py changes only the loop over external choices."""
+    from skillc.severity import _has_external
+    n = 0
+    for case in REAL_CASES:
+        pack = json.loads((case / "pack.json").read_text())
+        if _has_external(pack["protocol"]):
+            continue
+        n += 1
+        assert _volatile(_all_worlds().analyze_all_worlds(pack, 4).to_dict()) == \
+            _volatile(analyze(pack, kmax=4).to_dict()), case.name
+    assert n >= 6
