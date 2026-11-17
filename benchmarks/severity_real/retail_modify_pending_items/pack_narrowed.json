@@ -1,0 +1,1194 @@
+{
+ "name": "retail_modify_pending_items_narrowed",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "add_more_items": {
+   "owner": "User",
+   "add": [
+    "more_items"
+   ]
+  },
+  "modify_pending_order_items": {
+   "owner": "Agent",
+   "pre": {
+    "and": [
+     "status_pending",
+     "items_ok",
+     "pay_ok"
+    ]
+   },
+   "add": [
+    "modified"
+   ]
+  },
+  "rec_auth_ok": {
+   "owner": "System",
+   "add": [
+    "auth_ok"
+   ]
+  },
+  "rec_auth_failed": {
+   "owner": "System",
+   "add": [
+    "auth_failed"
+   ]
+  },
+  "rec_pending": {
+   "owner": "System",
+   "add": [
+    "status_pending"
+   ]
+  },
+  "rec_not_pending": {
+   "owner": "System",
+   "add": [
+    "status_other"
+   ]
+  },
+  "req_items_ok": {
+   "owner": "User",
+   "add": [
+    "items_ok"
+   ]
+  },
+  "req_items_bad": {
+   "owner": "User",
+   "add": [
+    "items_bad"
+   ]
+  },
+  "req_pay_ok": {
+   "owner": "User",
+   "add": [
+    "pay_ok"
+   ]
+  },
+  "req_pay_bad": {
+   "owner": "User",
+   "add": [
+    "pay_bad"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "ModifyItemsRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "external": true,
+    "branches": {
+     "user_located": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UserLocated"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_auth_ok",
+        "by": "System"
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "proceed_auth": [
+          {
+           "choice": {
+            "by": "System",
+            "to": "Agent",
+            "external": true,
+            "branches": {
+             "pending": [
+              {
+               "msg": {
+                "from": "System",
+                "to": "Agent",
+                "label": "OrderPending"
+               }
+              },
+              {
+               "act": {
+                "cap": "rec_pending",
+                "by": "System"
+               }
+              },
+              {
+               "choice": {
+                "by": "Agent",
+                "to": "User",
+                "branches": {
+                 "proceed_status": [
+                  {
+                   "choice": {
+                    "by": "User",
+                    "to": "Agent",
+                    "external": true,
+                    "branches": {
+                     "same_product_other_option": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "NewItemsSameProduct"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_items_ok",
+                        "by": "User"
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "Agent",
+                        "to": "User",
+                        "branches": {
+                         "proceed_items": [
+                          {
+                           "choice": {
+                            "by": "User",
+                            "to": "Agent",
+                            "external": true,
+                            "branches": {
+                             "payment_covers": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "PaymentCovers"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "req_pay_ok",
+                                "by": "User"
+                               }
+                              },
+                              {
+                               "choice": {
+                                "by": "Agent",
+                                "to": "User",
+                                "branches": {
+                                 "proceed_payment": [
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "ListDetailsAndAskConfirmation"
+                                   }
+                                  },
+                                  {
+                                   "choice": {
+                                    "by": "User",
+                                    "to": "Agent",
+                                    "external": true,
+                                    "branches": {
+                                     "yes_all_items_given": [
+                                      {
+                                       "msg": {
+                                        "from": "User",
+                                        "to": "Agent",
+                                        "label": "Yes"
+                                       }
+                                      },
+                                      {
+                                       "act": {
+                                        "cap": "say_yes",
+                                        "by": "User"
+                                       }
+                                      },
+                                      {
+                                       "choice": {
+                                        "by": "Agent",
+                                        "to": "User",
+                                        "branches": {
+                                         "execute": [
+                                          {
+                                           "act": {
+                                            "cap": "modify_pending_order_items",
+                                            "by": "Agent"
+                                           }
+                                          },
+                                          {
+                                           "msg": {
+                                            "from": "Agent",
+                                            "to": "User",
+                                            "label": "Done"
+                                           }
+                                          }
+                                         ],
+                                         "hold": [
+                                          {
+                                           "msg": {
+                                            "from": "Agent",
+                                            "to": "User",
+                                            "label": "NoActionTaken"
+                                           }
+                                          }
+                                         ]
+                                        },
+                                        "guards": {
+                                         "execute": {
+                                          "and": [
+                                           "auth_ok",
+                                           "status_pending",
+                                           "items_ok",
+                                           "pay_ok",
+                                           "confirmed"
+                                          ]
+                                         },
+                                         "hold": {
+                                          "not": {
+                                           "and": [
+                                            "auth_ok",
+                                            "status_pending",
+                                            "items_ok",
+                                            "pay_ok",
+                                            "confirmed"
+                                           ]
+                                          }
+                                         }
+                                        }
+                                       }
+                                      }
+                                     ],
+                                     "more_items_to_add": [
+                                      {
+                                       "msg": {
+                                        "from": "User",
+                                        "to": "Agent",
+                                        "label": "MoreItems"
+                                       }
+                                      },
+                                      {
+                                       "act": {
+                                        "cap": "add_more_items",
+                                        "by": "User"
+                                       }
+                                      },
+                                      {
+                                       "choice": {
+                                        "by": "Agent",
+                                        "to": "User",
+                                        "branches": {
+                                         "hold": [
+                                          {
+                                           "msg": {
+                                            "from": "Agent",
+                                            "to": "User",
+                                            "label": "NoActionTaken"
+                                           }
+                                          }
+                                         ]
+                                        },
+                                        "guards": {
+                                         "hold": {
+                                          "not": {
+                                           "and": [
+                                            "auth_ok",
+                                            "status_pending",
+                                            "items_ok",
+                                            "pay_ok",
+                                            "confirmed"
+                                           ]
+                                          }
+                                         }
+                                        }
+                                       }
+                                      }
+                                     ],
+                                     "not_yes": [
+                                      {
+                                       "msg": {
+                                        "from": "User",
+                                        "to": "Agent",
+                                        "label": "NotYes"
+                                       }
+                                      },
+                                      {
+                                       "act": {
+                                        "cap": "say_no",
+                                        "by": "User"
+                                       }
+                                      },
+                                      {
+                                       "choice": {
+                                        "by": "Agent",
+                                        "to": "User",
+                                        "branches": {
+                                         "hold": [
+                                          {
+                                           "msg": {
+                                            "from": "Agent",
+                                            "to": "User",
+                                            "label": "NoActionTaken"
+                                           }
+                                          }
+                                         ]
+                                        },
+                                        "guards": {
+                                         "hold": {
+                                          "not": {
+                                           "and": [
+                                            "auth_ok",
+                                            "status_pending",
+                                            "items_ok",
+                                            "pay_ok",
+                                            "confirmed"
+                                           ]
+                                          }
+                                         }
+                                        }
+                                       }
+                                      }
+                                     ]
+                                    }
+                                   }
+                                  }
+                                 ],
+                                 "ask_other_payment": [
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "AskOtherPaymentMethod"
+                                   }
+                                  }
+                                 ]
+                                },
+                                "guards": {
+                                 "proceed_payment": "pay_ok",
+                                 "ask_other_payment": "pay_bad"
+                                }
+                               }
+                              }
+                             ],
+                             "gift_card_short": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "GiftCardBalanceShort"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "req_pay_bad",
+                                "by": "User"
+                               }
+                              },
+                              {
+                               "choice": {
+                                "by": "Agent",
+                                "to": "User",
+                                "branches": {
+                                 "proceed_payment": [
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "ListDetailsAndAskConfirmation"
+                                   }
+                                  },
+                                  {
+                                   "choice": {
+                                    "by": "User",
+                                    "to": "Agent",
+                                    "branches": {
+                                     "yes_all_items_given": [
+                                      {
+                                       "msg": {
+                                        "from": "User",
+                                        "to": "Agent",
+                                        "label": "Yes"
+                                       }
+                                      },
+                                      {
+                                       "act": {
+                                        "cap": "say_yes",
+                                        "by": "User"
+                                       }
+                                      }
+                                     ],
+                                     "more_items_to_add": [
+                                      {
+                                       "msg": {
+                                        "from": "User",
+                                        "to": "Agent",
+                                        "label": "MoreItems"
+                                       }
+                                      },
+                                      {
+                                       "act": {
+                                        "cap": "add_more_items",
+                                        "by": "User"
+                                       }
+                                      }
+                                     ],
+                                     "not_yes": [
+                                      {
+                                       "msg": {
+                                        "from": "User",
+                                        "to": "Agent",
+                                        "label": "NotYes"
+                                       }
+                                      },
+                                      {
+                                       "act": {
+                                        "cap": "say_no",
+                                        "by": "User"
+                                       }
+                                      }
+                                     ]
+                                    },
+                                    "external": true
+                                   }
+                                  },
+                                  {
+                                   "choice": {
+                                    "by": "Agent",
+                                    "to": "User",
+                                    "branches": {
+                                     "execute": [
+                                      {
+                                       "act": {
+                                        "cap": "modify_pending_order_items",
+                                        "by": "Agent"
+                                       }
+                                      },
+                                      {
+                                       "msg": {
+                                        "from": "Agent",
+                                        "to": "User",
+                                        "label": "Done"
+                                       }
+                                      }
+                                     ],
+                                     "hold": [
+                                      {
+                                       "msg": {
+                                        "from": "Agent",
+                                        "to": "User",
+                                        "label": "NoActionTaken"
+                                       }
+                                      }
+                                     ]
+                                    },
+                                    "guards": {
+                                     "execute": {
+                                      "and": [
+                                       "auth_ok",
+                                       "status_pending",
+                                       "items_ok",
+                                       "pay_ok",
+                                       "confirmed"
+                                      ]
+                                     },
+                                     "hold": {
+                                      "not": {
+                                       "and": [
+                                        "auth_ok",
+                                        "status_pending",
+                                        "items_ok",
+                                        "pay_ok",
+                                        "confirmed"
+                                       ]
+                                      }
+                                     }
+                                    }
+                                   }
+                                  }
+                                 ],
+                                 "ask_other_payment": [
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "AskOtherPaymentMethod"
+                                   }
+                                  }
+                                 ]
+                                },
+                                "guards": {
+                                 "proceed_payment": "pay_ok",
+                                 "ask_other_payment": "pay_bad"
+                                }
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         ],
+                         "deny_items": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "Denial"
+                           }
+                          }
+                         ]
+                        },
+                        "guards": {
+                         "proceed_items": "items_ok",
+                         "deny_items": "items_bad"
+                        }
+                       }
+                      }
+                     ],
+                     "different_product_type": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "NewItemsOtherProductType"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_items_bad",
+                        "by": "User"
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "Agent",
+                        "to": "User",
+                        "branches": {
+                         "proceed_items": [
+                          {
+                           "choice": {
+                            "by": "User",
+                            "to": "Agent",
+                            "branches": {
+                             "payment_covers": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "PaymentCovers"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "req_pay_ok",
+                                "by": "User"
+                               }
+                              }
+                             ],
+                             "gift_card_short": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "GiftCardBalanceShort"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "req_pay_bad",
+                                "by": "User"
+                               }
+                              }
+                             ]
+                            },
+                            "external": true
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "Agent",
+                            "to": "User",
+                            "branches": {
+                             "proceed_payment": [
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "ListDetailsAndAskConfirmation"
+                               }
+                              },
+                              {
+                               "choice": {
+                                "by": "User",
+                                "to": "Agent",
+                                "branches": {
+                                 "yes_all_items_given": [
+                                  {
+                                   "msg": {
+                                    "from": "User",
+                                    "to": "Agent",
+                                    "label": "Yes"
+                                   }
+                                  },
+                                  {
+                                   "act": {
+                                    "cap": "say_yes",
+                                    "by": "User"
+                                   }
+                                  }
+                                 ],
+                                 "more_items_to_add": [
+                                  {
+                                   "msg": {
+                                    "from": "User",
+                                    "to": "Agent",
+                                    "label": "MoreItems"
+                                   }
+                                  },
+                                  {
+                                   "act": {
+                                    "cap": "add_more_items",
+                                    "by": "User"
+                                   }
+                                  }
+                                 ],
+                                 "not_yes": [
+                                  {
+                                   "msg": {
+                                    "from": "User",
+                                    "to": "Agent",
+                                    "label": "NotYes"
+                                   }
+                                  },
+                                  {
+                                   "act": {
+                                    "cap": "say_no",
+                                    "by": "User"
+                                   }
+                                  }
+                                 ]
+                                },
+                                "external": true
+                               }
+                              },
+                              {
+                               "choice": {
+                                "by": "Agent",
+                                "to": "User",
+                                "branches": {
+                                 "execute": [
+                                  {
+                                   "act": {
+                                    "cap": "modify_pending_order_items",
+                                    "by": "Agent"
+                                   }
+                                  },
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "Done"
+                                   }
+                                  }
+                                 ],
+                                 "hold": [
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "NoActionTaken"
+                                   }
+                                  }
+                                 ]
+                                },
+                                "guards": {
+                                 "execute": {
+                                  "and": [
+                                   "auth_ok",
+                                   "status_pending",
+                                   "items_ok",
+                                   "pay_ok",
+                                   "confirmed"
+                                  ]
+                                 },
+                                 "hold": {
+                                  "not": {
+                                   "and": [
+                                    "auth_ok",
+                                    "status_pending",
+                                    "items_ok",
+                                    "pay_ok",
+                                    "confirmed"
+                                   ]
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             ],
+                             "ask_other_payment": [
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "AskOtherPaymentMethod"
+                               }
+                              }
+                             ]
+                            },
+                            "guards": {
+                             "proceed_payment": "pay_ok",
+                             "ask_other_payment": "pay_bad"
+                            }
+                           }
+                          }
+                         ],
+                         "deny_items": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "Denial"
+                           }
+                          }
+                         ]
+                        },
+                        "guards": {
+                         "proceed_items": "items_ok",
+                         "deny_items": "items_bad"
+                        }
+                       }
+                      }
+                     ]
+                    }
+                   }
+                  }
+                 ],
+                 "deny_status": [
+                  {
+                   "msg": {
+                    "from": "Agent",
+                    "to": "User",
+                    "label": "Denial"
+                   }
+                  }
+                 ]
+                },
+                "guards": {
+                 "proceed_status": "status_pending",
+                 "deny_status": "status_other"
+                }
+               }
+              }
+             ],
+             "not_pending": [
+              {
+               "msg": {
+                "from": "System",
+                "to": "Agent",
+                "label": "OrderNotPending"
+               }
+              },
+              {
+               "act": {
+                "cap": "rec_not_pending",
+                "by": "System"
+               }
+              },
+              {
+               "choice": {
+                "by": "Agent",
+                "to": "User",
+                "branches": {
+                 "proceed_status": [
+                  {
+                   "choice": {
+                    "by": "User",
+                    "to": "Agent",
+                    "branches": {
+                     "same_product_other_option": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "NewItemsSameProduct"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_items_ok",
+                        "by": "User"
+                       }
+                      }
+                     ],
+                     "different_product_type": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "NewItemsOtherProductType"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_items_bad",
+                        "by": "User"
+                       }
+                      }
+                     ]
+                    },
+                    "external": true
+                   }
+                  },
+                  {
+                   "choice": {
+                    "by": "Agent",
+                    "to": "User",
+                    "branches": {
+                     "proceed_items": [
+                      {
+                       "choice": {
+                        "by": "User",
+                        "to": "Agent",
+                        "branches": {
+                         "payment_covers": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "PaymentCovers"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "req_pay_ok",
+                            "by": "User"
+                           }
+                          }
+                         ],
+                         "gift_card_short": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "GiftCardBalanceShort"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "req_pay_bad",
+                            "by": "User"
+                           }
+                          }
+                         ]
+                        },
+                        "external": true
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "Agent",
+                        "to": "User",
+                        "branches": {
+                         "proceed_payment": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "ListDetailsAndAskConfirmation"
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "User",
+                            "to": "Agent",
+                            "branches": {
+                             "yes_all_items_given": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "Yes"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "say_yes",
+                                "by": "User"
+                               }
+                              }
+                             ],
+                             "more_items_to_add": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "MoreItems"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "add_more_items",
+                                "by": "User"
+                               }
+                              }
+                             ],
+                             "not_yes": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "NotYes"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "say_no",
+                                "by": "User"
+                               }
+                              }
+                             ]
+                            },
+                            "external": true
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "Agent",
+                            "to": "User",
+                            "branches": {
+                             "execute": [
+                              {
+                               "act": {
+                                "cap": "modify_pending_order_items",
+                                "by": "Agent"
+                               }
+                              },
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "Done"
+                               }
+                              }
+                             ],
+                             "hold": [
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "NoActionTaken"
+                               }
+                              }
+                             ]
+                            },
+                            "guards": {
+                             "execute": {
+                              "and": [
+                               "auth_ok",
+                               "status_pending",
+                               "items_ok",
+                               "pay_ok",
+                               "confirmed"
+                              ]
+                             },
+                             "hold": {
+                              "not": {
+                               "and": [
+                                "auth_ok",
+                                "status_pending",
+                                "items_ok",
+                                "pay_ok",
+                                "confirmed"
+                               ]
+                              }
+                             }
+                            }
+                           }
+                          }
+                         ],
+                         "ask_other_payment": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "AskOtherPaymentMethod"
+                           }
+                          }
+                         ]
+                        },
+                        "guards": {
+                         "proceed_payment": "pay_ok",
+                         "ask_other_payment": "pay_bad"
+                        }
+                       }
+                      }
+                     ],
+                     "deny_items": [
+                      {
+                       "msg": {
+                        "from": "Agent",
+                        "to": "User",
+                        "label": "Denial"
+                       }
+                      }
+                     ]
+                    },
+                    "guards": {
+                     "proceed_items": "items_ok",
+                     "deny_items": "items_bad"
+                    }
+                   }
+                  }
+                 ],
+                 "deny_status": [
+                  {
+                   "msg": {
+                    "from": "Agent",
+                    "to": "User",
+                    "label": "Denial"
+                   }
+                  }
+                 ]
+                },
+                "guards": {
+                 "proceed_status": "status_pending",
+                 "deny_status": "status_other"
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         ],
+         "deny_auth": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "proceed_auth": "auth_ok",
+         "deny_auth": "auth_failed"
+        }
+       }
+      }
+     ],
+     "user_not_located": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UserNotLocated"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_auth_failed",
+        "by": "System"
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "deny_auth": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "deny_auth": "auth_failed"
+        }
+       }
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "auth_ok",
+     "status_pending",
+     "items_ok",
+     "pay_ok",
+     {
+      "or": [
+       {
+        "and": [
+         "modified",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         {
+          "not": "modified"
+         },
+         {
+          "or": [
+           "declined",
+           "more_items"
+          ]
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "auth_failed",
+       "status_other",
+       "items_bad",
+       "pay_bad"
+      ]
+     },
+     {
+      "not": "modified"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "modify_pending_order_items"
+ ]
+}

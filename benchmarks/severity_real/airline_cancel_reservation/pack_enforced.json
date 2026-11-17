@@ -1,0 +1,320 @@
+{
+ "name": "airline_cancel_reservation_enforced",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "rec_flown": {
+   "owner": "System",
+   "add": [
+    "flown"
+   ]
+  },
+  "rec_none_flown": {
+   "owner": "System",
+   "add": [
+    "not_flown"
+   ]
+  },
+  "ground_24h": {
+   "owner": "System",
+   "add": [
+    "eligible",
+    "within_24h"
+   ]
+  },
+  "ground_airline_cancelled": {
+   "owner": "System",
+   "add": [
+    "eligible",
+    "airline_cancelled"
+   ]
+  },
+  "ground_business": {
+   "owner": "System",
+   "add": [
+    "eligible",
+    "business"
+   ]
+  },
+  "ground_insured": {
+   "owner": "System",
+   "add": [
+    "eligible",
+    "insured_covered"
+   ]
+  },
+  "ground_none": {
+   "owner": "System",
+   "add": [
+    "ineligible"
+   ]
+  },
+  "transfer_to_human_agents": {
+   "owner": "Agent",
+   "add": [
+    "transferred"
+   ]
+  },
+  "cancel_reservation": {
+   "owner": "Agent",
+   "add": [
+    "cancelled"
+   ],
+   "pre": {
+    "and": [
+     "not_flown",
+     "eligible"
+    ]
+   }
+  },
+  "deny_request": {
+   "owner": "Agent",
+   "add": [
+    "denied"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "CancelRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "branches": {
+     "segment_flown": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "RecordShowsFlownSegment"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_flown",
+        "by": "System"
+       }
+      }
+     ],
+     "none_flown": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "RecordShowsNoFlownSegment"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_none_flown",
+        "by": "System"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "transfer": [
+      {
+       "act": {
+        "cap": "transfer_to_human_agents",
+        "by": "Agent"
+       }
+      },
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "Transferred"
+       }
+      }
+     ],
+     "continue": [
+      {
+       "choice": {
+        "by": "System",
+        "to": "Agent",
+        "branches": {
+         "booked_within_24h": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "RecordShowsBookedWithin24h"
+           }
+          },
+          {
+           "act": {
+            "cap": "ground_24h",
+            "by": "System"
+           }
+          }
+         ],
+         "airline_cancelled_flight": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "RecordShowsAirlineCancelled"
+           }
+          },
+          {
+           "act": {
+            "cap": "ground_airline_cancelled",
+            "by": "System"
+           }
+          }
+         ],
+         "business_cabin": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "RecordShowsBusiness"
+           }
+          },
+          {
+           "act": {
+            "cap": "ground_business",
+            "by": "System"
+           }
+          }
+         ],
+         "insured_covered_reason": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "RecordShowsInsuranceCovers"
+           }
+          },
+          {
+           "act": {
+            "cap": "ground_insured",
+            "by": "System"
+           }
+          }
+         ],
+         "no_ground": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "RecordShowsNoGround"
+           }
+          },
+          {
+           "act": {
+            "cap": "ground_none",
+            "by": "System"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "cancel": [
+          {
+           "act": {
+            "cap": "cancel_reservation",
+            "by": "Agent"
+           }
+          },
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "RefundNotice"
+           }
+          }
+         ],
+         "deny": [
+          {
+           "act": {
+            "cap": "deny_request",
+            "by": "Agent"
+           }
+          },
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "cancel": {
+          "and": [
+           "not_flown",
+           "eligible"
+          ]
+         },
+         "deny": {
+          "and": [
+           "not_flown",
+           "ineligible"
+          ]
+         }
+        }
+       }
+      }
+     ]
+    },
+    "guards": {
+     "transfer": "flown",
+     "continue": "not_flown"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "flown",
+     "transferred"
+    ]
+   },
+   {
+    "and": [
+     "not_flown",
+     "eligible",
+     "cancelled"
+    ]
+   },
+   {
+    "and": [
+     "not_flown",
+     "ineligible",
+     "denied"
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "cancel_reservation"
+ ]
+}

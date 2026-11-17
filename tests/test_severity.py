@@ -470,3 +470,80 @@ def test_recording_visits_every_environment_branch():
             "goal": "g", "init_true": [], "irreversible": ["wipe"]}
     r = analyze(pack, kmax=2)
     assert {v.branch for v in r.verdicts if "/second/" in v.node} == {"ok", "skip"}
+
+
+# ---------------------------------------------------------------------------
+# Repairs on the real protocols: scripts/severity_repairs.py
+# (pack_enforced / pack_narrowed and their results, REPAIRS.md)
+# ---------------------------------------------------------------------------
+def _repairs_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "severity_repairs", REAL.parents[1] / "scripts" / "severity_repairs.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _k(r):
+    return float("inf") if r["tolerance_degree"] is None else r["tolerance_degree"]
+
+
+def test_enforced_pack_only_adds_preconditions():
+    """Enforcement changes nothing but `pre` on capabilities (the protocol is untouched)."""
+    for case in REAL_CASES:
+        a = json.loads((case / "pack.json").read_text())
+        b = json.loads((case / "pack_enforced.json").read_text())
+        assert a["protocol"] == b["protocol"], case.name
+        assert a["goal"] == b["goal"] and a.get("init_true") == b.get("init_true"), case.name
+        for name, cap in a["capabilities"].items():
+            other = dict(b["capabilities"][name])
+            other.pop("pre", None)
+            mine = dict(cap)
+            mine.pop("pre", None)
+            assert mine == other, (case.name, name)
+        assert set(a["capabilities"]) == set(b["capabilities"]), case.name
+
+
+def test_repairs_never_lower_k_star_and_narrowing_is_sound():
+    """Anti-monotonicity / narrowing soundness (paper Sections 6 and 11): enforcing a
+    precondition only removes transitions and narrowing only removes branches, so
+    hazard reachability can only shrink: k* never decreases from pack.json to
+    pack_enforced.json and to pack_narrowed.json; the narrowed protocol has no
+    Catastrophic branch and is tolerant at every tested budget (kmax = 4), and both
+    repairs keep the goal reachable."""
+    mod = _repairs_module()
+    for case in REAL_CASES:
+        orig = json.loads((case / "result.json").read_text())
+        enf = json.loads((case / "result_enforced.json").read_text())
+        nar = json.loads((case / "result_narrowed.json").read_text())
+        assert _k(enf) >= _k(orig), f"{case.name}: enforcement lowered k*"
+        assert _k(nar) >= _k(orig), f"{case.name}: narrowing lowered k*"
+        assert nar["tolerance_degree"] is None and nar["kmax_tested"] == 4, case.name
+        assert nar["counts"].get("Catastrophic", 0) == 0, case.name
+        assert nar["narrowing"] == [], case.name
+        for f in ("pack_enforced.json", "pack_narrowed.json"):
+            assert mod.goal_reachable(json.loads((case / f).read_text())), (case.name, f)
+
+
+def test_repair_files_are_current():
+    """Shipped pack_/result_ enforced and narrowed files, the summary and REPAIRS.md are
+    exactly what scripts/severity_repairs.py produces from the packs."""
+    mod = _repairs_module()
+    for case in REAL_CASES:
+        pack = json.loads((case / "pack.json").read_text())
+        enf = mod.enforce(pack, mod.RULES[case.name])
+        assert json.loads((case / "pack_enforced.json").read_text()) == json.loads(json.dumps(enf)), case.name
+        assert json.loads((case / "result_enforced.json").read_text()) == mod.run(enf), \
+            f"{case.name}: result_enforced.json is stale; rerun scripts/severity_repairs.py"
+        nar, _ = mod.narrow_to_fixpoint(pack)
+        assert json.loads((case / "pack_narrowed.json").read_text()) == json.loads(json.dumps(nar)), case.name
+        assert json.loads((case / "result_narrowed.json").read_text()) == mod.run(nar), \
+            f"{case.name}: result_narrowed.json is stale; rerun scripts/severity_repairs.py"
+    rows = json.loads((REAL / "repairs_summary.json").read_text())
+    assert [r["case"] for r in rows] == [c.name for c in REAL_CASES]
+    for r in rows:
+        c = REAL / r["case"]
+        assert r["k_enforced"] == json.loads((c / "result_enforced.json").read_text())["tolerance_degree"]
+        assert r["k_narrowed"] == json.loads((c / "result_narrowed.json").read_text())["tolerance_degree"]
+    assert "| airline_cancel_reservation |" in (REAL / "REPAIRS.md").read_text()

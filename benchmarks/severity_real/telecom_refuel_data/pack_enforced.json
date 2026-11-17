@@ -1,0 +1,338 @@
+{
+ "name": "telecom_refuel_data_enforced",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "refuel_data": {
+   "owner": "Agent",
+   "add": [
+    "refueled"
+   ],
+   "pre": {
+    "and": [
+     "usage_exceeded",
+     "amount_ok"
+    ]
+   }
+  },
+  "rec_usage_exceeded": {
+   "owner": "System",
+   "add": [
+    "usage_exceeded"
+   ]
+  },
+  "rec_usage_within": {
+   "owner": "System",
+   "add": [
+    "usage_within"
+   ]
+  },
+  "req_amount_ok": {
+   "owner": "User",
+   "add": [
+    "amount_ok"
+   ]
+  },
+  "req_amount_bad": {
+   "owner": "User",
+   "add": [
+    "amount_bad"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "NoDataReport"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "branches": {
+     "limit_exceeded": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UsageExceedsLimit"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_usage_exceeded",
+        "by": "System"
+       }
+      }
+     ],
+     "within_limit": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UsageWithinLimit"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_usage_within",
+        "by": "System"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "proceed_usage": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "AskRefuelAmount"
+       }
+      },
+      {
+       "choice": {
+        "by": "User",
+        "to": "Agent",
+        "branches": {
+         "within_two_gb": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "AmountAtMostTwoGb"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_amount_ok",
+            "by": "User"
+           }
+          }
+         ],
+         "more_than_two_gb": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "AmountOverTwoGb"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_amount_bad",
+            "by": "User"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "proceed_amount": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "ListDetailsAndAskConfirmation"
+           }
+          },
+          {
+           "choice": {
+            "by": "User",
+            "to": "Agent",
+            "branches": {
+             "yes": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "Yes"
+               }
+              },
+              {
+               "act": {
+                "cap": "say_yes",
+                "by": "User"
+               }
+              }
+             ],
+             "not_yes": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "NotYes"
+               }
+              },
+              {
+               "act": {
+                "cap": "say_no",
+                "by": "User"
+               }
+              }
+             ]
+            },
+            "external": true
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "execute": [
+              {
+               "act": {
+                "cap": "refuel_data",
+                "by": "Agent"
+               }
+              },
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "Done"
+               }
+              }
+             ],
+             "hold": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "NoActionTaken"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "execute": {
+              "and": [
+               "usage_exceeded",
+               "amount_ok",
+               "confirmed"
+              ]
+             },
+             "hold": {
+              "not": {
+               "and": [
+                "usage_exceeded",
+                "amount_ok",
+                "confirmed"
+               ]
+              }
+             }
+            }
+           }
+          }
+         ],
+         "deny_amount": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "CannotRefuelThatMuch"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "proceed_amount": "amount_ok",
+         "deny_amount": "amount_bad"
+        }
+       }
+      }
+     ],
+     "deny_usage": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "NoRefuelNeeded"
+       }
+      }
+     ]
+    },
+    "guards": {
+     "proceed_usage": "usage_exceeded",
+     "deny_usage": "usage_within"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "usage_exceeded",
+     "amount_ok",
+     {
+      "or": [
+       {
+        "and": [
+         "refueled",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         "declined",
+         {
+          "not": "refueled"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "usage_within",
+       "amount_bad"
+      ]
+     },
+     {
+      "not": "refueled"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "refuel_data"
+ ]
+}
