@@ -5,3 +5,8 @@ Print Assumptions goal_reachable_correct.
 Print Assumptions goal_reach_implies_reach_mu.
 Print Assumptions goal_reach_strictly_stronger.
 Print Assumptions goal_reach_ignores_the_budget.
+Print Assumptions avoid_b_correct.
+Print Assumptions total_guards_no_misselection.
+Print Assumptions rat_guard_spec.
+Print Assumptions forced_choice_intended.
+Print Assumptions forced_choice_costs_nothing.

@@ -308,9 +308,95 @@ Proof.
 Qed.
 
 (* ================================================================= *)
+(*  Hazard AVOIDABILITY on the skeleton, used by the default guard     *)
+(*  once the goal is lost.  The skeleton's table holds every base      *)
+(*  action twice; an irreversible occurrence of cap c is cap nb + c.   *)
+(*  An edge is HAZARDOUS when it fires an irreversible action after    *)
+(*  which the goal is unreachable; the hazard is avoidable from a      *)
+(*  state when some maximal path of safe edges leaves it: one that     *)
+(*  reaches a dead end (protocol end, blocked action) or a safe cycle. *)
+(*  Every branch is followed (guards play no part): this is the simple *)
+(*  variant of "avoidable under intended play".                        *)
+(* ================================================================= *)
+Section Avoid.
+Variables (n hz nb : nat) (tbl : list Act) (goal : F).
+
+Definition haz_edge (s s' : GW) : bool :=
+  match fst s with
+  | RAct _ c _ _ => Nat.leb nb c && negb (goal_reachable n hz tbl goal (fst s') (snd s'))
+  | _ => false
+  end.
+Definition safe_succ (s : GW) : list GW :=
+  filter (fun s' => negb (haz_edge s s')) (gsucc hz tbl s).
+Definition sinkb (s : GW) : bool := match gsucc hz tbl s with [] => true | _ => false end.
+Definition GW_eqb (x y : GW) : bool := if GW_dec x y then true else false.
+Definition univ (G : Gr Gd) : list GW := list_prod (cands Gd [] G) (all_bits n).
+Definition cycb (U : list GW) (y : GW) : bool :=
+  existsb (fun z => decide' GW GW_dec safe_succ U (GW_eqb y) z) (safe_succ y).
+Definition avoid_b (G : Gr Gd) (w : Wd) : bool :=
+  decide' GW GW_dec safe_succ (univ G) (fun y => sinkb y || cycb (univ G) y) (G, w).
+
+(* the specification: a maximal safe path exists *)
+Definition avoid (G : Gr Gd) (w : Wd) : Prop :=
+  exists y, reach GW safe_succ (G, w) y /\
+    (gsucc hz tbl y = [] \/ exists z, In z (safe_succ y) /\ reach GW safe_succ z y).
+
+Lemma safe_closed : forall G0, closed_at Gd 0 G0 ->
+  forall s s', In s (univ G0) -> edge GW safe_succ s s' -> In s' (univ G0).
+Proof.
+  intros G0 Hc s s' Hs He. unfold edge, safe_succ in He. apply filter_In in He.
+  eapply (gsucc_closed n hz tbl G0 Hc); [ exact Hs | exact (proj1 He) ].
+Qed.
+
+Lemma safe_reach_closed : forall G0, closed_at Gd 0 G0 ->
+  forall s s', In s (univ G0) -> reach GW safe_succ s s' -> In s' (univ G0).
+Proof.
+  intros G0 Hc s s' Hs Hr. induction Hr as [ x | x y z He Hr IH ]; [ exact Hs | ].
+  apply IH. eapply safe_closed; eassumption.
+Qed.
+
+Theorem avoid_b_correct : forall G w,
+  closed_at Gd 0 G -> length w = n -> (avoid_b G w = true <-> avoid G w).
+Proof.
+  intros G w Hc Hlen.
+  assert (Hin : In (G, w) (univ G)).
+  { apply in_prod_iff. split; [ rewrite <- (close_nil Gd G Hc) at 1; apply cands_head
+                              | apply all_bits_spec; exact Hlen ]. }
+  unfold avoid_b. split.
+  - intro Hd. destruct (decide'_sound _ _ _ _ _ _ Hd) as [y [Hr Hb]].
+    exists y. split; [ exact Hr | ]. apply orb_true_iff in Hb. destruct Hb as [Hb | Hb].
+    + left. unfold sinkb in Hb. destruct (gsucc hz tbl y); [ reflexivity | discriminate ].
+    + right. unfold cycb in Hb. apply existsb_exists in Hb. destruct Hb as [z [Hz Hdz]].
+      destruct (decide'_sound _ _ _ _ _ _ Hdz) as [y' [Hr' Hb']].
+      unfold GW_eqb in Hb'. destruct (GW_dec y y') as [-> | ]; [ | discriminate ].
+      exists z. split; assumption.
+  - intros [y [Hr Hy]].
+    apply (decide'_complete GW GW_dec safe_succ (univ G) _ (safe_closed G Hc) (G, w) y Hin Hr).
+    apply orb_true_iff. destruct Hy as [Hy | [z [Hz Hrz]]].
+    + left. unfold sinkb. rewrite Hy. reflexivity.
+    + right. unfold cycb. apply existsb_exists. exists z. split; [ exact Hz | ].
+      apply (decide'_complete GW GW_dec safe_succ (univ G) _ (safe_closed G Hc) z y).
+      * apply (safe_closed G Hc y z); [ exact (safe_reach_closed G Hc (G, w) y Hin Hr) | exact Hz ].
+      * exact Hrz.
+      * unfold GW_eqb. destruct (GW_dec y y); [ reflexivity | contradiction ].
+Qed.
+End Avoid.
+
+(* a choice whose every guard holds offers no misselection edge *)
+Theorem total_guards_no_misselection : forall p q (brs : list (Lab * Gd * Gr Gd)) w G' w',
+  (forall l g Gl, In (l, g, Gl) brs -> satg g w) ->
+  ~ mstep1 Wd Gd satg (RComm Gd p q brs) w G' w'.
+Proof.
+  intros p q brs w G' w' Hall Hs.
+  inversion Hs as [ p0 q0 brs0 l g Gl w0 Hin Hns ]; subst.
+  exact (Hns (Hall _ _ _ Hin)).
+Qed.
+
+(* ================================================================= *)
 (*  Elaboration (trusted front end): the tool's protocol tree, with    *)
-(*  explicit or RATIONAL guards, becomes a guarded regular type whose  *)
-(*  guard tables and hazard tables are computed with goal_reachable.   *)
+(*  explicit or DEFAULT guards, becomes a guarded regular type whose   *)
+(*  guard tables (rat_guard: goal_reachable, then avoid_b) and hazard  *)
+(*  tables (goal_reachable) are computed on the skeleton.              *)
 (* ================================================================= *)
 Inductive Raw : Type :=
 | WEnd : Raw
@@ -324,19 +410,118 @@ Definition base_act (b : BCap) : Act :=
   {| a_pre := b_pre b; a_add := b_add b; a_del := b_del b; a_haz := [] |}.
 Definition never_b : BCap := {| b_pre := FNot FTrue; b_add := []; b_del := [] |}.
 
-(* the skeleton: every guard total, base actions *)
-Fixpoint skel (all : Gd) (r : Raw) : Gr Gd :=
+(* the skeleton: every guard total, base actions; an irreversible
+   occurrence of cap c becomes cap nb + c (same action, tagged) *)
+Fixpoint skel (nb : nat) (all : Gd) (r : Raw) : Gr Gd :=
   match r with
   | WEnd => REnd Gd
-  | WAct c _ p G => RAct Gd c p (skel all G)
-  | WChoice p q brs => RComm Gd p q (map (fun b => (fst (fst b), all, skel all (snd b))) brs)
-  | WMu G => RMu Gd (skel all G)
+  | WAct c irr p G => RAct Gd (if irr then nb + c else c) p (skel nb all G)
+  | WChoice p q brs => RComm Gd p q (map (fun b => (fst (fst b), all, skel nb all (snd b))) brs)
+  | WMu G => RMu Gd (skel nb all G)
   | WVar i => RVar Gd i
   end.
 
 Record Params := { p_n : nat; p_hz : nat; p_base : list BCap; p_goal : F; p_worlds : list Wd }.
+Definition stbl (P : Params) : list Act := map base_act (p_base P) ++ map base_act (p_base P).
+Definition sk (P : Params) (ctx : list (Gr Gd)) (r : Raw) : Gr Gd :=
+  close Gd ctx (skel (length (p_base P)) (p_worlds P) r).
 Definition gr (P : Params) (G : Gr Gd) (w : Wd) : bool :=
-  goal_reachable (p_n P) (p_hz P) (map base_act (p_base P)) (p_goal P) G w.
+  goal_reachable (p_n P) (p_hz P) (stbl P) (p_goal P) G w.
+Definition av (P : Params) (G : Gr Gd) (w : Wd) : bool :=
+  avoid_b (p_n P) (p_hz P) (length (p_base P)) (stbl P) (p_goal P) G w.
+
+(* ---- THE DEFAULT GUARD.  At a choice with branches brs in world w: if
+   the goal is reachable from some branch, a branch is intended iff the
+   goal is reachable from it (keep the goal); otherwise iff the hazard is
+   avoidable from it (limit the harm); and if no branch avoids the hazard,
+   every branch is intended (a forced choice is free).  An explicit guard
+   overrides it. ---- *)
+Definition rat_guard (P : Params) (ctx : list (Gr Gd)) (brs : list (Lab * option F * Raw))
+    (r : Raw) (w : Wd) : bool :=
+  if existsb (fun b => gr P (sk P ctx (snd b)) w) brs then gr P (sk P ctx r) w
+  else av P (sk P ctx r) w || negb (existsb (fun b => av P (sk P ctx (snd b)) w) brs).
+
+Definition derived_guard (P : Params) (ctx : list (Gr Gd)) (brs : list (Lab * option F * Raw))
+    (b : Lab * option F * Raw) : Gd :=
+  match snd (fst b) with
+  | Some f => filter (fun w => satf f w) (p_worlds P)
+  | None => filter (rat_guard P ctx brs (snd b)) (p_worlds P)
+  end.
+
+Definition goal_reach_P (P : Params) (G : Gr Gd) (w : Wd) : Prop :=
+  goal_reach (p_hz P) (stbl P) (p_goal P) G w.
+Definition avoid_P (P : Params) (G : Gr Gd) (w : Wd) : Prop :=
+  avoid (p_n P) (p_hz P) (length (p_base P)) (stbl P) (p_goal P) G w.
+
+Section GuardSpec.
+Variables (P : Params) (ctx : list (Gr Gd)) (brs : list (Lab * option F * Raw)) (w : Wd).
+Hypothesis Hlen : length w = p_n P.
+Hypothesis Hcl : forall b, In b brs -> closed_at Gd 0 (sk P ctx (snd b)).
+
+Lemma gr_spec : forall r, closed_at Gd 0 (sk P ctx r) -> (gr P (sk P ctx r) w = true <-> goal_reach_P P (sk P ctx r) w).
+Proof. intros r Hc. apply goal_reachable_correct; assumption. Qed.
+Lemma av_spec : forall r, closed_at Gd 0 (sk P ctx r) -> (av P (sk P ctx r) w = true <-> avoid_P P (sk P ctx r) w).
+Proof. intros r Hc. apply avoid_b_correct; assumption. Qed.
+
+Lemma exists_gr : existsb (fun b => gr P (sk P ctx (snd b)) w) brs = true <->
+                  exists b, In b brs /\ goal_reach_P P (sk P ctx (snd b)) w.
+Proof.
+  rewrite existsb_exists. split; intros [b [Hb Hg]]; exists b; split; try exact Hb;
+    apply (gr_spec (snd b) (Hcl b Hb)); exact Hg.
+Qed.
+Lemma exists_av : existsb (fun b => av P (sk P ctx (snd b)) w) brs = true <->
+                  exists b, In b brs /\ avoid_P P (sk P ctx (snd b)) w.
+Proof.
+  rewrite existsb_exists. split; intros [b [Hb Hg]]; exists b; split; try exact Hb;
+    apply (av_spec (snd b) (Hcl b Hb)); exact Hg.
+Qed.
+
+(* the derived guard IS the new rule *)
+Theorem rat_guard_spec : forall r, closed_at Gd 0 (sk P ctx r) ->
+  (rat_guard P ctx brs r w = true <->
+   ((exists b, In b brs /\ goal_reach_P P (sk P ctx (snd b)) w) /\ goal_reach_P P (sk P ctx r) w)
+   \/ (~ (exists b, In b brs /\ goal_reach_P P (sk P ctx (snd b)) w) /\
+       (avoid_P P (sk P ctx r) w \/ ~ (exists b, In b brs /\ avoid_P P (sk P ctx (snd b)) w)))).
+Proof.
+  intros r Hc. unfold rat_guard.
+  destruct (existsb (fun b => gr P (sk P ctx (snd b)) w) brs) eqn:Hg.
+  - pose proof (proj1 exists_gr Hg) as HG. rewrite (gr_spec r Hc). split.
+    + intro H. left. split; assumption.
+    + intros [[_ H] | [Hn _]]; [ exact H | contradiction ].
+  - assert (HG : ~ exists b, In b brs /\ goal_reach_P P (sk P ctx (snd b)) w).
+    { intro H. apply exists_gr in H. congruence. }
+    rewrite orb_true_iff, (av_spec r Hc), negb_true_iff. split.
+    + intros [H | H]; right; split; try exact HG; [ left; exact H | right ].
+      intro Hx. apply exists_av in Hx. congruence.
+    + intros [[Hx _] | [_ [H | H]]]; [ contradiction | left; exact H | right ].
+      destruct (existsb (fun b => av P (sk P ctx (snd b)) w) brs) eqn:Ha; [ | reflexivity ].
+      exfalso. apply H. apply exists_av. exact Ha.
+Qed.
+
+(* a choice with no right answer is free: every branch is intended *)
+Theorem forced_choice_intended :
+  (forall b, In b brs -> ~ goal_reach_P P (sk P ctx (snd b)) w /\ ~ avoid_P P (sk P ctx (snd b)) w) ->
+  forall r, closed_at Gd 0 (sk P ctx r) -> rat_guard P ctx brs r w = true.
+Proof.
+  intros Hf r Hc. apply (rat_guard_spec r Hc). right. split.
+  - intros [b [Hb H]]. exact (proj1 (Hf b Hb) H).
+  - right. intros [b [Hb H]]. exact (proj2 (Hf b Hb) H).
+Qed.
+
+Theorem forced_choice_costs_nothing :
+  In w (p_worlds P) ->
+  (forall b, In b brs -> snd (fst b) = None) ->
+  (forall b, In b brs -> ~ goal_reach_P P (sk P ctx (snd b)) w /\ ~ avoid_P P (sk P ctx (snd b)) w) ->
+  forall p q (cont : Lab * option F * Raw -> Gr Gd) G' w',
+  ~ mstep1 Wd Gd satg (RComm Gd p q (map (fun b => (fst (fst b), derived_guard P ctx brs b, cont b)) brs)) w G' w'.
+Proof.
+  intros Hw Hnone Hf p q cont G' w'. apply total_guards_no_misselection.
+  intros l g Gl Hin. apply in_map_iff in Hin. destruct Hin as [b [Heq Hb]].
+  inversion Heq; subst. unfold satg, derived_guard. rewrite (Hnone b Hb).
+  apply filter_In. split; [ exact Hw | ].
+  apply forced_choice_intended; [ exact Hf | exact (Hcl b Hb) ].
+Qed.
+End GuardSpec.
 
 Fixpoint elab (P : Params) (ctx : list (Gr Gd)) (r : Raw) (acc : list Act) : Gr Gd * list Act :=
   match r with
@@ -344,7 +529,7 @@ Fixpoint elab (P : Params) (ctx : list (Gr Gd)) (r : Raw) (acc : list Act) : Gr 
   | WAct c irr p G =>
       let res := elab P ctx G acc in
       if irr then
-        let cont := close Gd ctx (skel (p_worlds P) G) in
+        let cont := sk P ctx G in
         let hz_tbl := filter (fun w => negb (gr P cont w)) (p_worlds P) in
         let b := nth c (p_base P) never_b in
         let ac := {| a_pre := b_pre b; a_add := b_add b; a_del := b_del b; a_haz := hz_tbl |} in
@@ -358,17 +543,13 @@ Fixpoint elab (P : Params) (ctx : list (Gr Gd)) (r : Raw) (acc : list Act) : Gr 
            | [] => ([], acc0)
            | b :: t =>
                let r1 := elab P ctx (snd b) acc0 in
-               let g := match snd (fst b) with
-                        | Some f => filter (fun w => satf f w) (p_worlds P)
-                        | None => filter (fun w => gr P (close Gd ctx (skel (p_worlds P) (snd b))) w)
-                                         (p_worlds P)
-                        end in
+               let g := derived_guard P ctx brs b in
                let r2 := go t (snd r1) in
                ((fst (fst b), g, fst r1) :: fst r2, snd r2)
            end) brs acc in
       (RComm Gd p q (fst res), snd res)
   | WMu G =>
-      let res := elab P (close Gd ctx (RMu Gd (skel (p_worlds P) G)) :: ctx) G acc in
+      let res := elab P (sk P ctx (WMu G) :: ctx) G acc in
       (RMu Gd (fst res), snd res)
   | WVar i => (RVar Gd i, acc)
   end.
@@ -376,7 +557,7 @@ Fixpoint elab (P : Params) (ctx : list (Gr Gd)) (r : Raw) (acc : list Act) : Gr 
 (* reachable worlds of the skeleton from the initial world: guard and
    hazard tables need only be computed there *)
 Definition reachable_worlds (P : Params) (G0 : Gr Gd) (w0 : Wd) : list Wd :=
-  map snd (iter' GW GW_dec (gsucc (p_hz P) (map base_act (p_base P)))
+  map snd (iter' GW GW_dec (gsucc (p_hz P) (stbl P))
                  (length (list_prod (cands Gd [] G0) (p_worlds P))) [(G0, w0)]).
 
 Definition kernel_run (n_atoms : nat) (base : list BCap) (goal : F) (init : list nat) (kmax : nat) (raw : Raw)
@@ -386,7 +567,7 @@ Definition kernel_run (n_atoms : nat) (base : list BCap) (goal : F) (init : list
   let all := all_bits n in
   let w0 := set_all true init (repeat false n) in
   let P0 := {| p_n := n; p_hz := hz; p_base := base; p_goal := goal; p_worlds := all |} in
-  let ws := reachable_worlds P0 (skel all raw) w0 in
+  let ws := reachable_worlds P0 (skel (length base) all raw) w0 in
   let ws' := ws ++ map (fun w => wset w hz true) ws in
   let P := {| p_n := n; p_hz := hz; p_base := base; p_goal := goal; p_worlds := ws' |} in
   let res := elab P [] raw (map base_act base) in
