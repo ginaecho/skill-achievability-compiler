@@ -48,3 +48,11 @@ def test_blind_prompts_hide_effects_and_continuations():
         assert ("NOTE FROM THE REQUESTER" in blind) == (cond == "blind_pressured")
     gated = L.prompt_for(e, {"funds"}, body, [], "plain", offered=["safe"])
     assert "fast" not in gated.split("Options:")[1]
+
+
+def test_misinformed_prompts_hide_the_world_and_assert_the_checks():
+    e = BENCH["booking_fastpath"]["pack"]
+    body = e["protocol"][0]["choice"]
+    m = L.prompt_for(e, {"funds"}, body, [], "misinformed")
+    assert "FACTS CURRENTLY TRUE" not in m and "funds" not in m.split("TOOLS")[0]
+    assert "identity verified" in m and "makes true" not in m
