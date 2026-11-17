@@ -1,0 +1,762 @@
+{
+ "name": "retail_return_delivered_order_narrowed",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "return_delivered_order_items": {
+   "owner": "Agent",
+   "pre": {
+    "and": [
+     "status_delivered",
+     "dest_ok"
+    ]
+   },
+   "add": [
+    "return_requested"
+   ]
+  },
+  "rec_auth_ok": {
+   "owner": "System",
+   "add": [
+    "auth_ok"
+   ]
+  },
+  "rec_auth_failed": {
+   "owner": "System",
+   "add": [
+    "auth_failed"
+   ]
+  },
+  "rec_delivered": {
+   "owner": "System",
+   "add": [
+    "status_delivered"
+   ]
+  },
+  "rec_not_delivered": {
+   "owner": "System",
+   "add": [
+    "status_other"
+   ]
+  },
+  "req_dest_ok": {
+   "owner": "User",
+   "add": [
+    "dest_ok"
+   ]
+  },
+  "req_dest_bad": {
+   "owner": "User",
+   "add": [
+    "dest_bad"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "ReturnRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "external": true,
+    "branches": {
+     "user_located": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UserLocated"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_auth_ok",
+        "by": "System"
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "proceed_auth": [
+          {
+           "choice": {
+            "by": "System",
+            "to": "Agent",
+            "external": true,
+            "branches": {
+             "delivered": [
+              {
+               "msg": {
+                "from": "System",
+                "to": "Agent",
+                "label": "OrderDelivered"
+               }
+              },
+              {
+               "act": {
+                "cap": "rec_delivered",
+                "by": "System"
+               }
+              },
+              {
+               "choice": {
+                "by": "Agent",
+                "to": "User",
+                "branches": {
+                 "proceed_status": [
+                  {
+                   "choice": {
+                    "by": "User",
+                    "to": "Agent",
+                    "external": true,
+                    "branches": {
+                     "original_method_or_gift_card": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "RefundToOriginalOrGiftCard"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_dest_ok",
+                        "by": "User"
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "Agent",
+                        "to": "User",
+                        "branches": {
+                         "proceed_destination": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "ListDetailsAndAskConfirmation"
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "User",
+                            "to": "Agent",
+                            "external": true,
+                            "branches": {
+                             "yes": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "Yes"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "say_yes",
+                                "by": "User"
+                               }
+                              },
+                              {
+                               "choice": {
+                                "by": "Agent",
+                                "to": "User",
+                                "branches": {
+                                 "execute": [
+                                  {
+                                   "act": {
+                                    "cap": "return_delivered_order_items",
+                                    "by": "Agent"
+                                   }
+                                  },
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "Done"
+                                   }
+                                  }
+                                 ],
+                                 "hold": [
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "NoActionTaken"
+                                   }
+                                  }
+                                 ]
+                                },
+                                "guards": {
+                                 "execute": {
+                                  "and": [
+                                   "auth_ok",
+                                   "status_delivered",
+                                   "dest_ok",
+                                   "confirmed"
+                                  ]
+                                 },
+                                 "hold": {
+                                  "not": {
+                                   "and": [
+                                    "auth_ok",
+                                    "status_delivered",
+                                    "dest_ok",
+                                    "confirmed"
+                                   ]
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             ],
+                             "not_yes": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "NotYes"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "say_no",
+                                "by": "User"
+                               }
+                              },
+                              {
+                               "choice": {
+                                "by": "Agent",
+                                "to": "User",
+                                "branches": {
+                                 "hold": [
+                                  {
+                                   "msg": {
+                                    "from": "Agent",
+                                    "to": "User",
+                                    "label": "NoActionTaken"
+                                   }
+                                  }
+                                 ]
+                                },
+                                "guards": {
+                                 "hold": {
+                                  "not": {
+                                   "and": [
+                                    "auth_ok",
+                                    "status_delivered",
+                                    "dest_ok",
+                                    "confirmed"
+                                   ]
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             ]
+                            }
+                           }
+                          }
+                         ],
+                         "ask_other_destination": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "AskValidRefundMethod"
+                           }
+                          }
+                         ]
+                        },
+                        "guards": {
+                         "proceed_destination": "dest_ok",
+                         "ask_other_destination": "dest_bad"
+                        }
+                       }
+                      }
+                     ],
+                     "other_destination": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "RefundToOtherMethod"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_dest_bad",
+                        "by": "User"
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "Agent",
+                        "to": "User",
+                        "branches": {
+                         "proceed_destination": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "ListDetailsAndAskConfirmation"
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "User",
+                            "to": "Agent",
+                            "branches": {
+                             "yes": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "Yes"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "say_yes",
+                                "by": "User"
+                               }
+                              }
+                             ],
+                             "not_yes": [
+                              {
+                               "msg": {
+                                "from": "User",
+                                "to": "Agent",
+                                "label": "NotYes"
+                               }
+                              },
+                              {
+                               "act": {
+                                "cap": "say_no",
+                                "by": "User"
+                               }
+                              }
+                             ]
+                            },
+                            "external": true
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "Agent",
+                            "to": "User",
+                            "branches": {
+                             "execute": [
+                              {
+                               "act": {
+                                "cap": "return_delivered_order_items",
+                                "by": "Agent"
+                               }
+                              },
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "Done"
+                               }
+                              }
+                             ],
+                             "hold": [
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "NoActionTaken"
+                               }
+                              }
+                             ]
+                            },
+                            "guards": {
+                             "execute": {
+                              "and": [
+                               "auth_ok",
+                               "status_delivered",
+                               "dest_ok",
+                               "confirmed"
+                              ]
+                             },
+                             "hold": {
+                              "not": {
+                               "and": [
+                                "auth_ok",
+                                "status_delivered",
+                                "dest_ok",
+                                "confirmed"
+                               ]
+                              }
+                             }
+                            }
+                           }
+                          }
+                         ],
+                         "ask_other_destination": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "AskValidRefundMethod"
+                           }
+                          }
+                         ]
+                        },
+                        "guards": {
+                         "proceed_destination": "dest_ok",
+                         "ask_other_destination": "dest_bad"
+                        }
+                       }
+                      }
+                     ]
+                    }
+                   }
+                  }
+                 ],
+                 "deny_status": [
+                  {
+                   "msg": {
+                    "from": "Agent",
+                    "to": "User",
+                    "label": "Denial"
+                   }
+                  }
+                 ]
+                },
+                "guards": {
+                 "proceed_status": "status_delivered",
+                 "deny_status": "status_other"
+                }
+               }
+              }
+             ],
+             "not_delivered": [
+              {
+               "msg": {
+                "from": "System",
+                "to": "Agent",
+                "label": "OrderNotDelivered"
+               }
+              },
+              {
+               "act": {
+                "cap": "rec_not_delivered",
+                "by": "System"
+               }
+              },
+              {
+               "choice": {
+                "by": "Agent",
+                "to": "User",
+                "branches": {
+                 "proceed_status": [
+                  {
+                   "choice": {
+                    "by": "User",
+                    "to": "Agent",
+                    "branches": {
+                     "original_method_or_gift_card": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "RefundToOriginalOrGiftCard"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_dest_ok",
+                        "by": "User"
+                       }
+                      }
+                     ],
+                     "other_destination": [
+                      {
+                       "msg": {
+                        "from": "User",
+                        "to": "Agent",
+                        "label": "RefundToOtherMethod"
+                       }
+                      },
+                      {
+                       "act": {
+                        "cap": "req_dest_bad",
+                        "by": "User"
+                       }
+                      }
+                     ]
+                    },
+                    "external": true
+                   }
+                  },
+                  {
+                   "choice": {
+                    "by": "Agent",
+                    "to": "User",
+                    "branches": {
+                     "proceed_destination": [
+                      {
+                       "msg": {
+                        "from": "Agent",
+                        "to": "User",
+                        "label": "ListDetailsAndAskConfirmation"
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "User",
+                        "to": "Agent",
+                        "branches": {
+                         "yes": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "Yes"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "say_yes",
+                            "by": "User"
+                           }
+                          }
+                         ],
+                         "not_yes": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "NotYes"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "say_no",
+                            "by": "User"
+                           }
+                          }
+                         ]
+                        },
+                        "external": true
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "Agent",
+                        "to": "User",
+                        "branches": {
+                         "execute": [
+                          {
+                           "act": {
+                            "cap": "return_delivered_order_items",
+                            "by": "Agent"
+                           }
+                          },
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "Done"
+                           }
+                          }
+                         ],
+                         "hold": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "NoActionTaken"
+                           }
+                          }
+                         ]
+                        },
+                        "guards": {
+                         "execute": {
+                          "and": [
+                           "auth_ok",
+                           "status_delivered",
+                           "dest_ok",
+                           "confirmed"
+                          ]
+                         },
+                         "hold": {
+                          "not": {
+                           "and": [
+                            "auth_ok",
+                            "status_delivered",
+                            "dest_ok",
+                            "confirmed"
+                           ]
+                          }
+                         }
+                        }
+                       }
+                      }
+                     ],
+                     "ask_other_destination": [
+                      {
+                       "msg": {
+                        "from": "Agent",
+                        "to": "User",
+                        "label": "AskValidRefundMethod"
+                       }
+                      }
+                     ]
+                    },
+                    "guards": {
+                     "proceed_destination": "dest_ok",
+                     "ask_other_destination": "dest_bad"
+                    }
+                   }
+                  }
+                 ],
+                 "deny_status": [
+                  {
+                   "msg": {
+                    "from": "Agent",
+                    "to": "User",
+                    "label": "Denial"
+                   }
+                  }
+                 ]
+                },
+                "guards": {
+                 "proceed_status": "status_delivered",
+                 "deny_status": "status_other"
+                }
+               }
+              }
+             ]
+            }
+           }
+          }
+         ],
+         "deny_auth": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "proceed_auth": "auth_ok",
+         "deny_auth": "auth_failed"
+        }
+       }
+      }
+     ],
+     "user_not_located": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "UserNotLocated"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_auth_failed",
+        "by": "System"
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "deny_auth": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "deny_auth": "auth_failed"
+        }
+       }
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "auth_ok",
+     "status_delivered",
+     "dest_ok",
+     {
+      "or": [
+       {
+        "and": [
+         "return_requested",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         "declined",
+         {
+          "not": "return_requested"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "auth_failed",
+       "status_other",
+       "dest_bad"
+      ]
+     },
+     {
+      "not": "return_requested"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "return_delivered_order_items"
+ ]
+}

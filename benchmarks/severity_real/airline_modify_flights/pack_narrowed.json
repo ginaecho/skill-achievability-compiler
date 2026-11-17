@@ -1,0 +1,662 @@
+{
+ "name": "airline_modify_flights_narrowed",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "update_reservation_flights": {
+   "owner": "Agent",
+   "pre": "pay_valid",
+   "add": [
+    "modified"
+   ]
+  },
+  "rec_basic_economy": {
+   "owner": "System",
+   "add": [
+    "basic_economy"
+   ]
+  },
+  "rec_other_cabin": {
+   "owner": "System",
+   "add": [
+    "other_cabin"
+   ]
+  },
+  "req_route_unchanged": {
+   "owner": "User",
+   "add": [
+    "route_unchanged"
+   ]
+  },
+  "req_route_changed": {
+   "owner": "User",
+   "add": [
+    "route_changed"
+   ]
+  },
+  "pay_gift_or_credit": {
+   "owner": "User",
+   "add": [
+    "pay_valid"
+   ]
+  },
+  "pay_other": {
+   "owner": "User",
+   "add": [
+    "pay_invalid"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "ModifyFlightsRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "external": true,
+    "branches": {
+     "basic_economy": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "RecordShowsBasicEconomy"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_basic_economy",
+        "by": "System"
+       }
+      },
+      {
+       "choice": {
+        "by": "User",
+        "to": "Agent",
+        "external": true,
+        "branches": {
+         "route_unchanged": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "RouteUnchanged"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_route_unchanged",
+            "by": "User"
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "deny_rules": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "Denial"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "deny_rules": {
+              "or": [
+               "basic_economy",
+               "route_changed"
+              ]
+             }
+            }
+           }
+          }
+         ],
+         "route_changed": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "RouteChanged"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_route_changed",
+            "by": "User"
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "deny_rules": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "Denial"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "deny_rules": {
+              "or": [
+               "basic_economy",
+               "route_changed"
+              ]
+             }
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
+     ],
+     "other_cabin": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "RecordShowsOtherCabin"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_other_cabin",
+        "by": "System"
+       }
+      },
+      {
+       "choice": {
+        "by": "User",
+        "to": "Agent",
+        "external": true,
+        "branches": {
+         "route_unchanged": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "RouteUnchanged"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_route_unchanged",
+            "by": "User"
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "proceed_rules": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "AskPaymentMethod"
+               }
+              },
+              {
+               "choice": {
+                "by": "User",
+                "to": "Agent",
+                "external": true,
+                "branches": {
+                 "gift_or_credit_card": [
+                  {
+                   "msg": {
+                    "from": "User",
+                    "to": "Agent",
+                    "label": "PaymentGiftOrCredit"
+                   }
+                  },
+                  {
+                   "act": {
+                    "cap": "pay_gift_or_credit",
+                    "by": "User"
+                   }
+                  },
+                  {
+                   "choice": {
+                    "by": "Agent",
+                    "to": "User",
+                    "branches": {
+                     "accept_method": [
+                      {
+                       "msg": {
+                        "from": "Agent",
+                        "to": "User",
+                        "label": "ListDetailsAndAskConfirmation"
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "User",
+                        "to": "Agent",
+                        "external": true,
+                        "branches": {
+                         "yes": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "Yes"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "say_yes",
+                            "by": "User"
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "Agent",
+                            "to": "User",
+                            "branches": {
+                             "execute": [
+                              {
+                               "act": {
+                                "cap": "update_reservation_flights",
+                                "by": "Agent"
+                               }
+                              },
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "Done"
+                               }
+                              }
+                             ],
+                             "hold": [
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "NoActionTaken"
+                               }
+                              }
+                             ]
+                            },
+                            "guards": {
+                             "execute": {
+                              "and": [
+                               "other_cabin",
+                               "route_unchanged",
+                               "pay_valid",
+                               "confirmed"
+                              ]
+                             },
+                             "hold": {
+                              "not": {
+                               "and": [
+                                "other_cabin",
+                                "route_unchanged",
+                                "pay_valid",
+                                "confirmed"
+                               ]
+                              }
+                             }
+                            }
+                           }
+                          }
+                         ],
+                         "not_yes": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "NotYes"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "say_no",
+                            "by": "User"
+                           }
+                          },
+                          {
+                           "choice": {
+                            "by": "Agent",
+                            "to": "User",
+                            "branches": {
+                             "hold": [
+                              {
+                               "msg": {
+                                "from": "Agent",
+                                "to": "User",
+                                "label": "NoActionTaken"
+                               }
+                              }
+                             ]
+                            },
+                            "guards": {
+                             "hold": {
+                              "not": {
+                               "and": [
+                                "other_cabin",
+                                "route_unchanged",
+                                "pay_valid",
+                                "confirmed"
+                               ]
+                              }
+                             }
+                            }
+                           }
+                          }
+                         ]
+                        }
+                       }
+                      }
+                     ],
+                     "ask_other_method": [
+                      {
+                       "msg": {
+                        "from": "Agent",
+                        "to": "User",
+                        "label": "AskValidPaymentMethod"
+                       }
+                      }
+                     ]
+                    },
+                    "guards": {
+                     "accept_method": "pay_valid",
+                     "ask_other_method": "pay_invalid"
+                    }
+                   }
+                  }
+                 ],
+                 "certificate_or_other": [
+                  {
+                   "msg": {
+                    "from": "User",
+                    "to": "Agent",
+                    "label": "PaymentCertificateOrOther"
+                   }
+                  },
+                  {
+                   "act": {
+                    "cap": "pay_other",
+                    "by": "User"
+                   }
+                  },
+                  {
+                   "choice": {
+                    "by": "Agent",
+                    "to": "User",
+                    "branches": {
+                     "accept_method": [
+                      {
+                       "msg": {
+                        "from": "Agent",
+                        "to": "User",
+                        "label": "ListDetailsAndAskConfirmation"
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "User",
+                        "to": "Agent",
+                        "branches": {
+                         "yes": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "Yes"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "say_yes",
+                            "by": "User"
+                           }
+                          }
+                         ],
+                         "not_yes": [
+                          {
+                           "msg": {
+                            "from": "User",
+                            "to": "Agent",
+                            "label": "NotYes"
+                           }
+                          },
+                          {
+                           "act": {
+                            "cap": "say_no",
+                            "by": "User"
+                           }
+                          }
+                         ]
+                        },
+                        "external": true
+                       }
+                      },
+                      {
+                       "choice": {
+                        "by": "Agent",
+                        "to": "User",
+                        "branches": {
+                         "execute": [
+                          {
+                           "act": {
+                            "cap": "update_reservation_flights",
+                            "by": "Agent"
+                           }
+                          },
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "Done"
+                           }
+                          }
+                         ],
+                         "hold": [
+                          {
+                           "msg": {
+                            "from": "Agent",
+                            "to": "User",
+                            "label": "NoActionTaken"
+                           }
+                          }
+                         ]
+                        },
+                        "guards": {
+                         "execute": {
+                          "and": [
+                           "other_cabin",
+                           "route_unchanged",
+                           "pay_valid",
+                           "confirmed"
+                          ]
+                         },
+                         "hold": {
+                          "not": {
+                           "and": [
+                            "other_cabin",
+                            "route_unchanged",
+                            "pay_valid",
+                            "confirmed"
+                           ]
+                          }
+                         }
+                        }
+                       }
+                      }
+                     ],
+                     "ask_other_method": [
+                      {
+                       "msg": {
+                        "from": "Agent",
+                        "to": "User",
+                        "label": "AskValidPaymentMethod"
+                       }
+                      }
+                     ]
+                    },
+                    "guards": {
+                     "accept_method": "pay_valid",
+                     "ask_other_method": "pay_invalid"
+                    }
+                   }
+                  }
+                 ]
+                }
+               }
+              }
+             ],
+             "deny_rules": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "Denial"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "proceed_rules": {
+              "and": [
+               "other_cabin",
+               "route_unchanged"
+              ]
+             },
+             "deny_rules": {
+              "or": [
+               "basic_economy",
+               "route_changed"
+              ]
+             }
+            }
+           }
+          }
+         ],
+         "route_changed": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "RouteChanged"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_route_changed",
+            "by": "User"
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "deny_rules": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "Denial"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "deny_rules": {
+              "or": [
+               "basic_economy",
+               "route_changed"
+              ]
+             }
+            }
+           }
+          }
+         ]
+        }
+       }
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "other_cabin",
+     "route_unchanged",
+     "pay_valid",
+     {
+      "or": [
+       {
+        "and": [
+         "modified",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         "declined",
+         {
+          "not": "modified"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "basic_economy",
+       "route_changed",
+       "pay_invalid"
+      ]
+     },
+     {
+      "not": "modified"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "update_reservation_flights"
+ ]
+}
