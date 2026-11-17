@@ -1,0 +1,385 @@
+{
+ "name": "airline_compensation",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "req_asked": {
+   "owner": "User",
+   "add": [
+    "asked"
+   ]
+  },
+  "req_not_asked": {
+   "owner": "User",
+   "add": [
+    "not_asked"
+   ]
+  },
+  "rec_profile_ok": {
+   "owner": "System",
+   "add": [
+    "profile_ok"
+   ]
+  },
+  "rec_profile_bad": {
+   "owner": "System",
+   "add": [
+    "profile_bad"
+   ]
+  },
+  "rec_cancelled": {
+   "owner": "System",
+   "add": [
+    "reason_cancelled"
+   ]
+  },
+  "rec_delayed": {
+   "owner": "System",
+   "add": [
+    "reason_delayed"
+   ]
+  },
+  "rec_other_reason": {
+   "owner": "System",
+   "add": [
+    "reason_other"
+   ]
+  },
+  "quote_100": {
+   "owner": "Agent",
+   "add": [
+    "amt_100"
+   ]
+  },
+  "quote_50": {
+   "owner": "Agent",
+   "add": [
+    "amt_50"
+   ]
+  },
+  "send_certificate": {
+   "owner": "Agent",
+   "add": [
+    "certificate_sent"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "Complaint"
+   }
+  },
+  {
+   "choice": {
+    "by": "User",
+    "to": "Agent",
+    "branches": {
+     "asks_for_compensation": [
+      {
+       "msg": {
+        "from": "User",
+        "to": "Agent",
+        "label": "AsksForCompensation"
+       }
+      },
+      {
+       "act": {
+        "cap": "req_asked",
+        "by": "User"
+       }
+      }
+     ],
+     "does_not_ask": [
+      {
+       "msg": {
+        "from": "User",
+        "to": "Agent",
+        "label": "DoesNotAsk"
+       }
+      },
+      {
+       "act": {
+        "cap": "req_not_asked",
+        "by": "User"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "consider": [
+      {
+       "choice": {
+        "by": "System",
+        "to": "Agent",
+        "branches": {
+         "eligible_profile": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "ProfileEligible"
+           }
+          },
+          {
+           "act": {
+            "cap": "rec_profile_ok",
+            "by": "System"
+           }
+          }
+         ],
+         "ineligible_profile": [
+          {
+           "msg": {
+            "from": "System",
+            "to": "Agent",
+            "label": "ProfileIneligible"
+           }
+          },
+          {
+           "act": {
+            "cap": "rec_profile_bad",
+            "by": "System"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "continue_profile": [
+          {
+           "choice": {
+            "by": "System",
+            "to": "Agent",
+            "branches": {
+             "cancelled_flights": [
+              {
+               "msg": {
+                "from": "System",
+                "to": "Agent",
+                "label": "ComplaintCancelledFlights"
+               }
+              },
+              {
+               "act": {
+                "cap": "rec_cancelled",
+                "by": "System"
+               }
+              }
+             ],
+             "delayed_wants_change_or_cancel": [
+              {
+               "msg": {
+                "from": "System",
+                "to": "Agent",
+                "label": "ComplaintDelayedWantsChange"
+               }
+              },
+              {
+               "act": {
+                "cap": "rec_delayed",
+                "by": "System"
+               }
+              }
+             ],
+             "other_reason": [
+              {
+               "msg": {
+                "from": "System",
+                "to": "Agent",
+                "label": "ComplaintOtherReason"
+               }
+              },
+              {
+               "act": {
+                "cap": "rec_other_reason",
+                "by": "System"
+               }
+              }
+             ]
+            },
+            "external": true
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "certificate_100": [
+              {
+               "act": {
+                "cap": "quote_100",
+                "by": "Agent"
+               }
+              },
+              {
+               "act": {
+                "cap": "send_certificate",
+                "by": "Agent"
+               }
+              },
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "CertificateSent"
+               }
+              }
+             ],
+             "certificate_50": [
+              {
+               "act": {
+                "cap": "quote_50",
+                "by": "Agent"
+               }
+              },
+              {
+               "act": {
+                "cap": "send_certificate",
+                "by": "Agent"
+               }
+              },
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "CertificateSent"
+               }
+              }
+             ],
+             "no_compensation": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "NoCompensation"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "certificate_100": {
+              "and": [
+               "asked",
+               "profile_ok",
+               "reason_cancelled"
+              ]
+             },
+             "certificate_50": {
+              "and": [
+               "asked",
+               "profile_ok",
+               "reason_delayed"
+              ]
+             },
+             "no_compensation": {
+              "not": {
+               "and": [
+                "asked",
+                "profile_ok",
+                {
+                 "or": [
+                  "reason_cancelled",
+                  "reason_delayed"
+                 ]
+                }
+               ]
+              }
+             }
+            }
+           }
+          }
+         ],
+         "refuse_profile": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "continue_profile": "profile_ok",
+         "refuse_profile": "profile_bad"
+        }
+       }
+      }
+     ],
+     "no_offer": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "NoOffer"
+       }
+      }
+     ]
+    },
+    "guards": {
+     "consider": "asked",
+     "no_offer": "not_asked"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "asked",
+     "profile_ok",
+     "reason_cancelled",
+     "amt_100",
+     "certificate_sent"
+    ]
+   },
+   {
+    "and": [
+     "asked",
+     "profile_ok",
+     "reason_delayed",
+     "amt_50",
+     "certificate_sent"
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "not_asked",
+       "profile_bad",
+       "reason_other"
+      ]
+     },
+     {
+      "not": "certificate_sent"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "send_certificate"
+ ]
+}

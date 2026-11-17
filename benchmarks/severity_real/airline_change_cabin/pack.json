@@ -1,0 +1,325 @@
+{
+ "name": "airline_change_cabin",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "change_cabin": {
+   "owner": "Agent",
+   "add": [
+    "cabin_changed"
+   ]
+  },
+  "rec_flown_flight": {
+   "owner": "System",
+   "add": [
+    "flown_flight"
+   ]
+  },
+  "rec_none_flown": {
+   "owner": "System",
+   "add": [
+    "none_flown"
+   ]
+  },
+  "req_whole": {
+   "owner": "User",
+   "add": [
+    "whole_reservation"
+   ]
+  },
+  "req_one_segment": {
+   "owner": "User",
+   "add": [
+    "one_segment"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "CabinChangeRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "System",
+    "to": "Agent",
+    "branches": {
+     "some_flight_flown": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "RecordShowsFlownFlight"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_flown_flight",
+        "by": "System"
+       }
+      }
+     ],
+     "none_flown": [
+      {
+       "msg": {
+        "from": "System",
+        "to": "Agent",
+        "label": "RecordShowsNoneFlown"
+       }
+      },
+      {
+       "act": {
+        "cap": "rec_none_flown",
+        "by": "System"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "proceed_status": [
+      {
+       "choice": {
+        "by": "User",
+        "to": "Agent",
+        "branches": {
+         "whole_reservation": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "CabinForWholeReservation"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_whole",
+            "by": "User"
+           }
+          }
+         ],
+         "one_segment_only": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "CabinForOneSegment"
+           }
+          },
+          {
+           "act": {
+            "cap": "req_one_segment",
+            "by": "User"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "proceed_scope": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "ListDetailsAndAskConfirmation"
+           }
+          },
+          {
+           "choice": {
+            "by": "User",
+            "to": "Agent",
+            "branches": {
+             "yes": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "Yes"
+               }
+              },
+              {
+               "act": {
+                "cap": "say_yes",
+                "by": "User"
+               }
+              }
+             ],
+             "not_yes": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "NotYes"
+               }
+              },
+              {
+               "act": {
+                "cap": "say_no",
+                "by": "User"
+               }
+              }
+             ]
+            },
+            "external": true
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "execute": [
+              {
+               "act": {
+                "cap": "change_cabin",
+                "by": "Agent"
+               }
+              },
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "Done"
+               }
+              }
+             ],
+             "hold": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "NoActionTaken"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "execute": {
+              "and": [
+               "none_flown",
+               "whole_reservation",
+               "confirmed"
+              ]
+             },
+             "hold": {
+              "not": {
+               "and": [
+                "none_flown",
+                "whole_reservation",
+                "confirmed"
+               ]
+              }
+             }
+            }
+           }
+          }
+         ],
+         "deny_scope": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "Denial"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "proceed_scope": "whole_reservation",
+         "deny_scope": "one_segment"
+        }
+       }
+      }
+     ],
+     "deny_status": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "Denial"
+       }
+      }
+     ]
+    },
+    "guards": {
+     "proceed_status": "none_flown",
+     "deny_status": "flown_flight"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "none_flown",
+     "whole_reservation",
+     {
+      "or": [
+       {
+        "and": [
+         "cabin_changed",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         "declined",
+         {
+          "not": "cabin_changed"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "flown_flight",
+       "one_segment"
+      ]
+     },
+     {
+      "not": "cabin_changed"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "change_cabin"
+ ]
+}

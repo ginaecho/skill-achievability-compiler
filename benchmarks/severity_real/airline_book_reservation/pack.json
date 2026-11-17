@@ -1,0 +1,355 @@
+{
+ "name": "airline_book_reservation",
+ "roles": [
+  "User",
+  "Agent",
+  "System"
+ ],
+ "capabilities": {
+  "say_yes": {
+   "owner": "User",
+   "add": [
+    "confirmed"
+   ]
+  },
+  "say_no": {
+   "owner": "User",
+   "add": [
+    "declined"
+   ]
+  },
+  "book_reservation": {
+   "owner": "Agent",
+   "pre": {
+    "not": "pay_bad_tool"
+   },
+   "add": [
+    "booked"
+   ]
+  },
+  "req_pax_ok": {
+   "owner": "User",
+   "add": [
+    "pax_ok"
+   ]
+  },
+  "req_pax_bad": {
+   "owner": "User",
+   "add": [
+    "pax_bad"
+   ]
+  },
+  "pay_plan_ok": {
+   "owner": "User",
+   "add": [
+    "pay_ok"
+   ]
+  },
+  "pay_plan_composition": {
+   "owner": "User",
+   "add": [
+    "pay_bad_rule"
+   ]
+  },
+  "pay_plan_profile": {
+   "owner": "User",
+   "add": [
+    "pay_bad_tool"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "User",
+    "to": "Agent",
+    "label": "BookingRequest"
+   }
+  },
+  {
+   "choice": {
+    "by": "User",
+    "to": "Agent",
+    "branches": {
+     "at_most_five": [
+      {
+       "msg": {
+        "from": "User",
+        "to": "Agent",
+        "label": "PassengersAtMostFive"
+       }
+      },
+      {
+       "act": {
+        "cap": "req_pax_ok",
+        "by": "User"
+       }
+      }
+     ],
+     "more_than_five": [
+      {
+       "msg": {
+        "from": "User",
+        "to": "Agent",
+        "label": "PassengersMoreThanFive"
+       }
+      },
+      {
+       "act": {
+        "cap": "req_pax_bad",
+        "by": "User"
+       }
+      }
+     ]
+    },
+    "external": true
+   }
+  },
+  {
+   "choice": {
+    "by": "Agent",
+    "to": "User",
+    "branches": {
+     "proceed_passengers": [
+      {
+       "choice": {
+        "by": "User",
+        "to": "Agent",
+        "branches": {
+         "valid_plan": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "PaymentPlanValid"
+           }
+          },
+          {
+           "act": {
+            "cap": "pay_plan_ok",
+            "by": "User"
+           }
+          }
+         ],
+         "composition_violated": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "PaymentPlanTooManyOfAKind"
+           }
+          },
+          {
+           "act": {
+            "cap": "pay_plan_composition",
+            "by": "User"
+           }
+          }
+         ],
+         "not_in_profile_or_short": [
+          {
+           "msg": {
+            "from": "User",
+            "to": "Agent",
+            "label": "PaymentMethodNotInProfile"
+           }
+          },
+          {
+           "act": {
+            "cap": "pay_plan_profile",
+            "by": "User"
+           }
+          }
+         ]
+        },
+        "external": true
+       }
+      },
+      {
+       "choice": {
+        "by": "Agent",
+        "to": "User",
+        "branches": {
+         "proceed_payment": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "ListDetailsAndAskConfirmation"
+           }
+          },
+          {
+           "choice": {
+            "by": "User",
+            "to": "Agent",
+            "branches": {
+             "yes": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "Yes"
+               }
+              },
+              {
+               "act": {
+                "cap": "say_yes",
+                "by": "User"
+               }
+              }
+             ],
+             "not_yes": [
+              {
+               "msg": {
+                "from": "User",
+                "to": "Agent",
+                "label": "NotYes"
+               }
+              },
+              {
+               "act": {
+                "cap": "say_no",
+                "by": "User"
+               }
+              }
+             ]
+            },
+            "external": true
+           }
+          },
+          {
+           "choice": {
+            "by": "Agent",
+            "to": "User",
+            "branches": {
+             "execute": [
+              {
+               "act": {
+                "cap": "book_reservation",
+                "by": "Agent"
+               }
+              },
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "Done"
+               }
+              }
+             ],
+             "hold": [
+              {
+               "msg": {
+                "from": "Agent",
+                "to": "User",
+                "label": "NoActionTaken"
+               }
+              }
+             ]
+            },
+            "guards": {
+             "execute": {
+              "and": [
+               "pax_ok",
+               "pay_ok",
+               "confirmed"
+              ]
+             },
+             "hold": {
+              "not": {
+               "and": [
+                "pax_ok",
+                "pay_ok",
+                "confirmed"
+               ]
+              }
+             }
+            }
+           }
+          }
+         ],
+         "ask_other_payment": [
+          {
+           "msg": {
+            "from": "Agent",
+            "to": "User",
+            "label": "AskValidPaymentPlan"
+           }
+          }
+         ]
+        },
+        "guards": {
+         "proceed_payment": "pay_ok",
+         "ask_other_payment": {
+          "or": [
+           "pay_bad_rule",
+           "pay_bad_tool"
+          ]
+         }
+        }
+       }
+      }
+     ],
+     "deny_passengers": [
+      {
+       "msg": {
+        "from": "Agent",
+        "to": "User",
+        "label": "Denial"
+       }
+      }
+     ]
+    },
+    "guards": {
+     "proceed_passengers": "pax_ok",
+     "deny_passengers": "pax_bad"
+    }
+   }
+  }
+ ],
+ "goal": {
+  "or": [
+   {
+    "and": [
+     "pax_ok",
+     "pay_ok",
+     {
+      "or": [
+       {
+        "and": [
+         "booked",
+         "confirmed"
+        ]
+       },
+       {
+        "and": [
+         "declined",
+         {
+          "not": "booked"
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "and": [
+     {
+      "or": [
+       "pax_bad",
+       "pay_bad_rule",
+       "pay_bad_tool"
+      ]
+     },
+     {
+      "not": "booked"
+     }
+    ]
+   }
+  ]
+ },
+ "irreversible": [
+  "book_reservation"
+ ]
+}
