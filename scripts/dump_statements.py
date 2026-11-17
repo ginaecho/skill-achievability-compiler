@@ -23,7 +23,7 @@ OUT = PROOF / "STATEMENTS.md"
 DEF = (r"(Theorem|Lemma|Corollary|Definition|Fixpoint|Inductive|CoInductive|"
        r"Record|Proposition)")
 CONSTRUCTOR = r"^\s*\|\s*{name}\s*:"      # a constructor of an inductive
-ORDER = ["Severity", "Bridge", "Regular", "Mu", "Repairs", "Abort",
+ORDER = ["Severity", "EnvSeverity", "Bridge", "EnvBridge", "Regular", "Mu", "EnvRegular", "Repairs", "Abort",
          "Interleave", "Kernel", "DeviationLayer"]
 
 

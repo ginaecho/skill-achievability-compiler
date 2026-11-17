@@ -87,6 +87,23 @@ four TikZ figures, and the conventional structure.
   `μX.X` is typable (conformance is coinductive), unfinished and permanently
   stuck (`contractiveness_is_necessary`); `progress_mu` holds under `gd`;
   the decision procedure needs no guardedness at all.
+- **Environment choices** (`EnvSeverity.v`, `EnvBridge.v`, `EnvRegular.v`): a
+  choice the environment controls costs no budget and is existential for the
+  hazard (RH-Env, T-Env: `env_reach_iff`, `env_typing_iff`). A conservative
+  extension (`safe_embedE`) re-proves exactness (`TE_exact`), T-Sub, the
+  ordered trichotomy with the goal read demonically over the environment
+  (`severityE_monotone_in_budget`, `env_goal_is_demonic`), k\* principal, the
+  default guards (`dguard_some_intended`), the bridge for every resolution of
+  the environment (`bridgeE_run`), the product and decision procedure
+  (`decide_env_correct`) and, for the hazard question, μ-types
+  (`decide_mu_env_correct`, `bridge_mu_env`, `TE_is_TR`). A policy-shaped
+  instance has k\* = 0, is tolerant at every k once the rule is a
+  precondition (`Gpol_kstar_is_0`, `Genf_is_k_tolerant`), and with an
+  execute/hold choice after the user's answer stays at k\* = 0 under
+  enforcement and becomes tolerant under narrowing
+  (`Gconf_enforced_kstar_is_0`, `Gconf_narrowed_is_k_tolerant`). Not covered:
+  the demonic goal and default guards at the μ layer, composition, the cone,
+  bystanders and repairs with environment choices, and the kernel.
 - **Repairs**: narrow, guard, reorder, compensate --- all proved sound;
   guard and reorder characterized exactly, in an **aborting** model where the
   validation always fires and a failed check diverts to an *inert* world
@@ -114,7 +131,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**194 audited names (192 theorems and two constructors), every one axiom-free** (`Print Assumptions` harnesses).
+**267 audited names (265 theorems and two constructors), every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 `make check` at the repo root verifies both of the paper's mechanical
