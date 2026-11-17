@@ -34,3 +34,25 @@ Print Assumptions canon_conforms.
 Print Assumptions two_role_bridge_nonvacuous.
 Print Assumptions Gmiss_safe.
 Print Assumptions Gmiss_uninhabited.
+
+(* environment-controlled choice: EnvBridge.v *)
+Require Import EnvBridge.
+Print Assumptions env_step_costs_nothing.
+Print Assumptions env_every_answer_steps.
+Print Assumptions progressE.
+Print Assumptions bridgeE_step.
+Print Assumptions bridgeE_run.
+Print Assumptions bridgeE_every_configuration.
+Print Assumptions budgetE_distributes.
+Print Assumptions Gpol_is_0_tolerant.
+Print Assumptions Gpol_not_1_tolerant.
+Print Assumptions Gpol_kstar_is_0.
+Print Assumptions Genf_is_k_tolerant.
+Print Assumptions Gpol_inhabited.
+Print Assumptions Gpol_safe_for_every_answer.
+Print Assumptions Gpol_one_misselection_harms.
+Print Assumptions Gconf_enforced_is_0_tolerant.
+Print Assumptions Gconf_enforced_not_1_tolerant.
+Print Assumptions Gconf_enforced_kstar_is_0.
+Print Assumptions Gconf_narrowed_is_k_tolerant.
+Print Assumptions Gconf_narrowing_is_sound.

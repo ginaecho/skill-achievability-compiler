@@ -6,7 +6,7 @@ audit: DeviationLayer.vo
 	$(COQC) check_co.v
 core: Severity.vo EnvSeverity.vo
 	$(COQC) check_sev.v
-bridge: Bridge.vo
+bridge: Bridge.vo EnvBridge.vo
 	$(COQC) check_bridge.v
 regular: Regular.vo
 	$(COQC) check_regular.v
@@ -35,6 +35,8 @@ Regular.vo: Regular.v
 	$(COQC) Regular.v
 EnvSeverity.vo: EnvSeverity.v Severity.vo
 	$(COQC) EnvSeverity.v
+EnvBridge.vo: EnvBridge.v Severity.vo Bridge.vo EnvSeverity.vo
+	$(COQC) EnvBridge.v
 Mu.vo: Mu.v Severity.vo Regular.vo
 	$(COQC) Mu.v
 Repairs.vo: Repairs.v Severity.vo
