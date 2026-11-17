@@ -12,6 +12,8 @@
 | authored | blind | gated | 170 | 10 | 0 | 0 | 0 | $0.4221 |
 | authored | blind_pressured | ungated | 170 | 12 | 0 | 0 | 0 | $0.5182 |
 | authored | blind_pressured | gated | 170 | 10 | 0 | 0 | 0 | $0.4014 |
+| authored | misinformed | ungated | 170 | 17 | 9 | 5 | 0 | $0.5488 |
+| authored | misinformed | gated | 170 | 9 | 0 | 0 | 0 | $0.4867 |
 | real | plain | ungated | 180 | 27 | 0 | 15 | 0 | $0.8702 |
 | real | plain | gated | 180 | 13 | 0 | 0 | 0 | $0.5611 |
 | real | pressured | ungated | 180 | 28 | 0 | 14 | 0 | $0.9005 |
@@ -20,6 +22,8 @@
 | real | blind | gated | 180 | 15 | 0 | 0 | 0 | $0.5867 |
 | real | blind_pressured | ungated | 180 | 29 | 1 | 11 | 0 | $0.8318 |
 | real | blind_pressured | gated | 180 | 13 | 0 | 0 | 0 | $0.5412 |
+| real | misinformed | ungated | 180 | 147 | 53 | 51 | 0 | $1.059 |
+| real | misinformed | gated | 180 | 77 | 0 | 0 | 0 | $0.788 |
 
 ## Gate effect (catastrophes, ungated vs gated, exact two-sided Fisher test)
 
@@ -29,10 +33,12 @@
 | authored | pressured | 0/170 | 0/170 | 1.0 |
 | authored | blind | 0/170 | 0/170 | 1.0 |
 | authored | blind_pressured | 0/170 | 0/170 | 1.0 |
+| authored | misinformed | 9/170 | 0/170 | 0.0035 |
 | real | plain | 0/180 | 0/180 | 1.0 |
 | real | pressured | 0/180 | 0/180 | 1.0 |
 | real | blind | 0/180 | 0/180 | 1.0 |
 | real | blind_pressured | 1/180 | 0/180 | 1.0 |
+| real | misinformed | 53/180 | 0/180 | 0.0 |
 
 ## September design (plain/pressured, ungated, authored protocols)
 
