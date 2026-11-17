@@ -31,6 +31,9 @@ def load_corpora():
     sets["corpus"] = [(e["id"], e["pack"]) for e in json.load(open(DATA / "corpus.json"))]
     sets["corpus_extended"] = [(e["id"], e["pack"]) for e in json.load(open(DATA / "corpus_extended.json"))]
     sets["severity_benchmark"] = [(e["id"], e["pack"]) for e in json.load(open(DATA / "severity_corpus.json"))]
+    # second group: protocols ported from real multi-role skill repositories
+    sets["severity_real"] = [(f.parent.name, json.load(open(f)))
+                             for f in sorted((ROOT / "benchmarks" / "severity_real").glob("*/pack.json"))]
     real = []
     try:
         from skillc.profiles import load_profile
@@ -67,6 +70,10 @@ def structure(pack: dict) -> dict:
             "irreversible_caps": sorted(set(perm) | set(pack.get("irreversible", [])))}
 
 
+def acting_roles(pack: dict) -> set:
+    return {c.get("owner") for c in pack.get("capabilities", {}).values()} - {None}
+
+
 def run_sets(sets):
     rows = []
     for name, items in sets.items():
@@ -84,6 +91,14 @@ def run_sets(sets):
                              "witness": d["hazard_witness"], "narrowing": d["narrowing"],
                              "configs": d["configs_explored"], "goal_queries": d["goal_queries"],
                              "elapsed_s": d["elapsed_s"]})
+                if name == "severity_real":
+                    # marked "real"; misselections only (guard-intended branches excluded)
+                    rows[-1]["real"] = True
+                    rows[-1]["misselections"] = {s_: sum(1 for v in d["verdicts"] if not v["intended"] and v["severity"] == s_)
+                                                 for s_ in (BENIGN, FUTILE, CATASTROPHIC)}
+                    rows[-1]["acting_roles"] = len(acting_roles(pack))
+                    # bystander check (Interleave.v) where several roles act
+                    rows[-1]["bystander"] = d["bystander"] if len(acting_roles(pack)) > 1 else None
             except Exception as ex:
                 rows.append({"set": name, "id": pid, **st, "error": f"{type(ex).__name__}: {ex}"})
     return rows
@@ -310,6 +325,15 @@ def main():
               "| family | n | whole (hazard, short-circuit) ms | whole (complete) ms | whole exits | modular concrete ms | concrete interface | modular projected ms | projected interface | re-check whole ms | re-check modular ms |", "|---|---|---|---|---|---|---|---|---|---|---|"]
     for m in mod:
         lines.append(f"| {m['family']} | {m['n']} | {m['whole_system']['time_s']*1000:.1f} | {m['whole_system_complete']['time_s']*1000:.1f} | {m['whole_system_complete']['exits']} | {m['modular']['time_s']*1000:.1f} | {m['modular']['final_interface']} | {m['modular_projected']['time_s']*1000:.1f} | {m['modular_projected']['final_interface']} | {m['recheck_whole_system']['time_s']*1000:.1f} | {m['recheck_modular']['time_s']*1000:.1f} |")
+    real = [r for r in rows if r.get("real") and "error" not in r]
+    if real:
+        lines += ["", "## Real-protocol group (benchmarks/severity_real)", "",
+                  "Protocols ported from public multi-role skill repositories; expectations were committed before the tool ran (see benchmarks/severity_real/README.md). Counts are per branch and abstract world, as above; the misselection columns exclude branches the guard marks intended.", "",
+                  "| pack | acting roles | k* | misselections: Benign | Futile | Catastrophic | bystander pairs | bystander exact |", "|---|---|---|---|---|---|---|---|"]
+        for r in real:
+            ks = "≥5" if r["k_star"] is None else str(r["k_star"])
+            b = r["bystander"]; m_ = r["misselections"]
+            lines.append(f"| {r['id']} | {r['acting_roles']} | {ks} | {m_['Benign']} | {m_['Futile']} | {m_['Catastrophic']} | {b['pairs'] if b else '–'} | {b['exact'] if b else '–'} |")
     (ROOT / "docs" / "SEVERITY_RESULTS.md").write_text("\n".join(lines) + "\n")
     print(json.dumps(summary, indent=1))
     print("wrote", OUT / "severity.json", "and docs/SEVERITY_RESULTS.md")

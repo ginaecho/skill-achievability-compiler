@@ -340,3 +340,63 @@ def test_the_papers_verbatim_block_is_the_tools_output():
     block = tex.read_text(encoding="utf-8").split("\\begin{verbatim}")[1]
     block = block.split("\\end{verbatim}")[0]
     assert buf.getvalue().strip("\n") == block.strip("\n")
+
+
+# ---------------------------------------------------------------------------
+# Real-protocol benchmark: benchmarks/severity_real/<case>/{pack.json,result.json}
+# ---------------------------------------------------------------------------
+REAL = Path(__file__).resolve().parents[1] / "benchmarks" / "severity_real"
+REAL_CASES = sorted(p.parent for p in REAL.glob("*/pack.json"))
+
+
+def test_real_benchmark_has_cases():
+    assert len(REAL_CASES) >= 6
+
+
+def _volatile(d):
+    d = dict(d)
+    d.pop("elapsed_s", None)           # wall-clock, differs per run
+    return json.loads(json.dumps(d))   # tuples -> lists, as in result.json
+
+
+def test_every_real_pack_loads_and_result_json_is_current():
+    """Each ported pack loads, each choice of a multi-role pack names a recipient,
+    and the committed result.json is exactly the tool's current output."""
+    from skillc.pack import Pack, validate_pack
+
+    def choices(steps):
+        out = []
+        for s in steps:
+            if "choice" in s:
+                out.append(s["choice"])
+                for br in s["choice"]["branches"].values():
+                    out += choices(br)
+            elif "rec" in s:
+                out += choices(s["rec"]["body"])
+        return out
+
+    for case in REAL_CASES:
+        pack = json.loads((case / "pack.json").read_text())
+        body = {k: v for k, v in pack.items() if k != "irreversible"}
+        assert validate_pack(body) is None, case.name
+        Pack.load(body)
+        assert len(pack["roles"]) > 1, f"{case.name}: not a multi-role protocol"
+        cs = choices(pack["protocol"])
+        assert cs, f"{case.name}: no choice point"
+        assert pack.get("irreversible"), f"{case.name}: no irreversible tool declared"
+        for c in cs:
+            assert c.get("to") and c["to"] != c["by"] and c["to"] in pack["roles"], case.name
+        stored = json.loads((case / "result.json").read_text())
+        assert _volatile(stored) == _volatile(analyze(pack, kmax=4).to_dict()), \
+            f"{case.name}: result.json is stale; rerun skillc severity --json"
+
+
+def test_real_results_match_the_preregistered_expectations():
+    """benchmarks/severity_real/<case>/EXPECTED.md was committed before the tool ran."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("compare_expected", REAL / "compare_expected.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    for case in REAL_CASES:
+        r = mod.compare(case)
+        assert r["all_ok"], f"{case.name}: {r}"
