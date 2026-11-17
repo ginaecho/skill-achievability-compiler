@@ -4,7 +4,7 @@ all: audit core bridge regular mu repairs abort interleave kernel
 audit: DeviationLayer.vo
 	$(COQC) check_dev.v
 	$(COQC) check_co.v
-core: Severity.vo
+core: Severity.vo EnvSeverity.vo
 	$(COQC) check_sev.v
 bridge: Bridge.vo
 	$(COQC) check_bridge.v
@@ -33,6 +33,8 @@ Bridge.vo: Bridge.v Severity.vo
 	$(COQC) Bridge.v
 Regular.vo: Regular.v
 	$(COQC) Regular.v
+EnvSeverity.vo: EnvSeverity.v Severity.vo
+	$(COQC) EnvSeverity.v
 Mu.vo: Mu.v Severity.vo Regular.vo
 	$(COQC) Mu.v
 Repairs.vo: Repairs.v Severity.vo
