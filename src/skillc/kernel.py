@@ -2,7 +2,7 @@
 
 The kernel decides budgeted hazard reachability for the boolean fragment of
 the pack language -- propositional preconditions/effects and goal, agent
-choices with explicit or rational guards, named recursion -- with the
+choices with explicit or default guards, named recursion -- with the
 Coq-verified decision procedure `decide_mu` (Mu.v) run on the elaborated
 protocol.  The elaboration (this exporter plus `elab` in Kernel.v) is the
 trusted front end; the reachability decision is the verified part.

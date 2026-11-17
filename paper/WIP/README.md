@@ -48,7 +48,9 @@ four TikZ figures, and the conventional structure.
 
 - **Guarded choice**: each branch carries the predicate making it *intended*;
   taking a branch whose guard fails is a **misselection**. Default guard when
-  none is written: the goal survives the branch (rational choice).
+  none is written: the goal survives the branch; once the goal is lost from
+  every branch, the hazard stays avoidable from it; if no branch avoids the
+  hazard, every branch (a forced choice is free).
 - **Severity**: `Benign` (goal still reachable), `Futile` (goal lost, nothing
   harmed), `Catastrophic` (hazard reachable). *Failure is not disaster.*
   The classes are **ordered**: severity is monotone in the budget along
@@ -112,7 +114,7 @@ four TikZ figures, and the conventional structure.
 
 ## Verified results — `make` in `proof/`
 
-**189 audited names (187 theorems and two constructors), every one axiom-free** (`Print Assumptions` harnesses).
+**194 audited names (192 theorems and two constructors), every one axiom-free** (`Print Assumptions` harnesses).
 `make binary` extracts the kernel and builds `proof/kernel/skillc_kernel`.
 
 `make check` at the repo root verifies both of the paper's mechanical
@@ -133,10 +135,10 @@ that every citation resolves and is covered by a harness (a test runs it);
 - Existing corpora (15 + 6 achievability packs, 17 real skills): **no
   irreversible effects, and the real skills have no choice points** — the
   question is invisible to them.
-- Severity benchmark (17 protocols, 55 branch verdicts, 0.21 s): 29 Benign / 7
-  Futile / 19 Catastrophic **over all branches** — 28 of the 29 Benign are
+- Severity benchmark (17 protocols, 55 branch verdicts, 0.21 s): 35 Benign / 3
+  Futile / 17 Catastrophic **over all branches** — 34 of the 35 Benign are
   branches whose guard holds, so restricted to *misselections* the split is
-  1/7/19; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase, send,
+  1/3/17; `k*` = 0 for 9, 1 for 2, ≥5 for 6; PNR actions purchase, send,
   deploy, delete, ship, purge, refund, drop_old, commit. 16/17 matched
   pre-stated expectations; the exception was a benchmark authoring error, fixed.
 All figures below are from the 2026-11 re-run
@@ -175,12 +177,12 @@ slower machine than the original run.
   median compaction 10711 tokens ($0.003) = 24.9% of the tokens of one agent
   run (20 of 21 attempts returned a pack; the other one is counted as a
   failure); the 39 refuted runs that produced nothing cost $2.533.
-- Modularity: the tool's own hazard decision is already linear (22 queries at
+- Modularity: the tool's own hazard decision is already linear (23 queries at
   n=6), so the like-for-like comparison is computing an *interface*: complete
-  whole-system enumeration 566 queries / 53.7 s at n=6 against the projected
-  modular 48 / 0.173 s; the concrete interface is worse than not abstracting
-  (1149 queries, 256 points). The win that survives is re-check: 238 ms
-  growing with n against 24 ms, not growing.
+  whole-system enumeration 1536 queries / 91.9 s at n=6 against the projected
+  modular 48 / 0.222 s; the concrete interface is worse than not abstracting
+  (2091 queries, 496 points). The win that survives is re-check: 351 ms
+  growing with n against 36 ms, not growing.
 
 ## Before submission
 

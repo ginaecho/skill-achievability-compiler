@@ -86,7 +86,7 @@ Participants that Choose Wrongly}
 \keywords{Session types, Multiparty, Behavioural types, Safety, Irreversibility,
 Fault tolerance, Mechanized metatheory}
 \category{}\relatedversion{}
-\supplement{Coq development (187 theorems and 2 constructors, axiom-free, Coq 8.18), the
+\supplement{Coq development (192 theorems and 2 constructors, axiom-free, Coq 8.18), the
 \texttt{skillc severity} implementation, the severity benchmark, and the
 evaluation scripts; anonymized for submission.}
 \EventEditors{}\EventNoEds{0}
@@ -405,11 +405,26 @@ are not a constraint on an implementation but the \emph{definition of wrong}.
 
 \subparagraph*{Default instantiation.}
 Guards need not be written. When a branch carries none, the implementation
-uses the \emph{rational-choice} default: a branch is intended in $W$ iff the
-goal is still reachable from its residual. Under this default a misselection
-is a choice that forfeits the goal, and once the goal is forfeit every
-subsequent choice is a misselection --- there is no longer a right one --- so
-the budget counts decisions taken after the point at which the task was lost.
+uses a default derived from the goal and the hazard (\S\ref{sec:severity}).
+At a choice in world $W$:
+(i)~if the goal is reachable from the residual of some branch, a branch is
+intended iff the goal is reachable from its residual;
+(ii)~otherwise --- the goal is already lost --- a branch is intended iff the
+hazard is \emph{avoidable} from its residual: some maximal run from it (one
+that ends, blocks, or returns to a configuration it has visited) fires no
+hazard;
+(iii)~if no branch avoids the hazard either, every branch is intended.
+Before the point of no return the right choice keeps the goal; after it, the
+right choice limits harm; a choice with no right answer is free. The budget
+therefore counts wrong choices, not the depth of the protocol after the task
+was lost. Avoidability is decided on the finite unfolding graph the decision
+procedure already explores (\S\ref{sec:regular}), following every branch of
+later choices. The recursive alternative, which would follow only the
+\emph{intended} branches of later choices, makes the guards of a loop body
+depend on themselves; we use the simpler rule, which differs from it only when
+an explicit guard further down forbids the one hazard-free continuation (or,
+with environment choices, which avoidability takes adversarially, when an
+answer of the environment makes the goal reachable again).
 Explicit guards override the default where the intended branch is a matter of
 policy rather than reachability (Section~\ref{sec:eval} uses both).
 
@@ -858,7 +873,7 @@ discharge every side condition of an action swap (\coqok{strips\_swap\_act}).
 Theorem~\ref{thm:strips} is what the tool checks: for every capability action
 and every earlier node of another role it could pass, it compares footprints
 --- taking the goal's and every precondition's atoms as the support of the
-derived hazard and of the rational guards --- and reports either that the
+derived hazard and of the default guards --- and reports either that the
 head order is exact or the pairs the gate must serialize. The discipline is
 synchronous by design (the gate delivers a label when it is taken); what the
 theorem does not cover is asynchronous buffering, where a sent label waits in
@@ -1070,8 +1085,13 @@ guards as world sets, and the derived hazard as a bit that an irreversible
 action sets whenever the goal is no longer reachable from its continuation.
 The decision --- the least budget at which a hazard is reachable --- is proved
 correct (\coqok{kernel\_first\_spec}); goal reachability, used to derive
-rational guards and hazard bits, is proved correct
-(\coqok{goal\_reachable\_correct}); the decision procedure itself was
+default guards and hazard bits, is proved correct
+(\coqok{goal\_reachable\_correct}), and so is hazard avoidability
+(\coqok{avoid\_b\_correct}); the derived guard is the default rule of
+\S\ref{sec:mis} (\coqok{rat\_guard\_spec}), and at a choice with no right
+answer every branch is intended, so the choice offers no misselection edge
+and costs nothing (\coqok{forced\_choice\_intended},
+\coqok{forced\_choice\_costs\_nothing}); the decision procedure itself was
 replaced by a deduplicating, early-exiting variant proved sound and complete
 (\coqok{decide'\_sound}, \coqok{decide'\_complete}).
 
@@ -1083,7 +1103,7 @@ budget, where $\Phi$-reachability is budgeted
 (\coqok{goal\_reach\_ignores\_the\_budget}); only the first direction has an
 implication, and it reads the budget off the witness path
 (\coqok{goal\_reach\_implies\_reach\_mu}). This matters beyond the severity
-labels: the elaboration derives the \emph{rational default guard} and the
+labels: the elaboration derives the \emph{default guard} and the
 \emph{derived hazard bit} from the same notion, so it is a front-end convention
 the theory does not fix, and $\kstar$ is computed against it. Both the analyzer
 and the kernel implement that convention, independently; what the agreement
@@ -1099,7 +1119,7 @@ one, in under 50\,ms each.
 Sixteen hand-picked protocols are a weak test of that agreement, so we also
 compare the two on random ones (\texttt{scripts/differential\_test.py}). The
 generator samples packs inside the shared fragment and is otherwise
-unconstrained: nested choices, explicit and rational guards, named recursion,
+unconstrained: nested choices, explicit and default guards, named recursion,
 irreversible tools, unreachable goals. The analyzer and the extracted kernel
 share no code, so a disagreement is a defect in one of them.
 Across two seeds ($150$ at \texttt{20260902} and $350$ at \texttt{4242}, both
@@ -1156,11 +1176,11 @@ guarded shipping choice, an insurance claim in two worlds, a staged
 commit, and two release protocols with a bystander role --- one whose
 bystander is variable-disjoint, one whose bystander establishes a later
 precondition. Results (Table~\ref{tab:bench}): 55 branch verdicts (a branch at an
-abstract world) in 0.47\,s total; 29 \Ben{}, 7 \Fut{}, 19 \Cat{}. That
-count is over \emph{all} branches, and the reader should not take the 29 as
-the \Ben{} class of the trichotomy: 28 of them are branches whose guard
+abstract world) in 0.36\,s total; 35 \Ben{}, 3 \Fut{}, 17 \Cat{}. That
+count is over \emph{all} branches, and the reader should not take the 35 as
+the \Ben{} class of the trichotomy: 34 of them are branches whose guard
 \emph{holds}, so they are not misselections at all. Restricted to
-misselections the split is $1$ \Ben, $7$ \Fut, $19$ \Cat --- and the single
+misselections the split is $1$ \Ben, $3$ \Fut, $17$ \Cat --- and the single
 \Ben{} misselection is the express detour of \texttt{shipping\_detour}, whose
 guard is explicit. The class the slogan needs is the one this benchmark is
 thinnest on, and Finding~4 tests it with $n=1$.
@@ -1210,7 +1230,7 @@ protocol & guards & choices & loops & irreversible & $\kstar$ & \Ben & \Fut & \C
 booking\_fastpath & default & 1 & 0 & purchase & 0 & 1 & 0 & 1\\
 booking\_reordered (repair: hoist) & default & 1 & 0 & purchase & $\ge$5 & 2 & 0 & 0\\
 booking\_narrowed (repair: narrow) & default & 1 & 0 & purchase & $\ge$5 & 1 & 0 & 0\\
-migration\_backup & default & 2 & 0 & drop\_old & 1 & 3 & 1 & 2\\
+migration\_backup & default & 2 & 0 & drop\_old & 1 & 4 & 0 & 2\\
 email\_campaign & declared & 1 & 0 & send & 0 & 1 & 0 & 1\\
 email\_campaign\_guarded (repair: hoist) & declared & 1 & 0 & send & $\ge$5 & 2 & 0 & 0\\
 deploy\_with\_rollback & default & 1 & 0 & --- & $\ge$5 & 1 & 1 & 0\\
@@ -1221,13 +1241,13 @@ retry\_then\_purge & default & 2 & 1 & purge & 0 & 6 & 0 & 2\\
 shipping\_detour (explicit guards) & explicit & 1 & 0 & --- & $\ge$5 & 2 & 0 & 0\\
 claim\_eligible & explicit & 1 & 0 & refund & $\ge$5 & 1 & 1 & 0\\
 claim\_ineligible (same protocol) & explicit & 1 & 0 & refund & 0 & 1 & 0 & 1\\
-staged\_commit & default & 3 & 0 & commit & 1 & 3 & 4 & 7\\
+staged\_commit & default & 3 & 0 & commit & 1 & 8 & 1 & 5\\
 release\_with\_audit (bystander, exact) & default & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
 release\_with\_cache (bystander, serialize) & default & 1 & 0 & deploy & 0 & 1 & 0 & 1\\
 \bottomrule
 \end{tabular}}
 \caption{The severity benchmark ($k_{\max}=4$; $\ge$5 means no hazard within
-four misselections). Verdict counts are per branch and abstract world, so 29 \Ben{} counts 28 branches whose guard holds; restricted to misselections the split is 1/7/19. Total analysis time 0.47\,s.}
+four misselections). Verdict counts are per branch and abstract world, so 35 \Ben{} counts 34 branches whose guard holds; restricted to misselections the split is 1/3/17. Total analysis time 0.36\,s.}
 \label{tab:bench}
 \end{table}
 
@@ -1255,22 +1275,22 @@ after the last segment is replaced by its unsafe variant.
 
 State first what modularity does \emph{not} buy, because the natural comparison
 is the wrong one. Deciding whether a hazard is reachable in the whole chain is
-already linear for the tool: on the migration segment it asks $7$
-goal-reachability queries at $n=1$ and $22$ at $n=6$, fewer than the projected
+already linear for the tool: on the migration segment it asks $8$
+goal-reachability queries at $n=1$ and $23$ at $n=6$, fewer than the projected
 modular analysis' $48$. Nobody needs to decompose that. What is exponential is
 computing an \emph{interface} --- enumerating the hazard-free terminations a
 segment leaves behind --- and that is the like-for-like comparison, because it
 is what a boundary contract costs. There the complete whole-system enumeration
-asks $566$ queries at $n=6$ against $48$ ($53.7$\,s against $0.173$\,s; we
+asks $1536$ queries at $n=6$ against $48$ ($91.9$\,s against $0.222$\,s; we
 report the counters, which reproduce exactly). The concrete interface asks
-$1149$, more than the whole system, because it grows exponentially ($256$ points
+$2091$, more than the whole system, because it grows exponentially ($496$ points
 at $n=6$) --- computing an unabstracted interface is worse than not abstracting
-at all, and the projected one has two points at every $n$.
+at all, and the projected one has at most three points at every $n$.
 
 The win that survives is the practical one: re-checking after a change costs
-whole-system analysis the full run ($22$ queries, $238$\,ms at $n=6$, growing
+whole-system analysis the full run ($23$ queries, $351$\,ms at $n=6$, growing
 with $n$) and modular analysis the last segment alone ($8$ queries,
-$24$\,ms, not growing with $n$).
+$36$\,ms, not growing with $n$).
 
 \begin{table}[t]
 \centering\small
@@ -1280,17 +1300,17 @@ $24$\,ms, not growing with $n$).
 $n$ & whole, goal queries & exits & modular concrete, queries & interface & modular projected, queries & interface\\
 \midrule
 1 & 8 & 3 & 8 & 3 & 8 & 2\\
-2 & 26 & 6 & 29 & 8 & 16 & 2\\
-3 & 62 & 12 & 81 & 20 & 24 & 2\\
-4 & 134 & 24 & 205 & 48 & 32 & 2\\
-5 & 278 & 48 & 493 & 112 & 40 & 2\\
-6 & 566 & 96 & 1149 & 256 & 48 & 2\\
+2 & 32 & 8 & 32 & 9 & 16 & 3\\
+3 & 96 & 20 & 101 & 26 & 24 & 3\\
+4 & 256 & 48 & 291 & 72 & 32 & 3\\
+5 & 640 & 112 & 795 & 192 & 40 & 3\\
+6 & 1536 & 256 & 2091 & 496 & 48 & 3\\
 \bottomrule
 \end{tabular}}
 \caption{Chains of the migration segment, $k=2$. Re-check after replacing the
-last segment: whole-system 32--238\,ms growing with $n$; modular 24--37\,ms,
+last segment: whole-system 28--351\,ms growing with $n$; modular 30--41\,ms,
 not growing. The deployment segment gives the same shape at smaller scale
-(1092\,ms vs 107\,ms at $n=6$).}
+(2208\,ms vs 80\,ms at $n=6$).}
 \label{tab:mod}
 \end{table}
 

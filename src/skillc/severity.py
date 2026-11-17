@@ -521,7 +521,7 @@ def bystander_conflicts(p: Pack, perm: frozenset, goal_atoms: set) -> dict:
     pre_atoms_all = set()
     for c in caps.values():
         pre_atoms_all |= _atoms_of_formula(getattr(c, "pre", None))
-    # support of the derived hazard / rational guards: goal atoms and every
+    # support of the derived hazard / default guards: goal atoms and every
     # precondition atom (goal reachability can depend on nothing else)
     reach_support = set(goal_atoms) | pre_atoms_all
 
