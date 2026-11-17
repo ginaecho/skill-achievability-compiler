@@ -1,0 +1,290 @@
+{
+ "name": "pr_review_merge",
+ "roles": [
+  "Author",
+  "CodeReviewer",
+  "SecurityReviewer",
+  "Merger"
+ ],
+ "capabilities": {
+  "fix_review_comments": {
+   "owner": "Author",
+   "add": [
+    "quality_fixed"
+   ]
+  },
+  "fix_security_findings": {
+   "owner": "Author",
+   "add": [
+    "security_fixed"
+   ]
+  },
+  "merge": {
+   "owner": "Merger",
+   "add": [
+    "merged"
+   ]
+  }
+ },
+ "protocol": [
+  {
+   "msg": {
+    "from": "Author",
+    "to": "CodeReviewer",
+    "label": "ReadyForReview"
+   }
+  },
+  {
+   "msg": {
+    "from": "Author",
+    "to": "SecurityReviewer",
+    "label": "ReadyForReview"
+   }
+  },
+  {
+   "rec": {
+    "name": "ROUND",
+    "body": [
+     {
+      "choice": {
+       "by": "CodeReviewer",
+       "to": "Author",
+       "branches": {
+        "review_comments": [
+         {
+          "msg": {
+           "from": "CodeReviewer",
+           "to": "Author",
+           "label": "ReviewComments"
+          }
+         },
+         {
+          "msg": {
+           "from": "CodeReviewer",
+           "to": "SecurityReviewer",
+           "label": "ReviewComments"
+          }
+         },
+         {
+          "msg": {
+           "from": "CodeReviewer",
+           "to": "Merger",
+           "label": "ReviewComments"
+          }
+         },
+         {
+          "act": {
+           "cap": "fix_review_comments",
+           "by": "Author"
+          }
+         },
+         {
+          "msg": {
+           "from": "Author",
+           "to": "CodeReviewer",
+           "label": "Revision"
+          }
+         },
+         {
+          "msg": {
+           "from": "Author",
+           "to": "SecurityReviewer",
+           "label": "Revision"
+          }
+         },
+         {
+          "continue": "ROUND"
+         }
+        ],
+        "quality_clean": [
+         {
+          "msg": {
+           "from": "CodeReviewer",
+           "to": "SecurityReviewer",
+           "label": "QualityClean"
+          }
+         },
+         {
+          "msg": {
+           "from": "CodeReviewer",
+           "to": "Author",
+           "label": "QualityClean"
+          }
+         },
+         {
+          "msg": {
+           "from": "CodeReviewer",
+           "to": "Merger",
+           "label": "QualityClean"
+          }
+         },
+         {
+          "choice": {
+           "by": "SecurityReviewer",
+           "to": "Author",
+           "branches": {
+            "security_findings": [
+             {
+              "msg": {
+               "from": "SecurityReviewer",
+               "to": "Author",
+               "label": "SecurityFindings"
+              }
+             },
+             {
+              "msg": {
+               "from": "SecurityReviewer",
+               "to": "CodeReviewer",
+               "label": "SecurityFindings"
+              }
+             },
+             {
+              "msg": {
+               "from": "SecurityReviewer",
+               "to": "Merger",
+               "label": "SecurityFindings"
+              }
+             },
+             {
+              "act": {
+               "cap": "fix_security_findings",
+               "by": "Author"
+              }
+             },
+             {
+              "msg": {
+               "from": "Author",
+               "to": "CodeReviewer",
+               "label": "Revision"
+              }
+             },
+             {
+              "msg": {
+               "from": "Author",
+               "to": "SecurityReviewer",
+               "label": "Revision"
+              }
+             },
+             {
+              "continue": "ROUND"
+             }
+            ],
+            "security_approved": [
+             {
+              "msg": {
+               "from": "SecurityReviewer",
+               "to": "Merger",
+               "label": "SecurityApproved"
+              }
+             },
+             {
+              "msg": {
+               "from": "SecurityReviewer",
+               "to": "CodeReviewer",
+               "label": "SecurityApproved"
+              }
+             },
+             {
+              "msg": {
+               "from": "SecurityReviewer",
+               "to": "Author",
+               "label": "SecurityApproved"
+              }
+             },
+             {
+              "msg": {
+               "from": "CodeReviewer",
+               "to": "Merger",
+               "label": "QualityApproved"
+              }
+             }
+            ]
+           },
+           "guards": {
+            "security_findings": {
+             "and": [
+              "security_vuln",
+              {
+               "not": "security_fixed"
+              }
+             ]
+            },
+            "security_approved": {
+             "or": [
+              {
+               "not": "security_vuln"
+              },
+              "security_fixed"
+             ]
+            }
+           }
+          }
+         }
+        ]
+       },
+       "guards": {
+        "review_comments": {
+         "and": [
+          "quality_defect",
+          {
+           "not": "quality_fixed"
+          }
+         ]
+        },
+        "quality_clean": {
+         "or": [
+          {
+           "not": "quality_defect"
+          },
+          "quality_fixed"
+         ]
+        }
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "act": {
+    "cap": "merge",
+    "by": "Merger"
+   }
+  },
+  {
+   "msg": {
+    "from": "Merger",
+    "to": "Author",
+    "label": "MergeDone"
+   }
+  }
+ ],
+ "goal": {
+  "and": [
+   "merged",
+   {
+    "or": [
+     {
+      "not": "quality_defect"
+     },
+     "quality_fixed"
+    ]
+   },
+   {
+    "or": [
+     {
+      "not": "security_vuln"
+     },
+     "security_fixed"
+    ]
+   }
+  ]
+ },
+ "init_true": [
+  "quality_defect",
+  "security_vuln"
+ ],
+ "irreversible": [
+  "merge"
+ ]
+}
