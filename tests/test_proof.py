@@ -383,5 +383,5 @@ def test_the_live_agent_summary_is_current():
     spec = importlib.util.spec_from_file_location("las", root / "scripts" / "live_agents_summary.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    fresh = json.loads(json.dumps(mod.summarize()))
+    fresh = json.loads(json.dumps(mod.build()))
     assert fresh == json.load(open(shipped))

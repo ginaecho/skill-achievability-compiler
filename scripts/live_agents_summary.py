@@ -188,10 +188,16 @@ def coverage(models=SECONDARY) -> dict:
     return out
 
 
-def main() -> int:
+def build() -> dict:
+    """The shipped summary: the complete design, then each secondary model apart."""
     out = summarize()
     out["secondary"] = {m: summarize((m,)) for m in SECONDARY}
     out["secondary_coverage"] = coverage()
+    return out
+
+
+def main() -> int:
+    out = build()
     (RESULTS / "live_agents_summary.json").write_text(json.dumps(out, indent=1) + "\n")
     print(json.dumps({k: v for k, v in out.items() if k not in ("cells", "pooled", "secondary")}, indent=1))
     return 0

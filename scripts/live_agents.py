@@ -369,7 +369,9 @@ def main():
                   f"{r['outcome']:12s} missel={r['misselections']} "
                   f"{[c['label'] for c in r['choices']]}", file=sys.stderr)
 
-    report(bench, verdicts, runs, models, conds, arms)
+    # the report covers only the models asked for: a model run apart (see
+    # live_agents_summary.SECONDARY) must not leak into the two-model matrix
+    report(bench, verdicts, {k: r for k, r in runs.items() if r["model"] in models}, models, conds, arms)
 
 
 def fisher_two_sided(a: int, b: int, c: int, d: int) -> float:
