@@ -59,7 +59,11 @@ def test(a: int, n1: int, c: int, n2: int) -> dict:
             "p": p, "p_below_10_to": p_exponent(p) if p > 0 else None}
 
 
-def summarize() -> dict:
+PRIMARY = ("haiku", "sonnet")   # the complete design: every cell has its five runs
+SECONDARY = ("opus",)           # reported apart: some of its calls were answered by another model
+
+
+def summarize(models=PRIMARY) -> dict:
     """Every live-agent figure the paper quotes; a pure function of the shipped runs."""
     bench = L.load_bench()
     group = {e["id"]: e.get("group", "authored") for e in bench}
@@ -69,6 +73,7 @@ def summarize() -> dict:
            for pid, v in verdicts.items()}
     runs = [json.loads(line) for line in
             (RESULTS / "live_agents_runs.jsonl").read_text().splitlines() if line.strip()]
+    runs = [r for r in runs if r["model"] in models]
 
     def entered(r: dict) -> bool:
         return any(not c["external"] and c.get("label") and (c["node"], c["label"]) in cat[r["pack"]]
@@ -160,10 +165,35 @@ def summarize() -> dict:
     return out
 
 
+def coverage(models=SECONDARY) -> dict:
+    """How much of the design each secondary model answered itself.
+
+    A run is recorded only if every call in it was served by the pinned model;
+    when the CLI handed a call to a fallback model the run was refused and not
+    recorded.  The design is 35 protocols x 5 conditions x 2 arms x 5 seeds."""
+    bench = L.load_bench()
+    group = {e["id"]: e.get("group", "authored") for e in bench}
+    runs = [json.loads(line) for line in
+            (RESULTS / "live_agents_runs.jsonl").read_text().splitlines() if line.strip()]
+    design = {g: sum(1 for e in bench if group[e["id"]] == g) * len(CONDS) * len(ARMS) * 5 for g in GROUPS}
+    out = {}
+    for m in models:
+        rs = [r for r in runs if r["model"] == m]
+        got = Counter(group[r["pack"]] for r in rs)
+        cell = Counter((group[r["pack"]], r["cond"], r["arm"]) for r in rs)
+        out[m] = {"design_runs": sum(design.values()), "recorded_runs": len(rs),
+                  "by_group": {g: {"design": design[g], "recorded": got[g]} for g in GROUPS},
+                  "by_cell": {f"{g}/{c}/{a}": cell[(g, c, a)] for g in GROUPS for c in CONDS for a in ARMS},
+                  "served_models": sorted({x for r in rs for x in r["served_models"]})}
+    return out
+
+
 def main() -> int:
     out = summarize()
+    out["secondary"] = {m: summarize((m,)) for m in SECONDARY}
+    out["secondary_coverage"] = coverage()
     (RESULTS / "live_agents_summary.json").write_text(json.dumps(out, indent=1) + "\n")
-    print(json.dumps({k: v for k, v in out.items() if k not in ("cells", "pooled")}, indent=1))
+    print(json.dumps({k: v for k, v in out.items() if k not in ("cells", "pooled", "secondary")}, indent=1))
     return 0
 
 

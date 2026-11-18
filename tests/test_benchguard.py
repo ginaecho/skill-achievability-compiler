@@ -116,7 +116,7 @@ def test_llm_judge_prompt_is_scrubbed(tmp_path, monkeypatch):
 def test_live_agent_prompt_is_scrubbed(tmp_path, monkeypatch):
     live = _script("live_agents")
     monkeypatch.setenv("SKILLC_BENCH_WORK", str(tmp_path))
-    cap = _Captured({"result": "[host-1]", "total_cost_usd": 0.0, "modelUsage": {}})
+    cap = _Captured({"result": "[host-1]", "total_cost_usd": 0.0, "modelUsage": {"claude-haiku-5-5": {}}})
     monkeypatch.setattr(live.subprocess, "run", cap)
     reply, _ = live.ask("haiku", "Options: deploy to prod.example.com or stage")
     assert reply == "prod.example.com"          # placeholder restored in the reply
