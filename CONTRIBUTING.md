@@ -50,17 +50,12 @@ pip install -e ".[dev]"
 
 # Run tests
 python3 -m pytest
-
-# Build the paper (requires pdflatex + texlive)
-cd paper
-pdflatex skillachievability.tex && pdflatex skillachievability.tex
 ```
 
 ## Project Structure
 
 - **`src/skillc/`** — the compiler package (checker, session types, pack model, front-ends)
 - **`tests/`** — test suite (217 passing tests plus opt-in/tool-dependent suites)
-- **`paper/`** — LaTeX source and built PDF with full proofs
 - **`proof/`** — Coq verification of theorems (zero axioms)
 - **`examples/`** — fixture skills for testing
 
@@ -111,7 +106,6 @@ pytest tests/test_real_skills.py          # Real skill tests (requires fetch)
 ## Documentation
 
 - **README.md** — overview, quick start, what the checker decides
-- **paper/skillachievability.tex** — full formal proofs and theoretical justification
 - **docs/REAL_SKILLS_REPORT.md** — results on 32 deployed skills
 - **docs/SEMANTIC_VALIDATION.md** — LLM compaction validation
 - Code comments — only on non-obvious logic (why, not what)
