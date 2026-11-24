@@ -2,17 +2,18 @@
 
 Three tabs, nothing to set up:
 
-1. **My environment.** The page reads this machine the way a GitHub Copilot CLI agent started
+1. **Basic skillc.** The page reads this machine the way a GitHub Copilot CLI agent started
    here sees it (`skillc.env.copilot.probe`: built-in tools, saved approvals, MCP servers,
    which credential names are set), then checks a skill against this machine and four
    published tool profiles side by side: Copilot CLI, VS Code Copilot, Claude Code, claude.ai.
+   The same three examples have local execution evidence; external completion stays unverified.
 2. **A graph.** Upload a building graph (Turtle, TriG, N-Triples, N-Quads, RDF/XML) and paste a
    workflow; `skillc twin` says what the graph holds and, per target, which evidence is there
    and which is missing.
 3. **Why skillc.** Measured comparison with a plain and a guided LLM, and case replays.
 
-Standard library plus skillc (rdflib for the graph tab). Offline: no model call, no egress
-check, nothing is executed. Binds to 127.0.0.1 only.
+Standard library plus skillc (rdflib for the graph tab). Offline: no model call or egress
+check. Fixed tasks execute only on request. Binds to 127.0.0.1 only.
 """
 from __future__ import annotations
 
@@ -28,6 +29,7 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -35,6 +37,7 @@ sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(HERE))
 
 import llm_check  # noqa: E402
+import local_runs  # noqa: E402
 from skillc.cli import main as skillc  # noqa: E402
 from skillc.frontend.contracts import bind_environment  # noqa: E402
 from skillc.monitor import Config, Monitor  # noqa: E402
@@ -56,7 +59,7 @@ _LOCK = threading.Lock()  # z3 and the CLI's stdout capture are not thread-safe
 _ENV: dict | None = None
 
 
-# --- tab 1: my environment ----------------------------------------------------------------
+# --- tab 1: basic skillc ------------------------------------------------------------------
 
 def read_environment(refresh: bool = False, probe=None) -> dict:
     """This machine as a GitHub Copilot CLI agent started in this repository sees it. Cached."""
@@ -220,6 +223,21 @@ def llm_checks(text: str, where: dict[str, list[str]], env: dict, complete=None)
                      "error": next((r["error"] for r in rows if r["error"]), None)}
     return {"provider": LLM["provider"], "model": LLM["model"] or "provider default",
             "guide": llm_check.GUIDE, "arms": arms, "wall_ms": wall_ms}
+
+
+def native_predictions(text: str, host: str, tools: list[str], scope: str) -> dict:
+    """Predict from the native request's actual tool list before forwarding its first call."""
+    where = {host: tools}
+    result = {"skillc": check_skill(text, where)["rows"][0], "tools": tools, "scope": scope}
+    for arm in llm_check.ARMS:
+        answer = llm_check.llm_check(
+            text, where, {"execution_scope": scope}, arm=arm,
+            provider=LLM["provider"], model=LLM["model"])
+        result[arm] = {**answer["rows"][0], "error": answer["error"], "ms": answer["ms"],
+                       "input_tokens": answer["input_tokens"],
+                       "output_tokens": answer["output_tokens"]}
+    result["completed_at"] = time.time()
+    return result
 
 
 # --- tab 3: why skillc ----------------------------------------------------------------------
@@ -513,6 +531,18 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(HTTPStatus.OK, WHY)
         if path == "/api/benchmark":
             return self._json(HTTPStatus.OK, measured_benchmark())
+        if path == "/api/local-runs":
+            return self._json(HTTPStatus.OK, {"cases": local_runs.catalog(),
+                                             "latest": local_runs.latest()})
+        if path == "/api/local-runs/artifact":
+            params = parse_qs(query)
+            try:
+                artifact = local_runs.artifact(params.get("run", [""])[0],
+                                               params.get("file", [""])[0])
+                return self._send(HTTPStatus.OK, artifact.read_bytes(),
+                                  "application/octet-stream")
+            except (OSError, ValueError) as error:
+                return self._json(HTTPStatus.NOT_FOUND, {"error": str(error)})
         if path == "/api/samples":
             return self._json(HTTPStatus.OK, {
                 "skills": samples(),
@@ -533,6 +563,14 @@ class Handler(BaseHTTPRequestHandler):
             if length > MAX_GRAPH * 2:
                 raise ValueError("the request is too large")
             body = json.loads(self.rfile.read(length) or b"{}")
+            if self.path == "/api/local-runs/run":
+                return self._json(HTTPStatus.OK, local_runs.run(
+                    str(body.get("id", "")), str(body.get("text", "")),
+                    predictions=body.get("predictions"),
+                    enabled=LLM["enabled"] and LLM["provider"] == "azure-openai",
+                    model=LLM["model"] or "gpt-5.4",
+                    predictor=lambda host, tools, scope: native_predictions(
+                        str(body.get("text", "")), host, tools, scope)))
             if self.path in ("/api/check", "/api/llm-check"):
                 env = read_environment()
                 where = settings(env)

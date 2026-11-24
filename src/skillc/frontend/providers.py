@@ -1,4 +1,4 @@
-"""LLM provider clients: one text completion per call, no retries, no state.
+"""LLM provider clients: guarded text and structured chat requests, no retries.
 
 Credentials stay in provider-specific environment variables; nothing here is
 used unless a caller opts into the LLM front-end.
@@ -143,6 +143,37 @@ def anthropic_complete(system: str, user: str, model: str,
 def azure_openai_complete(system: str, user: str, model: str | None,
                           timeout: int, json_mode: bool = True,
                           image: tuple[bytes, str] | None = None) -> str:
+    content: str | list = user
+    if image is not None:
+        data, mime = _b64(image)
+        content = [{"type": "text", "text": user},
+                   {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}}]
+    payload = {
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": content},
+        ],
+        "max_completion_tokens": 32000,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    out = azure_openai_chat(payload, model, timeout)
+    choices = out.get("choices", [])
+    if not choices:
+        raise ValueError("Azure OpenAI response contained no choices")
+    content = choices[0].get("message", {}).get("content", "")
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        return "".join(
+            item.get("text", "") for item in content
+            if isinstance(item, dict) and item.get("type") == "text"
+        ).strip()
+    raise ValueError("Azure OpenAI response message content was not text")
+
+
+def azure_openai_chat(payload: dict, model: str | None, timeout: int) -> dict:
+    """Guarded, non-streaming chat including native agent tool calls."""
     require_model_opt_in()
     key = os.environ.get("AZURE_OPENAI_API_KEY")
     endpoint = os.environ.get("AZURE_OPENAI_ENDPOINT")
@@ -184,22 +215,13 @@ def azure_openai_complete(system: str, user: str, model: str | None,
         url = v1 + "/chat/completions"
         include_model = True
 
-    content: str | list = user
-    if image is not None:
-        data, mime = _b64(image)
-        content = [{"type": "text", "text": user},
-                   {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{data}"}}]
-    payload = {
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": content},
-        ],
-        "max_completion_tokens": 32000,
-    }
-    if json_mode:
-        payload["response_format"] = {"type": "json_object"}
+    payload = {**payload}
+    if payload.get("stream"):
+        raise ValueError("azure_openai_chat requires a non-streaming request")
     if include_model:
         payload["model"] = deployment
+    else:
+        payload.pop("model", None)
     headers = {"content-type": "application/json"}
     if key:
         headers["api-key"] = key
@@ -214,18 +236,17 @@ def azure_openai_complete(system: str, user: str, model: str | None,
         raise RuntimeError(
             f"Azure OpenAI request failed: {_azure_error(error)}") from error
     _record_usage(_azure_usage(out.get("usage")))
-    choices = out.get("choices", [])
-    if not choices:
-        raise ValueError("Azure OpenAI response contained no choices")
-    content = choices[0].get("message", {}).get("content", "")
-    if isinstance(content, str):
-        return restore(content.strip(), table)
-    if isinstance(content, list):
-        return restore("".join(
-            item.get("text", "") for item in content
-            if isinstance(item, dict) and item.get("type") == "text"
-        ).strip(), table)
-    raise ValueError("Azure OpenAI response message content was not text")
+
+    def restored(value):
+        if isinstance(value, str):
+            return restore(value, table)
+        if isinstance(value, list):
+            return [restored(v) for v in value]
+        if isinstance(value, dict):
+            return {restore(k, table): restored(v) for k, v in value.items()}
+        return value
+
+    return restored(out)
 
 
 DECISION_ENDPOINT = "https://foundary-tzuc06.services.ai.azure.com"
