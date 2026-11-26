@@ -1,5 +1,11 @@
 """Tools that do the same job under different names (skillc.equivalents)."""
+from dataclasses import replace
+
+import pytest
+
+from skillc import check
 from skillc.equivalents import groups, match, same_tool
+from skillc.frontend.markdown import compile_markdown
 from skillc.frontend.contracts import bind_environment
 from skillc.frontend.grants import bind_grants
 from skillc.profiles import load_profile
@@ -91,3 +97,36 @@ def test_environment_need_finds_the_tool_under_another_name():
     fact = need(env, {"tool": "AskUserQuestion"})
     assert fact.value is True and "AskUserQuestion is ask_user here" in fact.reasons[0]
     assert need(env, {"tool": "slack_send_message"}).value is False
+
+
+def _skill(sentence):
+    return f"---\nname: s\ndescription: Review a diff.\n---\n\n# s\n\n{sentence}\n"
+
+
+@pytest.mark.parametrize("sentence, missing", [
+    ("Use `task` to start a reviewer subagent on the diff and list the findings.", "task"),
+    ("Use `skill` to load the pr-review skill, then follow it to review the diff.", "skill"),
+    ("Use `task` to start a reviewer subagent, then use `read_agent` to read its report.",
+     "task"),
+])
+def test_dropping_an_agent_only_tool_refutes_even_with_a_shell(sentence, missing):
+    # Issue 11: one-word agent tools used to fall back to the shell and pass.
+    full = load_profile("copilot-cli")
+    reduced = replace(full, tools=frozenset(
+        t for t in full.tools if t not in {"task", "skill", "read_agent"}))
+    assert check(compile_markdown(_skill(sentence), full).pack).label == "ACHIEVABLE"
+    verdict = check(compile_markdown(_skill(sentence), reduced).pack)
+    assert (verdict.label, verdict.reason) == ("IMPOSSIBLE", "MISSING_CAPABILITY")
+    assert missing in verdict.detail
+
+
+def test_a_one_word_shell_program_still_runs_through_the_shell():
+    reduced = replace(load_profile("copilot-cli"), tools=frozenset({"bash"}))
+    result = compile_markdown(_skill("Use `jq` to extract the version field."), reduced)
+    assert check(result.pack).label == "ACHIEVABLE"
+
+
+def test_copilot_cli_profile_has_the_tools_its_requests_carry():
+    tools = set(load_profile("copilot-cli").tools)
+    assert {"sql", "session_store_sql", "fetch_copilot_cli_documentation",
+            "run_dynamic_workflow", "dynamic_workflows_manage"} <= tools

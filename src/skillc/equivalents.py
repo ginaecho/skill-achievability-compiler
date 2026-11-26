@@ -28,6 +28,16 @@ def groups() -> tuple[tuple[str, frozenset[str]], ...]:
                  for g in data["groups"])
 
 
+@lru_cache(maxsize=1)
+def agent_only_names() -> frozenset[str]:
+    """Normalized names of tools whose job no shell command can do (run a subagent,
+    ask the user, load a skill). Naming one is a tool use, never a shell command."""
+    raw = resources.files("skillc").joinpath("data/tool_equivalents.json")
+    data = json.loads(raw.read_text(encoding="utf-8"))
+    return frozenset(normalize_tool(n) for g in data["groups"] if g.get("agent_only")
+                     for n in g["names"])
+
+
 def same_tool(name: str) -> frozenset[str]:
     """Every name of the tool `name` (itself included)."""
     n = normalize_tool(name)

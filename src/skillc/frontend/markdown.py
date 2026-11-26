@@ -55,6 +55,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
+from ..equivalents import agent_only_names
 from ..pack import PackError, validate_pack
 from ..profiles import Profile, normalize_tool
 from . import semantic
@@ -290,7 +291,11 @@ def extract(body: str, declared: set[str]) -> list[Invocation]:
                 _names_a_value(raw, body) or _typed_as_value(body, m.end(1))):
             continue
         kind = _classify(raw)
-        if kind == "agent-tool" and raw[0].isupper():
+        if norm in agent_only_names():
+            # `task` or `skill` would otherwise read as a shell command like `jq`
+            # and pass under any profile with a shell; no shell can do their job.
+            kind = "agent-tool"
+        elif kind == "agent-tool" and raw[0].isupper():
             # Unknown CamelCase is a code symbol (library class/API), not an
             # agent tool: it executes through the shell, if at all.  Declared
             # CamelCase tools (e.g. `WebFetch` under claude-code) were matched

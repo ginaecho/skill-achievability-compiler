@@ -47,6 +47,12 @@ groups in `src/skillc/data/tool_equivalents.json`); `--exact-tool-names` turns
 that off. Profiles and self-declared
 `allowed-tools`/`tools` metadata are distinct trust inputs; the frontend combines
 them but does not discover or verify actual runtime grants (`skillc reach` does).
+A name the profile does not grant usually falls back to the shell when it reads
+like a command (`jq`). The exception is a tool no shell can stand in for:
+running a subagent (`task`), asking the user (`ask_user`) or loading a skill
+(`skill`), the groups marked `agent_only` in that file. A profile that leaves
+such a tool out, for example one written to match a session started with
+`--excluded-tools task,skill`, refutes a skill that names it.
 
 ```console
 $ skillc scan /mnt/skills --profile claude-ai      # every skill achievable (42/42)
