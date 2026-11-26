@@ -1,0 +1,34 @@
+I created `/work/check_captions.py` and ran it on `/inputs/captions.srt`. It found a real problem: 2 of 3 cues pass, and the checker exits with code 1. That exit code means it correctly caught a defect in the file, not that the checker broke.
+
+**Result on the input file** (stdout was one JSON object, stderr was empty):
+
+| cue | start_ms → end_ms | characters | issues |
+|---|---|---|---|
+| 1 | 27000 → 30730 | 5 | none |
+| 2 | 31500 → 34100 | 7 | `gap` |
+| 3 | 34100 → 36570 | 16 | none |
+
+Cue 2 fails because cue 3 starts at the exact moment cue 2 ends. That is a 0 ms gap, and the minimum is 2 frames. The file's own cue numbers (2, 4, 6) skip values; the checker numbers cues 1, 2, 3 in order instead.
+
+**How it works:**
+- It uses only the standard library, takes exactly one SRT path, and is 4,156 bytes.
+- All comparisons use whole milliseconds, with no rounding or tolerance:
+  - A gap passes if `gap_ms × 24 ≥ 2000`, so 84 ms passes and 83 ms fails.
+  - Duration passes if `duration_ms × 6 ≥ 5000` and `duration_ms ≤ 7000`, so 833 ms fails, 834 ms passes, 7000 ms passes and 7001 ms fails.
+  - Reading speed is only checked when duration is positive, and passes if `characters × 1000 ≤ 20 × duration_ms`.
+- A negative gap is reported as `overlap` rather than `gap`, and both belong to the earlier cue.
+- A zero-length cue fails `duration` without dividing by zero.
+- The file is read as UTF-8, with or without a BOM and with either line-ending style. Formatting tags are removed, trailing whitespace is trimmed and blank lines are dropped. Leading spaces are kept, and characters are counted as Unicode code points.
+
+**Tests:** besides the real input, I ran it on throwaway test files in `/work` (deleted afterwards):
+- an empty file, and one with only a BOM and a line break: 0 cues, exit 0;
+- a set of cues checking each timing limit just inside and just outside its boundary;
+- formatting tags, leading spaces, a whitespace-only line inside a cue, non-ASCII text, three-line cues and an overlap;
+- the same tests with CRLF line endings and a BOM, which gave identical results;
+- a file with no blank line at the end.
+
+All behaved as specified. My first version wrongly split a cue at a whitespace-only line, so I rewrote it to read line by line and reran every test.
+
+**One addition you didn't specify:** if it's run with the wrong number of arguments, or the file can't be read or parsed as SRT, it writes an error to stderr, prints no JSON and exits with code 2.
+
+The checker only tests these numbers. It doesn't retime captions or judge style, accessibility, audio sync or whether a broadcaster would accept the file. The input file was not changed.

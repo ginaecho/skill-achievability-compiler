@@ -1,0 +1,61 @@
+The query is verified: correct against manual aggregation checks, returns empty results for a no-sales period, and country_rank values are distinct 1/2 per country as required.
+
+**Deliverable confirmed at `/work/query.sql`:**
+
+```sql
+WITH line_data AS (
+    SELECT
+        inv.BillingCountry AS country,
+        t.GenreId AS genre_id,
+        CAST(ROUND(il.UnitPrice * 100) AS INTEGER) * il.Quantity AS line_revenue_cents,
+        il.Quantity AS quantity
+    FROM Invoice inv
+    JOIN InvoiceLine il ON il.InvoiceId = inv.InvoiceId
+    JOIN Track t ON t.TrackId = il.TrackId
+    WHERE inv.InvoiceDate >= '2021-01-01' AND inv.InvoiceDate < '2022-01-01'
+),
+agg AS (
+    SELECT
+        country,
+        genre_id,
+        SUM(line_revenue_cents) AS revenue_cents,
+        SUM(quantity) AS units
+    FROM line_data
+    GROUP BY country, genre_id
+),
+ranked AS (
+    SELECT
+        a.country,
+        a.genre_id,
+        g.Name AS genre,
+        a.revenue_cents,
+        a.units,
+        ROW_NUMBER() OVER (
+            PARTITION BY a.country
+            ORDER BY a.revenue_cents DESC, a.genre_id ASC
+        ) AS country_rank
+    FROM agg a
+    JOIN Genre g ON g.GenreId = a.genre_id
+)
+SELECT
+    country,
+    genre_id,
+    genre,
+    revenue_cents,
+    units,
+    country_rank
+FROM ranked
+WHERE country_rank <= 2
+ORDER BY country ASC, country_rank ASC;
+```
+
+Verification performed in the sandbox:
+- Inspected actual schema of `Invoice`, `InvoiceLine`, `Track`, `Genre` via `PRAGMA table_info`.
+- Confirmed `InvoiceDate` is stored as `'YYYY-MM-DD HH:MM:SS'` text, so string range comparisons against `'2021-01-01'`/`'2022-01-01'` are correct.
+- Executed the query against `/inputs/Chinook.sqlite` (read-only connection) — returned 39 rows across 22 countries, each with 1–2 genre rows and distinct `country_rank` values.
+- Cross-checked one country (Canada) against an independent manual aggregation query — results matched exactly (Rock 2673¢/27 units rank 1, Latin 1188¢/12 units rank 2).
+- Ran the same query with the date window shifted to a period with zero invoices (2099–2100) — correctly returned no rows, confirming it handles the "no sales" edge case without hard-coding.
+- Verified country_rank values per country are always a proper 1/2 (or just 1) sequence with no gaps or duplicates.
+- Database was only opened read-only (`mode=ro`) and never modified.
+
+No issues encountered; no operations were refused.

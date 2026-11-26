@@ -1,0 +1,15 @@
+I inspected the actual `/inputs/codec.py` (read-only, not executed as a downloaded script) and ran the real `canonicalize_url` function directly in the sandbox.
+
+**Finding:** `canonicalize_url` is not idempotent. It strips/lowercases, then percent-encodes with `quote(..., safe="/:?#[]@!$&'()*+,;=")`. Since `%` is not in the `safe` set, any `%` character in the input gets re-encoded on each pass, so repeated application keeps growing the string instead of converging.
+
+Witness (length 1, within the allowed ASCII letters/space/`%` alphabet):
+- `input = "%"`
+- `once = canonicalize_url("%") = "%25"`
+- `twice = canonicalize_url("%25") = "%2525"`
+
+`once != twice`, confirming `f(f(x)) != f(x)` — a genuine counterexample to idempotence, not a tautology/vacuity artifact.
+
+Result written to `/work/counterexample.json`:
+```json
+{"input": "%", "once": "%25", "twice": "%2525"}
+```

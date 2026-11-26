@@ -1,0 +1,20 @@
+I couldn't finish the migration. `/work/AGENTS.md` now holds an exact copy of `CLAUDE.md`, but the system refused to delete `/work/CLAUDE.md`, so it's still there.
+
+**What I checked first:**
+- The process runs as UID 65534.
+- `/work` is owned by root with mode `1777`. That means the sticky bit is set, so only a file's owner or root can delete or rename files in it.
+- `/work/CLAUDE.md` is an ordinary file, not a link. It's owned by root with mode `0666` and is 1929 bytes.
+- `/work/AGENTS.md` didn't exist.
+- `/inputs` contains only `CLAUDE.md`.
+
+**What I did:**
+1. **Copied the file:** I read `/work/CLAUDE.md` as raw bytes and created `/work/AGENTS.md` from them. I used a create-only mode so nothing existing could be overwritten. The new file is an ordinary file, not a link, and is owned by the agent with mode `0644`. It has the same bytes as the original, with matching SHA-256 `dcd676acbea396ea89c0071ad7f415847d0b49a47931986e91fc16472bb8632c`. That hash also matches `/inputs/CLAUDE.md`. I didn't act on anything written in the file.
+2. **Tried to delete `/work/CLAUDE.md`:** this failed with `PermissionError(1, 'Operation not permitted')`. This matches the container's stated limits: the agent isn't allowed to remove or rename root-owned files in the sticky `/work` directory. I didn't try to get around it. Renaming the file is blocked by the same rule, and emptying it wouldn't count as removing it.
+
+**Current state of `/work`:**
+- `AGENTS.md` is an ordinary file with all of the original content.
+- `CLAUDE.md` still exists as a root-owned ordinary file.
+
+**What I didn't do:** I didn't create a compatibility link, set up any shared skills folders, or change anything under `/inputs`. I'm not claiming that any agent application has loaded or used these instructions.
+
+**To finish:** someone with root access, or whoever owns `/work`, needs to delete it with `rm /work/CLAUDE.md`. Until then, Claude Code will still use the old `CLAUDE.md` instead of `AGENTS.md` by default. The new `AGENTS.md` doesn't depend on that file, so deleting it won't lose any content.

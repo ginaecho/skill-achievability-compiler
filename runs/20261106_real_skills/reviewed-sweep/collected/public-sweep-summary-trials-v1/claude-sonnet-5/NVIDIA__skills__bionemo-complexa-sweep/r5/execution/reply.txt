@@ -1,0 +1,30 @@
+I performed only the configuration-summary CSV analysis branch — no inference launches, no config generation, no hardware probing, and no claims of scientific results. This is a sanity-check analysis of an upstream public evaluation fixture.
+
+**What I did:**
+1. Read `/inputs/summary_review.csv` (9 data rows, header `config_id,temperature,replicas,n_designs,n_passed,mean_i_pae`).
+2. For each row, classified `count_status` in the required precedence order (missing_counts → invalid_counts → zero_denominator → valid), using the exact integer regex `-?[0-9]+`, checking negativity and `n_passed > n_designs`.
+3. Computed `success_rate = n_passed/n_designs` only for `valid` rows, exact rational division rounded half-up to 6 decimals; left it blank for every other status.
+4. Sorted: valid rows first by exact unrounded ratio descending, then numeric `mean_i_pae` ascending (missing last), then `config_id` ascending; remaining rows appended ordered by `config_id` ascending only.
+5. Preserved every original field's decoded text verbatim (including the empty `n_passed`/`mean_i_pae` fields), added only the two computed columns, kept the exact column order specified.
+6. Wrote the result as comma-delimited UTF-8 to `/work/sweep_summary.csv`, then reopened and printed the raw bytes to confirm it was actually persisted.
+
+**Verified result (9 rows, header + 9 data rows):**
+
+```
+config_id,temperature,replicas,n_designs,n_passed,mean_i_pae,success_rate,count_status
+review_1_8,1.0,8,25,20,5.0,0.800000,valid
+review_1_4,1.0,4,10,8,6.0,0.800000,valid
+review_15_8,1.5,8,20,14,,0.700000,valid
+review_05_8,0.5,8,50,30,7.0,0.600000,valid
+review_05_2,0.5,2,10,3,9.0,0.300000,valid
+review_05_4,0.5,4,0,0,,,zero_denominator
+review_15_2,1.5,2,10,11,4.0,,invalid_counts
+review_15_4,1.5,4,20,,8.0,,missing_counts
+review_1_2,1.0,2,-5,1,8.5,,invalid_counts
+```
+
+Notable classifications: `review_1_2` (n_designs=-5) and `review_15_2` (n_passed=11 > n_designs=10) → `invalid_counts`; `review_05_4` (0/0) → `zero_denominator`; `review_15_4` (n_passed empty) → `missing_counts`. The two tied 0.8 valid rows (`review_1_8`, `review_1_4`) were ordered by ascending `mean_i_pae` (5.0 before 6.0) per the tie-break rule.
+
+**Deliverable path:** `/work/sweep_summary.csv` (comma-delimited UTF-8, confirmed by reading the file back from disk).
+
+No GPU/inference work was performed or claimed; this is purely a CSV transformation of a labeled synthetic/fixture dataset.

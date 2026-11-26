@@ -1,0 +1,239 @@
+"""Independent goal checks; never included in compiler or executor prompts."""
+import csv
+import hashlib
+import io
+import json
+import re
+
+from scripts.real_skills_runtime import Sandbox
+
+MUTATION = "trailofbits__skills__mutation-testing"
+PALETTE = "davila7__claude-code-templates__ui-ux-pro-max"
+PROPERTY = "trailofbits__skills__property-based-testing"
+BATCH = "github__awesome-copilot__batch-script-progress"
+
+
+def mutation_reference(inputs: dict[str, bytes]) -> dict:
+    if set(inputs) != {"mewt-results.json", "mewt-status.txt"}:
+        raise ValueError("Mutation analysis requires both frozen public exports")
+    sections = inputs["mewt-status.txt"].decode().split("Campaign-Wide Summary:")
+    if len(sections) != 2:
+        raise ValueError("Expected one campaign-wide mutation summary")
+    totals = re.findall(r"Mutants:\s*(\d+) total,\s*(\d+) tested", sections[1])
+    outcomes = re.findall(
+        r"Outcomes:\s*(\d+) caught,\s*(\d+) uncaught,\s*(\d+) timeout,\s*(\d+) skipped",
+        sections[1])
+    if len(totals) != 1 or len(outcomes) != 1:
+        raise ValueError("Mutation summary lacks unambiguous campaign counts")
+    total, tested = map(int, totals[0])
+    caught, uncaught, timeout, skipped = map(int, outcomes[0])
+    if total != caught + uncaught + timeout + skipped or tested != caught + uncaught + timeout:
+        raise ValueError("Mutation campaign counts do not reconcile")
+    rows = json.loads(inputs["mewt-results.json"])["results"]
+    grouped = {}
+    seen = set()
+    for row in rows:
+        identifier = row["mutant"]["id"]
+        if (type(identifier) is not int or identifier in seen
+                or row["outcome"]["mutant_id"] != identifier
+                or row["outcome"]["status"] != "Uncaught"):
+            raise ValueError("Expected unique, matching uncaught mutation records")
+        seen.add(identifier)
+        grouped.setdefault(row["target"]["path"], []).append(identifier)
+    if len(seen) != uncaught:
+        raise ValueError("Public export does not contain every reported uncaught mutant")
+    return {
+        "campaign": {"total": total, "tested": tested, "caught": caught,
+                     "uncaught": uncaught, "timeout": timeout, "skipped": skipped},
+        "exported_uncaught_ids": sorted(seen),
+        "exported_uncaught_by_target": {path: sorted(ids) for path, ids in grouped.items()},
+        "kill_rate": {"numerator": caught, "denominator": caught + uncaught},
+        "equivalence": "not_assessed",
+    }
+
+
+def _unique_fields(pairs):
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError(f"Duplicate JSON field: {name}")
+        result[name] = value
+    return result
+
+
+def verify_mutation_summary(inputs: dict[str, bytes], actual: bytes) -> dict:
+    return _verify_json(mutation_reference(inputs), actual, "mutation_export_summary")
+
+
+def _relative_luminance(colour: str) -> float:
+    if not re.fullmatch(r"#[0-9A-Fa-f]{6}", colour):
+        raise ValueError("Public palette contains an invalid six-digit sRGB colour")
+    channels = [int(colour[index:index + 2], 16) / 255 for index in (1, 3, 5)]
+    linear = [value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+              for value in channels]
+    return sum(value * weight for value, weight in zip(linear, (0.2126, 0.7152, 0.0722)))
+
+
+def palette_reference(inputs: dict[str, bytes]) -> dict:
+    if set(inputs) != {"colors.csv"}:
+        raise ValueError("Palette contrast review requires the frozen public colour database")
+    try:
+        reader = csv.DictReader(io.StringIO(inputs["colors.csv"].decode("utf-8-sig")), strict=True)
+        if not {"No", "Text (Hex)", "Background (Hex)", "CTA (Hex)"}.issubset(
+                reader.fieldnames or []):
+            raise ValueError("Public palette CSV lacks required columns")
+        if len(reader.fieldnames) != len(set(reader.fieldnames)):
+            raise ValueError("Public palette CSV has duplicate columns")
+        rows = list(reader)
+    except csv.Error as error:
+        raise ValueError("Invalid public palette CSV") from error
+    seen = set()
+    failures = []
+    for row in rows:
+        if None in row:
+            raise ValueError("Public palette CSV has extra fields")
+        identifier = row["No"]
+        if not re.fullmatch(r"[1-9][0-9]*", identifier or "") or int(identifier) in seen:
+            raise ValueError("Public palette identifiers must be unique positive integers")
+        identifier = int(identifier)
+        seen.add(identifier)
+        foreground = _relative_luminance(row["Text (Hex)"] or "")
+        for role, column in (("body_text", "Background (Hex)"), ("cta_label", "CTA (Hex)")):
+            background = _relative_luminance(row[column] or "")
+            low, high = sorted((foreground, background))
+            ratio = (high + 0.05) / (low + 0.05)
+            if ratio < 4.5:
+                failures.append({"palette_id": identifier, "role": role,
+                                 "contrast_ratio": f"{ratio:.4f}"})
+    if not rows:
+        raise ValueError("Public palette CSV is empty")
+    failures.sort(key=lambda row: (row["palette_id"], row["role"]))
+    return {
+        "standard": "WCAG-2.2-AA-normal-text", "threshold": 4.5,
+        "total_palettes": len(rows), "total_pairs": 2 * len(rows),
+        "passing_pairs": 2 * len(rows) - len(failures), "failing_pairs": len(failures),
+        "failures": failures,
+    }
+
+
+def verify_palette_contrast(inputs: dict[str, bytes], actual: bytes) -> dict:
+    return _verify_json(palette_reference(inputs), actual, "public_palette_contrast")
+
+
+def verify_property_counterexample(inputs: dict[str, bytes], actual: bytes, host: str) -> dict:
+    if set(inputs) != {"codec.py"}:
+        raise ValueError("Counterexample verification requires the reviewed public codec")
+    kind = "public_canonicalizer_idempotence"
+    try:
+        candidate = json.loads(actual.decode(), object_pairs_hook=_unique_fields)
+        if (not isinstance(candidate, dict) or set(candidate) != {"input", "once", "twice"}
+                or any(not isinstance(value, str) for value in candidate.values())
+                or not re.fullmatch(r"[A-Za-z %]{1,32}", candidate["input"])):
+            raise ValueError("Expected three string fields and a bounded letters/space/percent input")
+    except (ValueError, RecursionError) as error:
+        return {"passed": False, "kind": kind, "error": str(error)}
+    sandbox = Sandbox(host)
+    try:
+        sandbox.start(inputs, [])
+        result = sandbox.execute(
+            "import json,runpy\n"
+            "f=runpy.run_path('/inputs/codec.py')['canonicalize_url']\n"
+            f"x={candidate['input']!r}\n"
+            "once=f(x)\n"
+            "print(json.dumps({'input':x,'once':once,'twice':f(once)}))", timeout=5)
+        if result["status"] != "completed" or result["exit_code"] != 0:
+            raise RuntimeError(f"Independent reviewed-code probe failed: {result}")
+        observed = json.loads(result["output"])
+        return {
+            "passed": candidate == observed and observed["once"] != observed["twice"],
+            "kind": kind, "actual_sha256": hashlib.sha256(actual).hexdigest(),
+            "observed": observed,
+        }
+    finally:
+        sandbox.stop()
+
+
+def verify_batch_sequence(inputs: dict[str, bytes], actual: bytes, host: str) -> dict:
+    if set(inputs) != {"batch.py"}:
+        raise ValueError("Batch verification requires the reviewed public Python probe")
+    kind = "public_batch_event_sequence"
+    sandbox = Sandbox(host)
+    try:
+        sandbox.start({"reference.py": inputs["batch.py"], "candidate.py": actual}, [])
+        result = sandbox.execute(
+            "import json,subprocess,sys\n"
+            "observations=[]\n"
+            "for scenario in ['normal','mixed','partial-zero','empty','unknown',"
+            "'fail-fast','cancelled','live']:\n"
+            " row={'scenario':scenario}\n"
+            " for name in ['reference','candidate']:\n"
+            "  try:\n"
+            "   p=subprocess.run([sys.executable,'-I','-S','-B',"
+            "f'/inputs/{name}.py',scenario],input='\\n',capture_output=True,"
+            "text=True,timeout=2)\n"
+            "   row[name]={'exit_code':p.returncode,'stdout':p.stdout,'stderr':p.stderr}\n"
+            "  except subprocess.TimeoutExpired:\n"
+            "   row[name]={'timeout':True}\n"
+            " observations.append(row)\n"
+            "print(json.dumps(observations))", timeout=20)
+        if result["status"] in {"tool_timeout", "output_limit"}:
+            return {"passed": False, "kind": kind, "runtime": result}
+        if result["status"] != "completed" or result["exit_code"] != 0:
+            raise RuntimeError(f"Independent batch replay failed: {result}")
+        observations = json.loads(result["output"])
+        failures = []
+        for row in observations:
+            reference, candidate = row["reference"], row["candidate"]
+            if reference.get("timeout"):
+                raise RuntimeError("The unchanged reviewed batch probe timed out")
+            try:
+                if candidate.get("timeout"):
+                    raise ValueError("Modified probe timed out")
+                if candidate["exit_code"] != reference["exit_code"]:
+                    raise ValueError("Exit contract changed")
+                if candidate["stdout"] != reference["stdout"]:
+                    raise ValueError("Machine-readable stdout changed")
+                expected = [json.loads(line, object_pairs_hook=_unique_fields)
+                            for line in reference["stderr"].splitlines()]
+                observed = [json.loads(line, object_pairs_hook=_unique_fields)
+                            for line in candidate["stderr"].splitlines()]
+                if len(observed) != len(expected):
+                    raise ValueError("Event count changed")
+                elapsed = 0
+                for sequence, (before, after) in enumerate(zip(expected, observed)):
+                    if not isinstance(after, dict):
+                        raise ValueError("Event must be a JSON object")
+                    after = dict(after)
+                    if (type(after.get("sequence")) is not int
+                            or after.pop("sequence") != sequence):
+                        raise ValueError("Event sequence is missing, repeated or out of order")
+                    duration = after.pop("elapsed_ms", None)
+                    if type(duration) is not int or duration < elapsed:
+                        raise ValueError("Elapsed time is invalid or decreased")
+                    elapsed = duration
+                    before.pop("elapsed_ms")
+                    if after != before:
+                        raise ValueError("Event fields or processing counts changed")
+            except (ValueError, KeyError, TypeError) as error:
+                failures.append({"scenario": row["scenario"], "error": str(error)})
+        return {"passed": not failures, "kind": kind, "checks": len(observations),
+                "actual_sha256": hashlib.sha256(actual).hexdigest(),
+                "failures": failures, "observations": observations,
+                "liveness_measured": False}
+    finally:
+        sandbox.stop()
+
+
+def _verify_json(reference: dict, actual: bytes, kind: str) -> dict:
+    expected = json.dumps(reference, sort_keys=True, allow_nan=False)
+    try:
+        parsed = json.loads(actual.decode(), object_pairs_hook=_unique_fields)
+        canonical = json.dumps(parsed, sort_keys=True, allow_nan=False)
+    except (ValueError, RecursionError) as error:
+        return {"passed": False, "kind": kind, "error": str(error)}
+    return {
+        "passed": canonical == expected,
+        "kind": kind,
+        "actual_sha256": hashlib.sha256(actual).hexdigest(),
+        "expected_canonical_sha256": hashlib.sha256(expected.encode()).hexdigest(),
+    }

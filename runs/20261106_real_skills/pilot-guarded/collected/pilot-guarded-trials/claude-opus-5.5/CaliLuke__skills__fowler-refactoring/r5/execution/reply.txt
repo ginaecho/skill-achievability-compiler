@@ -1,0 +1,31 @@
+I've refactored `/work/textmask.py`. The new `name_tokens(name)` sorts the unique name and its hyphen-separated parts from longest to shortest, and `masked` now calls it. Checks against a saved copy of the original file all passed, so the masking behaviour is unchanged.
+
+**File now:**
+```python
+import re
+
+def name_tokens(name: str) -> list[str]:
+    """The unique name and its hyphen-separated parts, longest first."""
+    return sorted({name} | set(name.split("-")), key=len, reverse=True)
+
+def masked(text: str, name: str) -> str:
+    """The text with the skill's own name and its parts replaced, lower-cased."""
+    t = text.lower()
+    for tok in name_tokens(name):
+        if len(tok) >= 3:
+            t = re.sub(r"\b" + re.escape(tok) + r"\b", "x", t)
+    return t
+```
+
+**How I checked it:**
+1. **Baseline:** before editing, I copied the original to `/tmp/textmask_orig.py` and recorded its output on 13 tricky cases. These included repeated parts, empty parts like `foo--bar`, regex characters like `c++` and `x.y`, short parts, an empty name and mixed-case names.
+2. **After the edit:** the new `masked` gave the same output as the original on all 13 cases and on 20,000 random text/name pairs.
+3. **Specific behaviour:**
+   - Parts shorter than 3 characters are still skipped: `masked("ab-cd ab cd", "ab-cd")` returns `"x ab cd"`.
+   - Case sensitivity is unchanged: the text is lowercased but the name isn't, so `masked("Fowler here", "Fowler")` returns `"fowler here"` with nothing masked.
+   - `name_tokens("fowler-refactoring")` returns `['fowler-refactoring', 'refactoring', 'fowler']`.
+4. **Structure:** the file contains only `import re`, `name_tokens` and `masked`, and it compiles without errors.
+
+My first check run failed with a `NameError` because the sandbox doesn't keep variables between runs. That error came from my test script, not the file; the self-contained rerun above passed.
+
+The length filter stays in `masked`, so `name_tokens` returns every unique part, including short or empty ones.

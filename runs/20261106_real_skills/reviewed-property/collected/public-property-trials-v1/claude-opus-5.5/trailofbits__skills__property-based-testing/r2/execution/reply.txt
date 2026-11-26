@@ -1,0 +1,16 @@
+I found a counterexample showing `canonicalize_url` is not idempotent, and wrote it to `/work/counterexample.json`:
+
+```json
+{"input": "%", "once": "%25", "twice": "%2525"}
+```
+
+**Why it happens:** the function calls `quote(u.strip().lower(), safe="/:?#[]@!$&'()*+,;=")`. Because `%` isn't in the `safe` list, it gets encoded as `%25`. On the next call, the `%` inside `%25` gets encoded again, so `f(x)` and `f(f(x))` can't be equal for any input containing `%`.
+
+**What I did:**
+- I read `/inputs/codec.py` before loading it. It only imports `struct` and `urllib.parse` and does nothing else when loaded, so I loaded it from that path. I didn't change it or run any other code.
+- I searched every string from shortest to longest using a smaller set of allowed characters (`a`, `A`, space, `%`), with a 32-character limit. The first counterexample was the single character `"%"` at length 1.
+- I ran the witness through the real function and wrote the file from those results. Reading the file back confirmed:
+  - it has exactly the three string fields `input`, `once` and `twice`;
+  - the input is 1–32 characters and uses only allowed characters;
+  - `once` is `f(input)` and `twice` is `f(f(input))`;
+  - `once` and `twice` are different.

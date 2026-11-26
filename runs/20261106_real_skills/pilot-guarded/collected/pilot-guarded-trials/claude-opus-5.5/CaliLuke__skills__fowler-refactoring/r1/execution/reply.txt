@@ -1,0 +1,29 @@
+I edited `/work/textmask.py` so the sorting now lives in a new function, `name_tokens(name)`, and `masked` calls it. When I ran the old and new versions side by side on 11 test inputs, every output matched.
+
+**The file now:**
+```python
+import re
+
+
+def name_tokens(name: str) -> list[str]:
+    """The unique name and its hyphen-separated parts, longest first."""
+    return sorted({name} | set(name.split("-")), key=len, reverse=True)
+
+
+def masked(text: str, name: str) -> str:
+    """The text with the skill's own name and its parts replaced, lower-cased."""
+    t = text.lower()
+    for tok in name_tokens(name):
+        if len(tok) >= 3:
+            t = re.sub(r"\b" + re.escape(tok) + r"\b", "x", t)
+    return t
+```
+
+- **Same behaviour:** The tokens are built and sorted exactly as before. The 3-character minimum stays in `masked`. Matching is still case-sensitive: the text is lower-cased but the name isn't, so a capitalised name like `Fowler` doesn't match anything.
+- **Structure:** The file has only the `re` import and these two pure functions.
+
+**Checks I ran:**
+- I saved the original file first, then compared its `masked` output with the new one on 11 inputs. All matched. They included mixed-case names, names with dots, repeated parts (`abc-abc`), double hyphens, empty text, short parts (`a-b-cd` → `cd`, `a`, `b` are left alone), and a long name containing shorter ones.
+- `name_tokens` gives the expected order, e.g. `"fowler-refactoring"` → `['fowler-refactoring', 'refactoring', 'fowler']`.
+- I parsed the file to confirm it contains only the import and the two functions, and that `masked` calls `name_tokens(name)`.
+- Importing the module in a fresh Python process and checking two results also passed.

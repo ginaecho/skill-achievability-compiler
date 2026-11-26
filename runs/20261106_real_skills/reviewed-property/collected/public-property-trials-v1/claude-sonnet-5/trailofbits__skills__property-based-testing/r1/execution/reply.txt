@@ -1,0 +1,14 @@
+I inspected the actual `/inputs/codec.py` module (read-only, unmodified) and found that `canonicalize_url` strips/lowercases then percent-encodes with `urllib.parse.quote`, but `%` itself is not in the `safe` set. So any output containing a literal space gets `%`-encoded on the first pass, and that newly-introduced `%` gets re-encoded to `%25` on the second pass — breaking idempotence.
+
+Witness used (within the allowed character set: letters, spaces; length ≤ 32, nonempty):
+
+- input: `"a b"`
+- once = f(input) = `"a%20b"`
+- twice = f(once) = `"a%2520b"`
+
+`once != twice`, confirming a genuine counterexample to idempotence (verified by actually calling the function, not just reasoning about it).
+
+Result written to `/work/counterexample.json`:
+```json
+{"input": "a b", "once": "a%20b", "twice": "a%2520b"}
+```

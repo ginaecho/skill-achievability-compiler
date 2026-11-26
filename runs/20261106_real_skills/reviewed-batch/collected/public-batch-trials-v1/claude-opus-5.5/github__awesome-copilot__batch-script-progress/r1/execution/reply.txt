@@ -1,0 +1,41 @@
+I edited `/work/batch.py` so every JSON record it writes to stderr now has an integer `sequence` field. It starts at 0 on each run and goes up by exactly 1 for every start, progress, item-failed and summary record. All eight scenarios and the default (no argument) run passed local checks against the original's behavior.
+
+**The change:** a counter set to 0 in `main()`, and an `emit()` that adds `"sequence"` as the last field and then increments it. Every stderr record goes through `emit()`. Existing fields keep their names, values and order, and nothing in processing, stdout, scenarios, defaults or exit codes changed.
+
+```diff
++    sequence = 0
++
+     def emit(event, **fields):
+-        record = {..., **fields}
++        nonlocal sequence
++        record = {..., **fields, "sequence": sequence}
++        sequence += 1
+         print(json.dumps(record), file=sys.stderr, flush=True)
+```
+
+**What I ran:** Before editing, I ran the original `/work/batch.py` for each scenario to get a reference. Then I ran the edited file twice per scenario, with stdout and stderr captured separately and a newline on stdin for `live`:
+
+| Scenario | Exit code | Events | sequence |
+|---|---|---|---|
+| normal | 0 | start, progress, summary | 0,1,2 |
+| mixed | 1 | start, progress, item-failed, progress, summary | 0–4 |
+| partial-zero | 0 | start, item-failed, progress, summary | 0–3 |
+| empty | 0 | start, summary | 0,1 |
+| unknown | 0 | start, progress, summary | 0,1,2 |
+| fail-fast | 1 | start, item-failed, summary | 0,1,2 |
+| cancelled | 130 | start, summary | 0,1 |
+| live | 0 | start, 3× progress, summary | 0–4 |
+| (no argument) | 0 | same as normal | 0,1,2 |
+
+Each run matched the original in these ways:
+- **Stdout:** identical bytes.
+- **Exit code:** the same.
+- **Stderr:** the same number and order of records, with every original field equal (I compared all fields except `elapsed_ms` values, which change with timing, but checked they're still integers).
+- **`sequence`:** an integer, always exactly 0…n-1, and back to 0 on the second run.
+
+An unknown scenario name still raises `ValueError` with exit code 1. Running `live` with nothing on stdin still fails with "Fixture release input missing" and exit code 1, the same as the original.
+
+**Limits:**
+- These are output checks only. I didn't add or run live-output tests (reading output while the script is still running), and the `cancelled` scenario only simulates cancellation internally; no real signal was sent.
+- I didn't run the bundled cross-language verifier or any other script. The only other thing I ran was a byte-identical copy of the original in `/tmp/batch.orig.py`, used for the no-stdin comparison.
+- `/inputs/batch.py` is unchanged.

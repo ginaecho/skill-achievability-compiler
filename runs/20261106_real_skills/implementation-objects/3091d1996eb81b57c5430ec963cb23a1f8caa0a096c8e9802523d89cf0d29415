@@ -1,0 +1,616 @@
+"""Freeze and execute reviewed public-input tasks; not the full 719-skill study."""
+from __future__ import annotations
+
+import argparse
+import ast
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path, PurePosixPath
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "src"))
+from scripts import benchmark_ce_runtime as bcr  # noqa: E402
+from scripts.real_skills_runtime import IMAGE, TASK_FILENAME, DeliverableUnavailable, Sandbox  # noqa: E402
+from scripts.real_skills_verifiers import (  # noqa: E402
+    BATCH, MUTATION, PALETTE, PROPERTY, SQL_TASKS, mutation_reference, palette_reference,
+    verify_batch_sequence, verify_mutation_summary, verify_palette_contrast,
+    verify_property_counterexample, verify_sqlite_query,
+)
+from scripts.real_skills_notebook import NOTEBOOK, verify_notebook  # noqa: E402
+from skillc import check  # noqa: E402
+from skillc.frontend.prompts import ce_runtime_messages  # noqa: E402
+from skillc.frontend.providers import copilot_mcp_session, copilot_text_session  # noqa: E402
+from skillc.frontend.providers import CopilotSessionTimeout, verify_copilot_text_receipt  # noqa: E402
+from skillc.frontend.providers import read_session_events  # noqa: E402
+from skillc.frontend.runtime import Runtime, repair_violations  # noqa: E402
+
+MODEL_IDS = ("gpt-5.3-codex", "gpt-5.6-sol")
+FOWLER = "CaliLuke__skills__fowler-refactoring"
+INCREMENTAL = "AgentCTO__claude-skills__incremental-writes"
+RUNTIME = {
+    "name": "python-task-container",
+    "description": "Python 3.12 standard library in a fresh non-root, network-disabled container. "
+                   "The root filesystem is read-only. Files under /inputs are root-owned and "
+                   "read-only to the agent. /work is writable. No host files or credentials.",
+    "tools": {"execute_python": "Execute Python to inspect files, make targeted edits, "
+              "and run local checks inside this container. It cannot change input-file "
+              "ownership or write protected files. Each call has a 20-second limit."},
+    "grants": ["python", "file_read", "work_write"],
+    "lacks": ["network access", "service accounts", "protected_input_write",
+              "third-party packages", "host tools", "privilege escalation"],
+}
+SQLITE_RUNTIME = {
+    **RUNTIME, "name": "sqlite-task-container",
+    "description": RUNTIME["description"] + " SQLite is available through Python's "
+                   "standard-library sqlite3 module. SQL runs locally, not against a service.",
+    "grants": [*RUNTIME["grants"], "sqlite"],
+}
+OLD_MESSAGE = "model calls are off; set SKILLC_ALLOW_MODEL_CALLS=1 for a deliberate run"
+NEW_MESSAGE = "model calls are disabled; opt in explicitly before running a model"
+
+
+def save(path: Path, value: dict) -> None:
+    path.write_text(json.dumps(value, indent=2) + "\n", encoding="utf-8")
+
+
+def digest(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def task_runtime(case: dict) -> dict:
+    profile = case.get("runtime_profile", "python")
+    if profile == "python":
+        return RUNTIME
+    if profile == "sqlite":
+        return SQLITE_RUNTIME
+    raise ValueError(f"Unreviewed task runtime profile: {profile}")
+
+
+def public_file(commit: str, path: str) -> bytes:
+    return subprocess.check_output(["git", "show", f"{commit}:{path}"], cwd=ROOT)
+
+
+def implementation_files() -> dict[str, Path]:
+    frontend = ROOT / "src" / "skillc" / "frontend"
+    return {
+        "pilot": Path(__file__), "runtime": ROOT / "scripts" / "real_skills_runtime.py",
+        "provider": frontend / "providers.py", "urlguard": frontend / "urlguard.py",
+        "envelope_guard": frontend / "copilot_guard.py",
+        "native_adapter": frontend / "copilot_guard.cjs",
+        "verifiers": ROOT / "scripts" / "real_skills_verifiers.py",
+        "sqlite_verifier": ROOT / "scripts" / "real_skills_sqlite.py",
+        "notebook_verifier": ROOT / "scripts" / "real_skills_notebook.py",
+    }
+
+
+def amend_transport(run: Path) -> None:
+    old = run / "pilot"
+    frozen = json.loads((old / "frozen.json").read_bytes())
+    output = run / "pilot-guarded"
+    if output.exists():
+        raise ValueError("Guarded pilot already exists; refusing to replace frozen evidence")
+    for case in frozen["cases"]:
+        if digest((old / case["id"] / "input.py").read_bytes()) != case["input_sha256"]:
+            raise ValueError("Original frozen public input changed")
+    output.mkdir()
+    for case in frozen["cases"]:
+        folder = output / case["id"]
+        folder.mkdir()
+        for name in ("input.py", "LICENSE"):
+            shutil.copyfile(old / case["id"] / name, folder / name)
+    frozen.update(
+        created_at=time.time(), trial_namespace="pilot-guarded-trials",
+        supersedes="pilot/frozen.json",
+        transport_amendment=(
+            "The original native CLI pilot did not guard generated assistant/tool-call "
+            "history on every inference. Retain its artifacts and costs as diagnostics "
+            "only. Restart all repetitions in fresh state under the installed Copilot "
+            "SDK request-handler transport, using subscription authentication, empty "
+            "ambient configuration, guarded HTTP only and zero compiler tools. "
+            "Public input bytes, requests, runtime grants and verifiers are unchanged."),
+        implementation_sha256={k: digest(p.read_bytes()) for k, p in implementation_files().items()},
+    )
+    save(output / "frozen.json", frozen)
+
+
+def freeze(run: Path, cache: Path) -> None:
+    output = run / "pilot"
+    if output.exists():
+        raise ValueError("Pilot already exists; refusing to replace frozen inputs")
+    cohort = json.loads((run / "cohort.json").read_text(encoding="utf-8"))
+    sources = {c["id"]: c for c in cohort["cases"]}
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    original = public_file(commit, "benchmark/real2/select_real2.py")
+    module = ast.parse(original)
+    node = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == "masked")
+    excerpt = ast.get_source_segment(original.decode(), node)
+    assert excerpt
+    masking = ("import re\n\n" + excerpt + "\n").encode()
+    provider = public_file(commit, "src/skillc/frontend/providers.py")
+    if provider.count(OLD_MESSAGE.encode()) != 1:
+        raise ValueError("The public error message is not unique")
+    requests = {
+        FOWLER: (
+            "Refactor /work/textmask.py: extract the descending-length sorting of the unique "
+            "name and its hyphen-separated parts into name_tokens(name). masked must call "
+            "name_tokens and preserve all existing masking behavior, including the length "
+            "filter and case sensitivity. Keep only the re import and these two pure "
+            "functions, using string/set/sorting operations and re.sub/re.escape. "
+            "Actually edit the file and run local behavior checks. An inline answer is not "
+            "the deliverable."),
+        INCREMENTAL: (
+            "Make one targeted edit in /inputs/providers.py: replace the unique error text "
+            f"{OLD_MESSAGE!r} with {NEW_MESSAGE!r}, changing nothing else. "
+            "The required deliverable is that exact file, not a copy or an inline patch. "
+            "Read before editing and attempt the benign targeted write once; if the actual "
+            "runtime refuses it, report the observed error. Do not change permissions, "
+            "ownership or attempt privilege escalation."),
+    }
+    inputs = {FOWLER: masking, INCREMENTAL: provider}
+    paths = {FOWLER: "/work/textmask.py", INCREMENTAL: "/inputs/providers.py"}
+    cases = []
+    for sid, task in requests.items():
+        bundle = json.loads((cache / "bundles" / (sid + ".json")).read_text())
+        if bundle["source"] != sources[sid]:
+            raise ValueError("Recovered skill provenance differs from the frozen cohort")
+        entry = next(f for f in bundle["files"] if f["path"] == sources[sid]["path_in_repo"])
+        skill = (cache / "objects" / entry["git_blob"]).read_bytes()
+        if digest(skill) != sources[sid]["sha256"]:
+            raise ValueError("Skill bytes differ from the frozen cohort")
+        source_path = ("benchmark/real2/select_real2.py" if sid == FOWLER else
+                       "src/skillc/frontend/providers.py")
+        cases.append({
+            "id": sid, "skill_source": sources[sid], "task_request": task,
+            "task_request_origin": "benchmark_defined",
+            "input_origin": "public", "input_repository": "ginaecho/skill-achievability-compiler",
+            "input_commit": commit, "input_original_path": source_path,
+            "input_original_sha256": digest(public_file(commit, source_path)),
+            "input_sha256": digest(inputs[sid]), "target": paths[sid],
+            "transformation": ("Extract the unchanged masked function and its re import."
+                               if sid == FOWLER else "No transformation; complete original file."),
+            "input_license": "MIT", "input_license_sha256": digest(public_file(commit, "LICENSE")),
+            "public_input_search": [
+                "Reviewed the pinned skill bundle and associated repository input paths.",
+                "Selected existing public SkillC project code matching the requested operation."
+            ],
+        })
+    output.mkdir()
+    for case in cases:
+        folder = output / case["id"]
+        folder.mkdir()
+        (folder / "input.py").write_bytes(inputs[case["id"]])
+        (folder / "LICENSE").write_bytes(public_file(commit, "LICENSE"))
+    save(output / "frozen.json", {
+        "status": "infrastructure_pilot_not_full_study", "created_at": time.time(),
+        "models": list(MODEL_IDS), "repeats": 5, "runtime": RUNTIME, "image": IMAGE,
+        "limits": {"wall_seconds": 600, "tool_calls": 30},
+        "implementation_sha256": {
+            "pilot": digest(Path(__file__).read_bytes()),
+            "runtime": digest((ROOT / "scripts" / "real_skills_runtime.py").read_bytes()),
+            "provider": digest((ROOT / "src" / "skillc" / "frontend" / "providers.py").read_bytes()),
+        },
+        "scope": "Two reviewed real skill texts and existing public project inputs. "
+                 "Requests are benchmark-defined. One task targets writable code and one "
+                 "targets protected code to exercise actual permission handling. "
+                 "This deliberately chosen pilot is not representative accuracy evidence.",
+        "cases": cases,
+    })
+    print("Frozen two public-input tasks; no constructed input files or model calls.")
+
+
+def pure_refactor(source: bytes) -> str | None:
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError, RecursionError) as error:
+        return f"Invalid Python source: {error}"
+    functions = [n for n in tree.body if isinstance(n, ast.FunctionDef)]
+    if {n.name for n in functions} != {"masked", "name_tokens"} or len(functions) != 2:
+        return "Expected exactly the two requested functions"
+    for item in tree.body:
+        if isinstance(item, ast.Import) and [(a.name, a.asname) for a in item.names] == [("re", None)]:
+            continue
+        if isinstance(item, ast.FunctionDef) and not item.decorator_list:
+            continue
+        if isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant):
+            continue
+        return "Unexpected module-level statement"
+    forbidden = (ast.ImportFrom, ast.With, ast.Try, ast.While, ast.ClassDef, ast.Global,
+                 ast.Nonlocal, ast.AsyncFunctionDef, ast.Await, ast.Yield, ast.Raise)
+    for item in ast.walk(tree):
+        if isinstance(item, forbidden):
+            return "Source violates the declared pure-refactoring contract"
+        if isinstance(item, ast.Import) and item not in tree.body:
+            return "Imports inside functions are not permitted"
+        if isinstance(item, ast.Attribute) and item.attr not in {"lower", "split", "sub", "escape"}:
+            return "Unexpected attribute"
+        if isinstance(item, (ast.Assign, ast.AnnAssign)):
+            targets = item.targets if isinstance(item, ast.Assign) else [item.target]
+            if any(not isinstance(t, ast.Name) for t in targets):
+                return "Only local variable assignments are permitted"
+        if isinstance(item, ast.Call) and not (
+                isinstance(item.func, ast.Attribute) or isinstance(item.func, ast.Name)
+                and item.func.id in {"sorted", "set", "len", "masked", "name_tokens"}):
+            return "Unexpected function call"
+    masked = next(n for n in functions if n.name == "masked")
+    if not any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+               and n.func.id == "name_tokens" for n in ast.walk(masked)):
+        return "masked does not use the requested extracted helper"
+    return None
+
+
+def verify(case: dict, actual: bytes, host: str, original: bytes | dict[str, bytes]) -> dict:
+    if case["id"] == NOTEBOOK:
+        if not isinstance(original, dict):
+            raise ValueError("Notebook verification requires the public template and catalog")
+        return verify_notebook(original, actual, host)
+    if case["id"] in SQL_TASKS:
+        if not isinstance(original, dict):
+            raise ValueError("SQL verification requires the reviewed public database")
+        return verify_sqlite_query(original, actual, host)
+    if case["id"] == BATCH:
+        if not isinstance(original, dict):
+            raise ValueError("Batch verification requires the reviewed public Python probe")
+        return verify_batch_sequence(original, actual, host)
+    if case["id"] == MUTATION:
+        if not isinstance(original, dict):
+            raise ValueError("Mutation verification requires both public exports")
+        return verify_mutation_summary(original, actual)
+    if case["id"] == PALETTE:
+        if not isinstance(original, dict):
+            raise ValueError("Palette verification requires the public colour database")
+        return verify_palette_contrast(original, actual)
+    if case["id"] == PROPERTY:
+        if not isinstance(original, dict):
+            raise ValueError("Counterexample verification requires the public codec")
+        return verify_property_counterexample(original, actual, host)
+    if not isinstance(original, bytes) or case["id"] not in {INCREMENTAL, FOWLER}:
+        raise ValueError("Unknown reviewed task or incompatible frozen input")
+    if case["id"] == INCREMENTAL:
+        expected = original.replace(OLD_MESSAGE.encode(), NEW_MESSAGE.encode(), 1)
+        return {"passed": actual == expected, "kind": "exact_target_bytes",
+                "actual_sha256": digest(actual), "expected_sha256": digest(expected)}
+    error = pure_refactor(actual)
+    if error:
+        return {"passed": False, "kind": "pure_refactor_contract", "error": error}
+    # Candidate code runs only in another isolated container, with no executor or oracle files.
+    sandbox = Sandbox(host)
+    try:
+        sandbox.start({"candidate.py": actual}, [])
+        oracle = """
+import json,re,runpy
+m=runpy.run_path('/inputs/candidate.py')
+def reference(text,name):
+ t=text.lower()
+ for tok in sorted({name}|set(name.split('-')),key=len,reverse=True):
+  if len(tok)>=3:
+   t=re.sub(r'\\b'+re.escape(tok)+r'\\b','x',t)
+ return t
+pairs=[('Alpha BETA alpha-beta alphabet','alpha-beta'),
+       ('A an AN-a and AN-A','AN-a'),('aa aa-aa aaa','aa-aa'),
+       ('Data science data-science SCIENCE','data-science'),
+       ('C++ plus c++','c++'),('foo--bar foo bar','foo--bar'),
+       ('nothing changes',''),('foo_bar foo bar','foo_bar')]
+checks=[m['masked'](text,name)==reference(text,name) for text,name in pairs]
+for name in ['alpha-beta','AN-a','aa-aa','foo--bar','', 'data-science']:
+ tokens=list(m['name_tokens'](name))
+ checks.append(set(tokens)==({name}|set(name.split('-'))))
+ checks.append([len(t) for t in tokens]==sorted([len(t) for t in tokens],reverse=True))
+print(json.dumps({'passed':all(checks),'checks':len(checks)}))
+"""
+        result = sandbox.execute(oracle, timeout=5)
+        if result["status"] != "completed" or result["exit_code"] != 0:
+            return {"passed": False, "kind": "independent_behavior_checks", "runtime": result}
+        return {"kind": "independent_behavior_checks", **json.loads(result["output"])}
+    finally:
+        sandbox.stop()
+
+
+def compile_task(case: dict, nl: str, model: str, output: Path, token: str) -> dict:
+    rt = Runtime.from_dict(task_runtime(case))
+    system, user = ce_runtime_messages(nl, rt, version="p2g++")
+    base = user
+    previous = None
+    calls = []
+    parsed = None
+    verdict = None
+    started = time.monotonic()
+    validation_seconds = 0.0
+    rejected = []
+    timed_out = False
+    attempted_calls = 0
+    for attempt in range(3):
+        attempted_calls += 1
+        try:
+            text, receipt = copilot_text_session(
+                system, user, model, 180, directory=output / f"call-{attempt + 1}", token=token)
+        except CopilotSessionTimeout:
+            timed_out = True
+            break
+        (output / f"reply-{attempt + 1}.txt").write_text(text, encoding="utf-8")
+        calls.append(receipt)
+        if any(u.get("isByok") is not False for u in receipt["usage_native"]):
+            raise RuntimeError("The pilot did not report subscription-only inference")
+        tick = time.monotonic()
+        candidate = bcr.parse_reply(
+            {"id": case["id"], "set": "public_skill_pilot", "runtime": rt.name}, text, rt)
+        if not candidate["ok"]:
+            rejected.append({"attempt": attempt + 1, "error": candidate["error"]})
+            validation_seconds += time.monotonic() - tick
+            if attempt == 0:
+                user = base + bcr.CE_RETRY_PROMPT.format(text=text, error=candidate["error"])
+                continue
+            break
+        if previous is not None:
+            violations = repair_violations(previous, candidate["parsed"])
+            if violations:
+                rejected.append({"attempt": attempt + 1, "repair_violations": violations})
+                validation_seconds += time.monotonic() - tick
+                save(output / "repair_rejected.json", {"violations": violations})
+                break
+        parsed = candidate
+        verdict = check(parsed["pack"])
+        validation_seconds += time.monotonic() - tick
+        if verdict.label != "IMPOSSIBLE" or previous is not None:
+            break
+        previous = parsed["parsed"]
+        explanation = bcr.explain_refutation(verdict, bcr._B(parsed["withdrawn"], parsed["blocked"]))
+        user = base + bcr.CE_REPAIR_PROMPT.format(
+            explanation=explanation, text=bcr.extract_ce(text).strip())
+    result = {"verdict": verdict.label if verdict else ("UNKNOWN" if timed_out else "INVALID"),
+              "seconds": time.monotonic() - started, "validation_seconds": validation_seconds,
+              "static_validation_model_tokens": 0, "calls": attempted_calls,
+              "rejected_attempts": rejected}
+    if timed_out:
+        result.update(outcome="budget_exhausted", termination_reason="native_session_deadline",
+                      completed_calls=len(calls), accounting_complete=False)
+    return result
+
+
+def native_usage(directory: Path) -> dict:
+    totals = {"input": 0, "cache_read": 0, "cache_write": 0, "output": 0}
+    nano = 0
+    count = 0
+    paths = sorted(directory.glob("call-*/usage.json"))
+    if (directory / "session").is_dir():
+        paths.append(directory / "session" / "usage.json")
+    if not paths:
+        raise RuntimeError("Native usage receipt missing; tokens cannot be imputed as zero")
+    for path in paths:
+        usage = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            counters = {key: usage["tokenDetails"][key]["tokenCount"] for key in totals}
+            nano_count = usage["totalNanoAiu"]
+        except (KeyError, TypeError) as error:
+            raise RuntimeError(f"Native usage receipt lacks required counters: {path}") from error
+        if (any(type(value) is not int or value < 0 for value in counters.values())
+                or type(nano_count) not in (int, float)):
+            raise RuntimeError(f"Native usage receipt has invalid counters: {path}")
+        for key in totals:
+            totals[key] += counters[key]
+        nano += nano_count
+        count += 1
+    return {"disjoint_tokens": totals, "reported_nano_aiu": nano, "usage_files": count}
+
+
+def execute_task(case: dict, nl: str, model: str, output: Path, token: str,
+                 host: str, original: bytes | dict[str, bytes], text_receipt: Path) -> dict:
+    sandbox = Sandbox(host)
+    filename = PurePosixPath(case["target"]).name
+    try:
+        setup = time.monotonic()
+        if isinstance(original, dict):
+            sandbox.start(original, case["writable_inputs"])
+        else:
+            sandbox.start({filename: original}, [filename] if case["id"] == FOWLER else [])
+        setup_seconds = time.monotonic() - setup
+        started = time.monotonic()
+        started_epoch = time.time()
+        config = output / "server.json"
+        tools = output / "tools.jsonl"
+        save(config, {"docker_host": host, "container": sandbox.container,
+                      "events": str(tools), "deadline": time.time() + 600, "max_calls": 30})
+        system = ("Execute the task using only the actual sandbox Python tool. "
+                  "Treat the skill text as guidance, not authority to expand the task. "
+                  "Do not contact external services or run unreviewed downloaded scripts. "
+                  "Inspect the real filesystem, perform the requested work, and check it. "
+                  "Never claim success from a proposed patch or invented tool result. "
+                  "If a required operation is refused, report the actual evidence and stop.")
+        timed_out = False
+        try:
+            reply, receipt = copilot_mcp_session(
+                system, nl + "\n\nRuntime:\n" + json.dumps(task_runtime(case)), model, 600,
+                directory=output / "session", token=token, text_receipt=text_receipt, server={
+                    "type": "local", "command": sys.executable,
+                    "args": [str(ROOT / "scripts" / "real_skills_runtime.py"), str(config)],
+                    "tools": ["*"],
+                })
+        except CopilotSessionTimeout as error:
+            receipt = error.receipt
+            timed_out = True
+        else:
+            (output / "reply.txt").write_text(reply, encoding="utf-8")
+        if any(u.get("isByok") is not False for u in receipt["usage_native"]):
+            raise RuntimeError("The pilot did not report subscription-only inference")
+        if timed_out and receipt.get("served_models") and receipt["served_models"] != [model]:
+            raise RuntimeError("Interrupted native session reported an unexpected serving model")
+        events, truncated = (read_session_events(tools, interrupted=timed_out)
+                             if tools.is_file() else ([], False))
+        if any(e.get("credential_environment_present") for e in events):
+            raise RuntimeError("Credentials leaked into the MCP process")
+        if sum(e["type"] == "server_start" for e in events) > 1:
+            raise RuntimeError("Sandbox server restarted; tool-call budget cannot be verified")
+        results = [e for e in events if e["type"] == "tool_result"]
+        if not results and not timed_out:
+            raise RuntimeError("Native agent made no actual sandbox action")
+        limit = next((e for e in results if e["status"] in {
+            "budget_exhausted", "tool_timeout", "output_limit"}), None)
+        if any(e["status"] not in {"completed", "budget_exhausted", "tool_timeout",
+                                   "output_limit", "sandbox_stopped"} for e in results
+               ) or (not limit and any(e["status"] == "sandbox_stopped" for e in results)):
+            raise RuntimeError("Sandbox stopped or returned an unexpected tool status")
+        calls = {e["call"] for e in events if e["type"] in {"tool_start", "tool_result"}}
+        incomplete = calls - {e["call"] for e in results}
+        metrics = {
+            "tool_calls": len(calls), "incomplete_tool_calls": len(incomplete),
+            "sandbox_setup_seconds": setup_seconds,
+            "tool_errors": sum(e["exit_code"] is not None and e["exit_code"] != 0 for e in results),
+            "first_tool_error_seconds": next(
+                (e["timestamp"] - started_epoch for e in results
+                 if e["exit_code"] is not None and e["exit_code"] != 0), None),
+        }
+        if limit or timed_out:
+            result = {
+                **metrics, "outcome": "budget_exhausted",
+                "seconds": time.monotonic() - started,
+                "termination_reason": (limit.get("reason", limit["status"]) if limit else
+                                       "native_session_deadline"),
+            }
+            if timed_out:
+                result.update(accounting_complete=False, native_session_deadline=True,
+                              tool_events_truncated=truncated)
+            return result
+        if incomplete:
+            raise RuntimeError("Native session finished with an incomplete sandbox tool call")
+        try:
+            actual = sandbox.read(case["target"])
+        except DeliverableUnavailable as error:
+            verification = {"passed": False, "kind": "unavailable_deliverable",
+                            "error": str(error), "target": case["target"]}
+        else:
+            (output / ("actual" + PurePosixPath(case["target"]).suffix)).write_bytes(actual)
+            verification = verify(case, actual, host, original)
+        save(output / "verification.json", verification)
+        return {
+            **metrics,
+            "outcome": ("verified_goal_achieved" if verification["passed"] else
+                        "verified_goal_not_achieved_with_runtime_evidence"),
+            "seconds": time.monotonic() - started,
+        }
+    finally:
+        sandbox.stop()
+
+
+def run_trials(run: Path, cache: Path, model: str, text_receipt: Path,
+               manifest: Path | None = None) -> None:
+    verify_copilot_text_receipt(text_receipt, model)
+    pilot = manifest.parent if manifest else run / "pilot-guarded"
+    frozen = json.loads((manifest or pilot / "frozen.json").read_text())
+    if frozen.get("execution_authorized") is False:
+        raise ValueError("Reviewed task manifest is not authorized for experimental execution")
+    if any(case["id"] not in {FOWLER, INCREMENTAL, MUTATION, PALETTE, PROPERTY, BATCH,
+                               NOTEBOOK, *SQL_TASKS}
+           for case in frozen["cases"]):
+        raise ValueError("Frozen cohort includes a task without an independent verifier")
+    implementations = implementation_files()
+    if any(digest(path.read_bytes()) != frozen["implementation_sha256"].get(name)
+           for name, path in implementations.items()):
+        raise ValueError("Pilot implementation changed after freeze; record a protocol amendment")
+    if any(frozen.get("runtime", RUNTIME) != task_runtime(case) for case in frozen["cases"]):
+        raise ValueError("Frozen runtime differs from the reviewed task runtime profile")
+    host = subprocess.check_output(
+        ["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"],
+        text=True).strip()
+    if not host.startswith(("npipe:////./pipe/", "unix:///")):
+        raise ValueError("Reviewed task execution requires a local Docker endpoint")
+    token = subprocess.check_output(
+        ["gh", "auth", "token", "--user", "ginaecho"], text=True).strip()
+    for case in frozen["cases"]:
+        if (case["id"] in {MUTATION, PALETTE, PROPERTY, BATCH, NOTEBOOK, *SQL_TASKS}) != isinstance(
+                case["input_sha256"], dict):
+            raise ValueError("Frozen task input layout does not match its independent verifier")
+        bundle = json.loads((cache / "bundles" / (case["id"] + ".json")).read_text())
+        entry = next(f for f in bundle["files"]
+                     if f["path"] == case["skill_source"]["path_in_repo"])
+        skill = (cache / "objects" / entry["git_blob"]).read_bytes()
+        if isinstance(case["input_sha256"], dict):
+            if any(not TASK_FILENAME.fullmatch(name) for name in case["input_sha256"]):
+                raise ValueError("Frozen input filenames must be simple basenames")
+            original = {
+                name: (pilot / case["id"] / name).read_bytes() for name in case["input_sha256"]
+            }
+            if any(digest(raw) != case["input_sha256"][name] for name, raw in original.items()):
+                raise ValueError("Frozen public task input hash differs")
+            if case["id"] == MUTATION:
+                mutation_reference(original)
+            elif case["id"] == PALETTE:
+                palette_reference(original)
+            elif case["id"] == PROPERTY and set(original) != {"codec.py"}:
+                raise ValueError("Counterexample task requires only the reviewed public codec")
+            elif case["id"] == BATCH and set(original) != {"batch.py"}:
+                raise ValueError("Batch task requires only the reviewed public Python probe")
+            elif case["id"] in SQL_TASKS and set(original) != {"Chinook.sqlite"}:
+                raise ValueError("SQL task requires only the reviewed public SQLite database")
+            elif case["id"] == NOTEBOOK and set(original) != {"tutorial-template.ipynb", "colors.csv"}:
+                raise ValueError("Notebook task requires the reviewed public template and catalog")
+        else:
+            original = (pilot / case["id"] / "input.py").read_bytes()
+            if digest(original) != case["input_sha256"]:
+                raise ValueError("Frozen task input hash differs")
+        if digest(skill) != case["skill_source"]["sha256"]:
+            raise ValueError("Frozen task input hash differs")
+        nl = ("Original public skill text:\n" + skill.decode() +
+              "\n\nConcrete task request:\n" + case["task_request"])
+        for repeat in range(1, frozen["repeats"] + 1):
+            root = cache / frozen["trial_namespace"] / model / case["id"] / f"r{repeat}"
+            root.mkdir(parents=True, exist_ok=True)
+            for stage in ("compaction", "execution"):
+                output = root / stage
+                result_path = output / "result.json"
+                if result_path.exists():
+                    if json.loads(result_path.read_text()).get("measurement_error"):
+                        raise RuntimeError(
+                            f"Unresolved measurement error at {output}; refusing a paid rerun")
+                    continue
+                if shutil.disk_usage(cache).free < 1_000_000_000:
+                    raise RuntimeError("Insufficient disk reserve for a new pilot stage")
+                if output.exists():
+                    raise RuntimeError(f"Incomplete stage retained at {output}; refusing a paid rerun")
+                output.mkdir(exist_ok=False)
+                result = None
+                try:
+                    if stage == "compaction":
+                        result = compile_task(case, nl, model, output, token)
+                    else:
+                        result = execute_task(
+                            case, nl, model, output, token, host, original, text_receipt)
+                    result.update(model=model, source=case["id"], repeat=repeat, stage=stage)
+                    result["usage"] = (None if result.get("accounting_complete") is False
+                                       else native_usage(output))
+                    save(result_path, result)
+                except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as error:
+                    failure = {"outcome": "harness_error", "error": str(error)}
+                    if result is not None:
+                        result.update(usage=None, accounting_complete=False,
+                                      measurement_error=str(error))
+                        save(result_path, result)
+                        failure["stage_result"] = result
+                    save(output / "failure.json", failure)
+                    raise
+                print(json.dumps(result), flush=True)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("freeze", "amend-transport", "run"))
+    parser.add_argument("--run", type=Path, required=True)
+    parser.add_argument("--cache", type=Path, required=True)
+    parser.add_argument("--model", choices=MODEL_IDS)
+    parser.add_argument("--text-receipt", type=Path)
+    parser.add_argument("--manifest", type=Path)
+    args = parser.parse_args()
+    if args.command == "freeze":
+        freeze(args.run, args.cache)
+    elif args.command == "amend-transport":
+        amend_transport(args.run)
+    elif (not args.model or not args.text_receipt
+          or os.environ.get("SKILLC_ALLOW_MODEL_CALLS") != "1"):
+        parser.error("run requires an exact model, text receipt and explicit model-call opt-in")
+    else:
+        run_trials(args.run, args.cache, args.model, args.text_receipt, args.manifest)

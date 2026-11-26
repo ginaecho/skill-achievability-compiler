@@ -1,0 +1,14 @@
+All seven synchronous scenarios plus the live scenario (verified separately with a real in-flight read) pass: sequence starts at 0, increments exactly once per emitted record, all original fields are intact, and exit codes/stdout match the documented contract.
+
+## Summary
+
+**File edited:** `/work/batch.py` (actual file modified in place, re-read and confirmed after edit).
+
+**Change made:** Added a `sequence` integer field to every stderr JSON record. A single `sequence` counter (closure variable via `nonlocal`) starts at `0` for each invocation, is included in the record dict before incrementing, and increments exactly once per call to `emit(...)` — covering `start`, `progress`, `item-failed`, and `summary` events uniformly, since they all funnel through the same `emit` function. No other logic, field, scenario name, argument default, or exit-code computation was touched.
+
+**Verification performed (executed, not narrated):**
+- Ran all 8 documented scenarios (`normal`, `mixed`, `partial-zero`, `empty`, `unknown`, `fail-fast`, `cancelled`, `live`) against the modified script via real subprocess invocations.
+- For `normal`, `mixed`, `partial-zero`, `empty`, `unknown`, `fail-fast`, `cancelled`: confirmed exit codes (0,1,0,0,0,1,130 respectively) are unchanged, confirmed stdout bytes match expected result payloads, confirmed every stderr record's field set exactly matches the pre-existing field set plus `sequence`, and confirmed `sequence` values are strictly sequential (`0..n-1`) across all events in one invocation.
+- For `live`: used a real `subprocess.Popen` with a pipe, read the first stderr line while the child was confirmed still running (`poll() is None` → `True`), then wrote a newline to stdin to release the fixture gate, and captured the remaining output — proving the gate and liveness behavior are unchanged, with `sequence` continuing correctly across the release.
+
+**Not claimed:** No new live-output guarantee or real-signal (SIGINT) cancellation coverage was added or asserted — the `cancelled` scenario was exercised only via its existing fixture `KeyboardInterrupt()` simulation, as before. Only this local, already-present `/work/batch.py` probe was executed; no other script was run and no network/service calls were made.

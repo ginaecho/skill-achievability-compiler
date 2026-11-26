@@ -1,0 +1,420 @@
+"""Deterministic front-end: SKILL.md / agent markdown  ->  achievability pack.
+
+This is the *untrusted* half of the compiler pipeline (the checker is the
+trusted half).  It compacts a natural-language skill into a formal pack in a
+purely deterministic, inspectable way -- no LLM required:
+
+  1. **Declared capabilities Γ** come from the environment profile plus the
+     skill's own frontmatter (`allowed-tools` for Claude Code skills, `tools`
+     for agent markdown), plus prose declarations of the corpus style
+     ("Tools: a, b, c" / "Tools available: ...").
+  2. **Invoked actions** are extracted from the prose: backticked identifiers
+     governed by an invocation verb ("via `ask_user_input_v0`",
+     "use `str_replace`", "call `save_skill`", ...), plus a small transparent
+     vocabulary of explicit external actions such as web search and flight
+     booking. An identifier the next words type as a code term ("use the
+     `required_providers` block", "the `pipeline_tag` parameter") is a value,
+     not an invocation. Fenced code blocks are not scanned (their contents run
+     through the shell capability).
+  3. Identifiers are classified: declared tools and snake_case names act via
+     their own capability; unix-ish commands, scripts, and undeclared
+     CamelCase code symbols (`pdftotext`, `thumbnail.py`, `PositionalTab`)
+     act via the profile's shell (`bash`) capability.
+  4. **Semantic compaction** (`prose.py` + `semantic.py`).  When the document
+     says what "finished" means -- "Your job is finished when the flight is
+     **booked** and a **confirmation email has been sent**" -- and lists
+     workflow steps, the pack is built from what the document actually
+     claims: goal conditions (with numeric budgets), participants, guards and
+     bounds stated in the Tools section, choices/messages/spawns read from the
+     workflow, and any declared per-role behaviour.  That pack can be refuted
+     for reasons the weak reading cannot see: a goal condition with no
+     establisher, a guard nothing satisfies, a budget no tool can meet, an
+     unannounced choice that strands a role, a declared behaviour that does
+     not cover its contract.
+  5. Otherwise the pack falls back to the weak reading: one capability per
+     granted tool establishing `used_<tool>`; the protocol is the ordered
+     sequence of invoked acts; the goal is the conjunction of `used_<t>` over
+     all invoked tools -- i.e. *the skill, as written, can actually be carried
+     out in this environment*.  A document that never says when it is finished
+     gives the front-end nothing stronger to check.
+
+An author can bypass the heuristics entirely by embedding a precise pack in a
+fenced block tagged `skillc-pack`; that JSON is validated and used verbatim
+(this unlocks the full checker: guards, budgets, roles, choice/projection).
+
+Soundness note (mirrors the paper's trust boundary): a misextraction here can
+only make the checker judge *a different pack*; the verdict remains sound for
+the pack actually produced, and the provenance report makes the pack
+inspectable at one checkpoint.
+"""
+from __future__ import annotations
+
+import json
+import re
+from dataclasses import dataclass, field
+
+import yaml
+
+from ..pack import PackError, validate_pack
+from ..profiles import Profile, normalize_tool
+from . import semantic
+from .prose import negated_before
+from .vocabulary import vocabulary
+
+FRONTMATTER_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.S)
+FENCE_RE = re.compile(r"^(```+|~~~+)([^\n]*)\n(.*?)^\1\s*$\n?", re.S | re.M)
+TOOLS_LINE_RE = re.compile(
+    r"^\s*(?:\*\*)?(?:required\s+)?tools?(?:\s+available)?(?:\*\*)?\s*:\s*(.+)$",
+    re.I | re.M,
+)
+AGENT_TOOL_RE = re.compile(r"\A(?:[a-z][a-z0-9]*(?:_[a-z0-9]+)+|[A-Z][A-Za-z0-9]*)\Z")
+SHELL_TOKEN_RE = re.compile(r"\A[a-z][a-z0-9+.-]*\Z")
+
+# API identifiers carry a date-version stamp (`computer_20251124`): they name a
+# request parameter or tool *type*, not a tool the agent calls.
+VERSIONED_RE = re.compile(r"[_-]\d{8}\Z")
+
+# The word right after an identifier names it as a tool: "use the `create_issue` tool".
+# That explicit reference outweighs data evidence elsewhere in the document.
+NAMED_TOOL_AFTER_RE = re.compile(r"\A`\s+(?:tools?|functions?|commands?)\b", re.I)
+
+# The word(s) right after an identifier type it as a code term, not a tool:
+# "`required_providers` block", "`pipeline_tag` parameter",
+# "`microsoft_agents` import prefix", "`action_trigger` lifecycle blocks".
+CODE_TERM_AFTER_RE = re.compile(
+    r"\A`\s+(?:[\w-]+\s+)?(?:blocks?|parameters?|params?|fields?|arguments?|args?"
+    r"|prefix(?:es)?|attributes?|meta-arguments?|keys?|flags?|options?"
+    r"|propert(?:y|ies)|variables?|settings?|headers?|claims?|columns?)\b",
+    re.I,
+)
+
+SHELL_CAP = "bash"
+PACK_FENCE_TAG = "skillc-pack"
+COMPACTION_SCHEMA = "skillc.compaction/1"
+
+
+@dataclass
+class Invocation:
+    """One extracted tool use, with provenance for the inspection report."""
+    raw: str            # identifier as written
+    tool: str           # normalized capability it acts through
+    kind: str           # "agent-tool" | "shell"
+    line: int           # 1-based line in the source markdown
+
+
+@dataclass
+class CompileResult:
+    pack: dict
+    name: str
+    profile: str
+    declared: dict[str, str] = field(default_factory=dict)  # tool -> source
+    invocations: list[Invocation] = field(default_factory=list)
+    embedded: bool = False           # pack came from a ```skillc-pack block
+    warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)   # semantic readings
+    goal_source: str = "tool_usage_only"
+
+
+def compaction_manifest(
+    result: CompileResult | None,
+    goal_source: str = "llm",
+) -> dict:
+    """Serializable provenance that can travel beside a compiled pack."""
+    if result is None:
+        return {
+            "schema": COMPACTION_SCHEMA,
+            "goal_source": goal_source,
+            "embedded": False,
+            "declared": {},
+            "invocations": [],
+            "warnings": [],
+            "notes": [],
+        }
+    return {
+        "schema": COMPACTION_SCHEMA,
+        "goal_source": result.goal_source,
+        "embedded": result.embedded,
+        "declared": result.declared,
+        "invocations": [
+            {
+                "raw": invocation.raw,
+                "tool": invocation.tool,
+                "kind": invocation.kind,
+                "line": invocation.line,
+            }
+            for invocation in result.invocations
+        ],
+        "warnings": result.warnings,
+        "notes": result.notes,
+    }
+
+
+def result_from_manifest(pack: dict, manifest: dict) -> CompileResult:
+    """Reattach validated compaction provenance to a compiled JSON pack."""
+    if not isinstance(manifest, dict) or manifest.get("schema") != COMPACTION_SCHEMA:
+        raise ValueError(f"not a {COMPACTION_SCHEMA} document")
+    goal_source = manifest.get("goal_source")
+    if not isinstance(goal_source, str) or not goal_source:
+        raise ValueError("compaction manifest needs goal_source")
+    raw_invocations = manifest.get("invocations", [])
+    if not isinstance(raw_invocations, list):
+        raise ValueError("compaction manifest invocations must be a list")
+    invocations = []
+    for index, item in enumerate(raw_invocations):
+        if not (
+            isinstance(item, dict)
+            and all(isinstance(item.get(key), str) for key in ("raw", "tool", "kind"))
+            and isinstance(item.get("line"), int)
+        ):
+            raise ValueError(f"compaction manifest invocation {index} is malformed")
+        invocations.append(Invocation(
+            item["raw"],
+            item["tool"],
+            item["kind"],
+            item["line"],
+        ))
+    declared = manifest.get("declared", {})
+    warnings = manifest.get("warnings", [])
+    notes = manifest.get("notes", [])
+    if not (
+        isinstance(declared, dict)
+        and all(isinstance(key, str) and isinstance(value, str)
+                for key, value in declared.items())
+        and isinstance(warnings, list)
+        and all(isinstance(value, str) for value in warnings)
+        and isinstance(notes, list)
+        and all(isinstance(value, str) for value in notes)
+    ):
+        raise ValueError("compaction manifest contains malformed provenance")
+    return CompileResult(
+        pack=pack,
+        name=str(pack.get("name", "skill")),
+        profile="compiled",
+        declared=declared,
+        invocations=invocations,
+        embedded=bool(manifest.get("embedded", False)),
+        warnings=warnings,
+        notes=notes,
+        goal_source=goal_source,
+    )
+
+
+def parse_frontmatter(text: str) -> tuple[dict, str]:
+    """Split YAML frontmatter from the body.  Tolerates malformed YAML."""
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return {}, text
+    body = text[m.end():]
+    try:
+        meta = yaml.safe_load(m.group(1))
+    except yaml.YAMLError:
+        return {}, body
+    return (meta if isinstance(meta, dict) else {}), body
+
+
+def _tool_list(value) -> list[str]:
+    """Frontmatter tools value: comma-separated string or YAML list."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [t.strip() for t in value.split(",") if t.strip()]
+    if isinstance(value, list):
+        return [str(t).strip() for t in value if str(t).strip()]
+    return []
+
+
+def _strip_fences(body: str) -> tuple[str, dict | None]:
+    """Blank out fenced code blocks (preserving line numbers) and pull out an
+    embedded ``skillc-pack`` JSON block if present."""
+    embedded: dict | None = None
+
+    def repl(m: re.Match) -> str:
+        nonlocal embedded
+        info = m.group(2).strip().lower()
+        if PACK_FENCE_TAG in info.split() and embedded is None:
+            try:
+                embedded = json.loads(m.group(3))
+            except json.JSONDecodeError as e:
+                raise PackError(f"embedded skillc-pack block is not valid JSON: {e}") from e
+        return "\n" * m.group(0).count("\n")
+
+    return FENCE_RE.sub(repl, body), embedded
+
+
+def _classify(raw: str) -> str | None:
+    """Classify an extracted identifier: 'agent-tool', 'shell', or None."""
+    if ":" in raw:
+        return None                      # XML-ish / namespaced code refs
+    if "." in raw:
+        # scripts and dotted method refs execute through a shell if at all
+        return "shell"
+    if AGENT_TOOL_RE.match(raw):
+        return "agent-tool"
+    if SHELL_TOKEN_RE.match(raw):
+        return "shell"                   # unix-ish command: jq, pdftotext, ...
+    return None
+
+
+def _typed_as_value(body: str, end: int) -> bool:
+    """The words right after the identifier call it a code term (block,
+    parameter, field, prefix, ...): "use `X` block" sets a value, not a tool."""
+    return bool(CODE_TERM_AFTER_RE.match(body[end:end + 40]))
+
+
+def _names_a_value(raw: str, body: str) -> bool:
+    """An undeclared identifier the document itself shows to be data, not a
+    tool: it is date-version stamped, or the document writes it as a quoted
+    string or as a key of an inline object literal (`{type: "between_tools"}`,
+    `{type: "enabled", budget_tokens: N}`).  "use `between_tools`" then names a
+    request parameter, not a tool call."""
+    if VERSIONED_RE.search(raw) or f'"{raw}"' in body or f"'{raw}'" in body:
+        return True
+    key = re.compile(r"`[^`\n]*\{[^`\n]*\b" + re.escape(raw) + r"\s*:[^`\n]*`")
+    return bool(key.search(body))
+
+
+def extract(body: str, declared: set[str]) -> list[Invocation]:
+    """Extract ordered tool invocations from prose (code fences pre-stripped)."""
+    out: list[Invocation] = []
+    for m in vocabulary().invoke_re.finditer(body):
+        # Skip negated invocations: "do NOT use `X`", "never call `X`", etc.
+        if negated_before(body, m.start(), window=20):
+            continue
+        raw = m.group(1)
+        norm = normalize_tool(raw)
+        line = body.count("\n", 0, m.start(1)) + 1
+        if norm in declared:
+            out.append(Invocation(raw, norm, "agent-tool", line))
+            continue
+        if not NAMED_TOOL_AFTER_RE.match(body[m.end(1):m.end(1) + 40]) and (
+                _names_a_value(raw, body) or _typed_as_value(body, m.end(1))):
+            continue
+        kind = _classify(raw)
+        if kind == "agent-tool" and raw[0].isupper():
+            # Unknown CamelCase is a code symbol (library class/API), not an
+            # agent tool: it executes through the shell, if at all.  Declared
+            # CamelCase tools (e.g. `WebFetch` under claude-code) were matched
+            # against Γ above.
+            kind = "shell"
+        if kind == "agent-tool":
+            out.append(Invocation(raw, norm, "agent-tool", line))
+        elif kind == "shell":
+            out.append(Invocation(raw, SHELL_CAP, "shell", line))
+    return out
+
+
+def extract_explicit_actions(body: str) -> list[Invocation]:
+    """Extract unambiguous external actions stated directly in plain prose."""
+    out = []
+    for action, match in vocabulary().action_matches(body):
+        if negated_before(body, match.start(), window=20):
+            continue
+        out.append(Invocation(
+            match.group(0),
+            action.name,
+            "intent-action",
+            body.count("\n", 0, match.start()) + 1,
+        ))
+    return out
+
+
+def _declared_action_target(action: str, declared: dict[str, str]) -> str | None:
+    """Reuse an author's declared operation instead of inventing an alias."""
+    return vocabulary().actions[action].target(declared)
+
+
+def compile_markdown(text: str, profile: Profile,
+                     name: str | None = None) -> CompileResult:
+    """Compact a SKILL.md / agent markdown into an achievability pack."""
+    meta, body = parse_frontmatter(text)
+    skill_name = str(name or meta.get("name") or "skill")
+    prose, embedded = _strip_fences(body)
+
+    if embedded is not None:
+        validate_pack(embedded)
+        return CompileResult(pack=embedded, name=skill_name,
+                             profile=profile.name, embedded=True,
+                             goal_source="embedded")
+
+    declared = _capability_context(meta, prose, profile)
+    explicit_actions = extract_explicit_actions(prose)
+    for action in explicit_actions:
+        target = _declared_action_target(action.tool, declared)
+        if target is not None:
+            action.tool = target
+        else:
+            declared[action.tool] = "prose:explicit-action"
+    invocations = explicit_actions + extract(prose, set(declared))
+    invocations.sort(key=lambda invocation: invocation.line)
+
+    # If the document states what "finished" means and lists workflow steps,
+    # compile what it actually claims (goal conditions, guards, budgets,
+    # participants, choices) instead of the weaker used_<tool> reading.
+    sem = semantic.build(skill_name, prose, declared)
+    if sem is not None:
+        validate_pack(sem.pack)
+        return CompileResult(pack=sem.pack, name=skill_name,
+                             profile=profile.name, declared=declared,
+                             invocations=invocations, notes=sem.notes,
+                             goal_source="semantic")
+
+    warnings: list[str] = []
+    if not invocations:
+        warnings.append("no tool invocations extracted; the fallback goal is "
+                        "trivially achievable, but the skill's actual goal "
+                        "and tool requirements have not been established")
+    pack = _usage_pack(skill_name, declared, invocations)
+    validate_pack(pack)
+    return CompileResult(pack=pack, name=skill_name, profile=profile.name,
+                         declared=declared, invocations=invocations,
+                         warnings=warnings)
+
+
+def _capability_context(meta: dict, prose: str, profile: Profile) -> dict[str, str]:
+    """Γ: declared tool -> where it was declared (profile, frontmatter, prose).
+
+    Unless the profile is `exact`, every other name of a profile tool is declared too
+    (`skillc.equivalents`): a skill that calls claude.ai's `ask_user_input_v0` is served
+    by Claude Code's `AskUserQuestion`. This only adds grants, so it never refutes."""
+    declared = dict.fromkeys(sorted(profile.tools), f"profile:{profile.name}")
+    if not profile.exact:
+        from ..equivalents import same_tool
+        for tool in sorted(profile.tools):
+            for other in sorted(same_tool(tool) - profile.tools):
+                declared.setdefault(other, f"profile:{profile.name}(same tool as {tool})")
+    for key in ("allowed-tools", "allowed_tools", "tools"):
+        for t in _tool_list(meta.get(key)):
+            declared[normalize_tool(t)] = f"frontmatter:{key}"
+    for m in TOOLS_LINE_RE.finditer(prose):
+        for t in m.group(1).rstrip(".").split(","):
+            t = t.strip().strip("`")
+            if t and re.match(r"\A[A-Za-z][A-Za-z0-9_-]*\Z", t):
+                declared[normalize_tool(t)] = "prose:tools-line"
+    if profile.shell and SHELL_CAP not in declared:
+        declared[SHELL_CAP] = f"profile:{profile.name}(shell)"
+    return declared
+
+
+def _usage_pack(name: str, declared: dict[str, str],
+                invocations: list[Invocation]) -> dict:
+    """The legacy reading: each tool establishes `used_<tool>`, and the goal is
+    that every invoked tool has been used."""
+    def pred(tool: str) -> str:
+        return "used_" + re.sub(r"[^a-z0-9_]", "_", tool)
+
+    used = list(dict.fromkeys(inv.tool for inv in invocations))
+    return {
+        "name": name,
+        "roles": ["agent"],
+        "capabilities": {t: {"owner": "agent", "add": [pred(t)]}
+                         for t in sorted(declared)},
+        "protocol": [{"act": {"cap": inv.tool, "by": "agent"}}
+                     for inv in invocations],
+        "goal": {"and": [pred(t) for t in used]} if used else True,
+        "init_true": [],
+    }
+
+
+def compile_file(path, profile: Profile, name: str | None = None) -> CompileResult:
+    with open(path, encoding="utf-8") as fh:
+        return compile_markdown(fh.read(), profile, name=name)

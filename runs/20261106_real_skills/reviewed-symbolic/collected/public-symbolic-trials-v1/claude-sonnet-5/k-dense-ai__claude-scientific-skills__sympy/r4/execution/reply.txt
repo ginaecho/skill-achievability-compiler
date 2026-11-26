@@ -1,0 +1,18 @@
+## Summary
+
+I created `/work/roots.py`, a standard-library + SymPy CLI that:
+
+1. **Reads the input file as inert text** — never executes anything from the Markdown (no `eval`, no `exec`, no `sympify` on raw text). I verified this explicitly by feeding it a document containing fenced code blocks with `os.system(...)` and `__import__('os').system('ls')` inside a `roots(...)` line — the custom tokenizer only recognizes digits, `x`, `+ - * / ** ( )`, and immediately raises a `ParseError` on anything else (confirmed: it never runs the injected code).
+2. **Only inspects physical lines whose stripped text starts with `roots(`**, extracting the first argument via paren-depth-aware scanning up to a top-level comma, then validates the trailing `, x)` plus optional `# comment` tail exactly as specified; non-matching lines (including a bare `roots(something)` with no comma, and `notroots(...)`) are correctly skipped.
+3. **Parses the polynomial expression with its own recursive-descent parser** (not SymPy's string parser) supporting `+ - * / **`, parentheses, integer literals, and `x`, enforcing exponents ≤ 8 and denominators free of `x`.
+4. **Builds an exact `sympy.Poly` over `QQ`**, extracts `coefficients` via `all_coeffs()` (highest-degree first, internal zeros kept, no leading zero), finds **all rational roots and multiplicities** via `Poly.ground_roots()` (exact, not `roots()`'s mixed algebraic output), and computes `residual_coefficients` by exact polynomial division by the product of `(x-root)**multiplicity` monic factors, preserving the original leading scalar.
+5. **Formats every rational as a canonical string** (`Rational.p`/`Rational.q`, reduced, positive denominator, no `/1` suffix).
+6. Prints exactly one JSON object with key `cases` (built with sympy only up to serialization; `multiplicity` is a Python `int`, never a bool/string) and a trailing newline, nothing to stderr, exit 0.
+
+**Verification performed in the sandbox (actual process runs, not claimed):**
+- Ran the CLI against the real `/inputs/core-capabilities.md` — it correctly found the single `roots(x**3 - 6*x**2 + 9*x, x)` line and produced `{0:1, 3:2}` with residual `[1]`, matching the document's own stated result.
+- Built a synthetic multi-example document (quadratics, quartics with no rational roots, a bare constant, division-by-constant, negative-leading-coefficient polynomials, repeated squared-root factors, indentation, a repeated duplicate example, and a non-matching `notroots(...)` line) — all cases produced mathematically correct coefficients/roots/residuals, with no-root and constant cases left unchanged as required, and duplicate lines reproduced independently in order.
+- Confirmed a document with no matching lines yields `{"cases": []}` with exit 0.
+- Confirmed a malicious injected document (code blocks and `__import__`/`os.system` attempts disguised as a `roots(...)` expression) is never executed — it is rejected by the parser as an invalid token, proving no document instructions/code are interpreted as authority.
+
+The deliverable is the working program at `/work/roots.py`; no protected `/inputs` files were modified, no packages were installed, and no network access was used.

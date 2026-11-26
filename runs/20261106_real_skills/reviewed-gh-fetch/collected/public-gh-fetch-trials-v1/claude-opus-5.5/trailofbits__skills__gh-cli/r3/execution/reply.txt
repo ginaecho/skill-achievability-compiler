@@ -1,0 +1,12 @@
+I couldn't get the file: `/work/intercept-github-fetch.sh` was not created.
+
+**What happened:**
+1. **Local check:** The only file under `/inputs` is `README.md` (4,640 bytes, the plugin README). `/work` was empty. `gh`, `git` and `curl` are not installed. The README describes the hooks but doesn't include the script.
+2. **Searching the filesystem:** I ran a combined call that tried to download the file from `raw.githubusercontent.com` at the requested commit, tried a DNS lookup for `github.com`, and searched the whole filesystem for `intercept-github-fetch*`. It returned `tool_timeout` (exit code 137) after about 21 seconds, with no output. Because everything ran in one call, I can't tell which step caused the timeout.
+3. **Network retry:** When I rerun just the download and DNS lookup with short timeouts, the tool returned `sandbox_stopped` with no output. A simple directory listing of `/work` afterward got the same `sandbox_stopped` result, so the sandbox can't be used now.
+
+**Why this blocks the task:** The container has no network access, no GitHub credentials and no `gh` or `git`, and no copy of the repository is available locally. The file at that commit can only come from GitHub. Since you need it byte-for-byte, I didn't write a rebuilt or approximate version, which wouldn't count. `/inputs` was not changed.
+
+**Next step:** Run this on a machine with network access and an authenticated `gh`:
+`gh api 'repos/trailofbits/skills/contents/plugins/gh-cli/hooks/intercept-github-fetch.sh?ref=0cc1c73a5e96749ab32d7ea5e14892fafa6972ae' -H 'Accept: application/vnd.github.raw' > intercept-github-fetch.sh`
+Or clone the repo, check out that commit, and copy the file. Then put the result in `/work`.

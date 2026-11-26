@@ -1,0 +1,35 @@
+The file `/work/shopify_webhook.py` has been written and verified.
+
+**Summary of work performed:**
+
+1. Read `/inputs/app-development.md` and located the "Webhook Handler" section's `verifyWebhook` JS function, which computes `HMAC-SHA256(secret, rawBody)`, base64-encodes it, and compares to the `x-shopify-hmac-sha256` header.
+
+2. Wrote `/work/shopify_webhook.py` defining:
+```python
+import hashlib
+import hmac
+import base64
+
+
+def verify_webhook(raw_body: bytes, hmac_header: str | None, secret: str) -> bool:
+    if not hmac_header:
+        return False
+    try:
+        hmac_header.encode("ascii")
+    except UnicodeEncodeError:
+        return False
+
+    digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode("ascii")
+
+    return hmac.compare_digest(hmac_header, expected)
+```
+This uses only stdlib (`hashlib`, `hmac`, `base64`), does the HMAC-SHA256 over the exact raw bytes with the UTF-8-encoded secret, compares via `hmac.compare_digest`, and guards against `None`/empty/non-ASCII headers without raising. Confirmed via AST parse that module-level statements are only 3 `Import` nodes and 1 `FunctionDef` — no other side-effecting code.
+
+3. Ran a separate subprocess test script (`/work/test_shopify_webhook.py`) that:
+   - Imports the module while capturing stdout, asserting it's empty (no import side effects).
+   - Computes its own HMAC-SHA256/base64 vectors for a valid case, wrong secret, wrong/altered body, `None` header, empty header, non-ASCII header, truncated header, and a differing-trailing-byte body — all producing correct `True`/`False` results.
+   - Also checks a non-ASCII secret case to confirm UTF-8 encoding of the secret works correctly.
+   - Output: `ALL TESTS PASSED`, exit code `0`.
+
+No files under `/inputs` were modified (only read). No network or external access was used — all checks ran locally in the sandbox via `subprocess` executing the test script with the sandbox's own Python interpreter.

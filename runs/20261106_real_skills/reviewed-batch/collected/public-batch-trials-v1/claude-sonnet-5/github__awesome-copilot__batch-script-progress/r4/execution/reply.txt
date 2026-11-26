@@ -1,0 +1,11 @@
+All verified. The edit adds a `sequence` field (starting at 0, incrementing once per emitted stderr record) to every emitted JSON record across start/progress/item-failed/summary, with no other changes.
+
+Verification performed (actual execution, not narrated):
+- Ran all eight scenarios (`normal`, `mixed`, `partial-zero`, `empty`, `unknown`, `fail-fast`, `cancelled`, `live`) against the modified `/work/batch.py`.
+- For each, parsed every stderr line as JSON and confirmed `sequence` is present and forms the exact sequence `0,1,2,...` in emission order (lengths 3/5/4/2/3/3/2/5 respectively — matching event counts).
+- Confirmed exit codes match the documented contract for each scenario: normal=0, mixed=1, partial-zero=0, empty=0, unknown=0, fail-fast=1, cancelled=130, live=0.
+- Reconstructed the pre-edit file content from the actual read, saved it as a separate reference script, and diffed stdout byte-for-byte between original and modified scripts for normal/mixed/partial-zero/empty/unknown/fail-fast — all identical (`stdout_match True`), plus exit codes identical.
+- `live` scenario was exercised by supplying `"\n"` on stdin (the existing fixture-release gate), exit code 0 confirmed — this reuses the existing probe mechanism; no new live-output or signal-based cancellation coverage is claimed. `cancelled` relies on the script's internal `KeyboardInterrupt()` simulation already present in the code (not a real OS signal), consistent with the existing probe design.
+- No new dependencies were added; only standard library (`json`, `sys`, `time`) is used, same as before.
+
+Deliverable: the modified file at `/work/batch.py` (in place), with only the `emit()` helper changed to add a `sequence` counter (`nonlocal sequence`, incremented after each record). All processing logic, stdout content, argument defaults, scenario names, and exit-code logic are byte-identical to the original.

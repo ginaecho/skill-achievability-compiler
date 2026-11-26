@@ -3,7 +3,8 @@
 **Shows:** skillc reading this folder by itself the way GitHub Copilot CLI sees it (tools, saved
 approvals, MCP servers) and deciding what a skill can do here, next to Copilot CLI, VS Code Copilot,
 Claude Code and claude.ai; and, for an uploaded graph, what a workflow can establish from it and what
-is missing; and **why** skillc, next to an LLM alone and an LLM with a guiding skill. **Audience:**
+is missing; **why** skillc, next to an LLM alone and an LLM with a guiding skill; and, for skills
+installed on this PC, what skillc, a compaction and a plain agent produced on three hosts. **Audience:**
 first-time viewers. **Time:** 3 to 6 minutes.
 
 ## Run it
@@ -55,6 +56,9 @@ Azure CLI sign-in or `AZURE_OPENAI_API_KEY` authenticates; `--llm-provider anthr
    **campus-sketch.svg · picture** and **Read the picture**: a model writes the sketch text, which
    you review before skillc reads it.
 9. Open **3 · Why skillc**. Pick a tool setup, then a case, and compare the three columns (below).
+10. Open **4 · My hosts** (after a `scripts/demo_hosts.py` run). Read the three host cards, then
+    click a cell of the matrix: its detail panel shows the missing tools, the plain agent's flagged
+    actions and the monitor replay. Point at "What this does not show".
 
 ## 1 · Basic skillc: what can an agent do here?
 
@@ -293,6 +297,46 @@ this authored-graph preflight; they do not include general natural-language comp
 The generated `REPORT.md` states these limits. A guided LLM may tie detection accuracy;
 the benchmark must report that rather than assume SkillC wins.
 
+## 4 · My hosts: skills installed on this PC, on three hosts
+
+This tab shows the newest result of `scripts/demo_hosts.py`: the newest
+`runs/*hosts_demo*/results.json` with schema `skillc.hosts-demo/1`, picked by its `run.stamp`
+(else by the file's modification time). Opening the tab never calls a model and runs nothing.
+
+* **Host cards:** GitHub Copilot CLI and Microsoft Scout, read from this PC's settings files
+  ("probed"), and Microsoft 365 Copilot ("declared, not probed": skillc's built-in description).
+* **Matrix:** one row per case, one column per host. Each cell has three lines: skillc with no
+  model (the host-profile checker verdict and the requirement reader verdict); compaction
+  (verdict, seconds, tokens, or the error); the plain agent (actions, actions flagged by the
+  script's fixed rules, the status it claimed).
+* **Detail panel** (click a cell): missing tools, the compaction's reason, the plain agent's
+  flagged actions with their flags, what it told the user, and the monitor replay steps with the
+  first denial and its reason.
+* **Totals:** model calls, tokens and seconds for each arm.
+
+The page shows the arms side by side and does not say which is right. The plain agent's tool
+results are stubs (nothing was executed), each model result is one sample from one model, and the
+Microsoft 365 Copilot environment is not probed. The skill text of an installed skill is never in
+the results file. The plain agent's raw model replies stay in the run folder and are not served.
+
+Produce the data without a model call:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\demo_hosts.py
+```
+
+The compaction and plain-agent columns need a model run. Do it only with the user's agreement
+for that run, and set the model-call switch for that process only:
+
+```powershell
+$env:SKILLC_ALLOW_MODEL_CALLS = '1'
+try {
+    .\.venv\Scripts\python.exe scripts\demo_hosts.py --live --provider azure-openai --model '<deployment>'
+} finally {
+    Remove-Item Env:SKILLC_ALLOW_MODEL_CALLS
+}
+```
+
 ## What it reads, and what it does not
 
 * The first tab reads Copilot CLI's saved configuration, not a running session. A session's launch
@@ -325,6 +369,10 @@ the benchmark must report that rather than assume SkillC wins.
 * `GET /api/benchmark`: latest local benchmark aggregates and case outcomes, or an explicit
   unavailable/error reason; never raw settings, credentials or model transcripts.
 * `GET /benchmark-report`: the curated published report as readable plain-text Markdown.
+* `GET /api/hosts`: the newest hosts-demo result: `available`, `run` (folder name), `picked_by`
+  (`run.stamp` or `file time`), `when`, `report` (REPORT.md present), `ignored` (folders with an
+  unreadable file or another schema), `commands`, and `results` (the results file, without the
+  plain agent's raw replies). With no result: `available` false, `reason`, `ignored`, `commands`.
 * `POST /api/twin/graph` `{"graph", "filename", "tenant"?}`: `nodes` (`id`, `kind`, `types`,
   `details`), `edges` (`s`, `t`, `p`), `facts`, `truncated` (at most 800 entities are drawn), and
   for a `.txt` sketch `sketch` (`read`: line, text, meaning; `ignored`: line, text; `entities`).

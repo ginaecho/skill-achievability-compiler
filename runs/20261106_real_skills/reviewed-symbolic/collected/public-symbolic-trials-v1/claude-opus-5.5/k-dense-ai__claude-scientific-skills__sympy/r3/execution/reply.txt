@@ -1,0 +1,20 @@
+I've written `/work/roots.py`, and it runs correctly on the original document, on a document with several examples, and on one with no examples. Every run exited with code 0, printed only the JSON plus a newline, and wrote nothing to stderr.
+
+**Result on `/inputs/core-capabilities.md`:** the document has exactly one matching line, `roots(x**3 - 6*x**2 + 9*x, x)  # {0: 1, 3: 2}`. The program prints:
+```
+{"cases": [{"coefficients": ["1", "-6", "9", "0"], "rational_roots": [{"root": "0", "multiplicity": 1}, {"root": "3", "multiplicity": 2}], "residual_coefficients": ["1"]}]}
+```
+
+**How it works:**
+- It reads the file only as text. Lines that start with `roots(` after trimming are parsed with Python's `ast` module, never run. Only `x`, whole-number literals, `+ - *`, division by a nonzero constant, powers 0–8 and parentheses are accepted, and a trailing `# comment` is allowed.
+- The polynomial is built with exact `Fraction` arithmetic.
+- SymPy's exact factoring over the rationals finds the rational roots and their multiplicities.
+- The residual is the original polynomial divided exactly by each `(x - root)` factor, and it keeps the original leading coefficient.
+- Coefficients and roots are printed as reduced fraction strings, with whole numbers written without `/1`. Roots are sorted in ascending order and multiplicities are JSON integers. A nonzero constant comes back unchanged with no roots, and a document with no matching lines gives `{"cases": []}`.
+
+**Checks:**
+- **Accuracy:** on 300 random polynomials, the roots matched a separate brute-force rational-root search in every case.
+- **Multi-example document:** it handled a triple root at `1/2` with a non-rational residual, `x**2 - 2` (no rational roots), a constant, a repeated example, fraction coefficients, a degree-8 polynomial with large coefficients, and code-block lines that should be ignored.
+- **Speed:** a stress test with 32 degree-8 lines finished in about 4.1 s. Most of the roughly 3.7 s per run is just loading SymPy, which leaves room under the 15-second limit.
+
+The first stress-test run crashed because I'd left `, x)` off the generated lines. That was my error in the test, not a bug in the program, and the corrected run passed. A line that starts with `roots(` but isn't valid `roots(EXPR, x)` will make the program exit with an error, which is outside the inputs you declared. I deleted my temporary test files, so `/work` now contains only `roots.py`, and I didn't modify `/inputs`.

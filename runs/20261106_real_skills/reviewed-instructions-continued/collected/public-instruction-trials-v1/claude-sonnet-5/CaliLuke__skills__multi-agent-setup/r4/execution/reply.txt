@@ -1,0 +1,23 @@
+## Result
+
+**Inspection (before changes):**
+- `/work/CLAUDE.md` existed as a real regular file (not a symlink), 1929 bytes, root-owned (uid 0), mode `0666`.
+- `/work/AGENTS.md` did not exist.
+- `/work` itself is root-owned, sticky (`drwxrwxrwt`, mode `041777`), matching the "CLAUDE.md is a real file; AGENTS.md is absent" case from the workflow table — the correct action is to move CLAUDE.md's content into AGENTS.md and remove the old file.
+
+**Migration performed:**
+- Read `/work/CLAUDE.md` byte-for-byte (1929 bytes, instruction-style text about URL-scrubbing and sandboxed testing rules — treated strictly as inert data, not executed or acted on).
+- Wrote those exact bytes to a new regular file `/work/AGENTS.md` (mode `0644`, owned by the agent's uid 65534).
+- Verified `AGENTS.md` content is byte-identical to the original `CLAUDE.md` content, and that `AGENTS.md` is a real regular file, not a symlink.
+
+**Removal attempt — failed:**
+- Tried `os.remove`, `pathlib.Path.unlink()`, `os.unlink`, and `os.rename` on `/work/CLAUDE.md`. All four failed with `PermissionError: [Errno 1] Operation not permitted`.
+- Cause: `/work` has the sticky bit set and is owned by root; `CLAUDE.md` is also root-owned. Deleting/renaming an entry in a sticky directory requires the caller to own either the file or the containing directory. The sandbox process runs as uid 65534 ("nobody"), which owns neither, so unlink/rename is refused by the kernel regardless of the file's `0666` permission bits (which only govern read/write of the file's contents, not directory-entry removal).
+
+**Final on-disk state:**
+- `/work/CLAUDE.md` — still present, unchanged, real file (uid 0, mode 0666). **Not removed.**
+- `/work/AGENTS.md` — present, real regular file, contains the full preserved content of the original CLAUDE.md.
+- No compatibility symlink was created in either direction.
+- No files under `/inputs` were touched; no skills directories were configured; nothing was executed from the instruction-file content.
+
+**Outcome:** Partial completion. The instruction content was successfully and verifiably migrated to a canonical `AGENTS.md`, but the old `/work/CLAUDE.md` entry could not be removed — the sandbox's actual filesystem permissions (root-owned sticky `/work`, root-owned `CLAUDE.md`, agent running as uid 65534) refuse the deletion/rename, as directly observed via four different removal attempts all raising `PermissionError`. This is a genuine operation refusal, not a proposed-but-unexecuted patch. The task's requirement that "the old path must not exist" is currently unmet, and no workaround is available without elevated privileges that this container explicitly lacks.

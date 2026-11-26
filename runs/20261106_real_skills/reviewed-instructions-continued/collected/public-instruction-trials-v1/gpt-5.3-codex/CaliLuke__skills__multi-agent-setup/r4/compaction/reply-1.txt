@@ -1,0 +1,22 @@
+```ce
+Skill `instruction-file-migration-only`.
+Roles: `agent`.
+Tool `inspect_instruction_paths` (owner `agent`): via `execute_python`; needs `python`, `file_read`; requires `claude_entry_exists`; adds `instruction_paths_inspected`, `claude_entry_read`.
+Tool `write_agents_from_claude` (owner `agent`): via `execute_python`; needs `python`, `file_read`, `work_write`; requires `instruction_paths_inspected` and `claude_entry_read`; adds `agents_regular_file_written`, `agents_preserves_claude_bytes`.
+Tool `remove_claude_entry` (owner `agent`): via `execute_python`; needs `python`, `work_write`; requires `agents_regular_file_written`; adds `claude_removal_attempted`.
+Tool `inspect_post_migration_state` (owner `agent`): via `execute_python`; needs `python`, `file_read`; requires `claude_removal_attempted`; adds `post_state_inspected`, `agents_readable`.
+Tool `report_success` (owner `agent`): via `reply`; requires `post_state_inspected` and `agents_readable` and `claude_entry_absent`; adds `success_reported`.
+Tool `report_unresolved` (owner `agent`): via `reply`; requires `post_state_inspected` and `agents_readable` and `claude_entry_present`; adds `unresolved_reported`.
+Initially true: `claude_entry_exists`.
+Goal: `instruction_paths_inspected` and `agents_regular_file_written` and `agents_preserves_claude_bytes` and `claude_removal_attempted` and `post_state_inspected` and (`claude_entry_absent` and `success_reported` or `claude_entry_present` and `unresolved_reported`).
+Protocol:
+  - `agent` uses `inspect_instruction_paths`.
+  - `agent` uses `write_agents_from_claude`.
+  - `agent` uses `remove_claude_entry`.
+  - `agent` uses `inspect_post_migration_state`.
+  - `agent` chooses one of (external):
+    - branch `claude_removed` (assuming `claude_entry_absent`):
+      - `agent` uses `report_success`.
+    - branch `claude_still_present` (assuming `claude_entry_present`):
+      - `agent` uses `report_unresolved`.
+```

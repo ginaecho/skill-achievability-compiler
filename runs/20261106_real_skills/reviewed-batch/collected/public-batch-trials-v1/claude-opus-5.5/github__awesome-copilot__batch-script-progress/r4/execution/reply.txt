@@ -1,0 +1,36 @@
+I edited `/work/batch.py` so every JSON record it writes to stderr now has an integer `sequence` field. I ran all eight scenarios against both the original and the edited file, and all checks passed.
+
+**The change:** the counter starts at 0 on each run and goes up by 1 after each record is written, so it is shared across start, progress, item-failed and summary events. `sequence` is added as the last key; all other fields keep their order and values. Nothing else in the file changed: processing, counters, status, exit-code logic, stdout and scenario handling are as before. Only the standard library is used.
+
+```python
+    sequence = 0
+
+    def emit(event, **fields):
+        nonlocal sequence
+        record = {..., **fields, "sequence": sequence}
+        sequence += 1
+        print(json.dumps(record), file=sys.stderr, flush=True)
+```
+
+**Checks I ran:** I saved the original as `/tmp/batch_orig.py`, captured its output as a baseline, then ran the edited script twice per scenario. A newline was sent on stdin each time to release the live scenario's fixture gate.
+
+| Scenario | Exit code (same as original) | Events → sequence |
+|---|---|---|
+| normal | 0 | start 0, progress 1, summary 2 |
+| mixed | 1 | start 0, progress 1, item-failed 2, progress 3, summary 4 |
+| partial-zero | 0 | start 0, item-failed 1, progress 2, summary 3 |
+| empty | 0 | start 0, summary 1 |
+| unknown | 0 | start 0, progress 1, summary 2 |
+| fail-fast | 1 | start 0, item-failed 1, summary 2 |
+| cancelled | 130 | start 0, summary 1 (no stdout, as before) |
+| live | 0 | start 0, progress 1–3, summary 4 |
+
+For every scenario and both runs:
+- **stdout:** identical to the original, byte for byte.
+- **Exit code and number of stderr records:** the same as the original.
+- **Existing fields:** names, order and values match the original. The exception is `elapsed_ms`, which is a timing value and was left out of the comparison.
+- **`sequence`:** always a plain integer equal to the record's position, starting from 0 on each run.
+
+Running with no arguments still defaults to `normal` (exit 0, same stdout). An unknown scenario still raises `ValueError` with exit 1. `live` with no stdin input still fails with exit 1 and `RuntimeError: Fixture release input missing`.
+
+**Limits:** these checks read output after the process finished. They don't show that output appears while the script is still running. The `cancelled` scenario only simulates an interrupt inside the script, so this doesn't cover real signal or host cancellation. I ran only the original and edited copies of this probe; I didn't run the skill's bundled verifier or any other downloaded script.

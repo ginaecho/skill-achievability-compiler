@@ -655,6 +655,7 @@ The HTML directory also shows internal imports and reverse import relationships.
 | [`frontend/prompts.py`](../src/skillc/frontend/prompts.py) | Compaction grammar instructions and prompt variants | `llm` |
 | [`frontend/providers.py`](../src/skillc/frontend/providers.py) | Model opt-in, provider dispatch and metered guarded sends | `urlguard`, `tokens` |
 | [`frontend/urlguard.py`](../src/skillc/frontend/urlguard.py) | Scrub, reject residual URL-like content and restore replies | `providers` |
+| [`frontend/copilot_guard.py`](../src/skillc/frontend/copilot_guard.py) | Local guard that scrubs every native Copilot client request, including tool history | `urlguard`, `providers` |
 | [`frontend/grants.py`](../src/skillc/frontend/grants.py) | `bind_grants`: independent tool availability | `contracts` |
 | [`frontend/contracts.py`](../src/skillc/frontend/contracts.py) | Environment contracts, vocabulary alignment and ungrounded-refutation abstention | `grants`, `formula` |
 | [`frontend/contract.py`](../src/skillc/frontend/contract.py) | Separately reviewed task contract replaces inferred goal/context | `cli` |
@@ -677,6 +678,8 @@ The HTML directory also shows internal imports and reverse import relationships.
 | [`env/rdet2.py`](../src/skillc/env/rdet2.py) | Strict-mention requirement-reader variant | `manifest`, `nl` |
 | [`env/copilot.py`](../src/skillc/env/copilot.py) | Read-only Copilot CLI tools, saved permissions and MCP configuration | `mcp`, `model` |
 | [`env/claude.py`](../src/skillc/env/claude.py) | Read-only Claude runtime and machine environment adapter | `mcp`, `model` |
+| [`env/m365.py`](../src/skillc/env/m365.py) | Declared Microsoft 365 Copilot chat environment with an optional local overlay | `model` |
+| [`env/scout.py`](../src/skillc/env/scout.py) | Read-only Microsoft Scout tools and approvals from its settings | `mcp`, `model` |
 | [`env/azure.py`](../src/skillc/env/azure.py) | Read-only Azure role/policy/resource probe, live or replay | `facts`, `reach` |
 | [`env/azd.py`](../src/skillc/env/azd.py) | Interpret declared `azure.yaml` topology | `gate` |
 | [`env/foundry.py`](../src/skillc/env/foundry.py) | Hosted-agent control-plane probe with replay/sanitization | `selfprobe`, `watch` |

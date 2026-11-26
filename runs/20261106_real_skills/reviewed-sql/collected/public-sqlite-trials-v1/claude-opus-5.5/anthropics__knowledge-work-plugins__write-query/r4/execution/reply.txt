@@ -1,0 +1,18 @@
+I wrote `/work/query.sql` and ran it against `/inputs/Chinook.sqlite`. It returns 39 rows with the six columns you asked for, in order: `country, genre_id, genre, revenue_cents, units, country_rank`. A separate Python calculation of the same rules gave exactly the same rows.
+
+**How the query works** (one read-only `WITH … SELECT`, 1,601 bytes, using only Invoice, InvoiceLine, Track and Genre):
+- **`period_lines`:** keeps invoices dated from `'2021-01-01'` up to but not including `'2022-01-01'`. Dates are stored as text like `2021-01-01 00:00:00`, so comparing them as text works. For each line it computes `CAST(ROUND(UnitPrice * 100) AS INTEGER) * Quantity`, so the price is rounded to cents before multiplying.
+- **`country_genre`:** joins Genre for the name, then adds up revenue in cents and `SUM(Quantity)` for units, grouped by country and genre.
+- **`ranked`:** numbers each country's genres by revenue, highest first, breaking ties by the smaller `GenreId`. This gives each row its own rank. The final query keeps ranks 1 and 2 and sorts by country, then rank.
+
+**Results:**
+- **Real data:** the first rows are `('Australia', 1, 'Rock', 891, 9, 1)` and `('Australia', 3, 'Metal', 297, 3, 2)`. Countries with sales in only one genre get one row (for example, Austria).
+- **Value types:** text, integer, text, integer, integer, integer.
+- **Size limit:** the run took about 36,000 SQLite steps, far under the 2 million allowed.
+- **Different quantities:** on a scratch copy with quantities changed to 1–4, the query still matched the Python calculation.
+- **No sales in the period:** on a scratch copy with all 2021 invoice lines deleted, it returned no rows, with the correct column names.
+- **Cleanup:** I opened the input database read-only and did not change it. I deleted the scratch copies, so `/work` contains only `query.sql`.
+
+**Choices you may want to check:**
+- **Zero or negative quantities:** lines are not filtered by quantity. Any such line still counts toward revenue and units.
+- **Half-cent prices:** these are rounded on the price × 100 value. All current prices are exactly 0.99 or 1.99, so this has no effect on today's data. If the data ever had half-cent prices, it could give a different cent than SQLite's `ROUND(UnitPrice, 2)`.

@@ -1,0 +1,38 @@
+I've written `/work/check_captions.py` (3,775 bytes, standard library only) and ran it on `/inputs/captions.srt`. It found one caption that breaks the gap rule, so it exits with 1. That's the checker doing its job, not a problem with the checker.
+
+**Result on the real input:** 2 of 3 cues pass.
+
+| Cue (SRT id) | Start–end (ms) | Characters | Issues |
+|---|---|---|---|
+| 1 (2) | 27000–30730 | 5 | — |
+| 2 (4) | 31500–34100 | 7 | `gap` |
+| 3 (6) | 34100–36570 | 16 | — |
+
+Cue 2 ends at 34100 ms and cue 3 starts at the same moment, so the gap between them is 0 ms. The minimum is two frames at 24 fps, which is 2000/24 ms (about 83.3 ms). The output was exactly one JSON object with nothing on stderr. I didn't change the input file.
+
+**How it works:**
+- **Input:** it reads UTF-8 with or without a BOM, and LF or CRLF line endings. It takes cue numbers that skip values and reports cues by their position (1, 2, 3), not their SRT number.
+- **Text cleanup:** it removes `<...>` and `{\...}` formatting tags, strips trailing spaces from each line, drops blank lines and keeps leading spaces. Characters are counted as Unicode code points.
+- **Exact limits:** every check uses whole milliseconds, with no tolerance or rounding:
+  - reading speed (`chars*1000 > 20*duration`, checked only when duration is positive)
+  - duration (`duration*6 < 5000` or `duration > 7000`)
+  - gap (`gap*24 < 2000`)
+- **Overlaps:** a cue that runs into the next one gets `overlap`, not `gap`. Gap and overlap issues are recorded on the earlier cue.
+- **Zero-length cues:** these fail `duration` without the speed check dividing by zero.
+
+**What I tested:**
+- **Empty file:** prints a zero-count report and exits 0.
+- **Made-up file:** I wrote a test file covering:
+  - a CRLF file with a BOM
+  - a cue that ends at 833 ms, just short of 5/6 s (fails), and one lasting 834 ms (passes)
+  - gaps of 83 ms (fails) and 84 ms (passes)
+  - 20 versus 21 characters in one second
+  - tags, a dropped tag-only line and leading spaces
+  - a zero-length cue, an overlap, three lines, and a 43-character line
+  - a cue of exactly 7 s and a 42-character accented line
+
+  Each case gave the expected result. I deleted the test files afterwards, so `/work` contains only the checker.
+
+**Error handling:** if it's called without exactly one path, or the file can't be read or decoded, or the file contains text that doesn't parse as cues, it prints a message to stderr and exits 2. The task didn't specify this behaviour; it's my own choice.
+
+As requested, the checker covers only these number limits. It doesn't retime anything or judge style, accessibility, sync with the audio, or whether a broadcaster would currently accept the file.

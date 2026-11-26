@@ -1,0 +1,28 @@
+I analyzed the supplied CSV fixture at `/inputs/summary_review.csv` (9 data rows, synthetic/upstream public evaluation data — no inference run, no hardware probe, no GPU claims) and wrote the required deliverable to `/work/sweep_summary.csv`.
+
+**Processing applied, per row:**
+- `missing_counts` if `n_designs` or `n_passed` was empty (e.g. `review_15_4`)
+- else `invalid_counts` if either count failed `^-?[0-9]+$`, was negative, or `n_passed > n_designs` (e.g. `review_1_2` with `n_designs=-5`; `review_15_2` with `n_passed=11 > n_designs=10`)
+- else `zero_denominator` if `n_designs == 0` (`review_05_4`)
+- else `valid`, with `success_rate = n_passed/n_designs` rounded half-up to 6 decimal places using `Decimal`
+
+**Ordering:** valid rows first by exact unrounded ratio descending, then `mean_i_pae` ascending (missing last), then `config_id` ascending; non-valid rows appended by `config_id` ascending.
+
+Result order: `review_1_8` (0.8, pae 5.0), `review_1_4` (0.8, pae 6.0), `review_15_8` (0.7, pae missing), `review_05_8` (0.6), `review_05_2` (0.3), then `review_05_4`, `review_15_2`, `review_15_4`, `review_1_2`.
+
+Final file contents (`/work/sweep_summary.csv`, 9 data rows + header, comma-delimited, UTF-8, written via Python's `csv` module which emits CRLF line terminators by default):
+
+```
+config_id,temperature,replicas,n_designs,n_passed,mean_i_pae,success_rate,count_status
+review_1_8,1.0,8,25,20,5.0,0.800000,valid
+review_1_4,1.0,4,10,8,6.0,0.800000,valid
+review_15_8,1.5,8,20,14,,0.700000,valid
+review_05_8,0.5,8,50,30,7.0,0.600000,valid
+review_05_2,0.5,2,10,3,9.0,0.300000,valid
+review_05_4,0.5,4,0,0,,,zero_denominator
+review_15_2,1.5,2,10,11,4.0,,invalid_counts
+review_15_4,1.5,4,20,,8.0,,missing_counts
+review_1_2,1.0,2,-5,1,8.5,,invalid_counts
+```
+
+No inference was launched, no configs were generated, no hardware was probed, and no manifest was written — only the requested CSV-analysis branch was performed, saved to `/work/sweep_summary.csv`.

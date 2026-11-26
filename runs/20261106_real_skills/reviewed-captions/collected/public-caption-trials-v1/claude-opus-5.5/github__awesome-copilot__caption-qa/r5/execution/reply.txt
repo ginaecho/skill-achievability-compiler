@@ -1,0 +1,32 @@
+I created `/work/check_captions.py` and ran it on the unchanged `/inputs/captions.srt`. It found one failing caption, so it exited with code 1, which is what it should do when a cue fails.
+
+**Result on the real input:** 3 captions checked, 2 passed, 1 failed. Nothing went to stderr.
+- **Cue 1** (27000–30730 ms, 5 characters): passes.
+- **Cue 2** (31500–34100 ms, 7 characters): fails on **gap**. Cue 3 starts at exactly 34100 ms, the same moment cue 2 ends, so the gap is 0 ms. The minimum is 2 frames at 24 fps, about 83.3 ms. A gap of 0 is not negative, so it counts as a gap failure, not an overlap.
+- **Cue 3** (34100–36570 ms, 16 characters): passes. It's the last cue, so there's no gap to check.
+
+**How it works:**
+- **Exact whole-millisecond comparisons, no rounding or tolerance:**
+  - characters × 1000 must be at most 20 × duration
+  - duration × 6 must be at least 5000 (that is, 5/6 s) and duration at most 7000 ms
+  - gap × 24 must be at least 2000 (2 frames)
+- Zero-length cues fail duration and skip the characters-per-second check, so there is no division by zero.
+- An overlap is reported as overlap, and each gap or overlap is charged to the earlier cue.
+- The input is read as UTF-8, with or without a BOM and with either line-ending style. Cue numbers in the file don't need to be consecutive, and the JSON uses its own 1, 2, 3… numbering.
+- Formatting tags are removed before counting.
+- Trailing spaces are trimmed, leading spaces are kept, and blank lines are dropped.
+- It uses only the standard library and is 4,093 bytes.
+
+**Other checks I ran** (on temporary files, now deleted):
+- An empty file printed zero counts and exited 0.
+- A file with a BOM, Windows line endings, tags, leading spaces and a blank line gave the expected counts.
+- Boundary cases gave the expected results:
+  - Durations of 833 ms (fails) and 834 ms (passes).
+  - Gaps of 83 ms (fails) and 83.33 ms (2 frames, passes at exactly 2 frames).
+  - Exactly 20 characters a second (passes) and 21 (fails).
+  - A 43-character line, three lines, a zero-length cue, an overlap and a 7100 ms cue all failed.
+  - A line of accented characters was counted per character.
+
+**One behaviour I added:** if there's no valid single path, the file can't be read, or it isn't valid UTF-8 or SRT, the script writes an error to stderr and exits 2 with nothing on stdout. Your spec only covered valid input.
+
+This only checks the numeric limits you specified. It doesn't retime anything, and it doesn't certify style, accessibility, audio sync or whether a broadcaster will currently accept the file. The input file wasn't modified.

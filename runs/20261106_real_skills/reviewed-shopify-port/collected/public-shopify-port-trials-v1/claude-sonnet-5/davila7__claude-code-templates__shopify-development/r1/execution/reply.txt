@@ -1,0 +1,43 @@
+I ported the `verifyWebhook` function from the "Webhook Handler" section of `/inputs/app-development.md` to Python.
+
+**File written:** `/work/shopify_webhook.py`
+
+```python
+import base64
+import hmac
+import hashlib
+
+
+def verify_webhook(raw_body: bytes, hmac_header: str | None, secret: str) -> bool:
+    if not hmac_header:
+        return False
+    try:
+        hmac_header.encode("ascii")
+    except UnicodeEncodeError:
+        return False
+
+    digest = hmac.new(secret.encode("utf8"), raw_body, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode("ascii")
+
+    return hmac.compare_digest(hmac_header, expected)
+```
+
+**Checks performed (actual execution, not inline claims):**
+
+1. **Static structure check** via `ast.parse` — module body contains only 3 `Import` nodes and one `FunctionDef`, confirming no side-effect statements at module level (satisfies "only imports and function definitions at module level").
+2. **Import side-effect check** — ran the import in a subprocess with stdout/stderr captured; output was empty, confirming no printing/file/network access on import.
+3. **Correctness vectors**, computed independently with `hmac`/`hashlib`/`base64` against the body `b'{"id":123,"name":"#1001"}'` and secret `"s3cr3t"`:
+   - valid signature → `True` ✓
+   - `hmac_header=None` → `False` ✓
+   - `hmac_header=""` → `False` ✓
+   - wrong/garbage header → `False` ✓
+   - correct header but tampered body → `False` ✓
+   - correct header but wrong secret → `False` ✓
+   - header with a non-ASCII character appended → `False` ✓ (no exception raised)
+   - header containing only non-ASCII characters → `False` ✓
+   - header with a single tampered trailing character (same length) → `False` ✓
+
+   All 9 cases matched expected results (`OK` printed for each).
+4. Confirmed `/inputs/app-development.md` was not modified (hash and `st_uid=0`/read-only stat unchanged, file still root-owned).
+
+No operations were refused; everything executed successfully in the sandbox.

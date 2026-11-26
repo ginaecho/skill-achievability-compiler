@@ -1,0 +1,22 @@
+## Summary
+
+**Change made to `/work/batch.py`:** Added a per-invocation `sequence` counter (closed over via a single-element list, since the existing `emit` is a nested function without `nonlocal` elsewhere) that is inserted into every stderr JSON record and incremented exactly once per `emit()` call, starting at 0. No other logic, formatting, scenario behavior, argument defaults, or exit codes were touched. No third-party packages were used — standard library only (`json`, `sys`, `time`, already present).
+
+**Diff summary (conceptual):**
+- Added `sequence = [0]` before `emit` definition.
+- `emit` now adds `"sequence": sequence[0]` into the record dict and does `sequence[0] += 1` after building the record, before printing.
+
+**Verification actually executed (not narrated):**
+- Ran all 8 scenario names: `normal, mixed, partial-zero, empty, unknown, fail-fast, cancelled, live`.
+- For the 7 non-interactive scenarios, reconstructed the exact pre-edit script in a temp file and diffed:
+  - stdout bytes: identical in every scenario.
+  - exit codes: identical in every scenario (`normal/partial-zero/empty/unknown`→0, `mixed/fail-fast`→1, `cancelled`→130).
+  - stderr record count: identical.
+  - All stderr fields except `sequence` identical per record, per scenario.
+  - `sequence` values were `0,1,2,...` strictly increasing per invocation in every case.
+- For `live`, launched the process with `subprocess.Popen`, read stderr lines while the process was still running (not after exit), confirmed the process stayed alive (`poll() is None`) after emitting `start` and the first `progress` record while blocked on `stdin.readline()`, then wrote a newline to stdin and confirmed the process completed with exit code 0 and the remaining `progress`/`summary` records carrying sequential `sequence` values (0–4). This matches the pre-existing documented gate/release behavior; I did not modify the fixture gate and make no claim of new real-signal cancellation or additional live-output coverage beyond this.
+- Cleaned up the temporary comparison file after verification; only `/work/batch.py` was left changed.
+
+**Deliverable:** The modified `/work/batch.py` file itself (shown above, confirmed present on disk), not an inline patch narration.
+
+**Not run:** The bundled `tests/verify-examples.mjs` cross-language verifier was not executed — it requires Node.js and PowerShell probes/harness files which were not part of this task's file set and were out of scope for this focused Python-only change; this is disclosed as an unexecuted case, not claimed as passing.

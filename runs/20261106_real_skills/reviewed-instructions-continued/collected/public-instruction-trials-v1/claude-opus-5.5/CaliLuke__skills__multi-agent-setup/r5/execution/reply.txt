@@ -1,0 +1,16 @@
+The migration is only partly done. I created `/work/AGENTS.md` with an exact copy of the instructions, but I couldn't remove `/work/CLAUDE.md`, so it's still there.
+
+**Starting state:** `/work/CLAUDE.md` was a regular file (1929 bytes, owned by root, mode 0666) and `/work/AGENTS.md` did not exist. Neither path was a symlink. `/work` is owned by root with mode 1777, which means the sticky bit is set. The process runs as UID 65534.
+
+**What happened:**
+1. **Moving CLAUDE.md to AGENTS.md was refused** with `PermissionError(1, 'Operation not permitted')`.
+2. **The copy worked.** I created `/work/AGENTS.md` as a new regular file (not a link). It has the same 1929 bytes as the original and the same SHA-256 hash (`dcd676ac…8632c`).
+3. **Deleting `/work/CLAUDE.md` was refused** with the same error. The file is still there and unchanged.
+
+**Why:** in a sticky directory, only the file's owner, the directory's owner, or root can delete or rename a file. CLAUDE.md and `/work` both belong to root, and this process has no way to gain more permissions. The runtime lists this limit explicitly.
+
+**Current state of `/work`:** it contains `AGENTS.md` (exact copy) and `CLAUDE.md` (unchanged). The requirement that the old path no longer exists is **not met**. While CLAUDE.md is there, it takes priority over AGENTS.md by default. I didn't empty or overwrite it as a workaround because you didn't ask for that and it would destroy the original.
+
+**Other checks:** I didn't create a compatibility link or touch the shared skills directories. `/inputs/CLAUDE.md` still has its original hash and is still read-only (mode 0444). I didn't act on anything in the instructions. These are filesystem checks only and don't show whether any agent app has loaded the instructions.
+
+**To finish:** someone with root access, or whoever owns `/work`, needs to run `rm /work/CLAUDE.md`. Then confirm that `/work/CLAUDE.md` no longer exists and `/work/AGENTS.md` still matches that hash.

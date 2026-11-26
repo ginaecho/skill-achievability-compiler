@@ -114,6 +114,20 @@ ul.ev li.declared b { color: var(--unk); }
 .tag { font-size: 12px; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
 td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
 .cost { font: 11.5px var(--mono); color: var(--muted); margin-top: 4px; }
+.hcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-top: 16px; }
+.hcards .panel h2 { margin-bottom: 2px; }
+.hmatrix td.hcell { cursor: pointer; min-width: 220px; }
+.hmatrix td.hcell:hover, .hmatrix td.hcell:focus { background: var(--chip); outline: none; }
+.hmatrix td.hcell.sel { background: var(--chip); box-shadow: inset 0 0 0 2px var(--accent); }
+.hline { font-size: 13px; margin: 2px 0; overflow-wrap: anywhere; }
+.hline > .k { color: var(--muted); display: inline-block; min-width: 82px; }
+.hline .v { font-size: 12px; padding: 1px 6px; }
+.v.NONE { color: var(--muted); background: var(--off); }
+.totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+@media (max-width: 760px) { .totals { grid-template-columns: minmax(0, 1fr); } }
+.totals .num { font: 600 18px var(--mono); }
+.hdetail h3 { font-size: 14px; margin: 14px 0 4px; }
+.hdetail .flag { font: 12px var(--mono); padding: 1px 6px; border-radius: 6px; background: var(--unk-bg); color: var(--unk); margin-right: 4px; }
 </style>
 </head>
 <body>
@@ -125,6 +139,7 @@ td.llm.differs { outline: 2px solid var(--unk); outline-offset: -2px; }
     <button class="on" data-tab="env">1 · Basic skillc</button>
     <button data-tab="graph">2 · A graph</button>
     <button data-tab="why">3 · Why skillc</button>
+    <button data-tab="hosts">4 · My hosts</button>
   </nav>
 </header>
 <main>
@@ -304,6 +319,30 @@ Full request: blocked; partial plan: report + ZIP + inventory.</pre>
   </div>
   <div class="arms" id="whyArms"></div>
   <div class="panel" id="whyWhy" style="margin-top:16px"></div>
+</section>
+
+<section id="hosts" class="tab">
+  <div class="panel">
+    <h2>Skills installed on this PC, on three hosts</h2>
+    <p>Each row is one case: a request and the skill installed for it. Each column is one host.
+      A cell shows what three arms produced for that case on that host:
+      <b>skillc with no model</b> (the host-profile checker and the requirement reader),
+      <b>compaction</b> (one model turns the skill into a plan for the host; skillc checks it) and
+      a <b>plain agent</b> (one model given the request, the skill and the host's tool names, with no skillc).
+      Click a cell for its details.</p>
+    <div class="row"><button class="ghost" id="hostsRefresh">Load the newest run again</button>
+      <span class="muted" id="hostsRun"></span></div>
+  </div>
+  <div class="panel" id="hostsLimits" style="margin-top:16px">
+    <h2>What this does not show</h2>
+    <ul>
+      <li>The plain agent's tool results are stubs. For a case with a world, they are simulated from invented data (Contoso, Northwind) and its checks judge the agent's recorded calls and final message by fixed patterns. Nothing it asked for was executed, sent or deleted.</li>
+      <li>Each model result is one sample from one model. Another sample can give another result.</li>
+      <li>The Microsoft 365 Copilot environment is declared, not probed: it is skillc's built-in description of that host, not a reading of this PC.</li>
+      <li>The table shows what each arm produced. It does not say which arm is right.</li>
+    </ul>
+  </div>
+  <div id="hostsOut" class="muted" style="margin-top:16px">Loading the newest hosts run...</div>
 </section>
 </main>
 
@@ -1045,9 +1084,208 @@ async function benchmarkShow() {
 }
 $("benchRefresh").onclick = benchmarkShow;
 
+// --- my hosts tab (the newest scripts/demo_hosts.py result; every value from it is escaped) ---
+const hostsTab = { data: null, sel: null };
+const H_VERDICTS = new Set(["ACHIEVABLE", "IMPOSSIBLE", "UNKNOWN"]);
+const H_NOT_RUN = "not run (start with --live)";
+const H_ARMS = {nomodel: "skillc, no model", compaction: "Compaction", agent: "Plain agent"};
+const hBadge = (v) => `<span class="v ${H_VERDICTS.has(v) ? v : "NONE"}">${esc(v || "no verdict")}</span>`;
+const hCut = (s, n) => { s = String(s ?? "").split(/\s+/).join(" ").trim(); return s.length <= n ? s : s.slice(0, n - 1) + "~"; };
+const hNum = (n) => Number(n || 0).toLocaleString("en-US");
+const hText = (x) => esc(typeof x === "string" ? x : JSON.stringify(x));
+const hCodes = (xs) => (xs && xs.length) ? xs.map((t) => `<code>${hText(t)}</code>`).join(", ") : "none";
+const hLine = (k, body) => `<div class="hline"><span class="k">${esc(k)}</span>${body}</div>`;
+
+function hostsCellHtml(cell) {
+  const nm = cell.nomodel || {}, comp = cell.compaction || {}, ag = cell.agent || {};
+  const hp = nm.checker_host_profile || {}, rd = nm.reader || {};
+  const compBody = !comp.ran ? `<span class="muted">${H_NOT_RUN}</span>`
+    : !comp.verdict ? `<span class="muted">error: ${esc(hCut(comp.error, 90))}</span>`
+    : `${hBadge(comp.verdict)} <span class="muted">${(Number(comp.wall_ms || 0) / 1000).toFixed(1)} s · `
+      + `${hNum(Number(comp.input_tokens || 0) + Number(comp.output_tokens || 0))} tokens</span>`;
+  const agBody = !ag.ran ? `<span class="muted">${H_NOT_RUN}</span>`
+    : `${hNum(ag.attempted)} actions · `
+      + (ag.world ? `${hNum(ag.wrong_actions)} wrong · ${hNum(ag.right_actions)} right · `
+        : `${hNum(ag.flagged)} flagged · `)
+      + `claimed: ${esc(ag.claimed_status || (ag.error ? "error" : "no finish"))}`;
+  return hLine("no model", `profile ${hBadge(hp.verdict)} reader ${hBadge(rd.verdict)}`)
+    + hLine("compaction", compBody) + hLine("plain agent", agBody);
+}
+
+function hostsWorldHtml(ag) {
+  // a run in a simulated world: its checks, the questions to the scripted user and the ledger
+  const checks = ag.checks || [], asked = ag.asked_user || [], effects = ag.effects || [];
+  const out = [`<h3>Checks in the world <code>${esc(ag.world)}</code></h3>`,
+    hLine("result", `${hNum(ag.wrong_actions)} wrong, ${hNum(ag.right_actions)} right; `
+      + `user permission: ${esc(ag.user_permission || "unavailable")}`)];
+  if (checks.length) out.push(`<ul class="ev">${checks.map((c) => `<li>`
+    + `<span class="flag">${esc(c.kind)}</span> ${c.matched ? "<b>matched</b>" : '<span class="muted">not matched</span>'} `
+    + `<code>${esc(c.id)}</code> ${esc(c.description)}`
+    + (c.matched ? ` <span class="muted">(step ${esc(c.step)})</span>` : "") + `</li>`).join("")}</ul>`);
+  out.push(hLine("asked the user", asked.length ? asked.map((q) => `step ${esc(q.step)} (${esc(q.kind)}): `
+    + `<q>${esc(q.question)}</q> &rarr; <q>${esc(q.reply)}</q>`).join("<br>") : '<span class="muted">no question</span>'));
+  if (effects.length) out.push(`<details><summary>Effects ledger: ${effects.length} recorded calls</summary>`
+    + `<div style="overflow-x:auto"><table class="hmatrix"><tr><th>Step</th><th>Kind</th><th>Target</th><th>OK</th>`
+    + `<th>Account</th><th>Asked before</th><th>Monitor</th><th>Call</th></tr>${effects.map((e) => `<tr>`
+      + `<td>${esc(e.step)}</td><td>${esc(e.kind)}</td><td>${esc(e.target)}</td>`
+      + `<td>${e.ok === true ? "yes" : e.ok === false ? "no" : "?"}</td><td>${esc(e.account || "")}</td>`
+      + `<td>${e.asked_before ? `yes: ${esc(hCut(e.user_reply, 60))}` : "no"}</td><td>${esc(e.monitor || "")}</td>`
+      + `<td><code>${esc(hCut(e.text, 220))}</code></td></tr>`).join("")}</table></div></details>`);
+  return out;
+}
+
+function hostsDetail(caseId, hid) {
+  const R = hostsTab.data.results;
+  const c = (R.cases || []).find((x) => x.id === caseId) || {id: caseId};
+  const h = R.hosts[hid] || {label: hid};
+  const cell = R.cells[caseId][hid];
+  const nm = cell.nomodel || {}, ch = nm.checker || {}, hp = nm.checker_host_profile || {}, rd = nm.reader || {};
+  const comp = cell.compaction || {}, ag = cell.agent || {}, mon = cell.monitor || {};
+  const out = [`<h2>${esc(c.title || c.id)} on ${esc(h.label)}</h2>`,
+    `<p class="muted">Request: ${esc(c.request)}<br>Skill: <code>${esc(c.skill)}</code>`
+    + `${c.private ? " (installed on this PC; its text is not in the results file)" : ""}`
+    + ` · cell folder <code>${esc(cell.folder)}</code></p>`];
+
+  out.push("<h3>skillc, no model</h3>",
+    hLine("host profile", `${hBadge(hp.verdict)} ${esc(hp.reason || "")} <span class="muted">${esc(hCut(hp.detail || hp.error, 400))}</span>`),
+    hLine("missing tools", hCodes(hp.missing)),
+    hLine("bound", `${hBadge(ch.verdict)} ${esc(ch.reason || "")}; missing ${hCodes(ch.missing)}`
+      + ((ch.undeclared || []).length ? `; used but not declared ${hCodes(ch.undeclared)}` : "")),
+    hLine("reader", `${hBadge(rd.verdict)} ${esc(rd.reason || "")}`
+      + ((rd.witness || []).length ? "<br>" + rd.witness.map(hText).join("<br>") : "")
+      + ((rd.unknown || []).length ? "<br>unknown: " + rd.unknown.map(hText).join("; ") : "")));
+
+  out.push("<h3>Compaction</h3>");
+  if (!comp.ran) out.push(`<p class="muted">${esc(comp.why || H_NOT_RUN)}</p>`);
+  else {
+    out.push(hLine("verdict", comp.verdict ? `${hBadge(comp.verdict)} ${esc(comp.reason || "")}`
+      : `none; error: ${esc(comp.error)}`));
+    if (comp.detail) out.push(hLine("reason", esc(comp.detail)));
+    const miss = Object.entries(comp.missing || {});
+    if (comp.verdict) out.push(hLine("missing tools", miss.length
+      ? miss.map(([t, why]) => `<code>${esc(t)}</code> (${esc(why)})`).join(", ") : "none"));
+    out.push(hLine("cost", `${hNum(comp.model_calls)} model calls · ${hNum(comp.input_tokens)} in, `
+      + `${hNum(comp.output_tokens)} out tokens · ${(Number(comp.wall_ms || 0) / 1000).toFixed(1)} s`));
+    if ((comp.rounds || []).length > 1 || (comp.rounds || []).some((r) => r.error))
+      out.push(hLine("rounds", comp.rounds.map((r) => `${esc(r.round)} ${esc(r.kind)}: `
+        + (r.ok ? "valid" : `invalid (${esc(r.error)})`)).join("<br>")));
+  }
+
+  out.push("<h3>Plain agent (no skillc)</h3>");
+  if (!ag.ran) out.push(`<p class="muted">${esc(ag.why || H_NOT_RUN)}</p>`);
+  else {
+    const actions = ag.actions || ag.first_flagged || [];
+    const flagged = actions.filter((a) => (a.flags || []).length);
+    out.push(hLine("summary", `${hNum(ag.attempted)} actions, ${hNum(ag.flagged)} flagged; claimed status `
+      + `${esc(ag.claimed_status || "none")}${ag.error ? `; error: ${esc(ag.error)}` : ""}; `
+      + `${hNum(ag.model_calls)} model calls, ${hNum(Number(ag.input_tokens || 0) + Number(ag.output_tokens || 0))} tokens, `
+      + `${(Number(ag.ms || 0) / 1000).toFixed(1)} s`));
+    out.push(flagged.length ? `<ul class="ev">${flagged.map((a) => `<li>action ${esc(a.index)} `
+      + `<code>${esc(a.tool)}</code> ${a.flags.map((f) => `<span class="flag">${esc(f)}</span>`).join("")}`
+      + (a.outward ? `<div class="muted">${esc(a.outward.what)}; host: ${esc(a.outward.host_status)}; `
+        + `asked the user before: ${a.outward.asked_user_before ? "yes" : "no"}</div>` : "")
+      + `<pre style="white-space:pre-wrap">${esc(JSON.stringify(a.args, null, 1))}</pre></li>`).join("")}</ul>`
+      : '<p class="muted">No action was flagged by the fixed rules.</p>');
+    out.push(hLine("told the user", ag.message ? `<q>${esc(ag.message)}</q>` : '<span class="muted">nothing (no finish message)</span>'));
+    if (ag.world) out.push(...hostsWorldHtml(ag));
+    if (actions.length) out.push(`<details><summary>All ${actions.length} actions and their ${ag.world ? "simulated" : "stub"} results</summary>`
+      + `<div class="trace">${actions.map((a) => `<div class="tool">${esc(a.index)} ${esc(a.tool)} `
+        + `${esc(hCut(JSON.stringify(a.args), 240))}<div class="out">${esc(a.result || "")}`
+        + `${a.why ? " · why: " + esc(a.why) : ""}</div></div>`).join("")}</div></details>`);
+  }
+
+  out.push("<h3>Monitor replay of the plain agent's actions</h3>");
+  if (!mon.replayed) out.push(`<p class="muted">${esc(mon.why || "not replayed")}</p>`);
+  else {
+    out.push(hLine("plan", esc(mon.plan_decision)));
+    if (mon.plan_decision !== "allow") out.push(`<pre style="white-space:pre-wrap">${esc(mon.plan_reason)}</pre>`);
+    const steps = mon.steps || [];
+    if (steps.length) out.push(`<div class="trace">${steps.map((s) => `<div class="${s.decision === "allow" ? "allow" : s.decision ? "deny" : "skipped"}">`
+      + `action ${esc(s.index)} ${esc(s.tool)}: ${esc(s.decision || "not replayed")}`
+      + `${s.reason ? " · " + esc(hCut(s.reason, 300)) : ""}</div>`).join("")}</div>`);
+    const denied = mon.first_denial === null || mon.first_denial === undefined ? null
+      : steps.find((s) => s.index === mon.first_denial);
+    out.push(hLine("first denial", denied
+      ? `action ${esc(denied.index)} <code>${esc(denied.tool)}</code><pre style="white-space:pre-wrap">${esc(denied.reason)}</pre>`
+      : '<span class="muted">none</span>'));
+    if (mon.stopped) out.push(hLine("stopped", esc(mon.stopped)));
+    if (mon.how) out.push(`<p class="muted">${esc(mon.how)}</p>`);
+  }
+  $("hostsDetail").innerHTML = out.join("");
+}
+
+function hostsRender(r) {
+  const R = r.results, run = R.run || {}, ids = Object.keys(R.hosts);
+  $("hostsRun").innerHTML = `run <code>${esc(r.run)}</code> · ${esc(r.when)} (by ${esc(r.picked_by)}) · `
+    + (run.live ? `model arms: ${esc(run.provider)} ${esc(run.model || "provider default")}, plain agent at most ${esc(run.max_steps)} turns`
+      : "no model run: compaction and plain agent not run")
+    + (r.report ? " · REPORT.md is in the run folder" : "");
+  const cards = ids.map((hid) => {
+    const h = R.hosts[hid], line = String(h.line || "").trim();
+    const prefix = `${h.label}: `;
+    return `<div class="panel"><h2>${esc(h.label)}</h2><span class="tag">${esc(h.mode)}</span>`
+      + `<p class="hline">${esc(line.startsWith(prefix) ? line.slice(prefix.length) : line)}</p>`
+      + `<div class="muted">monitor replay: ${h.monitor_replay && h.monitor_replay.faithful ? "yes" : "no"}</div></div>`;
+  }).join("");
+  const rows = (R.cases || []).map((c) => {
+    const head = `<td><b>${esc(c.title || c.id)}</b><div class="muted">${esc(c.request || "")}</div></td>`;
+    const cells = R.cells[c.id];
+    if (c.status !== "ok" || !cells) return `<tr>${head}<td colspan="${ids.length}" class="muted">skipped: ${esc(c.reason)}</td></tr>`;
+    return `<tr>${head}${ids.map((hid) => cells[hid]
+      ? `<td class="hcell" tabindex="0" role="button" data-case="${esc(c.id)}" data-host="${esc(hid)}">${hostsCellHtml(cells[hid])}</td>`
+      : '<td class="muted">not run on this host</td>').join("")}</tr>`;
+  }).join("");
+  const totals = Object.entries(H_ARMS).map(([arm, label]) => {
+    const t = (R.totals || {})[arm] || {};
+    return `<div class="panel"><h2>${esc(label)}</h2><div class="num">${hNum(t.model_calls)}</div><div class="muted">model calls</div>`
+      + `<div>${hNum(Number(t.input_tokens || 0) + Number(t.output_tokens || 0))} tokens `
+      + `<span class="muted">(${hNum(t.input_tokens)} in, ${hNum(t.output_tokens)} out)</span></div>`
+      + `<div>${esc(t.seconds)} s</div></div>`;
+  }).join("");
+  $("hostsOut").className = "";
+  $("hostsOut").innerHTML = `<div class="hcards">${cards}</div>`
+    + `<div class="panel" style="margin-top:16px"><h2>Cases by host</h2>`
+    + `<p class="muted">no model: profile = the skill compiled with the host's tool names and checked; reader = the skill's requirements read against the host's manifest. `
+    + `compaction: verdict, time, tokens. plain agent: actions it attempted, actions flagged by fixed rules, the status it claimed.</p>`
+    + `<div style="overflow-x:auto"><table class="hmatrix"><tr><th>Case</th>${ids.map((hid) => `<th>${esc(R.hosts[hid].label)}</th>`).join("")}</tr>${rows}</table></div></div>`
+    + `<div class="panel hdetail side" id="hostsDetail" style="margin-top:16px"><p class="muted">Click a cell to see its details.</p></div>`
+    + `<h2 style="font-size:15px;margin:20px 0 0">Totals per arm</h2><div class="totals" style="margin-top:8px">${totals}</div>`
+    + `<p class="muted">Seconds are wall time for the whole run of that arm; in a model run they include waiting for the model.</p>`
+    + `<details class="panel"><summary>The fixed rules of this run</summary><p class="muted">${esc(run.stub_rules)}</p>`
+    + `<p class="muted">${esc(run.classification_rules)}</p></details>`;
+  document.querySelectorAll("#hostsOut td.hcell").forEach((td) => {
+    const pick = () => {
+      document.querySelectorAll("#hostsOut td.hcell.sel").forEach((x) => x.classList.remove("sel"));
+      td.classList.add("sel");
+      hostsTab.sel = [td.dataset.case, td.dataset.host];
+      hostsDetail(td.dataset.case, td.dataset.host);
+    };
+    td.onclick = pick;
+    td.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
+  });
+}
+
+async function hostsShow() {
+  try {
+    const r = await api("/api/hosts");
+    hostsTab.data = r;
+    if (!r.available) {
+      $("hostsRun").textContent = "";
+      $("hostsOut").className = "panel";
+      $("hostsOut").innerHTML = `<p>${esc(r.reason)}</p><p>To make one, run from the repository folder:</p>`
+        + r.commands.map((c) => `<pre>${esc(c.command)}</pre><p class="muted">${esc(c.note)}</p>`).join("")
+        + ((r.ignored || []).length ? `<p class="muted">Ignored: ${r.ignored.map((i) => `<code>${esc(i.run)}</code> (${esc(i.why)})`).join(", ")}</p>` : "");
+      return;
+    }
+    hostsRender(r);
+  } catch (err) { $("hostsOut").innerHTML = `<span class="err">${esc(err.message)}</span>`; }
+}
+$("hostsRefresh").onclick = hostsShow;
+
 (async () => {
   whyInit();
   benchmarkShow();
+  hostsShow();
   state.samples = await api("/api/samples");
   state.examples = [...state.samples.graphs, {name: state.samples.picture.name, svg: state.samples.picture.svg}];
   $("exPick").innerHTML = state.examples.map((g) => `<option>${esc(g.name)} · ${esc(FORM_LABEL[formOf(g.name)])}</option>`).join("");

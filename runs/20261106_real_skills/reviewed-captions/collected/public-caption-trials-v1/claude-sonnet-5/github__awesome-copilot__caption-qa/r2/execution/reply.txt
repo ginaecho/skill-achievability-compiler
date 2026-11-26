@@ -1,0 +1,14 @@
+All schema requirements, edge cases, and boundary conditions verified against the actual sandbox.
+
+## Summary
+
+I inspected the real input at `/inputs/captions.srt` (3 cues, LF-terminated, no BOM) and wrote `/work/check_captions.py` (5,217 bytes, well under the 32,768-byte limit), a standard-library-only Python 3 CI checker implementing exactly the declared-adult-numeric-limits branch (20 cps, 42 cpl, ≤2 lines, duration in [5/6 s, 7 s], ≥2-frame gap at 24 fps, overlap detection, no retiming/style/certification logic).
+
+Key implementation choices, verified by actual runs:
+- **Exact integer-ms arithmetic**: duration and gap thresholds (5/6 s and 2/24 s) are compared via cross-multiplied integers (`dur_ms*6 >= 5000`, `gap_ms*12 >= 1000`) with no floating point or tolerance — confirmed boundary cases 833ms vs 834ms, 7000ms vs 7001ms, and 83ms vs 84ms gaps resolve exactly as specified.
+- **CPS** compared only when duration > 0, via `characters*1000 > MAX_CPS*dur_ms` to avoid division; zero-duration cues fail `duration` without a ZeroDivisionError.
+- **Overlap vs gap**: negative gap → `overlap`; nonnegative under threshold → `gap`; assigned to the earlier cue.
+- **Parsing**: UTF-8 with optional BOM (`utf-8-sig`), both LF and CRLF normalized, angle-bracket and brace-backslash tags stripped, trailing whitespace trimmed per line, whitespace-only lines dropped, leading spaces preserved, cue ordinal is 1-based position (not the SRT identifier — tested non-consecutive IDs 100/250 → output cue 1/2).
+- **Output**: single-line JSON to stdout, nothing to stderr, exact required top-level and per-cue keys, `issues` sorted/unique, empty input yields `total:0` and exit 0.
+
+Tested against the real file plus synthetic edge cases (overlap, zero duration, multi-line with tags, long lines, exact boundary timings, CRLF+BOM, non-consecutive cue numbers, whitespace-only lines) — all behaved as specified. Exit code 1 on the real input cue-2 gap failure is a correctly reported defect, not a task failure, per the instructions.

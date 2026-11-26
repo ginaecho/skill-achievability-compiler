@@ -1,0 +1,22 @@
+```ce
+Skill `instruction-file-migration-only`.
+Roles: `agent`.
+Tool `inspect_instruction_paths` (owner `agent`): via `execute_python`; adds `paths_inspected`, `claude_entry_present`.
+Tool `copy_claude_bytes_to_agents_file` (owner `agent`): via `execute_python`; requires `paths_inspected` and `claude_entry_present`; adds `agents_is_regular_file`, `claude_bytes_preserved_in_agents`.
+Tool `attempt_remove_claude_entry` (owner `agent`): via `execute_python`; requires `paths_inspected` and `claude_entry_present`; adds `claude_removal_attempted`.
+Tool `verify_migration_state` (owner `agent`): via `execute_python`; requires `claude_removal_attempted` and `agents_is_regular_file`; adds `result_observed`.
+Tool `report_success_result` (owner `agent`): via `reply`; requires `result_observed` and `claude_path_absent`; adds `result_reported`.
+Tool `report_unresolved_result` (owner `agent`): via `reply`; requires `result_observed` and not `claude_path_absent`; adds `unresolved_migration_reported`, `result_reported`.
+Initially true: none.
+Goal: all of (`paths_inspected`, `agents_is_regular_file`, `claude_bytes_preserved_in_agents`, `claude_removal_attempted`, `result_reported`, any of (`claude_path_absent`, `unresolved_migration_reported`)).
+Protocol:
+  - `agent` uses `inspect_instruction_paths`.
+  - `agent` uses `copy_claude_bytes_to_agents_file`.
+  - `agent` uses `attempt_remove_claude_entry`.
+  - `agent` uses `verify_migration_state`.
+  - `agent` chooses one of (external):
+    - branch `old_path_removed` (assuming `claude_path_absent`):
+      - `agent` uses `report_success_result`.
+    - branch `old_path_still_exists` (assuming not `claude_path_absent`):
+      - `agent` uses `report_unresolved_result`.
+```

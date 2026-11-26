@@ -1,0 +1,69 @@
+"""Independent goal checks; never included in compiler or executor prompts."""
+import hashlib
+import json
+import re
+
+MUTATION = "trailofbits__skills__mutation-testing"
+
+
+def mutation_reference(inputs: dict[str, bytes]) -> dict:
+    if set(inputs) != {"mewt-results.json", "mewt-status.txt"}:
+        raise ValueError("Mutation analysis requires both frozen public exports")
+    sections = inputs["mewt-status.txt"].decode().split("Campaign-Wide Summary:")
+    if len(sections) != 2:
+        raise ValueError("Expected one campaign-wide mutation summary")
+    totals = re.findall(r"Mutants:\s*(\d+) total,\s*(\d+) tested", sections[1])
+    outcomes = re.findall(
+        r"Outcomes:\s*(\d+) caught,\s*(\d+) uncaught,\s*(\d+) timeout,\s*(\d+) skipped",
+        sections[1])
+    if len(totals) != 1 or len(outcomes) != 1:
+        raise ValueError("Mutation summary lacks unambiguous campaign counts")
+    total, tested = map(int, totals[0])
+    caught, uncaught, timeout, skipped = map(int, outcomes[0])
+    if total != caught + uncaught + timeout + skipped or tested != caught + uncaught + timeout:
+        raise ValueError("Mutation campaign counts do not reconcile")
+    rows = json.loads(inputs["mewt-results.json"])["results"]
+    grouped = {}
+    seen = set()
+    for row in rows:
+        identifier = row["mutant"]["id"]
+        if (type(identifier) is not int or identifier in seen
+                or row["outcome"]["mutant_id"] != identifier
+                or row["outcome"]["status"] != "Uncaught"):
+            raise ValueError("Expected unique, matching uncaught mutation records")
+        seen.add(identifier)
+        grouped.setdefault(row["target"]["path"], []).append(identifier)
+    if len(seen) != uncaught:
+        raise ValueError("Public export does not contain every reported uncaught mutant")
+    return {
+        "campaign": {"total": total, "tested": tested, "caught": caught,
+                     "uncaught": uncaught, "timeout": timeout, "skipped": skipped},
+        "exported_uncaught_ids": sorted(seen),
+        "exported_uncaught_by_target": {path: sorted(ids) for path, ids in grouped.items()},
+        "kill_rate": {"numerator": caught, "denominator": caught + uncaught},
+        "equivalence": "not_assessed",
+    }
+
+
+def _unique_fields(pairs):
+    result = {}
+    for name, value in pairs:
+        if name in result:
+            raise ValueError(f"Duplicate JSON field: {name}")
+        result[name] = value
+    return result
+
+
+def verify_mutation_summary(inputs: dict[str, bytes], actual: bytes) -> dict:
+    expected = json.dumps(mutation_reference(inputs), sort_keys=True, allow_nan=False)
+    try:
+        parsed = json.loads(actual.decode(), object_pairs_hook=_unique_fields)
+        canonical = json.dumps(parsed, sort_keys=True, allow_nan=False)
+    except (ValueError, RecursionError) as error:
+        return {"passed": False, "kind": "mutation_export_summary", "error": str(error)}
+    return {
+        "passed": canonical == expected,
+        "kind": "mutation_export_summary",
+        "actual_sha256": hashlib.sha256(actual).hexdigest(),
+        "expected_canonical_sha256": hashlib.sha256(expected.encode()).hexdigest(),
+    }

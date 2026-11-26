@@ -1,0 +1,20 @@
+I wrote `/work/shopify_webhook.py` and tested it in the sandbox. All checks pass.
+
+**The module** contains only three imports (`base64`, `hashlib`, `hmac`) and `verify_webhook(raw_body: bytes, hmac_header: str | None, secret: str) -> bool`:
+- It returns `False` if `hmac_header` is `None`, empty, not a string, or contains non-ASCII characters. Checking for non-ASCII first matters because `hmac.compare_digest` raises an error on non-ASCII text.
+- Otherwise it computes HMAC-SHA256 over the raw body bytes exactly as received, using `secret.encode("utf-8")` as the key. It Base64-encodes the result and compares it with the header bytes using `hmac.compare_digest`.
+
+It differs from the original JavaScript `verifyWebhook` in three ways. The original reads `process.env`, but the secret is now passed in as an argument. It compared values with `===`, which can leak timing information, and that's now a timing-safe comparison. And there's no Express request object; the function takes the raw body and header directly.
+
+**Checks run:**
+- **Import:** importing the module in a fresh, isolated interpreter exited with code 0 and printed nothing. Its top level holds only the imports and one function definition.
+- **Published reference value:** a known HMAC-SHA256 test value from the RFC 4231 standard (key `"Jefe"`, test case 2), Base64-encoded, returns `True`. Changing the secret's capitalisation or adding one byte to the body makes it return `False`.
+- **Values I computed myself:** a secret with a non-ASCII character and an emoji, and a non-UTF-8 body containing `\r\n`, `\xff` and `\x00`, returns `True`. An empty body with its correct value also returns `True`.
+- **Should return `False`, and did, without raising an error:** a `None` header, an empty header, non-ASCII headers, a correct value with a trailing space, a hex digest instead of Base64, a re-serialized JSON body, and a value built from a Latin-1-encoded secret instead of UTF-8.
+- **Comparison method:** a mock confirmed that `hmac.compare_digest` is called.
+
+Two test-script mistakes came up during the run. One was a missing `os` import in my test code. The other was a test that wrongly failed because the non-ASCII secret was garbled when it reached the sandbox. I rewrote that test using escape sequences, and it passed.
+
+`/inputs/app-development.md` was only read, never changed; it is still read-only (mode `0o100444`). Nothing was refused.
+
+One edge case: a secret that can't be encoded as UTF-8 (a Python string with an unpaired surrogate character) will raise an error. You asked for no-raise behaviour only for bad header values, so I left this alone.

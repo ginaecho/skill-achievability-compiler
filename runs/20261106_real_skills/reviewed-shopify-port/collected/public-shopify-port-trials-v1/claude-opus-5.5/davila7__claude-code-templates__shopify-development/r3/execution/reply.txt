@@ -1,0 +1,21 @@
+I wrote `/work/shopify_webhook.py` with `verify_webhook(raw_body: bytes, hmac_header: str | None, secret: str) -> bool`, and all 20 local checks passed.
+
+**How it works:**
+- **Hash:** it computes HMAC-SHA256 over the exact `raw_body` bytes, using `secret` encoded as UTF-8 as the key, and Base64-encodes the result. The body is never parsed or changed.
+- **Comparison:** it encodes the header as ASCII and compares it to the expected value with `hmac.compare_digest`. The match must be exact: no trimming, case changes or padding fixes.
+- **Bad headers:** it returns `False` without raising when the header is `None`, empty or not a string, contains non-ASCII characters, or doesn't match.
+- **Extra safeguards I added:** it also returns `False` if the body isn't bytes-like (`bytes`, `bytearray` or `memoryview`), if the secret isn't a string, or if the secret can't be encoded as UTF-8. The task didn't ask for these. One trade-off: if a caller mistakenly passes the body as a `str`, it fails quietly instead of raising an error.
+- **Module contents:** only a docstring, three standard-library imports (`base64`, `hashlib`, `hmac`) and the function. A separate parse confirmed nothing else runs at module level.
+
+**What the 20 checks covered (run in a separate Python process):**
+- **Import:** importing the module printed nothing, opened no files and made no network connections. A plain import also exited cleanly with no output. Python's own `__pycache__` folder appeared in `/work`; that comes from the interpreter, not from the module.
+- **Known vector:** the published RFC 4231 test case 2 (key `"Jefe"`, message `"what do ya want for nothing?"`) returned `True`. Its expected value is `W9zBRr9gdU5qBCQmCJV1x1oAPwidJzmDnexYuWTsOEM=`.
+- **Vectors I computed:** a JSON body containing UTF-8 characters with a non-ASCII secret, an empty body, all 256 byte values, and an empty secret all verified as `True`.
+- **Rejections (all `False`):**
+  - a `None`, empty or non-ASCII header
+  - a header with leading or trailing spaces
+  - a header with its `=` padding removed, hex output instead of Base64, or changed letter case
+  - a body with one extra byte, or re-serialized JSON
+  - a wrong secret, a lossy re-encoding of the secret, or a garbage header
+
+One test-script line failed because I hadn't imported `os` in it. It wasn't checking the module, and I reran it successfully. `/inputs/app-development.md` is still read-only and owned by root, and I did not modify it. No operation was refused.

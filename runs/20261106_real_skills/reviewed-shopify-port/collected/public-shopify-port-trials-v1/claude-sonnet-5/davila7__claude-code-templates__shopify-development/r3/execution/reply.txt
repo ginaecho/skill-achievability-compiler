@@ -1,0 +1,36 @@
+All tests passed.
+
+**Work performed:**
+
+1. Read `/inputs/app-development.md` and located the `verifyWebhook` JavaScript function in the "Webhook Handler" section (uses `crypto.createHmac("sha256", secret).update(body).digest("base64")` compared to the `x-shopify-hmac-sha256` header).
+
+2. Wrote `/work/shopify_webhook.py` with the ported implementation:
+```python
+import base64
+import hmac
+import hashlib
+
+
+def verify_webhook(raw_body: bytes, hmac_header: str | None, secret: str) -> bool:
+    if not hmac_header:
+        return False
+    try:
+        hmac_header.encode("ascii")
+    except UnicodeEncodeError:
+        return False
+
+    digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode("ascii")
+
+    return hmac.compare_digest(hmac_header, expected)
+```
+
+3. Ran real checks in a fresh subprocess against self-computed test vectors:
+   - Import captured with stdout/stderr redirected — produced zero output, confirming no side effects on import.
+   - Correct HMAC → `True`.
+   - Wrong secret, tampered body, `None` header, empty header, non-ASCII header, near-miss header (extra `=`) → all `False`.
+   - Empty body case with correct digest → `True`.
+   - Unicode secret with raw binary body (including `\x00`, `\xff` bytes) → correct digest `True`, wrong secret `False`.
+   - Parsed the module with `ast` and asserted every top-level statement is only an `Import`/`ImportFrom`/`FunctionDef` (no stray executable statements at module level).
+
+All assertions passed (`ALL TESTS PASSED`, exit code 0). No files outside `/work` were modified; `/inputs` was only read.

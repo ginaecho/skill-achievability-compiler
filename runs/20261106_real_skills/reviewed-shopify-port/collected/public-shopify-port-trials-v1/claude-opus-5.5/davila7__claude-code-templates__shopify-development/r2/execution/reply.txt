@@ -1,0 +1,31 @@
+I wrote `/work/shopify_webhook.py` with `verify_webhook(raw_body, hmac_header, secret)`, ported from the `verifyWebhook` function in `/inputs/app-development.md`. All local checks passed when run in a fresh, isolated Python process.
+
+**How it works:**
+- It computes HMAC-SHA256 over the exact `raw_body` bytes, using `secret` encoded as UTF-8 as the key. The body is never parsed, decoded or re-serialized.
+- It Base64-encodes the result and compares it to the header with `hmac.compare_digest`.
+- It returns `False` without raising when the header is `None`, empty, contains non-ASCII characters, or doesn't match. It checks for non-ASCII before comparing, because `compare_digest` would raise an error on a non-ASCII string.
+- At module level there are only standard-library imports (`base64`, `hashlib`, `hmac`) and the one function.
+
+**Differences from the original JavaScript:**
+- The JS reads the secret from `process.env`. The port takes it as a parameter, so importing the module reads no environment.
+- The JS compares with `===`, which isn't constant-time. The port uses `compare_digest`.
+- A body passed as a `bytearray` or `memoryview` also works. Wrong types (a header that is a number or bytes, or a body or secret of the wrong type) return `False` instead of raising.
+
+**Checks run:**
+- **Importing the module:** it printed nothing and made no `open` or `os.getenv` calls. Socket use wasn't actually tested, but the module imports nothing that does networking. The module contains only imports and the function.
+- **Published test vector:** the standard HMAC-SHA256 example from RFC 4231 (case 2, key `"Jefe"`) gives `W9zBRr9gdU5qBCQmCJV1x1oAPwidJzmDnexYuWTsOEM=`, and the function accepts it.
+- **Vectors I computed myself:**
+  - **Accepted:** a JSON body containing UTF-8 text with a non-ASCII secret, an empty body, and a body made of all 256 byte values (not valid UTF-8).
+  - **Rejected (bodies):** the same JSON re-serialized, and the body with a trailing newline added.
+  - **Rejected (secrets and headers):**
+    - a different secret
+    - `None` and an empty header
+    - a header with whitespace added at either end
+    - a header with its trailing `=` padding removed
+    - a lowercased header
+    - non-ASCII and NUL characters
+    - the URL-safe Base64 and hex forms of the signature
+    - a number or bytes passed as the header
+    - every single-character change to the correct header
+
+I only read `/inputs` and wrote nothing to it. No operation was refused.

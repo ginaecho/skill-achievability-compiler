@@ -1,0 +1,22 @@
+I've written `/work/check_captions.py`, a 4,061-byte checker that uses only the Python standard library, and ran it on `/inputs/captions.srt`. It found 3 cues: 2 pass and 1 fails, so it exits with code 1, printed one JSON object and wrote nothing to stderr.
+
+**The failure is cue 2** (31,500–34,100 ms, "oh look"). Cue 3 starts at exactly 34,100 ms, so the gap between them is 0 ms. The minimum is two frames at 24 fps, about 83.3 ms. Under your rule, a gap problem belongs to the earlier cue, so cue 2 gets the `gap` issue. Cues 1 and 3 have no issues. That exit code 1 is the checker reporting a real problem in the captions, not a fault in the script.
+
+**How it checks:** every limit is compared in whole milliseconds, with no rounding or tolerance:
+- **Duration** fails if `dur*6 < 5000` (under 5/6 second) or `dur > 7000`.
+- **Reading speed** fails if `chars*1000 > 20*dur`, and is only checked when the duration is above zero.
+- **Gap** fails if `0 ≤ gap` and `gap*24 < 2000`. A negative gap is reported as `overlap` instead.
+
+**Tests run on throwaway files (since deleted):**
+- **Empty input:** an empty file, or one holding only a byte-order mark, gives total 0 and exit 0.
+- **Duration:** exactly 833 ms fails and 834 ms passes; exactly 7,000 ms passes and 7,001 ms fails.
+- **Gaps:** 83 ms fails and 84 ms passes; an overlap is reported as `overlap`, not `gap`.
+- **Zero duration:** fails `duration` with no division error.
+- **Reading speed:** exactly 20 characters a second passes and 21 fails.
+- **Lines:** a 42-character line passes and 43 fails; three lines fail `line_count`.
+- **Text handling:** `<i>` and `{\an8}` tags are removed, trailing spaces and blank lines are dropped, leading spaces are kept, and accented letters and dashes count as one character each.
+- **Other:** cue identifiers that skip numbers or repeat work fine, and CRLF line endings and a byte-order mark give the same output.
+
+Two behaviours go beyond your spec. Running it without exactly one path prints a usage message and exits 2. A file that can't be read, isn't valid UTF-8 or has a broken timing line prints an error to stderr and exits 2, with no JSON.
+
+The input file is unchanged and nothing was installed. The checker doesn't retime captions or judge style, accessibility, sync or whether a broadcaster would accept the file.

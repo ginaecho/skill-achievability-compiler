@@ -1,0 +1,28 @@
+I edited `/work/batch.py` so every JSON record it writes to stderr now has an integer `sequence` field. It starts at 0 on each run and goes up by one per record, across start, progress, item-failed and summary events. I ran all eight scenarios plus a no-argument run, and stdout and exit codes match the original exactly.
+
+**The change:** All stderr output goes through one function, `emit`, so the edit is only there. It now keeps a counter, adds it as the last field of each record, then increments it. I didn't change processing, scenario names, defaults or exit codes. All existing fields stay in their original order, and `sequence` is added at the end.
+
+**Test results:** I saved a copy of the original file, ran the original and the edited version on the same inputs, then deleted the copy. `/work/batch.py` is the only file left in `/work`. For each run I captured stdout, stderr and the exit code separately. The live scenario was given a newline on stdin to release its test pause.
+
+| Scenario | Exit | Stderr events (sequence) |
+|---|---|---|
+| normal | 0 | start 0, progress 1, summary 2 |
+| mixed | 1 | start 0, progress 1, item-failed 2, progress 3, summary 4 |
+| partial-zero | 0 | start 0, item-failed 1, progress 2, summary 3 |
+| empty | 0 | start 0, summary 1 |
+| unknown | 0 | start 0, progress 1, summary 2 |
+| fail-fast | 1 | start 0, item-failed 1, summary 2 |
+| cancelled | 130 | start 0, summary 1 |
+| live | 0 | start 0, progress 1, progress 2, progress 3, summary 4 |
+| no argument (defaults to normal) | 0 | same as normal |
+
+For every run, these all matched the original:
+- **stdout:** byte for byte the same.
+- **Exit code and number of stderr records:** the same.
+- **Field values:** the same, apart from `elapsed_ms`, which is a timing value that varies between runs.
+- **Field order:** the same, with `sequence` added last.
+- **Sequence and summary:** `sequence` is always a whole number counting 0, 1, 2… with no gaps, and each run has exactly one summary.
+
+Two error cases also behave as before: an unknown scenario name still fails with `ValueError`, and the live scenario with no stdin input still fails with `RuntimeError`, both exit code 1. The file also passes `py_compile` (Python's syntax check).
+
+**What wasn't tested:** In these checks, output was only read after each process finished. So nothing new is shown about output appearing while a run is still going. The cancelled scenario is still the script's simulated cancellation, not a real Ctrl-C. I didn't run the bundled cross-language test script or any other downloaded scripts; I only ran the reviewed Python probe.

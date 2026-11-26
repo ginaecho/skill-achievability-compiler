@@ -1,0 +1,29 @@
+I edited `/work/batch.py` so every JSON record it writes to stderr now has an integer `sequence` field. It starts at 0 on each run and goes up by exactly one for each record, whether that record is start, progress, item-failed or summary. I ran all eight scenarios plus a no-argument run, and stdout, exit codes and processing behaved exactly as before.
+
+**The change** is all inside `emit()`, the one function that writes to stderr:
+```diff
++    sequence = 0
++
+     def emit(event, **fields):
+-        record = {..., **fields}
++        nonlocal sequence
++        record = {..., **fields, "sequence": sequence}
++        sequence += 1
+         print(json.dumps(record), file=sys.stderr, flush=True)
+```
+`sequence` is added as the last key, so each record's existing fields keep their order. Since every event goes through `emit()`, none can be missed. Nothing was imported or added.
+
+**Checks I ran:** I saved a copy of the original to `/tmp/batch_orig.py` and ran both versions as separate processes, sending a newline on stdin each time. For normal, mixed, partial-zero, empty, unknown, fail-fast, cancelled, live and the no-argument default, all of these held:
+- **Stdout:** byte-for-byte the same.
+- **Exit codes:** unchanged (0, 1, 0, 0, 0, 1, 130, 0, 0 in that order).
+- **Stderr records:** same number and same event order.
+- **Existing fields:** same names, and the same values apart from `elapsed_ms`, which is a timing value and wasn't compared exactly.
+- **`sequence`:** always an integer, exactly `0..n-1` (for example `[0..4]` for mixed and live, `[0, 1]` for empty and cancelled).
+
+Two error cases also behave as before: an unknown scenario name still fails with `ValueError` and exit code 1, and live with no stdin input still fails with `RuntimeError` and exit code 1, the same as the original.
+
+**What this doesn't cover:**
+- **Live output:** live was only run with all output read after the process finished. I didn't read output while it was still running, so this doesn't show progress appears in real time.
+- **Cancellation:** the cancelled scenario only fakes a cancel inside the script. No real signal was tested.
+
+I ran only the original probe and the edited `/work/batch.py`, with no other scripts, network access or dependencies.

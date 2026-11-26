@@ -1,0 +1,16 @@
+## Summary
+
+Created `/work/check_captions.py` (5,446 bytes, stdlib-only Python 3) implementing exactly the declared-adult-numeric-limits SRT CI checker specified:
+
+- Parses SRT with optional UTF-8 BOM, LF or CRLF line endings, non-consecutive cue identifiers.
+- Strips `<...>` and `{\...}` formatting tags, drops whitespace-only lines, rstrips each displayed line, preserves leading spaces, counts Unicode code points (not bytes).
+- Applies exact-integer-millisecond comparisons (no float tolerance): CPS via `characters*1000 > 20*duration_ms`; min duration via `duration_ms*3 >= 2500` (exact 5/6 s); max duration `<= 7000`; gap/overlap via `gap_ms*24` vs `2*1000` at 24 fps, gap/overlap attributed to the earlier cue, overlap (negative gap) reported as `overlap` not `gap`.
+- Outputs exactly one JSON object to stdout with the required top-level and per-cue keys, `issues` sorted/unique from the fixed vocabulary, every cue included (even passing, with empty `issues`).
+- Exits 1 if any cue has issues, 0 otherwise — including for an empty input (total 0, passed 0, failed 0, exit 0).
+
+**Verified by actually executing the script** (not merely inspecting code) against:
+- The real, unmodified `/inputs/captions.srt` (3 cues; cue #2 fails `gap` because cue 2 ends exactly when cue 3 starts, a 0-frame gap) — exit code 1, clean stdout JSON, empty stderr.
+- Synthetic edge cases run through the actual interpreter: empty file (exit 0), zero-duration cue, overlapping cues, exact frame/duration boundary pairs (833 ms fails vs 834 ms passes; 7000 ms passes vs 7001 ms fails; 83 ms gap fails vs 84 ms gap passes), >2 lines, >42-char lines, exact 20 cps boundary (pass) vs 21 (fail), formatting-tag stripping with leading-space preservation, BOM+CRLF handling, and true multi-byte UTF-8 code-point counting (confirmed by inspecting raw file bytes, after discovering and ruling out an unrelated mojibake artifact in how I constructed one test string, not in the checker itself).
+- Schema-validated the real output object's keys, enum membership, and sort/uniqueness of `issues` arrays programmatically.
+
+No network access, package installs, or writes to `/inputs` were attempted or needed. The only deliverable is the single file `/work/check_captions.py`, well under the 32,768-byte limit. The nonzero exit code on the real input reflects an actual caption gap defect, per the task's own note that this does not indicate task failure.

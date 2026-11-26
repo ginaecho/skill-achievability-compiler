@@ -1,0 +1,21 @@
+I created `/work/check_captions.py`, a standard-library Python 3 checker, and verified it against the real input and edge cases.
+
+**What it does:** Reads one SRT file path from argv, parses cues (handling BOM, LF/CRLF, non-consecutive cue IDs, angle-bracket and brace-backslash formatting tags, whitespace-only line dropping, leading-space preservation), and checks each cue against fixed declared adult numeric limits at 24 fps:
+
+- ≤20 cps, ≤42 chars/line, ≤2 lines, duration in [5/6 s, 7 s], inter-cue gap ≥2 frames, overlap always fails.
+- All comparisons use exact integer-millisecond cross-multiplication (e.g. `duration_ms*6 < 5000`, `gap_ms*24 < 2000`) — no floats, no tolerance.
+- Prints exactly one JSON object to stdout (fields: `standard`, `fps`, `total`, `passed`, `failed`, `cues[]` each with `cue`, `start_ms`, `end_ms`, `characters`, `line_lengths`, sorted-unique `issues`), nothing to stderr.
+- Exits 1 if any cue fails, 0 otherwise (including the empty-file case, verified).
+
+**Testing performed on the actual sandbox** (not simulated):
+- Real input `/inputs/captions.srt` (3 cues): exit 1, one cue flagged `gap` (0 ms gap between cues 2 and 3) — hand-verified the arithmetic matches.
+- Empty file → `total:0, exit 0`.
+- Zero-duration cue → `duration` failure, no div-by-zero.
+- Overlapping cues → `overlap` on the earlier cue, exit 1.
+- Gap boundary 83 ms (fails, below exact 2 frames = 83.333 ms) vs 84 ms (passes) — confirms no floating tolerance.
+- Duration boundary 833 ms (fails) vs 834 ms (passes) — confirms exact 5/6 s boundary.
+- Formatting tags (`<i>`, `{\an8}`) stripped, long line + 3-line cue → `duration`, `line_count`, `line_length` all correctly flagged.
+- Whitespace-only line dropped, leading spaces preserved.
+- CRLF line endings and non-consecutive cue identifiers (`5`, `100`) parsed correctly, cue numbering is 1-based ordinal not the SRT id.
+
+File is 6478 bytes (under the 32768 limit), valid UTF-8, compiles cleanly with `py_compile`. No input files were modified, no packages installed, no network access used.

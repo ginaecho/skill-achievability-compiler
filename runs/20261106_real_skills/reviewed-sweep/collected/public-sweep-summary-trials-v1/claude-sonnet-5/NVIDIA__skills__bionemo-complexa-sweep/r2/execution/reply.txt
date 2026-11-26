@@ -1,0 +1,29 @@
+I analyzed the supplied configuration-summary CSV fixture at `/inputs/summary_review.csv` and wrote the required ranked output to `/work/sweep_summary.csv` (comma-delimited UTF-8, header and column order exactly as specified). No inference was launched, no configs were generated, and no hardware was probed, per the requested scope.
+
+**Processing logic applied per row:**
+- `missing_counts` if `n_designs` or `n_passed` is empty (`review_15_4`)
+- else `invalid_counts` if either count fails `^-?[0-9]+$`, is negative, or `n_passed > n_designs` (`review_1_2`: negative n_designs; `review_15_2`: n_passed=11 > n_designs=10)
+- else `zero_denominator` if `n_designs == 0` (`review_05_4`)
+- else `valid`, with `success_rate = n_passed/n_designs` rounded half-up to 6 decimals
+
+**Result file (`/work/sweep_summary.csv`), 8 data rows preserved exactly once:**
+
+```
+config_id,temperature,replicas,n_designs,n_passed,mean_i_pae,success_rate,count_status
+review_1_8,1.0,8,25,20,5.0,0.800000,valid
+review_1_4,1.0,4,10,8,6.0,0.800000,valid
+review_15_8,1.5,8,20,14,,0.700000,valid
+review_05_8,0.5,8,50,30,7.0,0.600000,valid
+review_05_2,0.5,2,10,3,9.0,0.300000,valid
+review_05_4,0.5,4,0,0,,,zero_denominator
+review_15_2,1.5,2,10,11,4.0,,invalid_counts
+review_15_4,1.5,4,20,,8.0,,missing_counts
+review_1_2,1.0,2,-5,1,8.5,,invalid_counts
+```
+
+Ordering verification:
+- Valid rows ranked by exact (unrounded) success ratio descending: 0.8 (two ties), 0.7, 0.6, 0.3. The 0.8 tie broken by `mean_i_pae` ascending (5.0 before 6.0), giving `review_1_8` before `review_1_4`.
+- `review_15_8` has valid counts (14/20) but empty `mean_i_pae` — left blank, not replaced with 0, and participates in ranking by success ratio only (no tie to break).
+- Non-valid rows (`zero_denominator`, `invalid_counts` ×2, `missing_counts`) appended afterward, ordered purely by ascending lexical `config_id`: `review_05_4` < `review_15_2` < `review_15_4` < `review_1_2` (ASCII `'5' < '_'`).
+
+This is a labeled analysis of an unchanged upstream public evaluation fixture — no scientific or GPU-measured claims are made, and all empty/missing fields were preserved as-is rather than imputed.

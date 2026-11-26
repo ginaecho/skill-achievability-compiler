@@ -1,0 +1,27 @@
+I've created `/work/check_captions.py` and run it on the real `/inputs/captions.srt`. It prints one JSON object, nothing on stderr, and exits with code 1 because cue 2 fails the gap rule.
+
+**Result on the real input:** 2 of 3 cues pass.
+- **Cue 1** (27000–30730 ms): passes.
+- **Cue 2** (31500–34100 ms): fails `gap`. Cue 3 starts at exactly 34100 ms, so the gap is 0 ms, which is under the 2-frame minimum (about 83.3 ms at 24 fps). A zero gap is not an overlap.
+- **Cue 3** (34100–36570 ms): passes.
+
+The exit code of 1 is the checker correctly catching a real defect, not an error in the checker. I didn't retime anything, and the input file is unchanged.
+
+**How the checker works:**
+- It uses the fixed limits you gave: 24 fps, at most 20 characters a second, 42 characters a line and 2 lines, and 5/6 s to 7 s on screen.
+- All comparisons use whole milliseconds with no rounding or tolerance. For example, characters × 1000 must not exceed 20 × duration, and gap × 24 must be at least 2000.
+- Overlap counts as its own failure, not a gap failure. Gap and overlap failures go on the earlier cue.
+- Zero-duration cues fail `duration` and skip the characters-a-second check.
+
+**Edge cases I tested, all with the expected results:**
+- An empty file gives zero cues and exit code 0.
+- Exact limits behave as intended: 833 ms fails and 834 ms passes; a gap of 83 ms fails and 84 ms passes; 20 characters a second passes and 21 fails; 7000 ms passes and 7001 ms fails.
+- Zero duration fails `duration` without dividing by zero, and an overlap is reported correctly.
+- Formatting tags are removed and leading spaces kept; three lines fail `line_count`, and a 43-character line fails `line_length`.
+- A byte-order mark with CRLF line endings, and cue numbers that skip, are read correctly.
+
+**Choices I made beyond your spec:**
+- **Bad input:** if the file is unreadable, isn't valid UTF-8, has a block without a valid `HH:MM:SS,mmm --> HH:MM:SS,mmm` timing line, or has a cue that ends before it starts, the checker prints an error to stderr and exits with code 2. It prints no JSON in that case, so CI still fails.
+- **Blank lines inside a cue:** a block with no timing line that follows a cue is treated as more text for that cue. That covers cues containing a whitespace-only line.
+
+The file is 3,924 bytes and uses only the standard library. The test file I made during checking has been deleted, so `/work` now contains only `check_captions.py`. These are numeric checks only; they don't certify style, accessibility, audio sync or whether a broadcaster will accept the file.

@@ -1,0 +1,14 @@
+I found a counterexample showing that `canonicalize_url` is not idempotent, and saved it to `/work/counterexample.json`:
+
+```
+{"input": "%", "once": "%25", "twice": "%2525"}
+```
+
+**Why it happens:** the function lowercases the string, trims it, and then calls `urllib.parse.quote`. The `%` character isn't in its list of characters to leave alone, so every run encodes it again: `%` → `%25` → `%2525`. Any input containing `%` will keep growing each time the function is applied.
+
+**How I found and checked it:**
+- I read `/inputs/codec.py` first. It only imports `struct` and `urllib.parse`, so loading it was safe. I didn't change it.
+- I searched all strings of length 1 to 3 built from upper- and lowercase letters, space and `%`, using only the standard library. The first failure was the one-character input `%`.
+- After writing the file, I read it back. It has exactly the three fields (`input`, `once`, `twice`). Running the real function again confirmed that `once` and `twice` are its actual outputs and that they differ.
+
+My first run stopped with an error (a missing `import os`) before writing anything. The second run fixed that and finished. Nothing was installed and no network access was used.

@@ -1,0 +1,16 @@
+I built and verified `/work/roots.py`, a standard-library + SymPy CLI that:
+
+1. **Reads** the given Markdown path as inert text (no execution of fenced code, imports, or document instructions).
+2. **Scans** each physical line; only lines whose *stripped* text begins with `roots(` are processed (indentation before `roots(` is allowed; everything else, including stray mentions of the word, is ignored).
+3. **Extracts** the argument list by depth-tracking the parentheses (not naive regex), splits on the top-level comma, requires the second argument to be exactly `x`, and validates the first argument only contains digits, `x`, whitespace, `+ - * / ( )` (rejecting anything else, e.g. no negative exponents) before parsing it with SymPy's `parse_expr` — so only a bounded arithmetic mini-language is ever evaluated, never arbitrary document code.
+4. **Computes** the polynomial over the exact rational field (`Poly(..., domain='QQ')`), finds all linear factors via `factor_list()` to obtain every rational root and its multiplicity, then derives `residual_coefficients` by performing exact polynomial division of the **original** polynomial by each monic `(x - root)**multiplicity` factor in turn (not by normalizing scalars from `factor_list`), preserving the original leading scalar as required.
+5. **Formats** every coefficient and root as canonical reduced rational strings (bare integers when the denominator is 1, `p/q` with positive `q` otherwise), sorts `rational_roots` ascending, and emits a single JSON object `{"cases": [...]}` to stdout with nothing on stderr, exiting 0.
+
+Verification performed in the sandbox (fresh subprocess invocations, not inline claims):
+
+- Ran it against the real `/inputs/core-capabilities.md`: found the one `roots(x**3 - 6*x**2 + 9*x, x)` line embedded in a fenced code block, correctly ignoring all other code/prose, producing `{"cases": [{"coefficients": ["1","-6","9","0"], "rational_roots":[{"root":"0","multiplicity":1},{"root":"3","multiplicity":2}], "residual_coefficients":["1"]}]}`.
+- Built a synthetic multi-example document covering: repeated/duplicate examples, nested parentheses `(x-1)*(x+2)**3`, a bare nonzero constant (no roots, unchanged), a non-monic rational leading coefficient (`2*x**2-2`), a polynomial with fractional coefficients (`x/2 - 3/4`, verifying the leading-scalar-preserving residual = `1/2`), degree-8 `x**8-1` (residual `x**6+x**4+x**2+1`), extra internal whitespace inside the `roots(...)` call, an irreducible quadratic with no rational roots, indentation before `roots(`, and a decoy line `rootsx(...)` that must be skipped — all produced correct, independently hand/SymPy-checked results.
+- Ran a no-match document → `{"cases": []}`, exit 0, empty stderr.
+- Ran a 32-case batch (the stated maximum) → completed in ~4 s, well under the 15 s limit, exit 0, clean stderr.
+
+All runs used the real `python3 /work/roots.py <path>` CLI as a subprocess, not any inline/simulated result.

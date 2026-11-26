@@ -1,0 +1,15 @@
+I wrote `/work/query.sql`: one read-only SQLite `SELECT` with `WITH` clauses that uses only the Invoice, InvoiceLine, Track and Genre tables. I ran it against `/inputs/Chinook.sqlite` and it returns 39 rows for 24 countries, with the six columns in the requested order and names.
+
+**How the query works:**
+1. **`sold_lines`:** keeps invoice lines where `InvoiceDate >= '2021-01-01'` and `< '2022-01-01'`. Plain text comparison works because the dates are stored as `YYYY-MM-DD HH:MM:SS` text. Each line's revenue is `CAST(ROUND(UnitPrice*100) AS INTEGER) * Quantity`, so the price is rounded to cents before multiplying.
+2. **`country_genre`:** joins Genre and groups by `BillingCountry` and `GenreId`, adding up revenue in cents and `Quantity` (units).
+3. **`ranked`:** numbers the genres within each country by revenue (highest first), with ties going to the smaller `GenreId`. The final step keeps the top two per country and sorts by country, then rank.
+
+**Checks I ran:**
+- **Independent check:** the output matches a separate Python calculation on the original data.
+- **Changed quantities:** on three in-memory copies with random quantities from 1 to 7, the output still matched the Python calculation.
+- **No sales in 2021:** on an in-memory copy with the 2021 invoices deleted, the query returns no rows and no error.
+- **Size and steps:** the file is 1,558 bytes, and the query used at most about 40,500 virtual-machine steps per run (the limit is 2 million).
+- **Input database:** it was only opened read-only. Its timestamp is unchanged and its integrity check returns `ok`.
+
+**One choice for you:** the query only counts lines with `Quantity > 0`, since I read "sold" as at least one unit sold. With the current data this changes nothing, because every quantity is 1. If quantities could be zero, a genre or country with only zero-quantity lines would be left out instead of showing up with zero revenue. To include those, remove the `AND il.Quantity > 0` line.

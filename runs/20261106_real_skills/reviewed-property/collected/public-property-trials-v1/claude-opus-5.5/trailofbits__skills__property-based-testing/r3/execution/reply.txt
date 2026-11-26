@@ -1,0 +1,12 @@
+I found a counterexample showing `canonicalize_url` is not idempotent, and saved it to `/work/counterexample.json`:
+
+```
+{"input": "%", "once": "%25", "twice": "%2525"}
+```
+
+**Why it fails:** the function calls `quote(u.strip().lower(), safe="/:?#[]@!$&'()*+,;=")`. Since `%` isn't in the safe list, each call encodes it again. `%` becomes `%25` on the first call, and that `%` becomes `%2525` on the second. So any input containing `%` will break idempotence.
+
+**What I did:**
+- **Reviewed the module first:** I read `/inputs/codec.py` before loading it. It only imports `struct` and `urllib.parse.quote` and has no side effects. I loaded only that file and didn't change it.
+- **Searched within your limits:** I used only the standard library and tried strings from shortest to longest, built from upper- and lowercase letters, space and `%`. The one-character string `%` was the first one that failed.
+- **Checked the result:** I ran the function on the input once and twice and confirmed the two outputs differ. I then read the saved file back: it's a single JSON object with exactly three text fields, and running the function again on its `input` reproduces both stored values.

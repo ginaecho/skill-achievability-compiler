@@ -1,0 +1,20 @@
+I wrote `/work/query.sql`: one read-only SQLite `SELECT` with `WITH` clauses that uses only `Invoice`, `InvoiceLine`, `Track` and `Genre`. I ran it against `/inputs/Chinook.sqlite` and it returns 39 rows (top-two genres per country). An independent Python calculation gave exactly the same rows.
+
+**How the query works**
+1. **`period_lines`**: selects invoice lines dated from `'2021-01-01'` up to, but not including, `'2022-01-01'`. Dates are stored as text like `'2021-01-01 00:00:00'`, so comparing them as text works. Each line's revenue is `CAST(ROUND(UnitPrice * 100) AS INTEGER) * Quantity`, giving whole cents.
+2. **`country_genre`**: joins `Genre` and adds up revenue in cents (`revenue_cents`) and `SUM(Quantity)` (`units`) for each country and genre.
+3. **`ranked`**: numbers the genres within each country with `ROW_NUMBER()`, highest revenue first and smaller `GenreId` first when revenue is tied. The final `SELECT` keeps ranks 1 and 2, returns the six requested columns in order and sorts by country, then rank.
+
+First rows: `('Australia', 1, 'Rock', 891, 9, 1)` and `('Australia', 3, 'Metal', 297, 3, 2)`. All values come back as text or integers, as specified.
+
+**Other checks** (all run on in-memory copies of the database):
+- **Random quantities (1–7):** results still matched the Python calculation.
+- **All prices and quantities set equal, to force revenue ties:** ties were broken by the smaller `GenreId`, and results matched.
+- **No sales in the period:** the query returns the correct column names and no rows.
+- **Limits:** the file is 1,351 bytes, and the query takes about 37,000 SQLite steps, well under the 2 million limit.
+- **Input database:** opened read-only, and its checksum is the same as before.
+
+**Choices to be aware of:**
+- Lines with a null `BillingCountry` are left out so that `country` is always text. There are none in the current data.
+- Lines whose track has no matching `Genre` row are also left out, because the query requires a genre name.
+- The date filter assumes dates keep the current text format.

@@ -1,0 +1,38 @@
+The edit is complete and verified.
+
+## Summary
+
+**File modified:** `/work/batch.py` (edited in place, verified by actual execution in the sandbox — no patch narration).
+
+**Change:** Added a `sequence` integer field to the shared `emit()` helper. It is initialized to `0` once per process invocation and incremented by exactly one after each stderr JSON record is written (`start`, `progress`, `item-failed`, `summary`), via a single `nonlocal sequence` counter shared across all emit call sites.
+
+**Diff essence:**
+```python
+sequence = 0
+
+def emit(event, **fields):
+    nonlocal sequence
+    record = {"event": event, "total": total, **stats,
+              "elapsed_ms": round((time.monotonic() - started) * 1000),
+              "sequence": sequence, **fields}
+    sequence += 1
+    print(json.dumps(record), file=sys.stderr, flush=True)
+```
+No other lines changed; all existing fields, ordering of other keys, scenario names, argument defaults, stdout formatting, and exit-code logic are untouched.
+
+**Verification performed (actual subprocess runs, all 8 documented scenarios):**
+
+| scenario | exit code | stderr sequences | stdout preserved |
+|---|---|---|---|
+| normal | 0 | 0,1,2 | `{"results":[item-1,item-2,item-3]}` unchanged |
+| mixed | 1 | 0,1,2,3,4 | results list unchanged (item-1, item-4) |
+| partial-zero | 0 | 0,1,2,3 | results unchanged, exit still 0 despite failure |
+| empty | 0 | 0,1 | `{"results":[]}` |
+| unknown | 0 | 0,1,2 | `total:null` preserved, no fabricated ETA |
+| fail-fast | 1 | 0,1,2 | stops after first failure, `will_continue:false` |
+| cancelled | 130 | 0,1 | stdout empty (status `cancelled` skips result dump), exit 130 preserved |
+| live | 0 | 0,1,2,3,4 | fed `"\n"` on stdin to release the fixture gate exactly as the existing probe already required; no new liveness/timing claim made — this just reruns the probe's own documented release mechanism |
+
+All exit codes, event ordering, `processed = succeeded + failed + skipped` accounting, and stdout byte content match the pre-edit script exactly (confirmed by reading the original file first and diffing behavior, not by assumption). `sequence` starts at 0 and increases by exactly 1 per emitted stderr record in every scenario, with no gaps or resets. No new dependencies were added; only the standard library (`json`, `sys`, `time`) already in use. No real-signal cancellation or new live-output coverage is claimed — the `cancelled` and `live` scenarios exercise the same simulated `KeyboardInterrupt`/stdin-gate fixture logic that was already present in the script.
+
+Only `/work/batch.py` was executed, and only directly via `sys.executable`; no other downloaded or external script was run.

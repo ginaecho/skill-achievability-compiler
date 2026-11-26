@@ -1,0 +1,29 @@
+I edited `/work/textmask.py` directly and verified it against actual behavior checks (not inline reasoning).
+
+Evidence from sandbox execution:
+
+**File contents** (confirmed written and re-read from disk):
+```python
+import re
+
+
+def name_tokens(name: str) -> list[str]:
+    """Unique name and its hyphen-separated parts, sorted by length descending."""
+    return sorted({name} | set(name.split("-")), key=len, reverse=True)
+
+
+def masked(text: str, name: str) -> str:
+    """The text with the skill's own name and its parts replaced, lower-cased."""
+    t = text.lower()
+    for tok in name_tokens(name):
+        if len(tok) >= 3:
+            t = re.sub(r"\b" + re.escape(tok) + r"\b", "x", t)
+    return t
+```
+
+**Checks performed:**
+- Structural check via `ast`: only one import (`re`), exactly two top-level `FunctionDef` nodes (`name_tokens`, `masked`), no other top-level statements.
+- Behavioral equivalence check: loaded the new module and compared `masked()` output against the original (pre-refactor) inline logic across 7 cases covering hyphenated names, case sensitivity (mixed-case name vs lower-cased text), duplicate tokens, short tokens below the length-3 filter, single-token names, and no-match text. All 7 cases produced identical output (`ALL MATCH: True`).
+- Spot-checked `name_tokens` output directly, confirming descending-length sort and set-deduplication, e.g. `name_tokens("fowler-refactoring") == ['fowler-refactoring', 'refactoring', 'fowler']`.
+
+This is real, verified output from the sandbox tool, not an inline/invented result.

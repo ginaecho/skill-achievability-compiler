@@ -1,0 +1,18 @@
+I wrote `/work/query.sql`: one read-only SQLite `SELECT` with `WITH` clauses (1,199 bytes) that computes everything from the database. I ran it against `/inputs/Chinook.sqlite` and it returns 39 rows with the columns `country, genre_id, genre, revenue_cents, units, country_rank`. They match a separate calculation I did in Python.
+
+**How it works**
+- **Date filter:** keeps invoices with `InvoiceDate >= '2021-01-01'` and `< '2022-01-01'`. Dates are stored as text like `2021-01-01 00:00:00`, so comparing them as text is accurate.
+- **Revenue:** each line's unit price is rounded to cents, turned into a whole number, then multiplied by its quantity and summed.
+- **Units:** the sum of quantities, not a count of rows.
+- **Ranking:** within each country, genres are ordered by revenue (highest first), then by smaller `GenreId`. Each gets a different rank number and only the top two are kept. Final rows are sorted by country, then rank.
+- **Tables:** it only reads `Invoice`, `InvoiceLine`, `Track` and `Genre`.
+
+**Checks**
+- **Read-only:** it runs on a read-only connection that blocks anything except reading, and the input database wasn't changed.
+- **Changed data:** I tested it on temporary copies of the database (since deleted). It still matched the separate calculation after random quantities from 1 to 9 and after tripling some quantities. When the period had no sales, it correctly returned zero rows.
+- **Limits:** it used about 43,000 SQLite steps, well under the two-million limit.
+
+**Choices you may want to review**
+- **Zero or negative quantities:** I read "sold invoice lines" as lines with `Quantity > 0`, so these lines are left out. The current data has none.
+- **Missing genre:** `Genre` is joined with a `LEFT JOIN`, so a track whose genre isn't in the `Genre` table still counts, with a blank genre name. Tracks with no `GenreId` would form their own group and rank last when revenue ties. The current data has no such tracks.
+- **Sort order:** countries are sorted by SQLite's default case-sensitive order, so "USA" comes before "United Kingdom".

@@ -1,0 +1,11 @@
+## Summary
+
+Created `/work/check_captions.py` — a standard-library-only Python 3 CI checker, 5552 bytes, that:
+
+- Parses SRT blocks (LF/CRLF, optional BOM, non-consecutive cue IDs), strips `<...>` and `{\...}` formatting tags, drops whitespace-only display lines, strips trailing whitespace while preserving leading spaces, and counts Unicode code points.
+- Applies the fixed declared adult limits at 24 fps (20 cps, 42 chars/line, 2 lines, duration in [5/6 s, 7 s], gap ≥ 2 frames) using **exact integer-millisecond arithmetic** (cross-multiplication, no floats/rounding/tolerance).
+- Treats negative gaps as `overlap` (attributed to the earlier cue) instead of `gap`; skips the cps check only when duration is 0 (reported as a `duration` failure, no division by zero).
+- Emits exactly one JSON object to stdout (nothing to stderr) with keys `standard`, `fps`, `total`, `passed`, `failed`, `cues` (each cue: `cue`, `start_ms`, `end_ms`, `characters`, `line_lengths`, sorted-unique `issues`), including passing cues with empty issue lists.
+- Exits 1 if any cue has issues, 0 otherwise (including for an empty file → 0 cues, exit 0).
+
+Verified against the real `/inputs/captions.srt` (unmodified) and a battery of synthetic edge cases I built in `/work/tests/` (empty file, overlap, zero-duration, line-count/line-length/cps failures, BOM+CRLF+tag stripping with leading-space preservation, exact millisecond boundaries for duration and gap, and Unicode code-point counting) — all produced the expected JSON and exit codes with no stderr output. The script performs no retiming and makes no accessibility/style/sync/platform-acceptance claims, per the task's scope limits.

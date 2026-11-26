@@ -1,0 +1,35 @@
+I edited `/work/batch.py` so every JSON record it writes to stderr now has an integer `sequence` field. It starts at 0 on each run and goes up by one for every record, whether that's a start, progress, item-failed or summary event. All eight scenarios were run locally and matched the original file's results.
+
+**The change** (in `main()`):
+- A counter `sequence = 0` is set at the start of each run.
+- Inside `emit()`, the counter is added as the last field of each record and then increased by one.
+- Nothing else changed: no new dependencies, processing logic, scenario names, defaults or exit codes. All existing stderr fields keep their order, with `sequence` added at the end.
+
+**Checks run:** Before editing, I saved a copy of the original to `/tmp/batch_orig.py` and recorded its output. I then ran the modified file and compared:
+
+| Scenario | Exit code | Events (sequence) |
+|---|---|---|
+| normal | 0 | start 0, progress 1, summary 2 |
+| mixed | 1 | start 0, progress 1, item-failed 2, progress 3, summary 4 |
+| partial-zero | 0 | start 0, item-failed 1, progress 2, summary 3 |
+| empty | 0 | start 0, summary 1 |
+| unknown | 0 | start 0, progress 1, summary 2 |
+| fail-fast | 1 | start 0, item-failed 1, summary 2 |
+| cancelled | 130 | start 0, summary 1 |
+| live (newline sent on stdin) | 0 | start 0, progress 1, 2, 3, summary 4 |
+| no argument (default) | 0 | same as normal |
+
+For each of these, the checks confirmed:
+- The exit code matches the original's.
+- Stdout is identical to the original's.
+- There are the same number of stderr records, with exactly one summary.
+- `sequence` is an integer and runs 0, 1, 2… with no gaps.
+- All other fields match the original, ignoring the timing field `elapsed_ms`, whose values change from run to run.
+- The other fields stay in their original order, with `sequence` last.
+
+Two failure paths also behave the same as before: an unknown scenario name still raises `ValueError` with exit code 1, and `live` with no stdin input still raises `RuntimeError` with exit code 1. Two separate runs both started at `sequence` 0.
+
+**Not covered:**
+- No new live-output testing: output was collected after each run finished, not read while it was running.
+- No real-signal cancellation testing: the `cancelled` scenario only simulates cancellation inside the script.
+- I didn't run any other scripts, such as the bundled cross-language verifier.

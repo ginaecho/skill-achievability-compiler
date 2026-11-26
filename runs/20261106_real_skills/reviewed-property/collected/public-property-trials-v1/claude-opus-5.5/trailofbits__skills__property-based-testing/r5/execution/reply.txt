@@ -1,0 +1,15 @@
+I found an input that breaks idempotence: running `canonicalize_url` on `"%"` gives `"%25"`, and running it again gives `"%2525"`. Since the second result differs from the first, the function isn't idempotent.
+
+The result is in `/work/counterexample.json`, as a single JSON object with only the three requested fields:
+```json
+{"input": "%", "once": "%25", "twice": "%2525"}
+```
+
+**Why it happens:** the function lowercases and trims the input, then percent-encodes it. `%` isn't in its list of characters to leave alone (`safe="/:?#[]@!$&'()*+,;=")`), so each pass encodes the `%` again: `%` becomes `%25`, then `%2525`.
+
+**How I found and checked it:**
+- I read `/inputs/codec.py` before loading it. It only imports `struct` and `urllib.parse` and does nothing when loaded.
+- I loaded that one file directly and searched every string of length 1–2 made of ASCII letters, space and `%`, shortest first. `"%"` was the first failure.
+- I read the JSON file back and confirmed that `f(input) == once`, `f(once) == twice`, and `once != twice`. All three checks passed.
+
+I didn't change the module, install anything or use the network.

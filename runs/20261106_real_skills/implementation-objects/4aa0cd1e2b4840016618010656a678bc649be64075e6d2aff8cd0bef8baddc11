@@ -1,0 +1,117 @@
+"""Offline replay and independent Python oracle for the reviewed SQL task."""
+import json
+import sqlite3
+from collections import defaultdict
+from contextlib import closing
+from decimal import Decimal
+from pathlib import Path
+
+TABLES = {"invoice", "invoiceline", "track", "genre"}
+COLUMNS = ["country", "genre_id", "genre", "revenue_cents", "units", "country_rank"]
+
+
+def reference(connection: sqlite3.Connection) -> list[list]:
+    invoices = {key: country for key, country, date in connection.execute(
+        "SELECT InvoiceId, BillingCountry, InvoiceDate FROM Invoice")
+        if "2021-01-01" <= date < "2022-01-01"}
+    tracks = dict(connection.execute("SELECT TrackId, GenreId FROM Track"))
+    genres = dict(connection.execute("SELECT GenreId, Name FROM Genre"))
+    totals = defaultdict(lambda: [0, 0])
+    for invoice, track, price, quantity in connection.execute(
+            "SELECT InvoiceId, TrackId, UnitPrice, Quantity FROM InvoiceLine"):
+        if invoice not in invoices:
+            continue
+        cents = Decimal(str(price)) * 100
+        if cents != cents.to_integral_value():
+            raise ValueError("The reviewed input contains a fractional-cent unit price")
+        group = totals[invoices[invoice], tracks[track]]
+        group[0] += int(cents) * quantity
+        group[1] += quantity
+    countries = defaultdict(list)
+    for (country, genre), (revenue, units) in totals.items():
+        countries[country].append([country, genre, genres[genre], revenue, units])
+    result = []
+    for country in sorted(countries):
+        ranked = sorted(countries[country], key=lambda row: (-row[3], row[1]))
+        result.extend(row + [rank] for rank, row in enumerate(ranked[:2], 1))
+    return result
+
+
+def check_query(connection: sqlite3.Connection, query: str, expected: list[list]) -> dict:
+    reads = set()
+
+    def authorize(action, first, second, database, trigger):
+        if action == sqlite3.SQLITE_READ:
+            reads.add(first.lower())
+            return sqlite3.SQLITE_OK if first.lower() in TABLES else sqlite3.SQLITE_DENY
+        if action in {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_RECURSIVE}:
+            return sqlite3.SQLITE_OK
+        if action == sqlite3.SQLITE_FUNCTION:
+            return (sqlite3.SQLITE_DENY if second.lower() == "load_extension"
+                    else sqlite3.SQLITE_OK)
+        return sqlite3.SQLITE_DENY
+
+    steps = 0
+
+    def limit():
+        nonlocal steps
+        steps += 1
+        return int(steps >= 2000)
+
+    connection.execute("PRAGMA query_only=ON")
+    connection.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, 65536)
+    connection.set_authorizer(authorize)
+    connection.set_progress_handler(limit, 1000)
+    try:
+        cursor = connection.execute(query)
+        if cursor.description is None or [c[0] for c in cursor.description] != COLUMNS:
+            raise ValueError("Required output columns or aliases changed")
+        rows = cursor.fetchmany(len(expected) + 1)
+        observed = [list(row) for row in rows]
+        types_valid = all(len(row) == 6 and all(type(row[i]) is str for i in [0, 2])
+                          and all(type(row[i]) is int for i in [1, 3, 4, 5])
+                          for row in observed)
+        return {"passed": reads == TABLES and types_valid and observed == expected,
+                "observed": observed, "expected": expected, "read_tables": sorted(reads),
+                "progress_callbacks": steps, "progress_interval": 1000, "callback_budget": 2000}
+    except (sqlite3.Error, ValueError) as error:
+        return {"passed": False, "error": str(error), "expected": expected,
+                "read_tables": sorted(reads), "progress_callbacks": steps,
+                "progress_interval": 1000, "callback_budget": 2000}
+    finally:
+        connection.set_progress_handler(None, 0)
+        connection.set_authorizer(None)
+
+
+def replay(database: Path, query: str) -> dict:
+    observations = []
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as original:
+        for variant in ["original", "quantity-shift", "empty-period"]:
+            with closing(sqlite3.connect(":memory:")) as connection:
+                original.backup(connection)
+                if variant == "quantity-shift":
+                    connection.execute(
+                        "UPDATE InvoiceLine SET Quantity=Quantity+2 "
+                        "WHERE InvoiceLineId % 3 = 0 AND InvoiceId IN "
+                        "(SELECT InvoiceId FROM Invoice WHERE "
+                        "InvoiceDate >= '2021-01-01' AND InvoiceDate < '2022-01-01')")
+                elif variant == "empty-period":
+                    connection.execute(
+                        "DELETE FROM InvoiceLine WHERE InvoiceId IN "
+                        "(SELECT InvoiceId FROM Invoice WHERE "
+                        "InvoiceDate >= '2021-01-01' AND InvoiceDate < '2022-01-01')")
+                expected = reference(connection)
+                if variant == "original" and not expected:
+                    raise ValueError("The reviewed public input must exercise nonempty results")
+                result = check_query(connection, query, expected)
+                observations.append({"variant": variant, **result})
+    return {"passed": all(row["passed"] for row in observations),
+            "checks": len(observations), "sqlite_version": sqlite3.sqlite_version,
+            "observations": observations,
+            "variant_provenance": "Original public database and two private in-memory "
+                                  "verifier transformations; not new project inputs."}
+
+
+if __name__ == "__main__":
+    print(json.dumps(replay(Path("/inputs/Chinook.sqlite"),
+                            Path("/inputs/query.sql").read_text(encoding="utf-8"))))

@@ -1,0 +1,17 @@
+I wrote `/work/query.sql`: one read-only SQLite `SELECT` that uses `WITH` clauses and reads only `Invoice`, `InvoiceLine`, `Track` and `Genre`. I ran it against `/inputs/Chinook.sqlite` opened read-only, and it returns 39 rows with the six columns you asked for, in order.
+
+**How it works**
+- **`line_sales`:** Keeps invoices dated from `2021-01-01` up to but not including `2022-01-01`. The dates are stored as text like `2021-01-01 00:00:00`, so plain text comparison works. Each line's value is the unit price rounded to whole cents, times `Quantity`.
+- **`country_genre`:** Joins `Genre` to get the genre name, then adds up `revenue_cents` and `units` for each `BillingCountry` and `GenreId`. Units are the total of `Quantity`, not a count of lines.
+- **`ranked`:** Numbers the genres within each country by revenue, highest first. A tie goes to the smaller `GenreId`, and ranks are always distinct.
+- **Final step:** Keeps ranks 1–2 and sorts by country, then `country_rank`.
+
+**Checks**
+- **Real data:** The output matched a separate calculation done in Python, row for row. For example, the top USA genre is Rock with 3168 cents and 32 units. The query took about 36,000 SQLite steps (limit: 2 million) and the file is 1,756 bytes (limit: 32,768).
+- **Changed quantities:** On an in-memory copy where I set quantities from 1 to 5, the output still matched the separate calculation.
+- **No sales in the period:** On a copy with no 2021 invoices, it returned an empty result without errors.
+- **Input untouched:** The input database was not modified. The only file in `/work` is `query.sql`.
+
+**Choices I made where the request was open**
+- **Inner join to `Genre`:** A track with no genre (or a genre ID missing from `Genre`) would be left out. No such tracks exist in this database today.
+- **No filter on `Quantity`:** Lines with zero or negative quantities would be counted as they are. This data only has quantities of 1.

@@ -1,0 +1,15 @@
+The query runs successfully against the actual Chinook database and produces sensible, schema-derived results (39 rows, columns and ordering match spec). The deliverable file `/work/query.sql` contains a single read-only SELECT (CTEs only, no writes), referencing only Invoice, InvoiceLine, Track, and Genre, well under the byte limits, and I did not modify the input database (opened read-only via `mode=ro`).
+
+**Summary of verification performed:**
+- Inspected actual schema of `Invoice`, `InvoiceLine`, `Track`, `Genre` tables in `/inputs/Chinook.sqlite`.
+- Wrote `/work/query.sql`:
+  - Filters invoices by `InvoiceDate >= '2021-01-01' AND < '2022-01-01'`.
+  - Computes `revenue_cents` per line as `ROUND(UnitPrice*100)` cast to integer, times `Quantity`, summed per (country, genre).
+  - Computes `units` as `SUM(Quantity)`.
+  - Uses `ROW_NUMBER()` partitioned by country, ordered by revenue desc then genre_id asc, to assign `country_rank`, keeping only ranks 1–2.
+  - Joins `Genre` for the name.
+  - Final `SELECT` returns exactly the required columns/aliases/types, ordered by country then country_rank.
+- Executed the query against the real database (read-only connection) and confirmed: 39 output rows, correct column names in order, ties and ranks behave as expected (e.g., Belgium, Chile show distinct ranks consistent with revenue ordering and genre_id tiebreak).
+- No hard-coded values — all outputs are computed from the actual joined/aggregated data, so it will adapt to quantity changes or empty periods (an empty result set would simply yield zero rows, which the query structure supports since it only aggregates existing matches).
+
+File delivered: `/work/query.sql`.

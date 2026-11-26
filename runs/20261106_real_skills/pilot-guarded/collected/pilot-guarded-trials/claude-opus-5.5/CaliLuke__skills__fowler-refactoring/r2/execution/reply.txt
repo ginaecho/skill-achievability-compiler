@@ -1,0 +1,40 @@
+I refactored `/work/textmask.py` and checked it. The new version gave exactly the same output as the original in all 3,011 test cases.
+
+**The change:** a new pure function, `name_tokens(name)`, now does the sorting. It takes the full name plus its hyphen-separated parts, removes duplicates, and sorts them longest first. `masked` calls `name_tokens` in its loop. The file contains only `import re` and these two functions:
+
+```python
+import re
+
+
+def name_tokens(name: str) -> list[str]:
+    """The unique name and its hyphen-separated parts, longest first."""
+    return sorted({name} | set(name.split("-")), key=len, reverse=True)
+
+
+def masked(text: str, name: str) -> str:
+    """The text with the skill's own name and its parts replaced, lower-cased."""
+    t = text.lower()
+    for tok in name_tokens(name):
+        if len(tok) >= 3:
+            t = re.sub(r"\b" + re.escape(tok) + r"\b", "x", t)
+    return t
+```
+
+**Behavior kept the same:**
+- The minimum length of 3 still applies inside `masked`, not in `name_tokens`.
+- Matching is still case-sensitive in the same way as before. The text is lowercased, but the name parts are not. So a name with capital letters, like `"Fowler-Refactoring"`, still masks nothing. That's how the original behaved, and I didn't change it.
+- The matching still uses `re.sub` and `re.escape` with the same word-boundary pattern.
+
+**How I checked it:** I saved a copy of the original as `/tmp/textmask_orig.py` and ran both versions on the same inputs in the same run. The inputs were 11 hand-picked edge cases and 3,000 random ones. The edge cases covered:
+- mixed capitals
+- names that are too short
+- characters with special meaning in patterns (`c++`, `x.y`)
+- repeated parts (`abc-abc`)
+- hyphens at the end, or names made only of hyphens
+- empty text
+
+Some sample results:
+- `name_tokens("fowler-refactoring")` → `['fowler-refactoring', 'refactoring', 'fowler']`
+- `masked("Use fowler-refactoring and Fowler Refactoring.", "fowler-refactoring")` → `"use x and x x."`
+
+A parse of the file confirmed it has only the `re` import and the two functions.

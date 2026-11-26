@@ -1,0 +1,23 @@
+```ce
+Skill `instruction-file-migration-only`.
+Roles: `agent`.
+Tool `inspect_instruction_paths` (owner `agent`): via `execute_python`; adds `paths_inspected`.
+Tool `write_agents_from_claude` (owner `agent`): via `execute_python`; requires `paths_inspected` and `claude_entry_present`; adds `agents_regular_file_preserved`; adds `migration_attempted`.
+Tool `attempt_remove_claude_entry` (owner `agent`): via `execute_python`; requires `migration_attempted`; adds `claude_removal_attempted`.
+Tool `observe_post_state` (owner `agent`): via `execute_python`; requires `claude_removal_attempted`; adds `post_state_observed`; picks `claude_exists_after` with (`claude_exists_after` == 0 or `claude_exists_after` == 1).
+Tool `report_success` (owner `agent`): via `reply`; requires `post_state_observed` and `claude_exists_after` == 0; adds `observed_result_reported`.
+Tool `report_unresolved_migration` (owner `agent`): via `reply`; requires `post_state_observed` and `claude_exists_after` == 1; adds `unresolved_migration_reported`; adds `observed_result_reported`.
+Initially true: `claude_entry_present`.
+Initially: `claude_exists_after` == 1.
+Goal: all of (`paths_inspected`, `agents_regular_file_preserved`, `claude_removal_attempted`, `post_state_observed`, `observed_result_reported`, any of (`claude_exists_after` == 0, `unresolved_migration_reported`)).
+Protocol:
+  - `agent` uses `inspect_instruction_paths`.
+  - `agent` uses `write_agents_from_claude`.
+  - `agent` uses `attempt_remove_claude_entry`.
+  - `agent` uses `observe_post_state`.
+  - `agent` chooses one of (external):
+    - branch `removed`:
+      - `agent` uses `report_success`.
+    - branch `still_present`:
+      - `agent` uses `report_unresolved_migration`.
+```

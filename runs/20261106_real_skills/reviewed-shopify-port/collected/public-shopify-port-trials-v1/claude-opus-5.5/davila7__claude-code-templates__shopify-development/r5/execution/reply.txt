@@ -1,0 +1,23 @@
+I wrote `/work/shopify_webhook.py`, and all 17 local checks pass.
+
+**What the module does**
+- The top level contains only `import base64`, `import hashlib`, `import hmac` and one function definition.
+- `verify_webhook(raw_body, hmac_header, secret)`:
+  - Returns `False` if the header is `None` or empty.
+  - Returns `False` if the header contains non-ASCII characters, instead of letting `compare_digest` raise an error.
+  - Otherwise, it computes HMAC-SHA256 over the exact `raw_body` bytes, keyed with `secret.encode("utf-8")`, and Base64-encodes the result. It then compares that with the header using `hmac.compare_digest`.
+  - The body is never parsed, decoded or re-serialized.
+
+**Checks I ran**
+- **Known test case:** RFC 4231 test case 2 (key `"Jefe"`) returned `True`.
+- **Vectors I computed myself:** a valid header was accepted for a JSON body containing UTF-8 bytes, for an empty body and for all 256 byte values. Each used a non-ASCII secret.
+- **Correctly rejected (all `False`):**
+  - Missing or bad header: `None`, an empty header, or a non-ASCII header.
+  - Wrong key: a different secret, or a header keyed with the Latin-1 encoding of the secret. The UTF-8 version is accepted.
+  - Changed body: a one-byte change, or the same JSON re-serialized.
+  - Changed header: extra space or newline at the end, a hex digest instead of Base64, a cut-off value, or random text.
+- **Import has no side effects:** importing the module in a fresh, isolated Python process exited with code 0 and printed nothing. An AST check confirmed the top level has only imports and one function.
+
+My first test run failed because of a mistake in the test, not the module. I fixed the test and reran everything. I also replaced a module docstring with a comment so the top level contains only imports and the function, as you asked.
+
+The original `verifyWebhook` compares with `===`, which isn't constant-time; the Python version uses `hmac.compare_digest` instead. `/inputs/app-development.md` was only read, never changed; it is read-only (`0444`). No operations were refused.

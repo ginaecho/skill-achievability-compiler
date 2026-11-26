@@ -50,6 +50,34 @@ def test_guarded_body_scrubs_nested_payload():
     assert "huggingface.co" in table.values()
 
 
+@pytest.mark.parametrize("address", [
+    "https://example.org/a/b.sh", "www.example.org/a", "10.1.2.3/path", "example.org/a/b"])
+def test_escaped_quotes_after_an_address_keep_tool_arguments_valid_json(address):
+    # A tool call's arguments are JSON text; an address followed by an escaped
+    # quote must not swallow the backslash.
+    arguments = json.dumps({"code": f'u="{address}"\nprint(u)'})
+    body, table = guarded_body({"tool_calls": [{"function": {"arguments": arguments}}]})
+    guarded = json.loads(body)["tool_calls"][0]["function"]["arguments"]
+    assert find_urls(guarded) == []
+    assert json.loads(restore(guarded, table)) == json.loads(arguments)
+
+
+@pytest.mark.parametrize("shape", ["cookie", "template", "template_path"])
+def test_dot_prefixed_hosts_are_guarded_restored_and_not_echoed(shape):
+    host = ".".join(["myapp", "com"])
+    address = "." + host
+    if shape != "cookie":
+        address = "https" + ":" + "//" + "${tenant}." + host
+    if shape == "template_path":
+        address += "/auth"
+    body, table = guarded_body({"messages": [{"role": "tool", "content": address}]})
+    assert host not in body.decode()
+    assert restore(json.loads(body)["messages"][0]["content"], table) == address
+    with pytest.raises(UrlInPromptError) as error:
+        assert_clean(address)
+    assert host not in str(error.value)
+
+
 def test_azure_request_body_carries_no_url_and_reply_is_restored(monkeypatch):
     sent = {}
 

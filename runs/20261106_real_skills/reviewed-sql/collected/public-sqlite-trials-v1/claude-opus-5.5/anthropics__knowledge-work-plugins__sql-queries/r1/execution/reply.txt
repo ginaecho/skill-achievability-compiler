@@ -1,0 +1,18 @@
+I wrote `/work/query.sql`: a single read-only SQLite `SELECT` (1,260 bytes) that ranks the top two genres by revenue for each country in 2021. On the original database it returns 39 rows, which match a separate calculation I did in Python.
+
+**How the query works:**
+1. It joins `InvoiceLine` to `Invoice`, `Track` and `Genre`, and keeps invoices dated on or after `'2021-01-01'` and before `'2022-01-01'`.
+2. For each line, revenue in cents is the unit price times 100, rounded to a whole number, times `Quantity`. Units are the sum of `Quantity`, not a count of lines.
+3. It groups by country and genre, then numbers the genres in each country by revenue (highest first). Ties go to the smaller `GenreId`, so ranks are always distinct (1 and 2).
+4. It keeps ranks 1 and 2, returns the six columns with the requested names and types, and sorts by country, then rank.
+
+**Checks I ran:**
+- **Original data:** the output matches the Python calculation exactly, and every value has the requested type (text or integer).
+- **Read-only:** I ran it with a guard that allows only reading `Invoice`, `InvoiceLine`, `Track` and `Genre`. It used about 36,000 SQLite steps, well under the 2,000,000 limit.
+- **Changed quantities:** on a test copy with random quantities from 1 to 9 and some unit prices changed to 0.994, the result still matched the Python calculation.
+- **Ties:** with all lines priced the same, the Netherlands had two genres tied at 297 cents. The smaller `GenreId` correctly ranked first.
+- **No sales in 2021:** it returned the correct columns and no rows, with no error.
+
+The input database was opened read-only and is unchanged. I deleted the test copy afterwards, so `/work` now contains only `query.sql`.
+
+The date filter compares the dates as text. That works because they're stored as `'YYYY-MM-DD HH:MM:SS'`; dates stored in a different format would need a different filter.

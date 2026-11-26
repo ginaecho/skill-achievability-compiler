@@ -1,0 +1,15 @@
+I wrote `/work/query.sql`: one read-only SQLite `SELECT` with a `WITH` clause, 1,262 bytes. I ran it against the real `/inputs/Chinook.sqlite` and it returns 39 rows with the columns `country, genre_id, genre, revenue_cents, units, country_rank`, with the requested types.
+
+**What the query does:**
+- It joins Invoice, InvoiceLine and Track, keeping invoices dated from `'2021-01-01'` up to but not including `'2022-01-01'`. The dates are stored as `YYYY-MM-DD HH:MM:SS` text, so comparing them as text works.
+- For each line, revenue in cents is the unit price rounded to cents, times 100, times Quantity. It adds these up and adds up Quantity for units, grouped by country and genre.
+- It looks up the genre name in Genre, ranks genres within each country by revenue (highest first, ties going to the smaller GenreId), and keeps ranks 1 and 2. Rows are sorted by country, then rank.
+
+**Checks:**
+- **Real data:** the output matches a separate Python calculation exactly. Example rows are `USA, 1, Rock, 3168, 32, 1` and `USA, 4, Alternative & Punk, 2277, 23, 2`. Netherlands has a tie (Rock and Alternative & Punk both at 297 cents), and it correctly puts GenreId 1 first. Countries with only one genre that year (Austria, Denmark, Ireland, Italy, Spain) get one row.
+- **Changed quantities:** on a scratch copy with Quantity changed to 1–5, the result still matches the Python calculation, and units are now sums of Quantity rather than line counts.
+- **No sales in the period:** on a scratch copy with every 2021 invoice moved out of the date range, the query returns no rows without errors.
+- **Limits:** it used roughly 39,000 SQLite steps (counted to the nearest 1,000), far under the two-million limit. It reads only the four allowed tables.
+- **Input file:** its checksum is unchanged. I deleted the scratch copies, so `query.sql` is the only file left in `/work`.
+
+**Decision for you:** I treated "sold" lines as those with `Quantity > 0`, so a line with zero or negative quantity is never counted. Every line in the current data has Quantity 1, so this makes no difference today. If returns (negative quantities) should reduce the totals instead, delete the `AND il.Quantity > 0` condition.

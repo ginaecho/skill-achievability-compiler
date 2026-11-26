@@ -1,0 +1,16 @@
+I wrote `/work/query.sql`: a single read-only SQLite `SELECT` that uses `WITH` clauses, ran it against the real database, and checked it.
+
+**What it does**
+1. **`period_lines`**: joins Invoice → InvoiceLine → Track and keeps invoices dated from `'2021-01-01'` up to, but not including, `'2022-01-01'`. Dates are stored as text like `2021-01-01 00:00:00`, so comparing them as strings is exact. Each line's revenue is `CAST(ROUND(UnitPrice * 100) AS INTEGER) * Quantity`, so the price is rounded to cents before multiplying.
+2. **`country_genre`**: joins Genre and groups by country and genre, adding up revenue in cents and `Quantity` (not counting rows) to get units.
+3. **`ranked`**: numbers each genre within its country using `ROW_NUMBER()`, highest revenue first, with ties going to the smaller `GenreId`. The final step keeps ranks 1–2 and sorts by country, then rank.
+
+**Results**
+- On the sample database it returns 39 rows with exactly the requested columns. Every value has the right type (text, integer, text, integer, integer, integer). For example, USA: Rock, 3168 cents, 32 units, rank 1; Alternative & Punk, 2277 cents, 23 units, rank 2.
+- The output matches a separate Python calculation. It also matched when I changed the quantities and when I forced revenue ties. When I moved all sales out of 2021, it correctly returned no rows.
+- The query is 1,862 bytes and took about 40,000 SQLite steps, far below the 2,000,000 limit. It only uses Invoice, InvoiceLine, Track and Genre, and it doesn't hard-code any results.
+- The input database was only opened read-only, and its integrity check still reports `ok`. All edits for testing happened on in-memory copies.
+
+**Decision for you:** I read "sold invoice lines" as lines with `Quantity > 0`, so the query ignores lines with zero or negative quantity. The sample data only has quantity 1, so this doesn't change the current result. If returns (negative quantities) should reduce revenue and units instead, remove the `AND il.Quantity > 0` line.
+
+Countries are sorted with SQLite's default case-sensitive order, so "USA" comes before "United Kingdom".

@@ -1,0 +1,24 @@
+## Summary
+
+**Change made to `/work/batch.py`:** added a single `sequence` counter (list-boxed, closed over by `emit`) that is inserted into every stderr JSON record and incremented exactly once per `emit()` call, before any other kwargs. It starts at 0 for each process invocation (fresh `sequence = [0]` inside `main()`) and counts every record across `start`, `progress`, `item-failed`, and `summary` events in emission order, no matter which scenario. No other logic, field, stdout write, exit-code computation, or scenario name was touched.
+
+**Verification executed (all 8 documented scenarios, actual subprocess runs of the modified file, stdout/stderr captured separately):**
+
+| scenario | exit code | stderr events (in order) | sequence 0..n-1 | stdout unchanged |
+|---|---|---|---|---|
+| normal | 0 | start, progress, summary | ✓ | `{"results":[item-1,item-2,item-3]}` |
+| mixed | 1 | start, progress, item-failed, progress, summary | ✓ | `{"results":[item-1,item-4]}` |
+| partial-zero | 0 | start, item-failed, progress, summary | ✓ | `{"results":[item-1,item-3]}` |
+| empty | 0 | start, summary | ✓ | `{"results":[]}` |
+| unknown | 0 | start, progress, summary | ✓ | `{"results":[item-1,item-2,item-3]}` |
+| fail-fast | 1 | start, item-failed, summary | ✓ | `{"results":[item-1]}` |
+| cancelled | 130 | start, summary | ✓ | *(no stdout, as before)* |
+| live | 0 | start, progress, progress, progress, summary | ✓ | `{"results":[item-1,item-2,item-3]}` |
+
+All exit codes, event sequences, and stdout bytes match the pre-edit script's documented contract.
+
+**Liveness re-check (child read while still running, not after exit):** ran `live` as a real subprocess with the fixture stdin gate held open, read stderr non-blockingly, confirmed a `progress` record arrived with `sequence` present while `proc.poll() is None` (process still alive), then wrote the newline to release the gate and confirmed final exit code 0 and unchanged stdout. This reconfirms the existing live-fixture gate behavior; it is not a claim of new live-output or real-signal cancellation coverage — the `cancelled` scenario is still the script's internal `KeyboardInterrupt()` simulation, not an externally delivered OS signal.
+
+**Deliverable:** the edited file itself, `/work/batch.py`, now containing the `sequence` field in every emitted stderr record, is the artifact (shown in full above via direct file read, not a narrated diff).
+
+No downloaded or third-party scripts were executed; only the local, already-present `/work/batch.py` was run, using the standard library (`json`, `sys`, `time`, `subprocess`, `fcntl`, `os`) already available in the container. No network access was used or attempted.

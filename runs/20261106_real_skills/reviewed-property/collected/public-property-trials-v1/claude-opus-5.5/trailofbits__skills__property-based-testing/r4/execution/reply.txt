@@ -1,0 +1,14 @@
+I found a counterexample: `canonicalize_url` is not idempotent. Running it once and running it twice give different results for the single-character input `"%"`:
+
+- `f("%")` = `"%25"`
+- `f(f("%"))` = `"%2525"`
+
+**Why:** the function calls `urllib.parse.quote` without listing `%` as a safe character. Each call encodes `%` as `%25`, including the `%` already in its own output, so the string keeps growing with every call.
+
+**What I did:** I read `/inputs/codec.py` first. It only uses the standard library (`struct`, `urllib.parse.quote`), so I loaded it and left it unchanged. Then I tried every string over the allowed characters (ASCII letters, space and `%`), shortest first. The first length-1 input that broke idempotence was `"%"`.
+
+**Output:** `/work/counterexample.json` contains exactly:
+```json
+{"input": "%", "once": "%25", "twice": "%2525"}
+```
+I read the file back and compared it to fresh calls of the real function, and they match.

@@ -1,0 +1,15 @@
+I wrote `/work/query.sql` as a single read-only SQLite `SELECT` statement with `WITH` clauses, and ran it against `/inputs/Chinook.sqlite`. It returns 39 rows with the exact columns you asked for, in order: `country`, `genre_id`, `genre`, `revenue_cents`, `units`, `country_rank`. The first rows are Australia/Rock (891 cents, 9 units, rank 1) and Australia/Metal (297 cents, 3 units, rank 2).
+
+**How the query works:**
+- **Tables:** it reads only `Invoice`, `InvoiceLine`, `Track` and `Genre`, with no extensions or other tables.
+- **Date range:** `InvoiceDate` is stored as text like `2021-01-01 00:00:00`, so the filter `>= '2021-01-01' AND < '2022-01-01'` compares the text directly.
+- **Revenue:** each line's unit price is rounded to whole cents, then multiplied by `Quantity`. Revenue and `units` are the sums of those values and of `Quantity`, grouped by `BillingCountry` and `Track.GenreId`.
+- **Ranking:** within each country, genres are numbered by revenue (highest first), with ties going to the smaller `GenreId`. Only ranks 1 and 2 are kept, and rows are sorted by country, then rank.
+
+**Checks I ran:**
+- The output matches a separate Python calculation of the same rules, and every value has the requested type (text or integer).
+- On an in-memory copy where I changed the quantities, the results still matched the Python calculation. On a copy with no invoices in the date range, it returned the correct columns and no rows.
+- The query is 1,231 bytes and took about 34,000 SQLite steps, well under the 32,768-byte and two-million-step limits.
+- The input database was opened read-only, and its checksum was the same before and after.
+
+**Assumptions:** the database has no tracks without a genre, no invoices without a country, and no sold lines pointing to missing tracks, so the join choices don't change today's result. If such rows existed, sales with no genre would be grouped together with an empty `genre_id`, and sales with no country would form their own group.

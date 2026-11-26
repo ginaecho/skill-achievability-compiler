@@ -1,0 +1,28 @@
+I edited `/work/textmask.py` and the sorting step now lives in its own function, `name_tokens(name)`. A rerun of the checks passed, and the output is the same as before the change.
+
+**The file now contains:**
+```python
+import re
+
+def name_tokens(name: str) -> list[str]:
+    """The unique name and its hyphen-separated parts, longest first."""
+    return sorted({name} | set(name.split("-")), key=len, reverse=True)
+
+def masked(text: str, name: str) -> str:
+    """The text with the skill's own name and its parts replaced, lower-cased."""
+    t = text.lower()
+    for tok in name_tokens(name):
+        if len(tok) >= 3:
+            t = re.sub(r"\b" + re.escape(tok) + r"\b", "x", t)
+    return t
+```
+The sorting expression is copied exactly from the old code. The rule that skips tokens shorter than 3 characters stays in `masked`. The text is still lower-cased but the name isn't, so case sensitivity hasn't changed (for example, the name `Fowler-Refactoring` still masks nothing).
+
+**Checks:**
+- **Baseline:** before editing, I saved a copy of the original file in `/tmp` and recorded its output on 11 test cases. These cover mixed case, empty name, empty text, parts shorter than 3 characters, repeated parts, regex characters like `+`, and double hyphens.
+- **Comparison:** the new `masked` gave the same output as the original on all 11 cases and on 3,000 random text/name pairs.
+- **Random set order:** I ran the checks under four different hash seeds (0, 1, 42, random) and all passed. This matters because the order of the set can change between runs.
+- **`name_tokens` itself:** `name_tokens("fowler-refactoring")` returns `["fowler-refactoring", "refactoring", "fowler"]`, and repeated parts only appear once.
+- **File structure:** the only import is `re`, followed by the two functions, and `masked` calls `name_tokens`.
+
+**Test problems along the way:** my first check run contained a garbled call (`subprocess.run(...)`) but was still reported as passing, so I didn't trust it. When I tried to rerun it, the call failed with a `NameError` because the sandbox doesn't keep variables between calls. The final run was a single self-contained script using `subprocess.run`, and it passed under all four hash seeds.

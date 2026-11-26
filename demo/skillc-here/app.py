@@ -1,6 +1,6 @@
 """skillc here -- what can an agent do on this machine, and what can a graph answer?
 
-Three tabs, nothing to set up:
+Four tabs, nothing to set up:
 
 1. **Basic skillc.** The page reads this machine the way a GitHub Copilot CLI agent started
    here sees it (`skillc.env.copilot.probe`: built-in tools, saved approvals, MCP servers,
@@ -11,6 +11,8 @@ Three tabs, nothing to set up:
    workflow; `skillc twin` says what the graph holds and, per target, which evidence is there
    and which is missing.
 3. **Why skillc.** Measured comparison with a plain and a guided LLM, and case replays.
+4. **My hosts.** The newest `scripts/demo_hosts.py` result: skills installed on this PC on
+   three hosts, with skillc (no model), compaction and a plain agent side by side.
 
 Standard library plus skillc (rdflib for the graph tab). Offline: no model call or egress
 check. Fixed tasks execute only on request. Binds to 127.0.0.1 only.
@@ -340,6 +342,59 @@ def measured_benchmark(runs: Path | None = None) -> dict:
         return {"available": False, "reason": f"Cannot read benchmark: {error}"}
 
 
+# --- tab 4: my hosts ------------------------------------------------------------------------
+
+HOSTS_SCHEMA = "skillc.hosts-demo/1"
+HOSTS_COMMANDS = [
+    {"command": "python scripts/demo_hosts.py",
+     "note": "no model call: reads the three hosts and runs skillc's checkers only"},
+    {"command": "python scripts/demo_hosts.py --live --provider azure-openai --model <deployment>",
+     "note": "adds compaction and the plain agent; calls a model, so it needs "
+             "SKILLC_ALLOW_MODEL_CALLS=1 set on purpose and the user's agreement for that run"},
+]
+
+
+def _hosts_when(path: Path, data: dict) -> tuple[float, str]:
+    """When a hosts-demo run was made: its `run.stamp`, else the file's modification time."""
+    from datetime import datetime, timezone
+    stamp = (data.get("run") or {}).get("stamp")
+    if isinstance(stamp, str):
+        with contextlib.suppress(ValueError):
+            when = datetime.strptime(stamp, "%Y%m%d_%H%M%SZ").replace(tzinfo=timezone.utc)
+            return when.timestamp(), "run.stamp"
+    return path.stat().st_mtime, "file time"
+
+
+def hosts_results(runs: Path | None = None) -> dict:
+    """The newest `scripts/demo_hosts.py` result with the expected schema.
+
+    The raw model replies of the plain agent (`agent.turns`) are left out; its parsed actions,
+    their flags and its final message stay."""
+    found, ignored = [], []
+    for path in sorted((runs or ROOT / "runs").glob("*hosts_demo*/results.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or data.get("schema") != HOSTS_SCHEMA:
+                raise ValueError(f"schema is not {HOSTS_SCHEMA}")
+            if not all(isinstance(data.get(k), dict) for k in ("run", "hosts", "cells", "totals")):
+                raise ValueError("run, hosts, cells or totals is missing")
+            found.append((*_hosts_when(path, data), path, data))
+        except (OSError, ValueError, TypeError) as error:
+            ignored.append({"run": path.parent.name, "why": str(error)[:200]})
+    if not found:
+        return {"available": False, "ignored": ignored, "commands": HOSTS_COMMANDS,
+                "reason": "No hosts-demo result with schema " + HOSTS_SCHEMA + " in runs/ yet."}
+    when, picked_by, path, data = max(found, key=lambda f: f[0])
+    for case in data["cells"].values():
+        for cell in case.values():
+            if isinstance(cell, dict) and isinstance(cell.get("agent"), dict):
+                cell["agent"].pop("turns", None)
+    return {"available": True, "run": path.parent.name, "picked_by": picked_by,
+            "when": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime(when)),
+            "report": (path.parent / "REPORT.md").is_file(), "ignored": ignored,
+            "commands": HOSTS_COMMANDS, "results": data}
+
+
 # --- tab 2: a graph -----------------------------------------------------------------------
 
 def _graph_file(tmp: Path, filename: str, data: bytes) -> Path:
@@ -543,6 +598,8 @@ class Handler(BaseHTTPRequestHandler):
                                   "application/octet-stream")
             except (OSError, ValueError) as error:
                 return self._json(HTTPStatus.NOT_FOUND, {"error": str(error)})
+        if path == "/api/hosts":
+            return self._json(HTTPStatus.OK, hosts_results())
         if path == "/api/samples":
             return self._json(HTTPStatus.OK, {
                 "skills": samples(),

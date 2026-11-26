@@ -1,0 +1,30 @@
+I edited `/work/textmask.py` and pulled the descending-length sort out into `name_tokens(name)`. `masked` now calls it, and the new outputs match the old ones in every case I checked.
+
+**The file now:**
+```python
+import re
+
+
+def name_tokens(name: str) -> list[str]:
+    """The unique name and its hyphen-separated parts, longest first."""
+    return sorted({name} | set(name.split("-")), key=len, reverse=True)
+
+
+def masked(text: str, name: str) -> str:
+    """The text with the skill's own name and its parts replaced, lower-cased."""
+    t = text.lower()
+    for tok in name_tokens(name):
+        if len(tok) >= 3:
+            t = re.sub(r"\b" + re.escape(tok) + r"\b", "x", t)
+    return t
+```
+
+**How I checked it:**
+- **Before and after:** Before editing, I saved the original `masked` output for 96,717 text and name pairs. These included hyphenated names, mixed-case names, short parts, empty strings, regex characters like `.` and `+`, and random strings. After the edit, all 96,717 results were exactly the same.
+- **File structure:** The file contains only `import re`, `name_tokens` and `masked`. `masked` calls `name_tokens`, `re.sub` and `re.escape`.
+- **Specific behaviours:**
+  - `name_tokens("fowler-refactoring")` returns `['fowler-refactoring', 'refactoring', 'fowler']`.
+  - Case sensitivity is unchanged: the text is lower-cased but the name isn't, so the name `"Fowler"` doesn't mask `"fowler"`.
+  - The length filter is unchanged: in `"ab cd ab-cd"` with the name `"ab-cd"`, only the full `ab-cd` is masked.
+
+The length filter (`len(tok) >= 3`) stays in `masked`, so `name_tokens` returns every unique part, including short ones.

@@ -1,0 +1,14 @@
+The query works correctly: it returns 39 rows for the actual 2021 period (up to 2 genres per country, properly ranked), and returns an empty result set for a period with no sales, confirming it computes dynamically rather than hard-coding results. File size is well under the 32768-byte limit, and it only touches Invoice, InvoiceLine, Track, and Genre with no loadable extensions, attachments, or writes to the source database.
+
+## Summary
+
+I inspected the real schema of `/inputs/Chinook.sqlite` (Invoice, InvoiceLine, Track, Genre tables), confirmed date format (`YYYY-MM-DD HH:MM:SS` as text, lexicographically comparable) and that `Track.GenreId` has no NULLs (so an inner join to Genre is safe).
+
+I wrote `/work/query.sql` as a single read-only SELECT with three CTEs:
+- `sales`: joins Invoice→InvoiceLine→Track, filters to `InvoiceDate >= '2021-01-01' AND InvoiceDate < '2022-01-01'`, computes each line's revenue in integer cents as `CAST(ROUND(UnitPrice*100) AS INTEGER) * Quantity`.
+- `agg`: sums `revenue_cents` and `Quantity` (as `units`) per `(country, genre_id)`.
+- `ranked`: joins Genre for the name, and uses `ROW_NUMBER()` partitioned by country ordered by `revenue_cents DESC, genre_id ASC` to assign `country_rank`.
+
+The final SELECT filters to `country_rank <= 2` and orders by `country ASC, country_rank ASC`, with exactly the required columns/aliases/order.
+
+I ran it directly against the real database (not simulated): it returned 39 rows (≤2 per country, properly ranked by revenue with genre_id tiebreaker), and when I tested with a date window containing no invoices, it correctly returned zero rows — confirming the logic is computed from the data, not hard-coded. File is 1071 bytes, well within the 32768-byte limit, uses only the permitted tables, and the source database was opened read-only and not modified.

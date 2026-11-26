@@ -1,0 +1,19 @@
+I wrote `/work/query.sql` and ran it. It's one read-only SQLite `SELECT` with `WITH` clauses that uses only `Invoice`, `InvoiceLine`, `Track` and `Genre`.
+
+**Schema checked:** Invoice dates are stored as text like `'2021-01-01 00:00:00'`, so the period filter is `InvoiceDate >= '2021-01-01' AND InvoiceDate < '2022-01-01'`. Unit prices are stored as decimals and quantities as integers. No track is missing a genre.
+
+**How the query works:**
+- Each line's revenue is `CAST(ROUND(UnitPrice*100) AS INTEGER) * Quantity`.
+- Units are `SUM(Quantity)`, not a count of lines.
+- Sales are grouped by `BillingCountry` and `Track.GenreId`, and the genre name comes from `Genre`.
+- `ROW_NUMBER()` ranks genres within each country by revenue (highest first), with ties going to the smaller `GenreId`. Only ranks 1 and 2 are kept.
+- Output columns are `country, genre_id, genre, revenue_cents, units, country_rank`, sorted by country then rank.
+
+**Test results:**
+- **Real data:** 39 rows, starting with `('Australia', 1, 'Rock', 891, 9, 1)` and ending with `('United Kingdom', 3, 'Metal', 594, 6, 2)`. Some countries sold only one genre, so they have one row. A separate Python calculation of the same rules matched the output exactly.
+- **Limits:** about 39,000 SQLite steps (limit 2,000,000) and 1,286 bytes of SQL (limit 32,768).
+- **Changed quantities:** on a temporary copy with quantities changed, Australia/Rock showed 21 units from 9 lines, which confirms units are summed. Revenue was 2,079 cents.
+- **No sales in the period:** on the same copy with all invoices moved out of 2021, the query returned no rows without error.
+- The temporary copy was deleted, so `/work` contains only `query.sql`. The input database was opened read-only and not changed.
+
+**Decision for you:** I treated "sold invoice lines" as lines with `Quantity > 0`, so zero or negative quantities are left out. This makes no difference on the current data, where every quantity is 1. If you want those lines included, remove `AND il.Quantity > 0` from the query.

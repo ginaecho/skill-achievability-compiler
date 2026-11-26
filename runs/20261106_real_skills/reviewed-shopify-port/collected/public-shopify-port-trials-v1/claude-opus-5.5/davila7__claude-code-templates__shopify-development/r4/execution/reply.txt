@@ -1,0 +1,26 @@
+I wrote `/work/shopify_webhook.py` and tested it. All 15 checks passed, and importing the module has no side effects.
+
+**What the function does:** `verify_webhook(raw_body: bytes, hmac_header: str | None, secret: str) -> bool`
+- It returns `False` straight away if the header is `None`, empty, not a string, or contains non-ASCII characters. Checking for non-ASCII first matters because `hmac.compare_digest` would raise a `TypeError` on non-ASCII text.
+- Otherwise it computes HMAC-SHA256 over the exact `raw_body` bytes, using `secret.encode("utf-8")` as the key, and Base64-encodes the result. It then compares that to the header with `hmac.compare_digest`. The body is never parsed, decoded or re-serialized.
+- It uses only the standard library (`base64`, `hashlib`, `hmac`). At module level there is only a docstring, three imports and the function definition.
+
+**Changes from the original JavaScript:** the secret is now passed in as a parameter instead of being read from `process.env`. The plain `===` comparison is replaced with a constant-time comparison (one that doesn't leak timing information).
+
+**Checks:**
+- **Known-answer vector:** I used the RFC 4231 test case 2 HMAC-SHA256 value for key `"Jefe"` and data `"what do ya want for nothing?"`. I converted it to Base64 myself, and the function accepted it.
+- **Vectors I computed myself (should pass):** a JSON body containing UTF-8 text with a non-ASCII secret, an empty body, and a binary body covering all 256 byte values. All returned `True`.
+- **Cases that should fail:** all returned `False` without raising. They were:
+  - a `None` header and an empty header
+  - two non-ASCII headers
+  - a header with one character changed
+  - the wrong secret
+  - a secret encoded as Latin-1 instead of UTF-8
+  - the same JSON re-serialized without spaces
+  - an extra trailing space on the body
+  - an extra trailing space on the header
+  - a hex digest instead of Base64
+- **Module structure:** parsing the file confirmed the top level is only `[Expr, Import, Import, Import, FunctionDef]`.
+- **Import side effects:** I imported the module in a separate process with output captured and Python's audit hooks watching file, network and process activity. It printed nothing. The only file events were Python reading `shopify_webhook.py` itself and looking for its cached bytecode. There was no network or environment access.
+
+My first write attempt failed because I forgot to import `os` in that call; the retry worked. I removed the `__pycache__` folder the tests created, so `/work` contains only `shopify_webhook.py`. I didn't modify `/inputs`; the input file is still read-only.

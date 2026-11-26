@@ -1,0 +1,112 @@
+const fs = require("node:fs");
+const { pathToFileURL } = require("node:url");
+const args = process.argv.slice(2);
+const option = (name) => {
+  const index = args.indexOf(name);
+  if (index < 0 || index + 1 >= args.length) throw new Error(`Missing ${name}`);
+  return args[index + 1];
+};
+
+async function guard(body) {
+  JSON.parse(body);
+  const response = await fetch(process.env.SKILLC_ENVELOPE_GUARD_URL, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      authorization: `Bearer ${process.env.SKILLC_ENVELOPE_GUARD_TOKEN}`,
+    },
+    body,
+  });
+  if (!response.ok) throw new Error("Native request-envelope guard refused the body");
+  return response.text();
+}
+
+async function main() {
+  const { CopilotClient, CopilotRequestHandler,
+    RuntimeConnection } = await import(pathToFileURL(option("--sdk")).href);
+
+  class GuardedRequests extends CopilotRequestHandler {
+    async sendRequest(request, context) {
+      const body = await guard(await request.text());
+      const headers = new Headers(request.headers);
+      headers.delete("content-length");
+      return super.sendRequest(new Request(request, { headers, body }), context);
+    }
+
+    async openWebSocket() {
+      throw new Error("WebSocket inference is disabled; only guarded HTTP is supported");
+    }
+  }
+
+  const model = option("--model");
+  const provider = process.env.COPILOT_PROVIDER_BASE_URL ? {
+    type: "openai", wireApi: "completions",
+    baseUrl: process.env.COPILOT_PROVIDER_BASE_URL,
+    apiKey: process.env.COPILOT_PROVIDER_API_KEY,
+  } : undefined;
+  const providerOptions = provider && RuntimeConnection.forSpawnedStdio ? {
+    model: `loopback/${model}`, allowedModels: [`loopback/${model}`],
+    inference: {
+      providers: [{ name: "loopback", ...provider }],
+      models: [{ id: model, provider: "loopback", wireModel: model }],
+    },
+    github: { capi: { enabled: false, enableWebSocketResponses: false } },
+  } : { provider };
+  const tools = option("--available-tools").split(",").filter(Boolean);
+  const config = args.includes("--additional-mcp-config")
+    ? JSON.parse(option("--additional-mcp-config")).mcpServers : {};
+  for (const server of Object.values(config)) {
+    server.env = { ...server.env };
+    for (const name of ["COPILOT_GITHUB_TOKEN", "COPILOT_SDK_AUTH_TOKEN", "SKILLC_ENVELOPE_GUARD_URL",
+      "SKILLC_ENVELOPE_GUARD_TOKEN"]) server.env[name] = "";
+  }
+  const client = new CopilotClient({
+    connection: (RuntimeConnection.forSpawnedStdio ?? RuntimeConnection.forStdio)({
+      path: process.execPath, args: [process.env.COPILOT_CLI_PATH],
+    }), mode: "empty",
+    baseDirectory: process.env.COPILOT_HOME,
+    gitHubToken: process.env.COPILOT_PROVIDER_BASE_URL
+      ? undefined : process.env.COPILOT_GITHUB_TOKEN,
+    useLoggedInUser: false, requestHandler: new GuardedRequests(),
+  });
+  let session;
+  try {
+    await client.start();
+    session = await client.createSession({
+      sessionId: option("--session-id"), model, allowedModels: [model],
+      capi: { enableWebSocketResponses: false },
+      availableTools: tools, mcpServers: config, streaming: false,
+      enableConfigDiscovery: false, enableSkills: false, memory: { enabled: false },
+      systemMessage: {
+        mode: "replace",
+        content: "Follow the system instructions and user input in the supplied JSON.",
+      },
+      ...providerOptions,
+      onPermissionRequest: (request) => ({
+        kind: request.kind === "mcp" && request.serverName === "skillc_sandbox"
+          && request.toolName === "skillc_sandbox-execute_python" ? "approve-once" : "reject",
+      }),
+      onEvent: (event) => fs.appendFileSync(
+        option("--events-output-file"), JSON.stringify(event) + "\n"),
+    });
+    // A file avoids the Windows command-line length limit for long prompts.
+    await session.sendAndWait(
+      { prompt: fs.readFileSync(option("--prompt-file"), "utf8") }, 3_600_000);
+  } finally {
+    try {
+      if (session) fs.writeFileSync(option("--usage-output-file"),
+        JSON.stringify(await session.rpc.usage.getMetrics(), null, 2));
+    } finally {
+      try {
+        if (session) await session.disconnect();
+      } finally {
+        await client.stop();
+      }
+    }
+  }
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

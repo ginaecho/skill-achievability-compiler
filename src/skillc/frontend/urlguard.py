@@ -30,12 +30,12 @@ _TLDS = (
     "microsoft|google|aws|amazon|github|gitlab|docker|npm|pypi|onion"
 )
 URL_RE = re.compile(
-    r"\b(?:[a-z][a-z0-9+.-]*://|www\.)[^\s<>\"'`)\]}]+", re.I)
+    r"\b(?:[a-z][a-z0-9+.-]*://|www\.)[^\s<>\"'`)\]}\\]+", re.I)
 EMAIL_RE = re.compile(r"\b[\w.+-]+@(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.I)
 HOST_RE = re.compile(
-    r"(?<![\w@/.-])(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:" + _TLDS
-    + r")(?::\d{1,5})?(?:/[^\s<>\"'`)\]}]*)?(?![\w-])", re.I)
-IP_URLISH_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?/[^\s<>\"'`]*")
+    r"(?<![\w@/-])(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:" + _TLDS
+    + r")(?::\d{1,5})?(?:/[^\s<>\"'`)\]}\\]*)?(?![\w-])", re.I)
+IP_URLISH_RE = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?/[^\s<>\"'`\\]*")
 _PLACEHOLDER_RE = re.compile(r"\[(?:url|email|host|ip)-\d+\]")
 
 
@@ -84,7 +84,7 @@ def assert_clean(text: str) -> None:
     if left:
         raise UrlInPromptError(
             f"refusing to send a model request containing {len(left)} URL-like "
-            f"string(s), e.g. {left[0][:40]!r}")
+            "string(s)")
 
 
 def restore(text: str, table: dict[str, str]) -> str:
